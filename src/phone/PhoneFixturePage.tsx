@@ -23,6 +23,15 @@ const CONTACTS = [
   { id: 'c3', name: 'Meredith', aliases: [], relationship: 'violin teacher', phone: '561-555-0199', email: null, address: null, primary_place_id: null, confirmed: false, occurrence_count: 20, dismissed_at: null },
 ]
 
+// What the scanner "reads" from any photo in the fixture: a school flyer, two dates.
+const SCANNED = {
+  summary: 'Palm Beach Public — fall flyer',
+  items: [
+    { id: 's1', type: 'event' as const, title: 'PTO Fall Festival', date: '2026-09-27', start_time_local: '11:00', end_time_local: '15:00', start_time: '', end_time: '', all_day: false, location_name: 'Palm Beach Public', address: null, notes: null, selectedMemberIds: ['emme', 'owen'], confidence: 0.92, selected: true },
+    { id: 's2', type: 'event' as const, title: 'Picture Day', date: '2026-09-29', start_time_local: null, end_time_local: null, start_time: '', end_time: '', all_day: true, location_name: null, address: null, notes: null, selectedMemberIds: [], confidence: 0.8, selected: true },
+  ],
+}
+
 export default function PhoneFixturePage() {
   const fontsReady = useFixtureFonts()
   const params = new URLSearchParams(window.location.search)
@@ -52,6 +61,7 @@ export default function PhoneFixturePage() {
               week={week}
               events={evs}
               checklist={checklist}
+              scan={async () => SCANNED}
               contacts={CONTACTS as never}
               places={PLACES as never}
               tripActions={{
@@ -68,7 +78,7 @@ export default function PhoneFixturePage() {
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
               createEvent={async (args) => setEvs((list) => [...list, {
-                id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
+                id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: Boolean(args.all_day),
                 start_time: String(args.start), end_time: String(args.end),
                 location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
                 members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),

@@ -12,6 +12,8 @@ import { eventView, familyItems, meView, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
+import PhoneScanSheet from './PhoneScanSheet'
+import type { ScannedItem } from '../utils/documentScanner'
 import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
 
@@ -45,6 +47,8 @@ export interface PhoneViewProps {
   /** Saves an edit from the event sheet (the same steps as the wall). */
   saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
   deleteEvent?: (event: EditableEvent) => Promise<void>
+  /** Scan it (the + → Scan it): reads photos into drafts; added with `createEvent`. */
+  scan?: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -77,7 +81,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, contacts = [], places = [] }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, contacts = [], places = [] }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
@@ -86,6 +90,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
   const [addOpen, setAddOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
@@ -389,6 +394,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
 
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
+      {scanOpen && scan && createEvent && (
+        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} onClose={() => setScanOpen(false)} />
+      )}
       {addOpen && (
         <PhoneAddSheet
           onClose={() => setAddOpen(false)}
@@ -398,6 +406,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             const day = tab === 'family' ? (shownDay?.date ?? now) : (focus?.date ?? now)
             setAdding(blankEvent(day, now, 'event'))
           }}
+          onScan={scan && createEvent ? () => { setAddOpen(false); setScanOpen(true) } : undefined}
         />
       )}
       {adding && (

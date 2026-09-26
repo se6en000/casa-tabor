@@ -9,6 +9,7 @@ import { toggleChecklistItem } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
 import { useSavedContacts } from '../hooks/useSavedContacts'
 import { useSavedPlaces } from '../hooks/useSavedPlaces'
+import { scanDocumentFiles } from '../utils/documentScanner'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 export default function PhoneFrame() {
@@ -29,6 +30,7 @@ export default function PhoneFrame() {
       saveEvent={(event, draft) => saveDraft({ event, draft, members, queryClient })}
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
+      scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
       contacts={contacts}
       places={places}
     />

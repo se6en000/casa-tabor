@@ -326,6 +326,10 @@
         "reason": "The phone lens (Phase 4): People's back button, styled with wall-*/phone-* tokens."
       },
       {
+        "path": "src/phone/PhoneScanSheet.tsx",
+        "reason": "The phone lens (Phase 4, board 05e): Scan it's photo buttons and review ticks, styled with wall-*/phone-* tokens."
+      },
+      {
         "path": "src/phone/PhoneAddSheet.tsx",
         "reason": "The phone lens (Phase 4, board 05e): the + sheet's ways in, styled with wall-*/phone-* tokens."
       },

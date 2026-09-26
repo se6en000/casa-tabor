@@ -157,6 +157,68 @@ export function matchSuggestedMemberIds(
 }
 
 /**
+ * The scanner's answer as ticked drafts (shared by the old scan sheet and the phone):
+ * times as printed, who it's for matched to the family, nothing invented. Throws when
+ * the scan failed or found nothing.
+ */
+export function scannedItemsFrom(
+  response: ScanDocumentResponse | null | undefined,
+  familyMembers: Array<Pick<FamilyMember, 'id' | 'name' | 'full_name'>>,
+  todayIso: string,
+): ScannedItem[] {
+  if (!response || !response.success || !Array.isArray(response.items)) {
+    throw new Error(response?.error || 'No items could be extracted from this document')
+  }
+  const items: ScannedItem[] = response.items.map((item, idx) => {
+    const dateStr = item.date || item.start_time?.slice(0, 10) || todayIso
+    return {
+      id: item.id || `scanned-${idx}-${Date.now()}`,
+      type: item.type === 'reminder' ? 'reminder' : 'event',
+      title: item.title,
+      date: dateStr,
+      start_time_local: item.start_time_local || null,
+      end_time_local: item.end_time_local || null,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      all_day: Boolean(item.all_day),
+      location_name: item.location_name ?? null,
+      address: item.address ?? null,
+      notes: item.notes ?? null,
+      raw_text_snippet: item.raw_text_snippet ?? null,
+      selectedMemberIds: matchSuggestedMemberIds(item.suggested_member_name, familyMembers as FamilyMember[]),
+      confidence: item.confidence ?? 0.9,
+      selected: true,
+    }
+  })
+  if (items.length === 0) throw new Error('No upcoming dates or actionable reminders detected in this photo.')
+  return items
+}
+
+/** Reads photos with the scanner: optimized for vision, then `scan-document-events`. */
+export async function scanDocumentFiles(
+  files: File[],
+  familyMembers: Array<Pick<FamilyMember, 'id' | 'name' | 'full_name'>>,
+): Promise<{ summary: string; items: ScannedItem[] }> {
+  const optimized = await Promise.all(files.map(async (file) => {
+    const opt = await optimizeFileForVision(file)
+    return { file_base64: opt.base64, mime_type: opt.mimeType }
+  }))
+  const now = new Date()
+  const { data, error } = await supabase.functions.invoke('scan-document-events', {
+    body: {
+      files: optimized,
+      current_date_iso: now.toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      family_members: familyMembers.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name })),
+    },
+  })
+  if (error) throw error
+  const response = data as ScanDocumentResponse
+  const items = scannedItemsFrom(response, familyMembers, format(now, 'yyyy-MM-dd'))
+  return { summary: response.document_summary || `Found ${items.length} ${items.length === 1 ? 'item' : 'items'}`, items }
+}
+
+/**
  * Batch insert created items into Supabase events and event_members tables.
  */
 export async function batchSaveScannedItems(

@@ -22,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase.ts'
 import {
   optimizeFileForVision,
-  matchSuggestedMemberIds,
+  scannedItemsFrom,
   batchSaveScannedItems,
   formatScannedDate,
   formatScannedTime,
@@ -108,37 +108,7 @@ export default function MobileDocumentScanSheet({
       if (error) throw error
 
       const response = data as ScanDocumentResponse
-      if (!response || !response.success || !Array.isArray(response.items)) {
-        throw new Error(response?.error || 'No items could be extracted from this document')
-      }
-
-      const todayIso = new Date().toISOString().slice(0, 10)
-      const parsedItems: ScannedItem[] = response.items.map((item, idx) => {
-        const suggestedMemberIds = matchSuggestedMemberIds(item.suggested_member_name, familyMembers)
-        const dateStr = item.date || item.start_time?.slice(0, 10) || todayIso
-        return {
-          id: item.id || `scanned-${idx}-${Date.now()}`,
-          type: item.type === 'reminder' ? 'reminder' : 'event',
-          title: item.title,
-          date: dateStr,
-          start_time_local: item.start_time_local || null,
-          end_time_local: item.end_time_local || null,
-          start_time: item.start_time,
-          end_time: item.end_time,
-          all_day: Boolean(item.all_day),
-          location_name: item.location_name ?? null,
-          address: item.address ?? null,
-          notes: item.notes ?? null,
-          raw_text_snippet: item.raw_text_snippet ?? null,
-          selectedMemberIds: suggestedMemberIds,
-          confidence: item.confidence ?? 0.9,
-          selected: true,
-        }
-      })
-
-      if (parsedItems.length === 0) {
-        throw new Error('No upcoming dates or actionable reminders detected in this photo.')
-      }
+      const parsedItems = scannedItemsFrom(response, familyMembers, new Date().toISOString().slice(0, 10))
 
       triggerHaptic(20)
       setDocumentSummary(response.document_summary || `Found ${parsedItems.length} items from document`)
