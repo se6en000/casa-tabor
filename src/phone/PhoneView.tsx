@@ -7,7 +7,9 @@ import type { WallChecklistItem } from '../wall/packing'
 import { driverChoices } from '../wall/people'
 import { pigmentIndexes } from '../wall/score'
 import { weekDays } from '../wall/week'
-import { familyItems, meView, type PhoneMove } from './lens'
+import type { EditDraft, EditableEvent } from '../wall/editing'
+import { eventView, familyItems, meView, type PhoneMove } from './lens'
+import PhoneEventSheet from './PhoneEventSheet'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -33,6 +35,9 @@ export interface PhoneViewProps {
   onToggleItem?: (item: WallChecklistItem) => void
   /** The + (adding comes in P4.5). */
   onAdd?: () => void
+  /** Saves an edit from the event sheet (the same steps as the wall). */
+  saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
+  deleteEvent?: (event: EditableEvent) => Promise<void>
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -65,11 +70,12 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAdd }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAdd, saveEvent, deleteEvent }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
-  const [handOff, setHandOff] = useState<Trip | null>(null)
+  const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan } | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const viewer = members.find((m) => m.id === viewerId) ?? null
@@ -87,6 +93,15 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const me = useMemo(() => meView({ viewerId, plan: focus, members, events, checklist, now: focusNow }), [viewerId, focus, members, events, checklist, focusNow])
   const lanePeople = members.filter((m) => m.show_on_home_sidebar !== false)
   const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
+  const eventIds = useMemo(() => new Set(events.map((e) => e.id)), [events])
+  const openable = (id: string | undefined | null) => Boolean(id && eventIds.has(id))
+  // The day plan an event sits in (its trip, or its blocks), for its sheet.
+  const planOf = (id: string) => week.find((p) => p.trips.some((t) => t.sourceId === id) || [...p.lanes.values()].some((segs) => segs.some((seg) => seg.sourceId === id))) ?? focus
+  const askHandOff = (trip: Trip | null) => {
+    if (!trip) return
+    const plan = week.find((p) => p.trips.some((t) => t.id === trip.id)) ?? focus
+    if (plan) setHandOff({ trip, plan })
+  }
   const itemOf = (id: string) => checklist.find((i) => i.id === id)
 
   const meScreen = (
@@ -120,7 +135,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               ) : (
                 <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border-0 bg-wall-on-pigment text-phone-body font-bold text-wall-ink">Leaving now</button>
               )}
-              <button type="button" onClick={() => setHandOff(tripOf(me.next!))} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Hand off</button>
+              <button type="button" onClick={() => askHandOff(tripOf(me.next!))} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Hand off</button>
             </div>
           )}
         </section>
@@ -132,7 +147,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <section aria-label="Your moves today">
           <Label>{ahead ? 'YOUR MOVES TOMORROW' : 'YOUR MOVES TODAY'}</Label>
           {me.moves.map((m) => (
-            <div key={m.tripIds[0]} className="flex items-start gap-[12px] border-0 border-t border-solid border-wall-stone py-[10px]">
+            <button key={m.tripIds[0]} type="button" disabled={!openable(tripOf(m)?.sourceId)} onClick={() => setOpenId(tripOf(m)?.sourceId ?? null)} className="flex w-full items-start gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-wall-ink">
               {/* Jake's note on 05a: a "Leave by" label, and the time in bold. */}
               <span className="flex w-[72px] shrink-0 flex-col">
                 <span className="text-phone-label text-wall-ink-2">Leave by</span>
@@ -142,7 +157,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                 <span className="text-phone-body font-semibold">{m.title}</span>
                 <span className="text-phone-detail text-wall-ink-2">{m.summary}</span>
               </span>
-            </div>
+            </button>
           ))}
         </section>
       )}
@@ -180,10 +195,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <section aria-label="Just yours">
           <Label>JUST YOURS</Label>
           {me.justYours.map((j) => (
-            <div key={j.id} className="flex items-baseline gap-[12px] border-0 border-t border-solid border-wall-stone py-[10px] text-phone-body">
+            <button key={j.id} type="button" onClick={() => setOpenId(j.id)} className="flex w-full items-baseline gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-phone-body text-wall-ink">
               <span className="w-[56px] shrink-0 text-phone-detail font-bold">{clock(j.at)}</span>
               <span>{j.title}</span>
-            </div>
+            </button>
           ))}
         </section>
       )}
@@ -216,7 +231,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <div>
         {items.length === 0 && <div className="py-[12px] font-display text-phone-heading italic text-wall-ink-2">Nothing on the calendar.</div>}
         {items.map((i) => (
-          <div key={i.id} className="flex items-stretch gap-[12px] border-0 border-t border-solid border-wall-stone py-[10px]">
+          <button key={i.id} type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex w-full items-stretch gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-wall-ink">
             <span className="w-[52px] shrink-0 pt-[2px] text-phone-body font-bold">{i.time}</span>
             <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
             <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
@@ -226,7 +241,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             <span className="flex shrink-0 gap-[2px] self-center">
               {i.people.map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" />)}
             </span>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -304,7 +319,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </button>
   )
 
-  const choices = handOff && focus ? driverChoices(focus, members, handOff, handOff.sourceId) : []
+  const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
+  const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
 
   return (
     <div className="relative flex h-dvh w-full flex-col bg-phone-ground font-body text-wall-ink">
@@ -324,17 +340,34 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         {tabButton(tabs[3])}
       </nav>
 
+      {opened && (
+        <PhoneEventSheet
+          key={openId}
+          view={opened}
+          members={members}
+          pigments={pigments}
+          viewerId={viewerId}
+          now={now}
+          onClose={() => setOpenId(null)}
+          onHandOff={tripActions ? askHandOff : undefined}
+          onLeaving={tripActions ? (trip) => tripActions.leaving([trip.id]) : undefined}
+          onToggleItem={onToggleItem}
+          saveEvent={saveEvent}
+          deleteEvent={deleteEvent}
+        />
+      )}
+
       {handOff && tripActions && (
-        <div className="absolute inset-0 z-10 bg-wall-ink/35" onClick={() => setHandOff(null)}>
+        <div className="absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setHandOff(null)}>
           <section aria-label="Hand off" className="absolute bottom-0 left-0 flex w-full flex-col gap-[10px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[30px] pt-[18px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-phone-detail text-wall-ink-2">{handOff.title}</div>
+                <div className="text-phone-detail text-wall-ink-2">{handOff.trip.title}</div>
                 <div className="font-display text-phone-heading font-bold">Who takes it?</div>
               </div>
               <button type="button" aria-label="Close" onClick={() => setHandOff(null)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>
             </div>
-            {choices.filter((c) => c.memberId !== handOff.driverId).map((c) => (
+            {choices.filter((c) => c.memberId !== handOff.trip.driverId).map((c) => (
               <button
                 key={c.memberId}
                 type="button"
@@ -342,7 +375,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                 onClick={async () => {
                   setBusy(true)
                   try {
-                    await tripActions.handOff(handOff, c.memberId, focus?.date)
+                    await tripActions.handOff(handOff.trip, c.memberId, handOff.plan.date)
                     setHandOff(null)
                   } finally {
                     setBusy(false)

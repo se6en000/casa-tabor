@@ -78,3 +78,38 @@ test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evenin
   await phone.getByRole('button', { name: 'Family' }).click()
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
 })
+
+test('phone: an event — details, the trip, get & pack; Edit a time and save; Delete after a yes', async ({ page }) => {
+  const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
+  const sheet = phone.getByRole('region', { name: /Softball: Huskies @ RPB Cascade on the phone/ })
+  await expect(sheet.getByText('SAT · 12:30 – 2:30 PM')).toBeVisible()
+  await expect(sheet.getByText('Jake drives')).toBeVisible()
+  await expect(sheet.getByRole('link', { name: 'Directions' })).toBeVisible()
+  await sheet.getByRole('button', { name: 'Water bottle' }).click()
+  await expect(sheet.getByText('GET & PACK · 2 OF 2')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-event.png')
+
+  await sheet.getByRole('button', { name: 'Edit' }).click()
+  await expect(sheet.getByRole('button', { name: 'Done' })).toBeVisible() // nothing changed yet
+  await sheet.getByRole('button', { name: 'Start later' }).click()
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(phone.getByRole('region', { name: /on the phone/ })).toHaveCount(0)
+  await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
+  await expect(phone.getByText('SAT · 12:45 – 2:45 PM')).toBeVisible() // the end follows the start
+
+  await phone.getByRole('button', { name: 'Delete' }).click()
+  await expect(phone.getByText('Delete “Softball: Huskies @ RPB Cascade”?')).toBeVisible()
+  await phone.getByRole('button', { name: 'Yes, delete' }).click()
+  await expect(phone.getByRole('button', { name: /Softball: Huskies/ })).toHaveCount(0)
+})
+
+test('phone: Hand off from an event gives the trip to someone else', async ({ page }) => {
+  const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
+  await phone.getByRole('button', { name: 'Hand off' }).click()
+  await phone.getByRole('region', { name: 'Hand off' }).getByRole('button', { name: /Kelly/ }).click()
+  await expect(phone.getByText('Kelly drives', { exact: true })).toBeVisible()
+})

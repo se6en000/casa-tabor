@@ -308,8 +308,9 @@ The kiosk showed only the page background for ~8 minutes after shipping `138d17f
 - [~] **P4.3 — Family and Week on the phone (05b, 05c)** — everyone's events as a list filtered by person; the seven days from the wall's week data. Tests; Playwright.
   - Evidence: _
 
-- [ ] **P4.4 — An event on the phone (05d)** — who's going, the trip (Leaving now / Hand off, same data as the wall), get & pack, Keep from…; edit and delete through the same save paths as the wall. Tests; Playwright.
+- [~] **P4.4 — An event on the phone (05d)** — who's going, the trip (Leaving now / Hand off, same data as the wall), get & pack, Keep from…; edit and delete through the same save paths as the wall. Tests; Playwright.
   - Evidence: _
+  - Claimed: Claude (Opus 5.5), 2026-09-26. Built: `eventView` in `lens.ts` (when/where/who/the trip/prep; prep empty for the person a celebration is for), `PhoneEventSheet.tsx` (Directions, the trip with Leaving now and Hand off on the trip's own day, get & pack, Edit for title/day/times/who's going with Done when nothing changed, Delete after a yes; repeats and places go to Calendar via "More options"). The wall's save loop moved to `src/wall/saveDraft.ts` so the phone saves an edit through exactly the same steps; `isRepeating` moved to `editing.ts`. Family rows, my moves and "Just yours" open it. Tests: `phone-lens` (10), Playwright (event details → check off → edit +15 → saved; delete; hand off). A test caught a real bug first: the phone's − / + moved times by 1 minute (the step is in minutes; now 15). The screenshot guard (now 34 tests) had become flaky — about one random failure per run, which blocked a ship: sub-pixel text positioning and lazily loaded font weights varied between runs. Fixed at the root: the fixture pages render only after every face and weight is loaded (`fixtureFonts.ts`), the Score measures labels once the fonts are in, the test browser draws text without sub-pixel positioning/hinting, and the guard runs one test at a time; baselines regenerated; three clean full runs in a row. **Remaining:** Keep from… (P4.6); a real edit from a phone.
 
 - [ ] **P4.5 — Adding on the phone (05e, 05f)** — type it (the edit sheet, blank), say it (the existing assistant), scan it (the existing document scanner, restyled; several items from one flyer, ticked). "From an email" deferred (desktop). Tests; Playwright; one real add from the phone.
   - Evidence: _
@@ -373,6 +374,8 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
+
+- Noted by Jake 2026-09-26: Settings → Family (family members, their PINs) is no longer reachable in the app's UX; bring it back (a later item). Liv's own phone view isn't tested for now.
 
 - P3 defaults awaiting OK: anyone at the wall can change things during family testing (add "who's this?" before driver/time changes later); the band says "You asked" until voices can be told apart.
 

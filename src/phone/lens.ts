@@ -2,6 +2,7 @@ import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { clockTime, placeName } from '../wall/header.ts'
 import { packingGroups, type WallChecklistItem } from '../wall/packing.ts'
 import { celebrationHonorees } from '../wall/surprise.ts'
+import { isRepeating } from '../wall/editing.ts'
 
 // The phone's "Me" screen (board 05a): one person's lens on the same day plan the
 // wall draws. Pure, so it's tested without rendering or a database.
@@ -131,4 +132,53 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
   return [...items.values()]
     .filter((i) => !filterId || i.people.includes(filterId))
     .sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
+}
+
+export interface EventView {
+  event: WallEvent | null
+  /** "SAT · 12:30 – 2:30 PM", "SAT · ALL DAY", a reminder: "SAT · 7:00 PM". */
+  when: string
+  place: { name: string; address: string | null; driveMinutes: number | null }
+  /** Who's going (not a driver-only member), in lane order. */
+  going: string[]
+  trip: Trip | null
+  /** Its get & pack list; empty for the person it celebrates (surprise-safe). */
+  prep: WallChecklistItem[]
+  repeating: boolean
+}
+
+/** Board 05d: one event as the phone shows it to this viewer. */
+export function eventView(input: { eventId: string; plan: DayPlan | null; events: WallEvent[]; members: WallMember[]; viewerId: string; checklist: WallChecklistItem[] }): EventView {
+  const { eventId, plan, events, members, viewerId, checklist } = input
+  const event = events.find((e) => e.id === eventId) ?? null
+  const empty: EventView = { event: null, when: '', place: { name: '', address: null, driveMinutes: null }, going: [], trip: null, prep: [], repeating: false }
+  if (!event) return empty
+  const start = new Date(event.start_time)
+  const end = new Date(event.end_time)
+  const day = start.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  const meridiem = (d: Date) => (d.getHours() < 12 ? 'AM' : 'PM')
+  const reminder = (event as WallEvent & { event_type?: string | null }).event_type === 'reminder'
+  const when = event.all_day
+    ? `${day} · ALL DAY`
+    : reminder
+      ? `${day} · ${clockTime(start)} ${meridiem(start)}`
+      : `${day} · ${clockTime(start)}${meridiem(start) === meridiem(end) ? '' : ` ${meridiem(start)}`} – ${clockTime(end)} ${meridiem(end)}`
+  const trip = plan?.trips.find((t) => t.source === 'event' && t.sourceId === eventId) ?? null
+  const raw = (event.location_name || event.address || '').trim()
+  const going = members
+    .map((m) => m.id)
+    .filter((id) => (event.members ?? []).some((m) => (m.family_member_id ?? m.family_member?.id) === id && m.role !== 'driver'))
+  const honorees = celebrationHonorees(event.title, members)
+  const prep = honorees.includes(viewerId)
+    ? []
+    : checklist.filter((i) => i.event_id === eventId).sort((a, b) => a.sort_order - b.sort_order)
+  return {
+    event,
+    when,
+    place: { name: raw.split(',')[0].trim(), address: event.address ?? null, driveMinutes: trip?.driveMinutes ?? null },
+    going,
+    trip,
+    prep,
+    repeating: isRepeating(event),
+  }
 }

@@ -47,8 +47,10 @@ function useLabelFit(score: Score | null) {
       }
       setFit((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next))
     }
-    measure()
-    void document.fonts?.ready.then(measure)
+    // Measure once the real faces are in: measuring with the fallback font and again after it
+    // loaded made labels jump (and screenshots flaky on a busy machine).
+    if (!document.fonts || document.fonts.status === 'loaded') measure()
+    else void document.fonts.ready.then(measure)
     return () => {
       live = false
     }

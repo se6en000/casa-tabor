@@ -1,6 +1,7 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
 import { useState } from 'react'
+import { useFixtureFonts } from './fixtureFonts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
@@ -24,6 +25,7 @@ const CHECKLIST = [
 ]
 
 export default function WallFixturePage() {
+  const fontsReady = useFixtureFonts()
   const now = new Date(new URLSearchParams(window.location.search).get('at') ?? '2026-09-25T07:12:00')
   const day = new Date(now)
   day.setHours(0, 0, 0, 0)
@@ -49,6 +51,8 @@ export default function WallFixturePage() {
     dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
   }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
+  // Nothing until every font weight is in, so screenshots never catch a fallback face.
+  if (!fontsReady) return null
   return (
     <QueryClientProvider client={queryClient}>
     <MemoryRouter>

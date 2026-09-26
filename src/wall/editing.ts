@@ -78,6 +78,12 @@ export function isReminder(event: EditableEvent): boolean {
  * "No place" only makes sense when no trip is planned: with a saved transportation
  * plan the wall (and the save path) would still treat it as an outing.
  */
+/** A repeating event (a series or one of its occurrences): edited and deleted from Calendar, where the scope choice lives. */
+export function isRepeating(event: EditableEvent): boolean {
+  const e = event as EditableEvent & { rrule?: string | null; recurrence_master_id?: string | null; series_id?: string | null; record_kind?: string | null }
+  return Boolean(e.rrule || e.recurrence_master_id || e.series_id || e.record_kind === 'occurrence')
+}
+
 export function canClearPlace(event: EditableEvent): boolean {
   return !(event.plan_override?.transportation_plan?.legs?.length)
 }

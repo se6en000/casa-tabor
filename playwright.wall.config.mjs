@@ -8,6 +8,8 @@ export default defineConfig({
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
   reporter: 'line',
   retries: 1,
+  // One at a time: on the Pi, two workers (next to a ship's build) made random tests miss their timeouts.
+  workers: 1,
   // Tight on purpose: a thin new element (the 44px MT ring) changes only ~80 pixels; runs on the Pi repeat exactly.
   // The first page loads compile the fixture on the dev server; two workers starting together can
   // take more than the default 5 s to show it (this only waits longer; screenshots stay strict).
@@ -19,6 +21,9 @@ export default defineConfig({
     locale: 'en-US',
     timezoneId: 'America/New_York',
     viewport: { width: 1920, height: 1080 },
+    // Text drawn the same way every run: with sub-pixel positioning and hinting on, glyphs
+    // landed a fraction of a pixel apart from run to run (~600-pixel diffs on "MAISON TABOR").
+    launchOptions: { args: ['--disable-font-subpixel-positioning', '--font-render-hinting=none', '--disable-lcd-text'] },
   },
   webServer: {
     command: 'VITE_VISUAL_TEST_MODE=true npx vite --host 127.0.0.1 --port 4175 --strictPort',

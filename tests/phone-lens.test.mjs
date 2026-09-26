@@ -68,3 +68,19 @@ test('two children at the same school, same hours, are one line with both of the
   assert.equal(school.length, 1)
   assert.deepEqual(school[0].people, ['emme', 'owen'])
 })
+
+import { eventView } from '../src/phone/lens.ts'
+
+test('an event on the phone: when, where, who, the trip, and its prep', () => {
+  const v = eventView({ eventId: 'softball', plan: saturday, events, members, viewerId: 'jake-id', checklist: kit })
+  assert.equal(v.when, 'SAT · 12:30 – 2:30 PM')
+  assert.equal(v.place.name, 'Ferrin Park Field 1')
+  assert.deepEqual(v.going, ['jake-id'])
+  assert.equal(v.trip.driverId, 'jake-id')
+  assert.deepEqual(v.prep.map((i) => i.label), ['Glove'])
+})
+
+test("the person being celebrated doesn't see the prep on their own phone (everyone else does)", () => {
+  assert.deepEqual(eventView({ eventId: 'birthday', plan: saturday, events, members, viewerId: 'kelly', checklist: kit }).prep, [])
+  assert.deepEqual(eventView({ eventId: 'birthday', plan: saturday, events, members, viewerId: 'jake-id', checklist: kit }).prep.map((i) => i.label), ['Birthday card'])
+})
