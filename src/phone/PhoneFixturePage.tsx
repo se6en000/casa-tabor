@@ -8,6 +8,8 @@ import type { WallEvent, WallMember } from '../wall/engine/types'
 import { dayState, withDeparted, withHandOff, withoutDeparted, type WallTripState } from '../wall/tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import PhoneView from './PhoneView'
+import PhoneAssistantView from './PhoneAssistantView'
+import type { PhoneLine } from './assistant'
 import { previewEvent, withDriver } from '../wall/editing'
 
 const CHECKLIST = [
@@ -27,9 +29,38 @@ const CONTACTS = [
 const SCANNED = {
   summary: 'Palm Beach Public — fall flyer',
   items: [
-    { id: 's1', type: 'event' as const, title: 'PTO Fall Festival', date: '2026-09-27', start_time_local: '11:00', end_time_local: '15:00', start_time: '', end_time: '', all_day: false, location_name: 'Palm Beach Public', address: null, notes: null, selectedMemberIds: ['emme', 'owen'], confidence: 0.92, selected: true },
+    { id: 's1', type: 'event' as const, title: 'Palm Beach Public PTO Fall Festival', date: '2026-09-27', start_time_local: '11:00', end_time_local: '15:00', start_time: '', end_time: '', all_day: false, location_name: 'School field', address: '239 Cocoanut Row, Palm Beach, FL', notes: null, selectedMemberIds: ['emme', 'owen'], confidence: 0.92, selected: true },
     { id: 's2', type: 'event' as const, title: 'Picture Day', date: '2026-09-29', start_time_local: null, end_time_local: null, start_time: '', end_time: '', all_day: true, location_name: null, address: null, notes: null, selectedMemberIds: [], confidence: 0.8, selected: true },
   ],
+}
+
+// Say it, scripted: a question gets an answer; "add …" gets a draft that waits for a yes.
+function FixtureAssistant({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
+  const [lines, setLines] = useState<PhoneLine[]>([])
+  const [pending, setPending] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const say = (role: PhoneLine['role'], text: string) => setLines((l) => [...l, { id: `l${l.length}`, role, text }])
+  return (
+    <PhoneAssistantView
+      lines={lines}
+      thinking={false}
+      pending={pending}
+      working={false}
+      note={note}
+      onSend={(q) => {
+        say('user', q)
+        setNote(null)
+        if (/^add/i.test(q)) {
+          say('assistant', 'Here’s the draft. Tap Yes and it goes on the calendar.')
+          setPending('Add “Jaida watching the kids” · Sat, Sep 26 · 12 – 3 PM')
+        } else say('assistant', 'Kelly drives Liv to Ferrin Park Field 1. Leave by 9:08 for the 9:40 game.')
+      }}
+      onConfirm={() => { onAdd(); setPending(null); setNote('Done.') }}
+      onCancel={() => { setPending(null); setNote('Okay, nothing changed.') }}
+      onReport={async (report) => { (window as unknown as { __phoneReports: unknown[] }).__phoneReports = [...((window as unknown as { __phoneReports?: unknown[] }).__phoneReports ?? []), { ...report, lines }] }}
+      onClose={onClose}
+    />
+  )
 }
 
 export default function PhoneFixturePage() {
@@ -62,6 +93,16 @@ export default function PhoneFixturePage() {
               events={evs}
               checklist={checklist}
               scan={async () => SCANNED}
+              assistant={({ onClose }) => (
+                <FixtureAssistant
+                  onClose={onClose}
+                  onAdd={() => setEvs((list) => [...list, {
+                    id: 'jaida-sat', title: 'Jaida watching the kids', event_type: 'event', all_day: false,
+                    start_time: new Date('2026-09-26T12:00:00').toISOString(), end_time: new Date('2026-09-26T15:00:00').toISOString(),
+                    location_name: null, address: null, members: ['liv', 'emme', 'owen'].map((id) => ({ family_member_id: id, role: 'attendee' })),
+                  } as unknown as WallEvent])}
+                />
+              )}
               contacts={CONTACTS as never}
               places={PLACES as never}
               tripActions={{

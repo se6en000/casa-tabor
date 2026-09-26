@@ -7,6 +7,8 @@ import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
 import { toggleChecklistItem } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
+import PhoneAssistant from './PhoneAssistant'
+import type { FamilyMember } from '../types'
 import { useSavedContacts } from '../hooks/useSavedContacts'
 import { useSavedPlaces } from '../hooks/useSavedPlaces'
 import { scanDocumentFiles } from '../utils/documentScanner'
@@ -31,6 +33,7 @@ export default function PhoneFrame() {
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
+      assistant={({ onClose, onOpenEvent }) => <PhoneAssistant events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} onClose={onClose} onOpenEvent={onOpenEvent} />}
       contacts={contacts}
       places={places}
     />

@@ -6,7 +6,7 @@ import type { AIMessage } from '../hooks/useAISession'
 const MAX_ANSWER_CHARS = 300
 
 /** Plain spoken-style text: markdown removed, list items joined as sentences, cut at a sentence when long. */
-export function bandAnswer(content: string): string {
+export function bandAnswer(content: string, maxChars = MAX_ANSWER_CHARS): string {
   const lines = content
     .replace(/\*\*|__|`/g, '')
     .split('\n')
@@ -17,8 +17,8 @@ export function bandAnswer(content: string): string {
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
-  if (text.length <= MAX_ANSWER_CHARS) return text
-  const clipped = text.slice(0, MAX_ANSWER_CHARS)
+  if (text.length <= maxChars) return text
+  const clipped = text.slice(0, maxChars)
   const end = Math.max(clipped.lastIndexOf('. '), clipped.lastIndexOf('! '), clipped.lastIndexOf('? '))
   return end > 0 ? clipped.slice(0, end + 1) : `${clipped.trimEnd()}…`
 }

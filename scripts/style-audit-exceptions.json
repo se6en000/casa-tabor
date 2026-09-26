@@ -330,6 +330,10 @@
         "reason": "The phone lens (Phase 4, board 05e): Scan it's photo buttons and review ticks, styled with wall-*/phone-* tokens."
       },
       {
+        "path": "src/phone/PhoneAssistantView.tsx",
+        "reason": "The phone lens (Phase 4, board 05e): Say it's send, mic, yes/no and bug-report controls, styled with wall-*/phone-* tokens."
+      },
+      {
         "path": "src/phone/PhoneAddSheet.tsx",
         "reason": "The phone lens (Phase 4, board 05e): the + sheet's ways in, styled with wall-*/phone-* tokens."
       },

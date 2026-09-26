@@ -49,6 +49,8 @@ export interface PhoneViewProps {
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Scan it (the + → Scan it): reads photos into drafts; added with `createEvent`. */
   scan?: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
+  /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void }) => ReactNode
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -81,7 +83,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, contacts = [], places = [] }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, contacts = [], places = [] }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
@@ -91,6 +93,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [addOpen, setAddOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [askOpen, setAskOpen] = useState(false)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
@@ -394,6 +397,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
 
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
+      {askOpen && assistant?.({ onClose: () => setAskOpen(false), onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) } })}
       {scanOpen && scan && createEvent && (
         <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} onClose={() => setScanOpen(false)} />
       )}
@@ -407,6 +411,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             setAdding(blankEvent(day, now, 'event'))
           }}
           onScan={scan && createEvent ? () => { setAddOpen(false); setScanOpen(true) } : undefined}
+          onSay={assistant ? () => { setAddOpen(false); setAskOpen(true) } : undefined}
         />
       )}
       {adding && (

@@ -1,19 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bug, Mic } from 'lucide-react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
 import WallKeyboard from './WallKeyboard'
-import { useAIAssistant } from '../hooks/useAIAssistant'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
-import { getAssistantDeviceId } from '../lib/assistantTelemetry'
-import { invalidateAllCalendarQueries } from '../lib/eventMutations'
-import { supabase } from '../lib/supabase'
 import type { FamilyMember } from '../types'
-import { answerEventId, bandAnswer, bandState, latestExchange, pendingAction, voiceFinal } from './assistant'
-import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
+import { bandAnswer, bandState, voiceFinal } from './assistant'
+import { useAssistantTurn } from './useAssistantTurn'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
 // shows what it heard large, answers in a sentence or two, points at the wall,
@@ -34,11 +29,8 @@ export interface WallAssistantBandProps {
 }
 
 export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent }: WallAssistantBandProps) {
-  const queryClient = useQueryClient()
-  const { messages, loading, send, session, updateMessageToolStatus } = useAIAssistant({ page: 'wall', events, family, onSessionEnd: onClose })
+  const { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, seenAt } = useAssistantTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
   const [interim, setInterim] = useState('')
-  const [note, setNote] = useState<string | null>(null)
-  const [working, setWorking] = useState(false)
   const lastTouch = useRef(Date.now())
   const captured = useRef('')
   const stopRef = useRef<() => void>(() => {})
@@ -56,60 +48,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
   const dictateRef = useRef<'expected' | 'happened' | null>(null)
   const heardRef = useRef('')
-  const seenAt = useRef<Record<string, string>>({})
-
-  // When each message first appeared (messages carry no time of their own).
-  useEffect(() => {
-    for (const m of messages) if (!seenAt.current[m.id]) seenAt.current[m.id] = new Date().toISOString()
-  }, [messages])
-
-  const { question, answer } = latestExchange(messages)
-  const pending = pendingAction(messages)
-  const pointAt = answerEventId(answer)
-
-  const confirm = useCallback(async () => {
-    const message = pending
-    const action = message?.toolAction
-    if (!message || !action || working) return
-    setWorking(true)
-    setNote(null)
-    updateMessageToolStatus(message.id, 'loading')
-    const args = requestArgsFor(action.tool, action.args, events)
-    const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-      body: {
-        tool: action.tool,
-        args,
-        action_id: message.id,
-        session_id: session?.id ?? null,
-        correlation_id: `${session?.id ?? 'no-session'}:${message.id}:${Date.now().toString(36)}`,
-        lane: 'voice',
-        device_id: getAssistantDeviceId(),
-        client_trace_source: 'wall-band-confirmation',
-        confirmed_by_user: true,
-      },
-    })
-    const result = readActionResult(await responseBody(data, error), args)
-    setWorking(false)
-    if (result.kind === 'conflict') {
-      updateMessageToolStatus(message.id, 'pending', { args: result.args } as never)
-      setNote('That clashes with something already on the calendar. Say yes, or tap Yes, to add it anyway.')
-      return
-    }
-    if (result.kind === 'error') {
-      updateMessageToolStatus(message.id, 'error', { errorMsg: result.message })
-      setNote(result.message)
-      return
-    }
-    updateMessageToolStatus(message.id, 'done', { actionId: result.actionId, resultEventId: result.eventId })
-    invalidateAllCalendarQueries(queryClient, String(args.event_id ?? args.id ?? result.eventId ?? ''))
-    setNote('Done.')
-  }, [pending, working, events, session?.id, updateMessageToolStatus, queryClient])
-
-  const cancel = useCallback(() => {
-    if (!pending) return
-    updateMessageToolStatus(pending.id, 'cancelled')
-    setNote('Okay, nothing changed.')
-  }, [pending, updateMessageToolStatus])
 
   const speech = useSpeechInput({
     onInterim: (text) => {

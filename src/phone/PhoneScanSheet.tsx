@@ -20,6 +20,9 @@ export interface PhoneScanSheetProps {
 
 type Stage = 'intake' | 'reading' | 'review'
 
+/** About how many characters of a title fit on one line of the review list. */
+const TITLE_LINE_CHARS = 26
+
 export default function PhoneScanSheet({ members, pigments, scan, createEvent, onClose }: PhoneScanSheetProps) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
@@ -120,14 +123,20 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
                   </span>
                 </button>
                 <div className={`flex min-w-0 flex-1 flex-col gap-[6px] ${item.selected ? '' : 'opacity-50'}`}>
-                  <input
+                  {/* Wraps: a flyer's titles run long ("Roosevelt Elementary PTO Fall Festival"). */}
+                  <textarea
                     aria-label="Title"
                     value={item.title}
-                    onChange={(e) => patch(item.id, () => ({ title: e.target.value }))}
-                    className="min-w-0 border-0 border-b border-solid border-transparent bg-transparent p-0 font-display text-phone-heading font-bold text-wall-ink outline-none focus:border-wall-stone"
+                    rows={Math.max(1, Math.ceil(item.title.length / TITLE_LINE_CHARS))}
+                    onChange={(e) => patch(item.id, () => ({ title: e.target.value.replace(/\n/g, ' ') }))}
+                    className="field-sizing-content min-w-0 resize-none border-0 border-b border-solid border-transparent bg-transparent p-0 font-display text-phone-heading font-bold text-wall-ink outline-none focus:border-wall-stone"
                   />
                   <div className="text-phone-body text-wall-ink">{scanWhen(item)}</div>
-                  {(item.location_name || item.address) && <div className="text-phone-detail text-wall-ink-2">{item.location_name || item.address}</div>}
+                  {(item.location_name || item.address) && (
+                    <div className="text-phone-detail text-wall-ink-2">
+                      {[item.location_name, item.address].filter((v, i, all) => v && all.indexOf(v) === i).join(' · ')}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-[6px]">
                     <button
                       type="button"
