@@ -35,6 +35,13 @@ test('on the kiosk, "Home" in the rest of the app leads back to the Wall', () =>
   assert.equal(shouldSendHomeToWall('/', '', null), false)
 })
 
+test('the Wall is the landing page on desktop-sized screens too (Jake, 2026-09-25); phones keep the classic home', () => {
+  assert.equal(shouldSendHomeToWall('/', '', null, { wide: true }), true)
+  assert.equal(shouldSendHomeToWall('/', '?classic=1', null, { wide: true }), false) // the way back to the old home
+  assert.equal(shouldSendHomeToWall('/', '', null, { wide: false }), false) // a phone: the Wall's 1920x1080 stage would be tiny
+  assert.equal(shouldSendHomeToWall('/calendar', '', null, { wide: true }), false)
+})
+
 test('the kiosk URL sets or clears the wall-home flag', () => {
   assert.equal(wallHomeFlagFromUrl('/wall', '?kiosk=1'), '1')
   assert.equal(wallHomeFlagFromUrl('/', '?density=kiosk&wallHome=0'), '0')

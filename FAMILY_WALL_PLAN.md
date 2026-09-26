@@ -346,6 +346,7 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Pack tonight: tap to check off, packed folds away, "See all" sheet, headings open the event | Jake (on Claude's recommendation) |
 | 2026-09-25 | Chained trips: a pickup that goes straight on to the next place is one trip, and a driver with two trips at once is asked about | Jake (on Claude's recommendation) |
 | 2026-09-25 | Navigation (board section 04): the week strip is the way around; any future day uses one day-ahead layout; the evening face is Tomorrow after 7 PM; tomorrow's to-get/to-pack speaks up from 1 PM; postures switch by rule and a tap on empty wall no longer flips them; + adds by touch | Jake ("the navigation looks great, approved to build") |
+| 2026-09-25 | The Wall is the landing page: "/" opens it on the kiosk and on desktop-sized screens (≥900px wide); phones keep the classic home until the phone lens; "/?classic=1" (MT → Previous home screen) still opens the old one | Jake |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
