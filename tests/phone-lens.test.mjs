@@ -55,7 +55,7 @@ test('Family: the day as one list — each event once, when it starts, who is in
 
 test('Family filtered to one person shows only what they are in', () => {
   const kelly = familyItems(saturday, members, 'kelly')
-  assert.deepEqual(kelly.map((i) => i.id), ['birthday'])
+  assert.deepEqual(kelly.map((i) => i.id), ['grandma', 'birthday']) // an all-day for nobody in particular is for everyone
 })
 
 test('school shows as a quiet line for the children, not a list of runs', () => {
@@ -83,4 +83,12 @@ test('an event on the phone: when, where, who, the trip, and its prep', () => {
 test("the person being celebrated doesn't see the prep on their own phone (everyone else does)", () => {
   assert.deepEqual(eventView({ eventId: 'birthday', plan: saturday, events, members, viewerId: 'kelly', checklist: kit }).prep, [])
   assert.deepEqual(eventView({ eventId: 'birthday', plan: saturday, events, members, viewerId: 'jake-id', checklist: kit }).prep.map((i) => i.label), ['Birthday card'])
+})
+
+test('all-day items head the day on the phone, with their people (and for nobody in particular)', () => {
+  const items = familyItems(friday, members, null)
+  assert.deepEqual([items[0].time, items[0].title, items[0].people], ['All day', 'Spirit Day · wear school colors', ['emme', 'owen']])
+  assert.deepEqual(familyItems(friday, members, 'owen')[0].title, 'Spirit Day · wear school colors')
+  assert.equal(familyItems(saturday, members, null)[0].title, 'Grandma visiting')
+  assert.equal(familyItems(saturday, members, 'kelly').some((i) => i.title === 'Grandma visiting'), true) // for everyone
 })

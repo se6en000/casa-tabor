@@ -172,3 +172,9 @@ test('"Everyone home by" earlier in the day reads to the right of its line, on t
   assert.equal(score.everyoneHomeBy.flip, false)
   assert.equal(score.everyoneHomeBy.laneIndex, score.lanes.length - 1)
 })
+
+test('all-day items ride along to the Score: title, and the people in lane order with their colours', () => {
+  const score = buildScore(fridayPlan(), members, at(25, 7, 12))
+  assert.deepEqual(score.allDay.map((a) => [a.sourceId, a.title, a.people.map((p) => p.id)]), [['spirit-day-all', 'Spirit Day · wear school colors', ['emme', 'owen']]])
+  assert.equal(score.allDay[0].people[0].pigmentIndex, pigmentOf(score, 'emme'))
+})

@@ -56,6 +56,8 @@ export interface Score {
    * the words cover no block (the bottom lane unless something is there).
    */
   everyoneHomeBy: { x: number; label: string; flip: boolean; laneIndex: number } | null
+  /** All-day items (a birthday, "no school"): context for the day, drawn as one row under the hours, not in time. */
+  allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }> }>
 }
 
 const MIN_BLOCK_WIDTH = 8
@@ -218,5 +220,14 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
     }
   }
 
-  return { lanes, everyoneHomeBy }
+  const order = members.map((m) => m.id)
+  const allDay = plan.allDay.map((item) => ({
+    sourceId: item.sourceId,
+    title: item.title,
+    people: [...new Set(item.memberIds)]
+      .sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      .map((id) => ({ id, initial: nameOf(id)?.charAt(0) ?? '?', pigmentIndex: pigmentFor(id) })),
+  }))
+
+  return { lanes, everyoneHomeBy, allDay }
 }

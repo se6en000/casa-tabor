@@ -129,9 +129,13 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
       people: order([...trip.travelerIds, ...(trip.driverId ? [trip.driverId] : [])]),
     })
   }
-  return [...items.values()]
-    .filter((i) => !filterId || i.people.includes(filterId))
-    .sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
+  // All-day items head the day; one for nobody in particular is for everyone.
+  const allDay: FamilyItem[] = plan.allDay.map((a) => ({
+    id: a.sourceId, time: 'All day', at: plan.date, title: a.title, sub: '', people: order(a.memberIds),
+  }))
+  const timed = [...items.values()].sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
+  const mine = (i: FamilyItem) => !filterId || i.people.includes(filterId)
+  return [...allDay.filter((i) => mine(i) || i.people.length === 0), ...timed.filter(mine)]
 }
 
 export interface EventView {

@@ -152,6 +152,36 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col border-b border-wall-rule">
+        {score && score.allDay.length > 0 && (
+          // All day: context for the day, not a place in time — one quiet row under the hours.
+          // Above the "already past" shading: an all-day item isn't over at 7 AM.
+          <div data-all-day className={`relative z-10 flex shrink-0 items-center ${compact ? 'h-[36px]' : 'h-[42px]'}`}>
+            <div className="w-[320px] shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">ALL DAY</div>
+            <div className="flex min-w-0 flex-1 gap-[10px] overflow-hidden pl-[20px]">
+              {score.allDay.map((item) => {
+                const open = interaction && interaction.selectable(item.sourceId)
+                return (
+                  <button
+                    key={item.sourceId}
+                    type="button"
+                    disabled={!open}
+                    aria-label={`Open ${item.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      interaction?.onSelect(item.sourceId)
+                    }}
+                    className={`flex h-[32px] min-w-0 shrink items-center gap-[8px] rounded-full border border-solid border-wall-rule bg-transparent pl-[4px] pr-[14px] text-wall-ink ${item.people.length === 0 ? 'pl-[14px]' : ''}${ringFor(item.sourceId)}`}
+                  >
+                    {item.people.map((p) => (
+                      <span key={p.id} aria-hidden="true" className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full text-wall-label font-bold text-wall-on-pigment ${pigmentStyleFor(p.pigmentIndex ?? 0).solid}`}>{p.initial}</span>
+                    ))}
+                    <span className="truncate whitespace-nowrap text-wall-detail font-semibold">{item.title}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {lanes.map((lane, laneIndex) => (
           <div key={lane.member.id} className="flex min-h-0 flex-1 border-t border-wall-rule">
             <div className="flex w-[300px] shrink-0 items-center gap-[14px]">

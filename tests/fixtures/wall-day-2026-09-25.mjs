@@ -92,6 +92,17 @@ export const events = [
     location_name: 'Palm Beach Public Elementary School', address: null,
     members: [],
   },
+  // All day: context for the day, drawn as one row under the hours (for people, and for nobody in particular).
+  {
+    id: 'spirit-day-all', title: 'Spirit Day · wear school colors', event_type: 'event', all_day: true,
+    start_time: local(9, 25, 0, 0), end_time: local(9, 26, 0, 0), location_name: null, address: null,
+    members: [{ family_member_id: 'emme', role: 'primary' }, { family_member_id: 'owen', role: 'attendee' }],
+  },
+  {
+    id: 'grandma', title: 'Grandma visiting', event_type: 'event', all_day: true,
+    start_time: local(9, 26, 0, 0), end_time: local(9, 27, 0, 0), location_name: null, address: null,
+    members: [],
+  },
   // Thursday runs late: labels and "Everyone home by" sit at the right edge of the Score.
   {
     id: 'book-club', title: 'Book club at the Harrisons', event_type: 'event', all_day: false,
