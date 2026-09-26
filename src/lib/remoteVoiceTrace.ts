@@ -316,3 +316,12 @@ export function enqueueRemoteVoiceTrace(
   }
   scheduleFlush()
 }
+
+/**
+ * A person's bug report from the assistant (the band's bug icon): sent at once and
+ * awaited, not queued, so the reporter knows it arrived. Lands in ai_drawer_debug_events
+ * as event "user_bug_report", next to the server's events for the same session.
+ */
+export async function sendBugReport(entry: { event: string; detail: string; sessionId?: string; page?: string; payload: unknown }): Promise<void> {
+  await postToIngest([{ ...entry, at: new Date().toISOString(), channel: 'audit' }], 'client:bug-report')
+}

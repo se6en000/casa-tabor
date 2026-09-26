@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Mic } from 'lucide-react'
+import { Bug, Mic } from 'lucide-react'
+import { useProfileSession } from '../contexts/useProfileSession'
+import { sendBugReport } from '../lib/remoteVoiceTrace'
+import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
+import WallKeyboard from './WallKeyboard'
 import { useAIAssistant } from '../hooks/useAIAssistant'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
@@ -38,6 +42,26 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const lastTouch = useRef(Date.now())
   const captured = useRef('')
   const stopRef = useRef<() => void>(() => {})
+
+  // ── Bug report (the bug icon): pauses the conversation, asks what went wrong, and sends
+  // the whole conversation with it (bugReport.ts). Fields fill by the wall keyboard or by voice.
+  const { profile } = useProfileSession()
+  const [reporting, setReporting] = useState(false)
+  const reportingRef = useRef(false)
+  reportingRef.current = reporting
+  const [categories, setCategories] = useState<string[]>([])
+  const [expected, setExpected] = useState('')
+  const [happened, setHappened] = useState('')
+  const [typing, setTyping] = useState<'expected' | 'happened' | null>(null)
+  const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  const dictateRef = useRef<'expected' | 'happened' | null>(null)
+  const heardRef = useRef('')
+  const seenAt = useRef<Record<string, string>>({})
+
+  // When each message first appeared (messages carry no time of their own).
+  useEffect(() => {
+    for (const m of messages) if (!seenAt.current[m.id]) seenAt.current[m.id] = new Date().toISOString()
+  }, [messages])
 
   const { question, answer } = latestExchange(messages)
   const pending = pendingAction(messages)
@@ -96,6 +120,19 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       lastTouch.current = Date.now()
       const step = voiceFinal(captured.current, text)
       captured.current = step.captured
+      if (step.captured) heardRef.current = step.captured
+      // Dictating into the bug report: the words fill the field, nothing goes to the assistant.
+      if (dictateRef.current) {
+        const field = dictateRef.current
+        if (step.captured) (field === 'expected' ? setExpected : setHappened)(step.captured)
+        if (step.toSend) {
+          ;(field === 'expected' ? setExpected : setHappened)(step.toSend)
+          dictateRef.current = null
+          captured.current = ''
+          stopRef.current()
+        }
+        return
+      }
       if (step.captured) setInterim(step.captured)
       if (!step.toSend) return
       setInterim('')
@@ -110,7 +147,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     hasPendingAction: Boolean(pending),
     autoDismissOnFailure: true,
     onAutoDismiss: () => {
-      if (!question) onClose()
+      if (!question && !reportingRef.current) onClose()
     },
   })
 
@@ -134,7 +171,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   useEffect(() => {
     if (state !== 'ANSWERED') return
     const timer = window.setInterval(() => {
-      if (Date.now() - lastTouch.current > ANSWER_IDLE_MS) onClose()
+      // Never while a bug report is being written (typing on the wall keyboard doesn't count as a touch here).
+      if (Date.now() - lastTouch.current > ANSWER_IDLE_MS && !reportingRef.current) onClose()
     }, 5_000)
     return () => window.clearInterval(timer)
   }, [state, onClose])
@@ -143,6 +181,124 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content) : ''), [answer?.content])
   const pill = 'h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment'
   const lightPill = 'h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink'
+
+  const openReport = () => {
+    lastTouch.current = Date.now()
+    stopRef.current()
+    setReporting(true)
+    setReportState('idle')
+  }
+  const submitReport = async () => {
+    setReportState('sending')
+    const report = buildBugReport({
+      messages,
+      seenAt: seenAt.current,
+      sessionId: session?.id ?? null,
+      heard: heardRef.current,
+      categories,
+      expected,
+      happened,
+      context: {
+        surface: 'wall',
+        build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+        viewer: profile?.memberName ?? null,
+        at: new Date().toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        utcOffset: -new Date().getTimezoneOffset(),
+        screen: `${window.innerWidth}x${window.innerHeight}`,
+        bandState: state,
+        pointAt: pointAt ?? null,
+        pendingTool: pending?.toolAction?.tool ?? null,
+        loading,
+        online: navigator.onLine,
+        messageCount: messages.length,
+      },
+    })
+    try {
+      await sendBugReport(report)
+      setReportState('sent')
+      window.setTimeout(() => {
+        setReporting(false)
+        setCategories([])
+        setExpected('')
+        setHappened('')
+      }, 2500)
+    } catch {
+      setReportState('failed')
+    }
+  }
+  const dictate = (field: 'expected' | 'happened') => {
+    setTyping(null)
+    dictateRef.current = field
+    captured.current = ''
+    void speech.start()
+  }
+
+  if (reporting) {
+    const field = (key: 'expected' | 'happened', label: string, value: string) => (
+      <div className="flex flex-col gap-[8px]">
+        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{label}</div>
+        <div className="flex items-center gap-[12px]">
+          <button
+            type="button"
+            onClick={() => { dictateRef.current = null; setTyping(key) }}
+            className={`flex h-[64px] min-w-0 flex-1 items-center rounded-[16px] border border-solid bg-transparent px-[22px] text-left text-wall-body text-wall-on-pigment ${typing === key || dictateRef.current === key ? 'border-wall-night-brass' : 'border-wall-ink-2'}`}
+          >
+            <span className="truncate">{value || (dictateRef.current === key ? 'Listening…' : 'Tap to type')}</span>
+          </button>
+          <button type="button" aria-label={`Say it: ${label.toLowerCase()}`} onClick={() => dictate(key)} className="flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-night-brass bg-transparent p-0 text-wall-night-brass">
+            <Mic size={26} />
+          </button>
+        </div>
+      </div>
+    )
+    return (
+      <>
+        <section
+          aria-label="Report a problem"
+          className={`absolute left-0 z-10 flex w-[1920px] flex-col gap-[20px] rounded-t-[32px] bg-wall-ink px-[64px] py-[40px] font-body text-wall-on-pigment ${typing ? 'bottom-[430px] rounded-b-[32px]' : 'bottom-0'}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            lastTouch.current = Date.now()
+          }}
+        >
+          <div className="flex items-baseline justify-between">
+            <div className="font-display text-wall-quote font-medium italic">What went wrong?</div>
+            <div className="text-wall-label text-wall-night-ink-2">The whole conversation goes with it, with the time.</div>
+          </div>
+          <div className="flex flex-wrap gap-[10px]">
+            {REPORT_CATEGORIES.map((c) => {
+              const on = categories.includes(c)
+              return (
+                <button key={c} type="button" aria-pressed={on} onClick={() => setCategories((list) => (on ? list.filter((x) => x !== c) : [...list, c]))} className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-on-pigment text-wall-ink' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-on-pigment'}`}>
+                  {c}
+                </button>
+              )
+            })}
+          </div>
+          {!typing || typing === 'expected' ? field('expected', 'WHAT DID YOU EXPECT?', expected) : null}
+          {!typing || typing === 'happened' ? field('happened', 'WHAT HAPPENED INSTEAD?', happened) : null}
+          <div className="flex items-center gap-[14px]">
+            <button type="button" disabled={reportState === 'sending' || reportState === 'sent'} onClick={() => void submitReport()} className="h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink">
+              {reportState === 'sending' ? 'Sending…' : reportState === 'sent' ? 'Sent' : 'Send report'}
+            </button>
+            <button type="button" onClick={() => { setReporting(false); setTyping(null); dictateRef.current = null }} className="h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment">
+              Back to the conversation
+            </button>
+            {reportState === 'sent' && <span className="text-wall-body text-wall-night-brass">Thank you — sent with the whole conversation.</span>}
+            {reportState === 'failed' && <span className="text-wall-body text-wall-night-rust">That didn’t send. Try again in a moment.</span>}
+          </div>
+        </section>
+        {typing && (
+          <WallKeyboard
+            value={typing === 'expected' ? expected : happened}
+            onChange={(v) => (typing === 'expected' ? setExpected(v) : setHappened(v))}
+            onDone={() => setTyping(null)}
+          />
+        )}
+      </>
+    )
+  }
 
   return (
     <section
@@ -168,6 +324,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </div>
       </div>
 
+      {/* Quiet, but always there when things go awry. */}
+      <button type="button" aria-label="Report a problem" onClick={openReport} className="absolute right-[40px] top-[36px] flex h-[48px] w-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2">
+        <Bug size={22} />
+      </button>
       <div className="flex min-w-0 flex-1 flex-col gap-[18px]">
         <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{shownQuestion ? 'YOU ASKED' : 'LISTENING'}</div>
         <div className="font-display text-wall-quote font-medium italic">
