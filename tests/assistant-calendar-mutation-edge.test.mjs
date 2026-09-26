@@ -555,3 +555,14 @@ test('active-event prep checklist, outfit, and notes mutations', () => {
 })
 
 
+
+test('adding something new never grounds an existing event that merely shares words', async () => {
+  const { groundsExistingEvent } = await import('../supabase/functions/_shared/assistant-calendar-mutation-edge.mjs')
+  assert.equal(groundsExistingEvent('Add Emmy is watching Owen on Sunday from 12 PM to 1 PM'), false)
+  assert.equal(groundsExistingEvent('schedule a haircut for Owen Tuesday at 4'), false)
+  assert.equal(groundsExistingEvent('add the dentist to my calendar friday at 3'), false)
+  assert.equal(groundsExistingEvent('add Emme to the softball game'), true)
+  assert.equal(groundsExistingEvent('Move the yoga appointment up to 8 30 a.m.'), true)
+  assert.equal(groundsExistingEvent('who is driving to softball'), true)
+  assert.equal(groundsExistingEvent('make the yoga 8:30'), true)
+})

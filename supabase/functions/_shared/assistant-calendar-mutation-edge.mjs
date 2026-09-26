@@ -102,6 +102,19 @@ function deleteSelectionMatches(request, events, utcOffset) {
   ))
 }
 
+/**
+ * Whether a message could be about an event already on the calendar. "Add Emmy is watching
+ * Owen on Sunday" is something new — grounding it on "Jaida Watching Owen and Emme" (shared
+ * words) made that the conversation's event (Jake, 2026-09-26). "Add Emme to the softball
+ * game" is a change to an existing one.
+ */
+export function groundsExistingEvent(text) {
+  const input = normalizeAssistantSpeechPunctuation(String(text ?? '')).trim()
+  if (!/^(?:please\s+)?(?:can you\s+)?(?:add|create|schedule|book|put)\b/i.test(input)) return true
+  const withoutCalendar = input.replace(/\b(?:to|on|in)\s+(?:the|my|our)\s+(?:family\s+)?calendar\b/gi, '')
+  return /\b(?:to|from|for|on)\s+(?:the|my|our|her|his|their)\s+\w/i.test(withoutCalendar)
+}
+
 export function findTargetEventFromText(text, events, options = {}) {
   if (!text || !Array.isArray(events) || events.length === 0) return null
   const input = normalizeAssistantSpeechPunctuation(text).toLowerCase()

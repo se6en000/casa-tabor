@@ -242,3 +242,24 @@ test('skipCompoundCreate does not affect move/delete matching against real event
   )
   assert.equal(move?.tool, 'update_event')
 })
+
+test('"from 2 PM to 3 PM" starts at 2, not 3 (the last time said is the end)', () => {
+  // 2026-09-26: "Add Emme piano practice on Sunday from 2 PM to 3 PM" was drafted 3–4 PM.
+  const now = new Date('2026-09-26T14:30:00Z')
+  const at = (q) => resolveDeterministicEventMutation(q, [], { now, utcOffset: '-04:00', familyNames: ['Emme', 'Owen'] })?.args
+  const local = (iso) => new Date(Date.parse(iso) - 4 * 3600e3).toISOString().slice(0, 16)
+  for (const [q, start, end] of [
+    ['Add Emme piano practice on Sunday from 2 PM to 3 PM', '2026-09-27T14:00', '2026-09-27T15:00'],
+    ['Add Emme piano practice on Sunday from 12 PM to 1 PM', '2026-09-27T12:00', '2026-09-27T13:00'],
+    ['Add Owen haircut on Tuesday from 2 to 3:30 pm', '2026-09-29T14:00', '2026-09-29T15:30'],
+    ['Add Owen haircut on Tuesday from 11 to 1 pm', '2026-09-29T11:00', '2026-09-29T13:00'],
+    ['Add Owen haircut on Tuesday from 2pm - 3pm', '2026-09-29T14:00', '2026-09-29T15:00'],
+    ['Add Owen haircut on Tuesday from 2 PM until 3 PM', '2026-09-29T14:00', '2026-09-29T15:00'],
+  ]) {
+    const args = at(q)
+    assert.ok(args, q)
+    assert.equal(local(args.start), start, q)
+    assert.equal(local(args.end), end, q)
+  }
+  assert.deepEqual(at('Add Emme piano practice on Sunday from 2 PM to 3 PM').members, ['Emme'], 'who it is for stays')
+})

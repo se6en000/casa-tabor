@@ -17,7 +17,7 @@ import {
 } from '../_shared/llm-model-policy.mjs'
 import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
-import { formatLocal, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
+import { formatLocal, humanWhen, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -53,6 +53,7 @@ import {
   answerPendingSelectiveClear,
   calendarDeleteAmbiguityClarification,
   findTargetEventFromText,
+  groundsExistingEvent,
   isCalendarMutationDisambiguationFollowUp,
   calendarMutationClarification,
   resolveActiveCalendarMutation,
@@ -1223,7 +1224,7 @@ Deno.serve(async (req) => {
     ? allEvents?.find((event: { id: string }) => event.id === incomingConversationState.activeEventId)
     : null) ?? (context?.focusedEvent
     ? allEvents?.find((event: { id: string }) => event.id === context.focusedEvent.id) ?? context.focusedEvent
-    : null) ?? (latestUserText
+    : null) ?? (latestUserText && groundsExistingEvent(latestUserText)
     ? findTargetEventFromText(latestUserText, allEvents ?? [], { utcOffset: context?.utcOffset })
     : null)
   const activeConversationGroceryItem = incomingConversationState?.activeEntityType === 'grocery_item'
@@ -5932,7 +5933,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   }
 
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
-    if (name === 'create_event') return `Create: **${args.title}** on ${args.start}`
+    // `context`, not the later `utcOffset` const: this is called before that line runs.
+    const utcOffsetForDisplay = (context?.utcOffset as string | undefined) ?? '-04:00'
+    if (name === 'create_event') return `Create: **${args.title}** · ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
       const steps = Array.isArray(args.steps) ? args.steps.length : 0
@@ -5942,7 +5945,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       // Build a human-readable single-line summary of what will change
       const parts: string[] = []
       if (args.title !== undefined) parts.push(`title → "${String(args.title).slice(0, 40)}"`)
-      if (args.start !== undefined) parts.push(`time → ${String(args.start).slice(0, 30)}`)
+      if (args.start !== undefined) parts.push(`time → ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`)
       if (args.all_day !== undefined) parts.push(args.all_day ? 'all-day' : 'timed')
       if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
       if (args.driver_name !== undefined) parts.push(`driver → ${String(args.driver_name || 'none')}`)

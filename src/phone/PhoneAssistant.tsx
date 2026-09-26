@@ -4,7 +4,7 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
-import { voiceFinal } from '../wall/assistant'
+import { cardText, voiceFinal } from '../wall/assistant'
 import { buildBugReport } from '../wall/bugReport'
 import { useAssistantTurn } from '../wall/useAssistantTurn'
 import { phoneTranscript } from './assistant'
@@ -53,7 +53,7 @@ export default function PhoneAssistant({ events, family, onClose, onOpenEvent }:
     <PhoneAssistantView
       lines={lines}
       thinking={thinking}
-      pending={pending?.toolAction?.displayText ?? null}
+      pending={pending?.toolAction?.displayText ? cardText(pending.toolAction.displayText) : null}
       working={working}
       note={note}
       mic={canListen ? {

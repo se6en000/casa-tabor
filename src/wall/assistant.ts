@@ -38,6 +38,8 @@ export function pendingAction(messages: AIMessage[]): AIMessage | null {
 /** The calendar item an answer is about, so the wall can outline it. */
 export function answerEventId(message: AIMessage | null): string | null {
   if (!message) return null
+  // An add points at what it added, once it's added — never at an event it only sounded like.
+  if (message.toolAction?.tool === 'create_event') return message.toolAction.status === 'done' ? message.toolAction.resultEventId ?? null : null
   const state = message.conversationState
   if (state && state.activeEntityType === 'event') return state.activeEventId
   return message.toolAction?.resultEventId ?? null
@@ -58,4 +60,9 @@ export const SEND_MARKER = '__SEND__'
 export function voiceFinal(captured: string, text: string): { captured: string; toSend: string | null } {
   if (text === SEND_MARKER) return { captured: '', toSend: captured.trim() || null }
   return { captured: text.trim(), toSend: null }
+}
+
+/** A confirmation card's words: the server's display text without its markdown. */
+export function cardText(displayText: string): string {
+  return displayText.replace(/\*\*|__|`/g, '')
 }

@@ -49,3 +49,30 @@ const ZONED_TIMESTAMP = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:
 export function localizeTimestamps(text, utcOffset = DEFAULT_OFFSET) {
   return String(text ?? '').replace(ZONED_TIMESTAMP, (iso) => `${formatLocal(iso, utcOffset)} (local)`)
 }
+
+function clockParts(date) {
+  const h = date.getUTCHours()
+  const m = date.getUTCMinutes()
+  return { text: `${h % 12 === 0 ? 12 : h % 12}${m ? `:${String(m).padStart(2, '0')}` : ''}`, meridiem: h < 12 ? 'AM' : 'PM' }
+}
+
+/**
+ * "Sun, Sep 27 · 12 – 1 PM": when, for a confirmation card (Jake, 2026-09-26: the card
+ * said "2026-09-27T12:00:00-04:00"). Anything that isn't a date comes back as it was.
+ */
+export function humanWhen(start, end, utcOffset = DEFAULT_OFFSET, options = {}) {
+  const dayWords = (date) => date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  if (options.allDay) {
+    const day = new Date(`${String(start).slice(0, 10)}T12:00:00Z`)
+    return Number.isNaN(day.getTime()) ? String(start) : `${dayWords(day)} · all day`
+  }
+  const shift = offsetMs(utcOffset) ?? 0
+  const s = new Date(start)
+  if (!start || Number.isNaN(s.getTime())) return String(start ?? '')
+  const ls = new Date(s.getTime() + shift)
+  const a = clockParts(ls)
+  const e = end ? new Date(end) : null
+  if (!e || Number.isNaN(e.getTime()) || e.getTime() <= s.getTime()) return `${dayWords(ls)} · ${a.text} ${a.meridiem}`
+  const b = clockParts(new Date(e.getTime() + shift))
+  return `${dayWords(ls)} · ${a.text}${a.meridiem === b.meridiem ? '' : ` ${a.meridiem}`} – ${b.text} ${b.meridiem}`
+}

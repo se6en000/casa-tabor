@@ -103,6 +103,30 @@ function parseRequestedTime(text) {
   return { hour, minute }
 }
 
+/**
+ * "from 2 PM to 3 PM", "from 2 to 3:30 pm", "from 2pm - 3pm", "from 2 PM until 3 PM": the
+ * start and end. A start said without AM/PM takes the end's, unless that would put it after
+ * the end ("from 11 to 1 pm" is 11 AM). Before this, only "until" was read, and "from 2 PM to
+ * 3 PM" took its last time, 3 PM, as the start (2026-09-26).
+ */
+function parseTimeRange(text) {
+  const match = String(text).match(/\bfrom\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:until|till|to|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)/i)
+  if (!match) return null
+  const to24 = (h, m, meridiem) => {
+    if (h < 1 || h > 12 || m > 59) return null
+    const pm = meridiem.toLowerCase().startsWith('p')
+    return { hour: pm ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h), minute: m }
+  }
+  const end = to24(Number(match[4]), Number(match[5] ?? 0), match[6])
+  if (!end) return null
+  let start = to24(Number(match[1]), Number(match[2] ?? 0), match[3] ?? match[6])
+  if (!start) return null
+  if (!match[3] && start.hour * 60 + start.minute >= end.hour * 60 + end.minute) {
+    start = to24(Number(match[1]), Number(match[2] ?? 0), match[6].toLowerCase().startsWith('p') ? 'am' : 'pm')
+  }
+  return { text: match[0], start, end }
+}
+
 function movedIso(eventStart, requestedTime, offsetMinutes) {
   const local = localParts(new Date(eventStart), offsetMinutes)
   return new Date(Date.UTC(
@@ -167,6 +191,11 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   const naturalEventPattern = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(.+?)(?=\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\s+at\s+\d)/i
   const standAlonePattern = /^(.+?)\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+.*at\s+\d/i
 
+  // The family members a request names ("Add Emme piano practice …" is for Emme).
+  const namedMembers = () => (Array.isArray(options.familyNames) ? options.familyNames : []).filter((name) =>
+    new RegExp(`\\b${String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(input)
+  )
+
   if (
     !options.skipCompoundCreate &&
     (createPrefix.test(input) || (standAlonePattern.test(input) && /\b(?:event|appointment|appt|apt|reservation|dinner|lunch|breakfast|practice|meeting|party|tour|doctor|dr\b|dentist)\b/i.test(input)))
@@ -179,12 +208,12 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
     const title = candidateTitle && !/^(?:calendar\s+)?(?:event|appointment|apt|reminder)$/i.test(candidateTitle)
       ? candidateTitle
       : null
-    const timeRange = input.match(/\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))\s+until\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))(?:\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday))?/i)
+    const timeRange = parseTimeRange(input)
     if (title && timeRange) {
-      const requestedStart = parseRequestedTime(timeRange[1])
-      const requestedEnd = parseRequestedTime(timeRange[2])
-      const startText = input.slice(0, input.indexOf(timeRange[0])) + ` at ${timeRange[1]}`
-      const start = requestedStart ? createStartIso(startText, requestedStart, now, offsetMinutes) : null
+      const { start: requestedStart, end: requestedEnd } = timeRange
+      // The day words stay; the range reads as its start ("… on Sunday at 2:00 pm").
+      const startText = input.replace(timeRange.text, `at ${requestedStart.hour % 12 || 12}:${String(requestedStart.minute).padStart(2, '0')} ${requestedStart.hour < 12 ? 'am' : 'pm'}`)
+      const start = createStartIso(startText, requestedStart, now, offsetMinutes)
       if (start && requestedEnd) {
         const startLocal = new Date(Date.parse(start) + offsetMinutes * 60000)
         let end = new Date(Date.UTC(
@@ -201,7 +230,7 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
             title,
             start,
             end: end.toISOString(),
-            members: [],
+            members: namedMembers(),
             event_type: 'event',
           },
           event: null,
@@ -216,10 +245,7 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
         ? Number(durationMatch[1]) * (/hour|hr/i.test(durationMatch[2]) ? 60 : 1)
         : 60
       if (durationMinutes >= 5 && durationMinutes <= 240) {
-        const familyNames = Array.isArray(options.familyNames) ? options.familyNames : []
-        const members = familyNames.filter((name) =>
-          new RegExp(`\\b${String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(input)
-        )
+        const members = namedMembers()
         return {
           tool: 'create_event',
           args: {

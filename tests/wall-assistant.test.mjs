@@ -69,3 +69,17 @@ test('the speech hook gives the words, then "__SEND__" to send them; the marker 
   assert.deepEqual(voiceFinal('', '__SEND__'), { captured: '', toSend: null })
   assert.deepEqual(voiceFinal('', '   '), { captured: '', toSend: null })
 })
+
+test('"Open it" goes to what was just added, not to an event the request only sounded like', () => {
+  // Jake, 2026-09-26: "add Emmy watching Owen on Sunday" — Open it opened today's "Jaida Watching Owen and Emme".
+  const state = { activeEntityType: 'event', activeEventId: 'jaida-today', expectedFollowUp: 'event_follow_up', establishedAt: '' }
+  const create = (status, resultEventId) => msg('assistant', 'Create', { conversationState: state, toolAction: { tool: 'create_event', args: {}, displayText: '', status, resultEventId } })
+  assert.equal(answerEventId(create('done', 'emmy-sunday')), 'emmy-sunday')
+  assert.equal(answerEventId(create('pending')), null)
+  assert.equal(answerEventId(create('cancelled')), null)
+})
+
+test('a confirmation card reads as words: no markdown', async () => {
+  const { cardText } = await import('../src/wall/assistant.ts')
+  assert.equal(cardText('Create: **Emmy is watching Owen** · Sun, Sep 27 · 12 – 1 PM'), 'Create: Emmy is watching Owen · Sun, Sep 27 · 12 – 1 PM')
+})

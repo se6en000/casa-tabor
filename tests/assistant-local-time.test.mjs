@@ -32,3 +32,12 @@ test('evidence text: every timestamp with a zone becomes local words (the yoga a
 test('dates without a time or zone are left alone (they are already calendar dates)', () => {
   assert.equal(localizeTimestamps('Due 2026-09-26; ref 2026-09-26T12:00', '-04:00'), 'Due 2026-09-26; ref 2026-09-26T12:00')
 })
+
+test('a confirmation card says when in words: "Sun, Sep 27 · 12 – 1 PM", never 2026-09-27T12:00:00-04:00', async () => {
+  const { humanWhen } = await import('../supabase/functions/_shared/assistant-local-time.mjs')
+  assert.equal(humanWhen('2026-09-27T12:00:00-04:00', '2026-09-27T13:00:00-04:00', '-04:00'), 'Sun, Sep 27 · 12 – 1 PM')
+  assert.equal(humanWhen('2026-09-27T11:30:00-04:00', '2026-09-27T13:00:00-04:00', '-04:00'), 'Sun, Sep 27 · 11:30 AM – 1 PM')
+  assert.equal(humanWhen('2026-09-27T16:00:00Z', null, '-04:00'), 'Sun, Sep 27 · 12 PM')
+  assert.equal(humanWhen('2026-09-27', '2026-09-28', '-04:00', { allDay: true }), 'Sun, Sep 27 · all day')
+  assert.equal(humanWhen('not a date', null, '-04:00'), 'not a date')
+})

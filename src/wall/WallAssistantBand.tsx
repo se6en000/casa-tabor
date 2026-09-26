@@ -7,7 +7,7 @@ import WallKeyboard from './WallKeyboard'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { bandAnswer, bandState, voiceFinal } from './assistant'
+import { bandAnswer, bandState, cardText, voiceFinal } from './assistant'
 import { useAssistantTurn } from './useAssistantTurn'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
@@ -282,7 +282,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         {pending?.toolAction && (
           <div className="flex flex-col gap-[16px] rounded-[22px] bg-wall-on-pigment px-[32px] py-[24px] text-wall-ink">
             <div className="flex items-baseline justify-between gap-[24px]">
-              <div className="font-display text-wall-date font-semibold">{pending.toolAction.displayText}</div>
+              <div className="font-display text-wall-date font-semibold">{cardText(pending.toolAction.displayText)}</div>
               <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
             </div>
             <div className="flex gap-[14px]">
