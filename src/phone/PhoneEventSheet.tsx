@@ -61,11 +61,13 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const label = 'text-phone-label font-bold tracking-[0.16em] text-wall-ink-2'
 
   return (
-    <section aria-label={`${event.title} on the phone`} className="absolute inset-0 z-20 flex flex-col overflow-y-auto bg-phone-ground px-[20px] pb-[30px] pt-[18px] font-body text-wall-ink">
-      <div className="flex items-center justify-between">
+    <section aria-label={`${event.title} on the phone`} className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
+      {/* A pinned top bar, clear of the notch: Back and Edit never scroll away or sit under the status bar. */}
+      <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         {mode === 'details' && !view.repeating && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
       </div>
+      <div className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+16px))]">
 
       {mode !== 'edit' ? (
         <div className="mt-[14px] flex flex-col gap-[16px]">
@@ -189,6 +191,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (place, repeats) in Calendar</Link>
         </div>
       )}
+      </div>
     </section>
   )
 }

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { nextPreview, shownPosture, PREVIEW_MS } from '../src/wall/preview.ts'
-import { homeRedirect, shouldSendHomeToWall, wallHomeFlagFromUrl } from '../src/wall/kioskHome.ts'
+import { homeRedirect, phoneRedirect, shouldSendHomeToWall, wallHomeFlagFromUrl } from '../src/wall/kioskHome.ts'
 
 const t0 = 1_000_000
 
@@ -59,4 +59,12 @@ test('"/" opens the Wall on the kiosk and desktops, and the phone lens on phones
   assert.equal(homeRedirect('/', '', null, { wide: false }), '/phone')
   assert.equal(homeRedirect('/', '?classic=1', null, { wide: false }), null)
   assert.equal(homeRedirect('/calendar', '', null, { wide: false }), null)
+})
+
+test('/wall on a phone-sized screen opens the phone view instead of a shrunken wall; never on the kiosk', () => {
+  assert.equal(phoneRedirect('/wall', '', null, { wide: false }), '/phone')
+  assert.equal(phoneRedirect('/wall', '', '1', { wide: false }), null) // the kiosk
+  assert.equal(phoneRedirect('/wall', '?kiosk=1', null, { wide: false }), null) // becoming the kiosk
+  assert.equal(phoneRedirect('/wall', '', null, { wide: true }), null)
+  assert.equal(phoneRedirect('/calendar', '', null, { wide: false }), null)
 })

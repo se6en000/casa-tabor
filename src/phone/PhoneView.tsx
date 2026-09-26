@@ -323,14 +323,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
 
   return (
-    <div className="relative flex h-dvh w-full flex-col bg-phone-ground font-body text-wall-ink">
-      <main className="flex-1 overflow-y-auto px-[20px] pb-[24px] pt-[22px]">
+    // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
+    // the top clears the notch / status bar and the tab bar clears the home indicator.
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
+      <main className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[24px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
         {tab === 'me' && meScreen}
         {tab === 'family' && familyScreen}
         {tab === 'week' && weekScreen}
         {tab === 'more' && moreScreen}
       </main>
-      <nav aria-label="Sections" className="flex h-[78px] shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[18px] pt-[6px]">
+      <nav aria-label="Sections" className="flex shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px]">
         {tabButton(tabs[0])}
         {tabButton(tabs[1])}
         <button type="button" aria-label="Add something" onClick={onAdd} disabled={!onAdd} className="-mt-[18px] flex h-[56px] w-[56px] items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
@@ -359,7 +361,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
       {handOff && tripActions && (
         <div className="absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setHandOff(null)}>
-          <section aria-label="Hand off" className="absolute bottom-0 left-0 flex w-full flex-col gap-[10px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[30px] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+          <section aria-label="Hand off" className="absolute bottom-0 left-0 flex max-h-[85%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-phone-detail text-wall-ink-2">{handOff.trip.title}</div>

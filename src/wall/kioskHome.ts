@@ -53,3 +53,10 @@ export function homeRedirect(pathname: string, search: string, flag: string | nu
   if (pathname !== '/' || new URLSearchParams(search).get('classic') === '1') return null
   return shouldSendHomeToWall(pathname, search, flag, screen) ? '/wall' : '/phone'
 }
+
+/** /wall on a phone-sized screen (not the kiosk) opens the phone view: the wall's 1920x1080 stage would be tiny there. */
+export function phoneRedirect(pathname: string, search: string, flag: string | null, screen: { wide: boolean }): '/phone' | null {
+  if (pathname !== '/wall' || screen.wide || flag === '1') return null
+  if (new URLSearchParams(search).get('kiosk') === '1') return null
+  return '/phone'
+}
