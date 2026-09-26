@@ -68,3 +68,21 @@ test('when space runs out, a thing still to pack wins over the "N packed" line',
   assert.equal(fit.groups[1].showPacked, false)
   assert.equal(fit.hidden, 1)
 })
+
+import { fitPackingColumns } from '../src/wall/packing.ts'
+
+test('in columns, a whole event moves to the next column rather than splitting; the last column cuts and counts', () => {
+  const fit = fitPackingColumns([
+    group('a', 'A · 7:00', [['1', false], ['2', false]]),              // 3 lines
+    group('b', 'B · 9:00', [['3', false], ['4', false], ['5', false]]), // 4 lines: doesn't fit under A, goes right
+    group('c', 'C · 11:00', [['6', false], ['7', false]]),             // nowhere left: counted
+  ], 4, 2)
+  assert.deepEqual(fit.columns.map((col) => col.map((g) => g.eventId)), [['a'], ['b']])
+  assert.equal(fit.hidden, 2)
+})
+
+test('an event too long for any column starts one and is cut there', () => {
+  const fit = fitPackingColumns([group('big', 'Big · 7:00', [['1', false], ['2', false], ['3', false], ['4', false], ['5', false]])], 4, 2)
+  assert.deepEqual(fit.columns[0][0].items.map((i) => i.label), ['1', '2', '3'])
+  assert.equal(fit.hidden, 2)
+})

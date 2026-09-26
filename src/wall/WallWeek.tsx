@@ -18,8 +18,7 @@ export interface WallWeekProps {
 export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect }: WallWeekProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ''
   return (
-    <section aria-label="Next seven days" className="flex shrink-0 flex-col gap-[10px]">
-      <div className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NEXT SEVEN DAYS</div>
+    <section aria-label="Next seven days" className="flex shrink-0 flex-col">
       <div className="flex gap-[12px]">
         {days.map((day) => {
           const selected = day.key === shownKey
@@ -51,7 +50,10 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect 
                   <span key={id} className={`h-[18px] w-[18px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
                 ))}
               </div>
-              <div className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.firstOut}</div>
+              <div className="flex items-baseline justify-between gap-[8px]">
+                <span className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.firstOut}</span>
+                {day.toDo > 0 && <span className="shrink-0 text-wall-label font-bold text-wall-brass-ink">{day.toDo} to do</span>}
+              </div>
             </button>
           )
         })}

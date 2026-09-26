@@ -88,3 +88,31 @@ export function fitPacking(groups: PackingGroup[], lines: number): { groups: Fit
   }
   return { groups: fitted, hidden }
 }
+
+/**
+ * The same, in `columns` columns of `lines` rows (the day-ahead layout). An event moves
+ * whole to the next column rather than splitting; one too long for any column starts a
+ * column and is cut there. Whatever doesn't fit is counted.
+ */
+export function fitPackingColumns(groups: PackingGroup[], lines: number, columns: number): { columns: FittedPackingGroup[][]; hidden: number } {
+  const need = (g: PackingGroup) => {
+    const open = g.items.filter((i) => !i.checked).length
+    return 1 + open + (open < g.items.length ? 1 : 0)
+  }
+  const cols: FittedPackingGroup[][] = [[]]
+  let left = lines
+  let hidden = 0
+  for (const group of groups) {
+    if (need(group) > left && cols[cols.length - 1].length > 0 && cols.length < columns) {
+      cols.push([])
+      left = lines
+    }
+    const fit = fitPacking([group], left)
+    hidden += fit.hidden
+    if (fit.groups.length === 0) continue
+    const [g] = fit.groups
+    cols[cols.length - 1].push(g)
+    left -= 1 + g.items.length + (g.showPacked ? 1 : 0)
+  }
+  return { columns: cols, hidden }
+}

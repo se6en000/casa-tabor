@@ -6,6 +6,7 @@ import { describeNextMove, weatherLine } from './header'
 import { pigmentStyleFor } from './lanes'
 import { calmHeadline, calmNextLine } from './posture'
 import { DecisionCount } from './WallDecisions'
+import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
 import { buildScore, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
 
@@ -33,10 +34,12 @@ export interface WallCalmProps {
   onSelectPerson?: (memberId: string) => boolean
   decisionCount?: number
   onOpenDecisions?: () => void
+  /** Tomorrow speaking up in the afternoon. */
+  tomorrow?: TomorrowNote | null
 }
 
 /** The calm posture (board 02b): a big clock, where everyone is, and the day in miniature. */
-export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, decisionCount = 0, onOpenDecisions }: WallCalmProps) {
+export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, decisionCount = 0, onOpenDecisions, tomorrow = null }: WallCalmProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const next = useMemo(() => (plan ? calmNextLine(describeNextMove(selectNextMove(plan, now), members, now)) : null), [plan, members, now])
   const clock = formatWallClock(now)
@@ -93,6 +96,7 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
             <span className="truncate">{next}</span>
           </div>
         )}
+        {tomorrow && <WallTomorrowNote note={tomorrow} quiet />}
 
         <div aria-hidden="true" className="relative" style={{ height: 30 + lanes.length * RIBBON_ROW }}>
           <div className="absolute top-0 h-[20px] text-wall-label text-wall-ink-2" style={{ left: RIBBON_LEFT, width: RIBBON_WIDTH }}>

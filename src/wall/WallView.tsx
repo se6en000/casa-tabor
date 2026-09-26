@@ -11,8 +11,9 @@ import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
 import { packingGroups, type WallChecklistItem } from './packing'
 import WallPackingSheet from './WallPackingSheet'
-import { eveningFocus, selectPosture, type Posture } from './posture'
-import { PREVIEW_MS, nextPreview, shownPosture, type PreviewState } from './preview'
+import { eveningFocus, selectPosture, tomorrowLine, type Posture } from './posture'
+import { formatWallDate } from './clock'
+import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
@@ -65,11 +66,15 @@ export interface WallViewProps {
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
+/** A touch on Calm keeps the full day up this long after the last touch. */
+const WAKE_MS = 5 * 60_000
 
 /**
  * The whole Wall, drawn from data only (no fetching), so it can be rendered from fixtures.
- * A tap on empty wall previews the next face (back to the automatic one after 2 idle
- * minutes); a tap on a calendar item opens its sheet (details, then edit).
+ * The wall picks its face by the clock and the day (posture.ts); a touch on Calm wakes
+ * the full day until 5 idle minutes pass. The week strip is the way around: a day
+ * tapped there shows that day (back after "Back", or 2 idle minutes). Previewing a
+ * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
   const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist } = props
@@ -78,8 +83,10 @@ export default function WallView(props: WallViewProps) {
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [packingOpen, setPackingOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
-  // Another day tapped in the week strip: shown until a tap elsewhere, "Back to today", or 2 idle minutes.
+  // A day tapped in the week strip: shown until "Back", or 2 idle minutes.
   const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
+  // A touch on Calm wakes the full day until this time (5 idle minutes).
+  const [awakeUntil, setAwakeUntil] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
@@ -100,11 +107,18 @@ export default function WallView(props: WallViewProps) {
   const shownToday = useMemo(() => withDraft(today), [withDraft, today])
   const shownTomorrow = useMemo(() => withDraft(tomorrow), [withDraft, tomorrow])
 
-  const auto = selectPosture(today, now)
+  const chosen = selectPosture(today, now)
+  const auto: Posture = chosen === 'calm' && Date.now() < awakeUntil ? 'launch' : chosen
   const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
-  const lookAhead = dayPreview && Date.now() < dayPreview.until && !sameDay(dayPreview.date, now) ? dayPreview.date : null
-  // Looking at another day is always the full Score.
-  const shown = lookAhead ? { posture: 'launch' as Posture, preview: false } : shownPosture(auto, preview, Date.now())
+  const shown = shownPosture(auto, preview, Date.now())
+  const evening = shown.posture === 'evening'
+  const focus = eveningFocus(now)
+  // The day the wall shows by itself: tomorrow in the evening (today after midnight), else today.
+  const autoDay = evening && focus.day === 'tomorrow' ? (tomorrow?.date ?? now) : now
+  const picked = dayPreview && Date.now() < dayPreview.until ? dayPreview.date : null
+  const dayOnShow = picked ?? autoDay
+  const planFor = (date: Date) =>
+    sameDay(date, now) ? shownToday : tomorrow && sameDay(date, tomorrow.date) ? shownTomorrow : withDraft(week.find((p) => sameDay(p.date, date)) ?? null)
 
   // Drop the preview exactly when it lapses (the minute clock alone could keep it up to a minute longer).
   useEffect(() => {
@@ -117,6 +131,14 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setDayPreview(null), Math.max(0, dayPreview.until - Date.now()))
     return () => window.clearTimeout(timer)
   }, [dayPreview])
+  // Fall back asleep exactly when the 5 idle minutes are up.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const left = awakeUntil - Date.now()
+    if (left <= 0) return
+    const timer = window.setTimeout(() => setTick((n) => n + 1), left)
+    return () => window.clearTimeout(timer)
+  }, [awakeUntil])
 
   useEffect(() => {
     if (openRequest) setSelectedId(openRequest.id)
@@ -184,69 +206,89 @@ export default function WallView(props: WallViewProps) {
     : undefined
 
   const openMenu = () => setMenuOpen(true)
+  const decisionsOn = (date: Date) => weekDecisions.filter((d) => sameDay(d.date, date))
+  const showDay = (date: Date) => setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
+  const tomorrowDate = tomorrow?.date ?? null
+  const weekStrip = week.length > 1 ? (
+    <WallWeek
+      days={weekDays(week, members, weekDecisions, now, checklist)}
+      members={members}
+      pigmentOf={(id) => pigments.get(id) ?? null}
+      shownKey={dayOnShow.toDateString()}
+      onSelect={showDay}
+    />
+  ) : null
+  const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
+  const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
+
   let face
-  if (shown.posture === 'evening') {
-    const focus = eveningFocus(now)
-    const eveningPlan = focus.day === 'today' ? shownToday : shownTomorrow
+  if (!sameDay(dayOnShow, now) || (evening && !picked)) {
+    // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
+    const plan = planFor(dayOnShow)
+    const isAuto = sameDay(dayOnShow, autoDay) && !picked
+    const heading = evening && isAuto
+      ? (focus.day === 'tomorrow' ? 'TOMORROW' : 'TODAY')
+      : tomorrowDate && sameDay(dayOnShow, tomorrowDate)
+        ? 'TOMORROW'
+        : `LOOKING AHEAD · ${dayOnShow.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()}`
     face = (
       <WallEvening
         now={now}
         members={members}
-        plan={eveningPlan}
-        label={focus.label}
-        focusDay={focus.day}
+        plan={plan}
+        label={evening ? focus.label : formatWallDate(now)}
+        heading={heading}
+        dark={evening}
         checklist={checklist}
-        interaction={{ ...interaction, marks: marksFor(eveningPlan?.date) }}
-        decisions={weekDecisions.filter((d) => eveningPlan && sameDay(d.date, eveningPlan.date))}
+        interaction={{ ...interaction, marks: marksFor(plan?.date) }}
+        decisions={plan ? decisionsOn(plan.date) : []}
         onAnswer={tripActions ? answer : undefined}
         onToggleItem={toggleChecklist}
         onOpenEvent={(id) => eventsById.has(id) && setSelectedId(id)}
         onSeeAllPacking={() => setPackingOpen(true)}
+        week={weekStrip}
+        onBack={picked ? () => setDayPreview(null) : undefined}
       />
     )
   } else if (shown.posture === 'calm') {
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} />
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} tomorrow={tomorrowNote} />
   } else {
-    const lookPlan = lookAhead ? withDraft(week.find((p) => sameDay(p.date, lookAhead)) ?? null) : null
-    const launchPlan = lookAhead ? lookPlan : shownToday
-    const startOf = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    // The full day (also Today tapped in the evening).
     face = (
       <WallLaunch
         now={now}
         members={members}
-        plan={launchPlan}
+        plan={shownToday}
         currentWeather={currentWeather}
         onOpenMenu={openMenu}
         onAsk={onAsk}
-        interaction={{ ...interaction, marks: marksFor(launchPlan?.date) }}
+        interaction={{ ...interaction, marks: marksFor(shownToday?.date) }}
         moveActions={moveActions}
         decisionCount={weekDecisions.length}
         onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined}
-        day={lookAhead ? { asOf: startOf(lookAhead), onBack: () => setDayPreview(null) } : null}
-        week={
-          week.length > 1 ? (
-            <WallWeek
-              days={weekDays(week, members, weekDecisions, now)}
-              members={members}
-              pigmentOf={(id) => pigments.get(id) ?? null}
-              shownKey={(lookAhead ?? now).toDateString()}
-              onSelect={(date) => setDayPreview(sameDay(date, now) ? null : { date, until: Date.now() + PREVIEW_MS })}
-            />
-          ) : null
-        }
+        tomorrow={tomorrowNote}
+        week={weekStrip}
       />
     )
   }
+  const onLaunchFace = sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
 
   return (
-    <div className="relative h-full w-full" onClick={() => (lookAhead ? setDayPreview(null) : setPreview((state) => nextPreview(auto, state, Date.now())))}>
+    <div
+      className="relative h-full w-full"
+      // A tap that nothing else handled (a person, a count, a block stop it) wakes Calm; once awake, any touch keeps it awake.
+      onClick={() => setAwakeUntil(Date.now() + WAKE_MS)}
+      onPointerDownCapture={() => {
+        if (Date.now() < awakeUntil) setAwakeUntil(Date.now() + WAKE_MS)
+      }}
+    >
       {face}
-      {shown.posture !== 'launch' && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
-      {shown.posture !== 'launch' && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
+      {!onLaunchFace && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
+      {!onLaunchFace && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
       {!selected && overlay}
       {shown.preview && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
-          Previewing {POSTURE_NAMES[shown.posture]} · tap for the next · back to {POSTURE_NAMES[auto]} on its own
+          Previewing {POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
         </div>
       )}
       {selected && (
@@ -285,13 +327,21 @@ export default function WallView(props: WallViewProps) {
       {decisionsOpen && tripActions && (
         <WallDecisionsSheet decisions={weekDecisions} now={now} onAnswer={answer} onClose={() => setDecisionsOpen(false)} />
       )}
-      {packingOpen && toggleChecklist && shown.posture === 'evening' && (() => {
-        const focus = eveningFocus(now)
-        const plan = focus.day === 'today' ? shownToday : shownTomorrow
+      {packingOpen && toggleChecklist && (() => {
+        const plan = planFor(dayOnShow)
         const packing = plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }
         return <WallPackingSheet groups={packing.groups} packed={packing.packed} total={packing.total} onToggle={toggleChecklist} onClose={() => setPackingOpen(false)} />
       })()}
-      {menuOpen && <WallMenu onClose={() => setMenuOpen(false)} />}
+      {menuOpen && (
+        <WallMenu
+          onClose={() => setMenuOpen(false)}
+          onPreview={(posture) => {
+            setDayPreview(null)
+            setPreview(posture === auto ? null : { posture, until: Date.now() + PREVIEW_MS })
+            setMenuOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test'
 const MOMENTS = [
   { name: 'launch-before-school', at: '2026-09-25T07:12:00' },
   { name: 'launch-needs-driver', at: '2026-09-26T12:00:00' },
-  { name: 'calm-afternoon', at: '2026-09-25T13:40:00' },
+  { name: 'calm-afternoon', at: '2026-09-25T11:40:00' },
   { name: 'evening-before-games', at: '2026-09-25T20:15:00' },
 ]
 
@@ -18,26 +18,24 @@ for (const moment of MOMENTS) {
   })
 }
 
-test('wall: a tap previews the next face, and the MT menu opens the rest of the app', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+test('wall: a touch on Calm wakes the full day; faces are previewed from the MT menu; the menu opens the rest of the app', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
   const wall = page.getByTestId('wall-fixture')
   await expect(wall.getByText('A quiet stretch until 1:50.')).toBeVisible()
 
   await wall.click({ position: { x: 400, y: 600 } })
-  await expect(wall.getByText(/Previewing Full day/)).toBeVisible()
-  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
-
-  await wall.click({ position: { x: 400, y: 600 } })
-  await expect(wall.getByText(/Previewing Evening/)).toBeVisible()
-  await expect(wall.getByText('TOMORROW', { exact: true })).toBeVisible()
-
-  await wall.click({ position: { x: 400, y: 600 } })
+  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible() // awake: the full day
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
-  await expect(wall.getByText('A quiet stretch until 1:50.')).toBeVisible()
+  await wall.click({ position: { x: 1700, y: 1060 } }) // another tap on empty wall doesn't flip faces
+  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
 
   await wall.getByRole('button', { name: 'Open menu' }).click()
   await expect(wall.getByRole('link', { name: 'Calendar' })).toBeVisible()
-  await expect(wall.getByText(/Previewing/)).toHaveCount(0) // opening the menu isn't a tap on the wall
+  await wall.getByRole('button', { name: 'Evening' }).click()
+  await expect(wall.getByText(/Previewing Evening · back to Full day on its own/)).toBeVisible()
+  await expect(wall.getByRole('banner').getByText('TOMORROW', { exact: true })).toBeVisible()
+
+  await wall.getByRole('button', { name: 'Open menu' }).click()
   await wall.getByRole('button', { name: 'Back to the Wall' }).click()
   await expect(wall.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
 })
@@ -84,7 +82,7 @@ test('wall: tapping an item opens its details; Edit shows what changes before sa
 })
 
 test('wall: in the calm view, tapping a person opens what they are doing next', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: /^Emme/ }).click()
   await expect(wall.getByRole('region', { name: /SAVE the DATE.*details/ })).toBeVisible()
@@ -160,7 +158,7 @@ test('wall: "One trip" gives both games to one driver', async ({ page }) => {
   await expect(wall.getByText('Leaves at 11:56').first()).toBeVisible()
 })
 
-test('wall: the week strip shows another day\'s Score, and comes back to today', async ({ page }) => {
+test('wall: the week strip shows another day, in the day-ahead layout, and comes back to today', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   const wall = page.getByTestId('wall-fixture')
   const week = wall.getByRole('region', { name: 'Next seven days' })
@@ -168,26 +166,33 @@ test('wall: the week strip shows another day\'s Score, and comes back to today',
 
   await week.getByRole('button', { name: /^Saturday, September 26/ }).click()
   await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
-  await expect(wall.getByText('LOOKING AHEAD')).toBeVisible()
-  await expect(wall.getByText(/First out: Jake → Ferrin Park Field 1 · leave 11:56/)).toBeVisible()
-  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+  await expect(wall.getByRole('banner').getByText('TOMORROW', { exact: true })).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'First departure' }).getByText('Jake → Ferrin Park Field 1')).toBeVisible()
+  await expect(week.getByRole('button', { name: /^Saturday, September 26/ })).toHaveAttribute('aria-pressed', 'true')
   await expect(wall).toHaveScreenshot('week-saturday.png')
 
   await wall.getByRole('button', { name: 'Back to today' }).click()
   await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
 
-  // A tap anywhere else on the wall also comes back to today (not on to the next face).
   await week.getByRole('button', { name: /^Sunday/ }).click()
-  await expect(wall.getByText("SUNDAY · WHO'S WHERE")).toBeVisible()
-  await wall.getByText('LOOKING AHEAD').click()
+  await expect(wall.getByText('LOOKING AHEAD · SUNDAY')).toBeVisible()
+  await week.getByRole('button', { name: /^Today/ }).click()
   await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
-  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+})
+
+test('wall: from 1 PM tomorrow speaks up on the full day, and a tap opens it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  const wall = page.getByTestId('wall-fixture')
+  const note = wall.getByRole('button', { name: /^TOMORROW/ })
+  await expect(note).toContainText("Kelly's Birthday: Birthday card still to do")
+  await expect(wall).toHaveScreenshot('tomorrow-note.png')
+  await note.click()
+  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
 })
 
 test('wall: nothing runs off the stage, even late in the day, and the header keeps its weather line', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-10-01T18:00:00')
   const wall = page.getByTestId('wall-fixture')
-  await wall.click({ position: { x: 400, y: 1000 } }) // calm → full day
   await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
   await expect(wall.getByText(/Pick up the costume/).first()).toBeVisible()
   await expect(wall.getByText(/Everyone home by/)).toBeVisible()
@@ -297,10 +302,10 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
   const pack = wall.getByRole('region', { name: 'Pack tonight' })
-  await expect(pack.getByText('PACK TONIGHT · 1 OF 6 PACKED')).toBeVisible()
+  await expect(pack.getByText('GET & PACK · 1 OF 6 DONE')).toBeVisible()
 
   await pack.getByRole('button', { name: 'Birthday card' }).click()
-  await expect(pack.getByText('PACK TONIGHT · 2 OF 6 PACKED')).toBeVisible()
+  await expect(pack.getByText('GET & PACK · 2 OF 6 DONE')).toBeVisible()
   await expect(pack.getByRole('button', { name: 'Birthday card' })).toHaveCount(0) // folded into "1 packed"
   await expect(wall.getByText(/Previewing/)).toHaveCount(0) // a tap on a line isn't a tap on the wall
   await expect(wall).toHaveScreenshot('pack-tonight.png')
@@ -308,9 +313,9 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await pack.getByRole('button', { name: 'See all' }).click()
   const sheet = wall.getByRole('region', { name: 'Everything to pack' })
   await sheet.getByRole('button', { name: 'Birthday card' }).click() // untick it again
-  await expect(sheet.getByText('PACK TONIGHT · 1 OF 6 PACKED')).toBeVisible()
+  await expect(sheet.getByText('GET & PACK · 1 OF 6 DONE')).toBeVisible()
   await sheet.getByRole('button', { name: 'Close' }).click()
 
-  await pack.getByRole('button', { name: /^Softball/ }).click()
-  await expect(wall.getByRole('region', { name: 'Softball: Huskies @ RPB Cascade details' })).toBeVisible()
+  await pack.getByRole('button', { name: /^Kelly's Birthday/ }).click()
+  await expect(wall.getByRole('region', { name: /^Kelly's Birthday details/ })).toBeVisible()
 })

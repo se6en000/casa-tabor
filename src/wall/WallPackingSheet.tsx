@@ -43,7 +43,7 @@ export default function WallPackingSheet({ groups, packed, total, onToggle, onCl
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">PACK TONIGHT · {packed} OF {total} PACKED</div>
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">GET &amp; PACK · {packed} OF {total} DONE</div>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
             <X size={22} />
           </button>

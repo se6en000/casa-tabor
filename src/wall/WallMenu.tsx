@@ -1,5 +1,6 @@
 import { Mic } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import type { Posture } from './posture'
 
 // The MT monogram opens the rest of the app. On the kiosk, each page's Home
 // button — and a few idle minutes — bring it back to the Wall (kioskHome.ts).
@@ -47,7 +48,14 @@ export function MicButton({ onAsk, className = '', small = false }: { onAsk: () 
   )
 }
 
-export default function WallMenu({ onClose }: { onClose: () => void }) {
+const PREVIEWS: Array<{ posture: Posture; label: string }> = [
+  { posture: 'launch', label: 'Full day' },
+  { posture: 'calm', label: 'Calm' },
+  { posture: 'evening', label: 'Evening' },
+]
+
+/** The MT menu: the rest of the app, and (since a tap on the wall no longer flips faces) a way to preview each face. */
+export default function WallMenu({ onClose, onPreview }: { onClose: () => void; onPreview?: (posture: Posture) => void }) {
   return (
     <div
       role="dialog"
@@ -72,6 +80,23 @@ export default function WallMenu({ onClose }: { onClose: () => void }) {
             {item.label}
           </Link>
         ))}
+        {onPreview && (
+          <div className="mt-[14px] flex flex-col gap-[10px] border-t border-wall-rule pt-[14px]">
+            <div className="text-wall-label font-semibold tracking-[0.2em] text-wall-ink-2">PREVIEW A FACE</div>
+            <div className="flex gap-[10px]">
+              {PREVIEWS.map((p) => (
+                <button
+                  key={p.posture}
+                  type="button"
+                  onClick={() => onPreview(p.posture)}
+                  className="h-[52px] flex-1 rounded-full border border-wall-rule bg-transparent text-wall-detail font-semibold text-wall-ink"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <button
           type="button"
           onClick={onClose}

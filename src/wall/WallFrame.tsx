@@ -44,7 +44,8 @@ export default function WallFrame() {
     }
   }, [today?.date, now, trips, allEvents, members, queryClient])
   const { data: currentWeather } = useHomeWeather()
-  const eventIds = useMemo(() => [today, tomorrow].flatMap((plan) => (plan ? packingEventIds(plan) : [])), [today, tomorrow])
+  // Prep for the whole week: the week strip counts it, and any day can be opened.
+  const eventIds = useMemo(() => (week.length ? week : [today, tomorrow]).flatMap((plan) => (plan ? packingEventIds(plan) : [])), [week, today, tomorrow])
   const checklist = useWallChecklist(eventIds)
 
   // The assistant band: the mic button or the wake word (heard on the Pi) opens it and starts listening.

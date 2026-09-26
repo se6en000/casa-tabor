@@ -13,21 +13,27 @@ test('the morning rush is launch, from 6 AM until the last school run arrives', 
   assert.equal(selectPosture(friday, at(25, 5, 59)), 'evening')
   assert.equal(selectPosture(friday, at(25, 6, 0)), 'launch')
   assert.equal(selectPosture(friday, at(25, 7, 50)), 'launch') // Kelly and Liv arrive 8:00
-  assert.equal(selectPosture(friday, at(25, 8, 0)), 'calm')
+  assert.equal(selectPosture(friday, at(25, 8, 0)), 'launch') // Kelly is still driving home from the drop-off
+  assert.equal(selectPosture(friday, at(25, 8, 30)), 'calm')
 })
 
-test('a departure within 5 minutes is launch; further out is calm', () => {
-  assert.equal(selectPosture(friday, at(25, 13, 44)), 'calm') // Giselle leaves 1:50
-  assert.equal(selectPosture(friday, at(25, 13, 45)), 'launch')
+test('a departure within 2 hours is the full day; further out is calm', () => {
+  assert.equal(selectPosture(friday, at(25, 11, 49)), 'calm') // Giselle leaves 1:50
+  assert.equal(selectPosture(friday, at(25, 11, 50)), 'launch')
+})
+
+test('while someone is out on a trip, it stays the full day', () => {
+  assert.equal(selectPosture(saturday, at(26, 13, 30)), 'launch') // Jake is at softball until 2:30, home 2:59
+  assert.equal(selectPosture(saturday, at(26, 15, 5)), 'calm') // everyone home
 })
 
 test('a weekend with no school runs has no morning rush', () => {
   assert.equal(selectPosture(saturday, at(26, 7, 0)), 'calm')
-  assert.equal(selectPosture(saturday, at(26, 11, 52)), 'launch') // softball leaves 11:56
+  assert.equal(selectPosture(saturday, at(26, 10, 0)), 'launch') // softball leaves 11:56, within 2 hours
 })
 
 test('from 7 PM until 5 AM it is evening', () => {
-  assert.equal(selectPosture(friday, at(25, 18, 59)), 'calm')
+  assert.equal(selectPosture(friday, at(25, 16, 30)), 'calm')
   assert.equal(selectPosture(friday, at(25, 19, 0)), 'evening')
   assert.equal(selectPosture(friday, at(26, 2, 0)), 'evening')
 })
@@ -60,3 +66,24 @@ test('tomorrow\'s forecast is read from the first outing that has one', () => {
   assert.equal(forecastLine(saturday), null)
 })
 
+
+import { tomorrowLine } from '../src/wall/posture.ts'
+
+const kit = [
+  { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
+  { id: 'c7', event_id: 'birthday', label: 'Gift', checked: false, sort_order: 2 },
+  { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
+  { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
+]
+
+test('from 1 PM, tomorrow speaks up with what is still to do, and when the day starts', () => {
+  assert.equal(tomorrowLine(saturday, kit, 0, at(25, 12, 59)), null) // too early
+  assert.equal(tomorrowLine(saturday, kit, 0, at(25, 13, 0)), "Kelly's Birthday: Birthday card and Gift still to do · 1 more · first out 11:56")
+  assert.equal(tomorrowLine(saturday, kit, 0, at(25, 19, 0)), null) // the evening shows tomorrow itself
+})
+
+test('tomorrow with a question but nothing to pack still speaks up; with nothing at all it stays quiet', () => {
+  const done = kit.map((i) => ({ ...i, checked: true }))
+  assert.equal(tomorrowLine(saturday, done, 1, at(25, 14, 0)), '1 to decide · first out 11:56')
+  assert.equal(tomorrowLine(saturday, done, 0, at(25, 14, 0)), null)
+})
