@@ -130,7 +130,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
       {me.moves.length > 0 && (
         <section aria-label="Your moves today">
-          <Label>YOUR MOVES TODAY</Label>
+          <Label>{ahead ? 'YOUR MOVES TOMORROW' : 'YOUR MOVES TODAY'}</Label>
           {me.moves.map((m) => (
             <div key={m.tripIds[0]} className="flex items-start gap-[12px] border-0 border-t border-solid border-wall-stone py-[10px]">
               {/* Jake's note on 05a: a "Leave by" label, and the time in bold. */}
