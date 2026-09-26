@@ -35,6 +35,9 @@ export interface PhoneViewProps {
   onAdd?: () => void
 }
 
+/** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
+const LOOK_AHEAD_HOUR = 19
+
 const shortDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 const clock = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/, '')
 
@@ -65,23 +68,35 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
 export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAdd }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
-  const [dayIndex, setDayIndex] = useState(0)
+  const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [handOff, setHandOff] = useState<Trip | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const viewer = members.find((m) => m.id === viewerId) ?? null
   const today = week[0] ?? null
-  const me = useMemo(() => meView({ viewerId, plan: today, members, events, checklist, now }), [viewerId, today, members, events, checklist, now])
+  // From 7 PM, "Me" and Family default to tomorrow, read from its start (everything still ahead).
+  const ahead = now.getHours() >= LOOK_AHEAD_HOUR && week.length > 1
+  const focusIndex = ahead ? 1 : 0
+  const focus = week[focusIndex] ?? today
+  const focusNow = useMemo(() => {
+    if (!ahead || !focus) return now
+    const start = new Date(focus.date)
+    start.setHours(0, 0, 0, 0)
+    return start
+  }, [ahead, focus, now])
+  const me = useMemo(() => meView({ viewerId, plan: focus, members, events, checklist, now: focusNow }), [viewerId, focus, members, events, checklist, focusNow])
   const lanePeople = members.filter((m) => m.show_on_home_sidebar !== false)
-  const tripOf = (move: PhoneMove) => today?.trips.find((t) => t.id === move.tripIds[0]) ?? null
+  const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
   const itemOf = (id: string) => checklist.find((i) => i.id === id)
 
   const meScreen = (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-phone-detail text-wall-ink-2">{now.toLocaleDateString('en-US', { weekday: 'long' })} · {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
-          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s day` : 'Your day'}</h1>
+          <div className="text-phone-detail text-wall-ink-2">
+            {ahead && focus ? `Tomorrow · ${focus.date.toLocaleDateString('en-US', { weekday: 'long' })}` : `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+          </div>
+          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s ${ahead ? 'tomorrow' : 'day'}` : ahead ? 'Tomorrow' : 'Your day'}</h1>
         </div>
         {viewer && <Disc id={viewer.id} members={members} pigments={pigments} size="h-[40px] w-[40px] text-phone-heading" />}
       </div>
@@ -100,7 +115,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           )}
           {tripActions && (
             <div className="mt-[8px] flex gap-[8px]">
-              {me.next.departed ? (
+              {ahead ? null : me.next.departed ? (
                 <button type="button" onClick={() => tripActions.undoLeaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Not yet (undo)</button>
               ) : (
                 <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border-0 bg-wall-on-pigment text-phone-body font-bold text-wall-ink">Leaving now</button>
@@ -110,7 +125,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           )}
         </section>
       ) : (
-        <div className="rounded-[20px] bg-phone-card p-[18px] font-display text-phone-heading italic text-wall-ink-2">Nothing for you to drive today.</div>
+        <div className="rounded-[20px] bg-phone-card p-[18px] font-display text-phone-heading italic text-wall-ink-2">Nothing for you to drive {ahead ? 'tomorrow' : 'today'}.</div>
       )}
 
       {me.moves.length > 0 && (
@@ -175,7 +190,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </div>
   )
 
-  const shownDay = week[dayIndex] ?? today
+  const shownDay = week[dayIndex ?? focusIndex] ?? today
   const items = familyItems(shownDay, members, filter)
   const familyScreen = (
     <div className="flex flex-col gap-[14px]">
@@ -226,10 +241,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           key={d.key}
           type="button"
           onClick={() => { setDayIndex(i); setTab('family') }}
-          className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === 0 ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
+          className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === focusIndex ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
         >
           <span className="flex w-[80px] flex-col">
-            <span className={`text-phone-label font-bold tracking-[0.16em] ${i === 0 ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{d.weekday.toUpperCase()}</span>
+            <span className={`text-phone-label font-bold tracking-[0.16em] ${i === focusIndex ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{d.weekday.toUpperCase()}</span>
             <span className="font-display text-phone-heading font-bold">{d.dayNumber}</span>
           </span>
           <span className="flex flex-1 flex-col gap-[6px]">
@@ -281,7 +296,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       key={t.id}
       type="button"
       aria-current={tab === t.id ? 'page' : undefined}
-      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') setDayIndex(0) }}
+      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') setDayIndex(null) }}
       className={`flex h-[52px] w-[62px] flex-col items-center justify-center gap-[3px] border-0 bg-transparent p-0 text-phone-label ${tab === t.id ? 'font-bold text-wall-ink' : 'font-medium text-wall-ink-2'}`}
     >
       {t.icon}
@@ -289,7 +304,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </button>
   )
 
-  const choices = handOff && today ? driverChoices(today, members, handOff, handOff.sourceId) : []
+  const choices = handOff && focus ? driverChoices(focus, members, handOff, handOff.sourceId) : []
 
   return (
     <div className="relative flex h-dvh w-full flex-col bg-phone-ground font-body text-wall-ink">
@@ -327,7 +342,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                 onClick={async () => {
                   setBusy(true)
                   try {
-                    await tripActions.handOff(handOff, c.memberId)
+                    await tripActions.handOff(handOff, c.memberId, focus?.date)
                     setHandOff(null)
                   } finally {
                     setBusy(false)

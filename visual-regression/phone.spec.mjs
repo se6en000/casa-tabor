@@ -68,3 +68,13 @@ test('phone: More opens the rest of Casa', async ({ page }) => {
   await expect(phone.getByRole('link', { name: /Grocery/ })).toBeVisible()
   await expect(phone.getByRole('link', { name: /See the Wall/ })).toBeVisible()
 })
+
+test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evening)', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T20:15:00', 'jake-id')
+  await expect(phone.getByRole('heading', { name: "Jake's tomorrow" })).toBeVisible()
+  const next = phone.getByRole('region', { name: 'Your next move' })
+  await expect(next.getByText('LEAVE BY 11:56')).toBeVisible()
+  await expect(phone.getByRole('region', { name: 'Kept from someone' }).getByRole('button', { name: 'Birthday card' })).toBeVisible()
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await expect(phone.getByText('Saturday, September 26')).toBeVisible()
+})
