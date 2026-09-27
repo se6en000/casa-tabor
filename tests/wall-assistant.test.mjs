@@ -38,6 +38,8 @@ test('the band says what it is doing', () => {
   assert.equal(bandState({ listening: false, loading: false, answer: msg('assistant', 'x'), pending: null }), 'ANSWERED')
   assert.equal(bandState({ listening: false, loading: false, answer: msg('assistant', 'x'), pending: msg('assistant', 'y') }), 'NEEDS A YES')
   assert.equal(bandState({ listening: false, loading: false, answer: null, pending: null }), 'READY')
+  // The mic stays open while a card waits (P3.13): the band still says what it's waiting for.
+  assert.equal(bandState({ listening: true, loading: false, answer: msg('assistant', 'x'), pending: msg('assistant', 'y') }), 'NEEDS A YES')
 })
 
 import { requestArgsFor, readActionResult } from '../src/wall/assistantActions.ts'
@@ -143,4 +145,20 @@ test('an answer that offers to do something gets a one-tap yes', async () => {
   assert.equal(nextStep(msg('assistant', 'Kelly drives. Leave by 1:28.')), null)
   assert.equal(nextStep(msg('assistant', 'Which one do you mean?')), null, 'a question back is not an offer')
   assert.equal(nextStep(null), null)
+})
+
+test('words not said to Casa (asides) are dropped from the conversation, and a run of them is counted', async () => {
+  const { withoutAsides } = await import('../src/wall/assistant.ts')
+  const m = [
+    msg('user', 'what is on sunday'), msg('assistant', 'Skyzone at 9.'),
+    msg('user', 'owen get your shoes on'), { ...msg('assistant', ''), id: 'a-aside-1', aside: true },
+  ]
+  const one = withoutAsides(m)
+  assert.deepEqual(one.messages.map((x) => x.content), ['what is on sunday', 'Skyzone at 9.'])
+  assert.equal(one.asidesInARow, 1)
+  const two = withoutAsides([...m, msg('user', 'honey where are my keys'), { ...msg('assistant', ''), id: 'a-aside-2', aside: true }])
+  assert.equal(two.asidesInARow, 2)
+  const back = withoutAsides([...m, msg('user', 'and saturday'), msg('assistant', 'Softball.')])
+  assert.equal(back.asidesInARow, 0, 'talking to Casa again resets the count')
+  assert.equal(back.messages.length, 4)
 })

@@ -436,3 +436,58 @@ test('wall assistant: an answer that offers something gets a one-tap yes, and op
   await section.getByRole('button', { name: 'Yes, do that' }).click()
   await expect(section.getByText('“Yes, do that”')).toBeVisible()
 })
+
+// The band keeps listening (P3.13), through the fixture's stand-in microphone (window.__mic).
+const mic = (page, call) => page.evaluate(call)
+const starts = (page) => page.evaluate(() => window.__mic?.starts ?? 0)
+
+test('wall assistant: after an answer the mic opens again by itself; quiet after a plain answer, the band slips away', async ({ page }) => {
+  await band(page, 'answer')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await expect.poll(() => starts(page)).toBeGreaterThan(0)
+  const opened = await starts(page)
+  await mic(page, () => window.__mic.say('and what about sunday'))
+  await expect(section.getByText('“and what about sunday”')).toBeVisible()
+  await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
+  await expect.poll(() => starts(page)).toBe(opened + 1)
+  await expect(section.getByText('Keep talking, or')).toBeVisible()
+  await mic(page, () => window.__mic.quiet())
+  await expect(section).toHaveCount(0)
+})
+
+test('wall assistant: a card waiting for a yes outlasts the quiet; a spoken no cancels it and the conversation goes on', async ({ page }) => {
+  await band(page, 'add')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('DRAFT · NOT SAVED YET')).toBeVisible()
+  await expect(section.getByText('NEEDS A YES')).toBeVisible()
+  await mic(page, () => window.__mic.quiet())
+  await expect(section.getByText('DRAFT · NOT SAVED YET')).toBeVisible()
+  const before = await starts(page)
+  await mic(page, () => window.__mic.no())
+  await expect(section.getByText('DRAFT · NOT SAVED YET')).toHaveCount(0)
+  await expect.poll(() => starts(page)).toBe(before + 1)
+})
+
+test('wall assistant: a spoken yes saves the card and the mic opens again; "that\'s all" closes the band', async ({ page }) => {
+  await band(page, 'change')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('CHANGE · NOT SAVED YET')).toBeVisible()
+  const before = await starts(page)
+  await mic(page, () => window.__mic.yes())
+  await expect(section.getByText('CHANGE · NOT SAVED YET')).toHaveCount(0)
+  await expect.poll(() => starts(page)).toBe(before + 1)
+  await mic(page, () => window.__mic.bye())
+  await expect(section).toHaveCount(0)
+})
+
+test('wall assistant: talk not meant for Casa gets no answer and leaves no trace; two in a row and the band slips away', async ({ page }) => {
+  await band(page, 'answer')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await mic(page, () => window.__mic.say('psst owen get your shoes on'))
+  await expect(section.getByText('“Could Kelly take it instead?”')).toBeVisible()
+  await expect(section.getByText(/owen get your shoes/)).toHaveCount(0)
+  await mic(page, () => window.__mic.say('psst honey where are my keys'))
+  await expect(section).toHaveCount(0)
+})

@@ -131,9 +131,12 @@ ${before.map((m) => `${m.role === 'user' ? 'PERSON' : 'CASA'}: ${String(m.conten
 
 LATEST FROM THE PERSON: "${String(latest?.content ?? '')}"
 
-First, "closes_draft": true if the person drops or calls off the draft above (only when there is one) — whether or not they also want something else in the same message.
+First, was it said to Casa at all? The wall's microphone stays open between turns, so it can hear the room. "aside": the words clearly weren't said to Casa — the person talking to someone else ("Owen get your shoes on", "honey where are my keys"), a TV or radio, a half-sentence to themselves — and have nothing to do with the conversation with Casa. Only when that's clear; anything that could be for Casa is not an aside. For an aside, "closes_draft" is false and nothing else is needed.
+
+Then "closes_draft": true if the person drops or calls off the draft above (only when there is one) — whether or not they also want something else in the same message.
 
 Then the act — what they want (besides dropping the draft). Decide in this order: is it about the draft? Is it about the family's plans — anything on the calendar, rides, who's going, who drives, what's coming up? Then it's "add", "change", "clarify" or "question". Only if neither, "other".
+- "aside": see above.
 - "none": nothing else (they only called the draft off).
 - "revise_draft": changes or adds something to the draft above, which stays the same item — give "changes". If they say the draft is about the wrong item, that isn't a revision: it's a "change" (or "add") for the right one.
 - "confirm_draft": says yes / go ahead to the draft and nothing else.
@@ -154,7 +157,7 @@ Dates: always take them from the Days list. In scheduling, pushing or moving som
 Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false}`
 }
 
-const ACTS = ['none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
+const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
 /** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
@@ -165,8 +168,9 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const eventId = typeof r.event_id === 'string' && (knownIds ?? []).includes(r.event_id) ? r.event_id : null
   const changes = r.changes && typeof r.changes === 'object' && Object.keys(r.changes).length > 0 ? r.changes : (r.draft_changes && typeof r.draft_changes === 'object' && Object.keys(r.draft_changes).length > 0 ? r.draft_changes : null)
   const newItem = r.new_item && typeof r.new_item === 'object' ? r.new_item : null
-  // Dropping the draft is its own yes/no; the act is whatever else the turn wants.
-  const closesDraft = Boolean(draft) && (r.closes_draft === true || act === 'cancel_draft')
+  // Dropping the draft is its own yes/no; the act is whatever else the turn wants. Words not
+  // said to Casa (an aside) never touch the draft.
+  const closesDraft = act !== 'aside' && Boolean(draft) && (r.closes_draft === true || act === 'cancel_draft')
   if (act === 'cancel_draft') act = 'none'
   if (act === 'none' && !closesDraft) act = 'other'
   // Each act needs what it acts on; without it the turn goes on to the full assistant.
@@ -179,7 +183,7 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const question = typeof r.question === 'string' && r.question.trim() ? r.question.trim().slice(0, 400) : null
   if (act === 'clarify' && (candidates.length < 2 || !question)) act = 'other'
   const answerable = act === 'question' && r.answerable === true
-  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question }
+  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/

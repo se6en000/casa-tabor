@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAIAssistant } from '../hooks/useAIAssistant'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -6,7 +6,7 @@ import { getAssistantDeviceId } from '../lib/assistantTelemetry'
 import { invalidateAllCalendarQueries } from '../lib/eventMutations'
 import { supabase } from '../lib/supabase'
 import type { FamilyMember } from '../types'
-import { answerEventId, latestExchange, pendingAction } from './assistant'
+import { answerEventId, latestExchange, pendingAction, withoutAsides } from './assistant'
 import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
 import { conversationForReport, type ReportConversation } from './bugReport'
 
@@ -21,17 +21,19 @@ let lastConversation: ReportConversation | null = null
  */
 export function useAssistantTurn({ surface, events, family, onSessionEnd }: { surface: 'wall' | 'phone'; events: EventWithDetails[]; family: FamilyMember[]; onSessionEnd?: () => void }) {
   const queryClient = useQueryClient()
-  const { messages, loading, send, session, updateMessageToolStatus } = useAIAssistant({ page: surface, events, family, onSessionEnd })
+  const { messages: allMessages, loading, send, session, updateMessageToolStatus } = useAIAssistant({ page: surface, events, family, onSessionEnd })
   const [note, setNote] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
   const seenAt = useRef<Record<string, string>>({})
+  // Words the wall's open mic heard that weren't said to Casa are dropped from what's shown (P3.13).
+  const { messages, asidesInARow } = useMemo(() => withoutAsides(allMessages), [allMessages])
 
   // When each message first appeared (messages carry no time of their own), for bug reports.
   useEffect(() => {
-    for (const m of messages) if (!seenAt.current[m.id]) seenAt.current[m.id] = new Date().toISOString()
-    if (messages.length > 0) lastConversation = { messages, seenAt: { ...seenAt.current }, sessionId: session?.id ?? null }
-  }, [messages, session?.id])
-  const forReport = useCallback(() => conversationForReport({ messages, seenAt: seenAt.current, sessionId: session?.id ?? null }, lastConversation), [messages, session?.id])
+    for (const m of allMessages) if (!seenAt.current[m.id]) seenAt.current[m.id] = new Date().toISOString()
+    if (allMessages.length > 0) lastConversation = { messages: allMessages, seenAt: { ...seenAt.current }, sessionId: session?.id ?? null }
+  }, [allMessages, session?.id])
+  const forReport = useCallback(() => conversationForReport({ messages: allMessages, seenAt: seenAt.current, sessionId: session?.id ?? null }, lastConversation), [allMessages, session?.id])
 
   const { question, answer } = latestExchange(messages)
   const pending = pendingAction(messages)
@@ -87,5 +89,5 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     updateMessageToolStatus(pending.id, 'pending', { args: { ...pending.toolAction.args, ...patch } } as never)
   }, [pending, updateMessageToolStatus])
 
-  return { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
+  return { messages, asidesInARow, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
 }

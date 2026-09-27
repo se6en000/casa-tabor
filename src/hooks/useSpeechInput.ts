@@ -5,11 +5,8 @@ import {
   reconcileTranscriptRevision,
   STT_TURN_PROTOCOL,
 } from '../lib/sttTurnProtocol.mjs'
-import { isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript } from '../lib/voiceTurnTaking.mjs'
+import { isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript, voiceFinalIntent } from '../lib/voiceTurnTaking.mjs'
 
-const DISMISS_PHRASES = /\b(goodbye|bye|go away|close|dismiss|that'?s all|all done|i(?:'| a)?m done|we(?:'| a)?re done|done for now|stop listening|end session|close session|never mind|nevermind|stop)\b/i
-const CONFIRM_PHRASES = /\b(yes|yeah|yep|confirm|ok|okay|go ahead|do it|sounds good|correct|right|affirmative|absolutely|sure|proceed)\b/i
-const CANCEL_PHRASES  = /\b(no|nope|cancel|don't|do not|stop|abort|never mind|nevermind|undo)\b/i
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
 const BRIDGE    = 'http://127.0.0.1:8766'
@@ -61,6 +58,7 @@ export function useSpeechInput({
   onIncomplete,
   onAutoDismiss,
   autoDismissOnFailure = false,
+  silenceDismissMs = WAKE_SILENCE_TIMEOUT_MS,
   hasPendingAction,
   onTrace,
 }: {
@@ -72,6 +70,8 @@ export function useSpeechInput({
   onIncomplete?: (text: string) => void
   onAutoDismiss?: (reason: 'wake_silence' | 'speech_without_transcript' | 'repeated_gibberish') => void
   autoDismissOnFailure?: boolean
+  /** How long a listening session waits for speech before it quietly ends (with autoDismissOnFailure). */
+  silenceDismissMs?: number
   hasPendingAction: boolean
   onTrace?: (event: string, payload?: Record<string, unknown>) => void
 }) {
@@ -122,6 +122,7 @@ export function useSpeechInput({
   const onIncompleteRef    = useRef(onIncomplete)
   const onAutoDismissRef   = useRef(onAutoDismiss)
   const autoDismissOnFailureRef = useRef(autoDismissOnFailure)
+  const silenceDismissMsRef = useRef(silenceDismissMs)
   const onTraceRef         = useRef(onTrace)
   const hasPendingRef      = useRef(hasPendingAction)
   useEffect(() => { onInterimRef.current  = onInterim },        [onInterim])
@@ -132,6 +133,7 @@ export function useSpeechInput({
   useEffect(() => { onIncompleteRef.current = onIncomplete },     [onIncomplete])
   useEffect(() => { onAutoDismissRef.current = onAutoDismiss },   [onAutoDismiss])
   useEffect(() => { autoDismissOnFailureRef.current = autoDismissOnFailure }, [autoDismissOnFailure])
+  useEffect(() => { silenceDismissMsRef.current = silenceDismissMs }, [silenceDismissMs])
   useEffect(() => { onTraceRef.current    = onTrace },           [onTrace])
   useEffect(() => { hasPendingRef.current = hasPendingAction },  [hasPendingAction])
 
@@ -207,7 +209,7 @@ export function useSpeechInput({
       if (activeRef.current && speechStartedAtRef.current === 0 && !lastInterimRef.current.trim()) {
         autoDismissSession('wake_silence')
       }
-    }, WAKE_SILENCE_TIMEOUT_MS)
+    }, silenceDismissMsRef.current)
   }
   const scheduleSpeechWithoutTranscriptTimeout = () => {
     if (!autoDismissOnFailureRef.current) return
@@ -250,7 +252,10 @@ export function useSpeechInput({
   const handleFinalTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return
     if (suppressRef.current) return
-    if (DISMISS_PHRASES.test(transcript)) {
+    // A yes, a no, or a goodbye only when that's all that was said (voiceFinalIntent);
+    // "never mind that, when does softball start" is a question, not a goodbye.
+    const intent = voiceFinalIntent(transcript, { hasPending: hasPendingRef.current })
+    if (intent === 'dismiss') {
       activeRef.current = false  // prevent poll-scheduled restart from re-firing
       onDismissRef.current()
       return
@@ -269,12 +274,11 @@ export function useSpeechInput({
       return
     }
     unusableFinalCountRef.current = 0
-    const isShort = transcript.trim().split(/\s+/).length <= 5
-    if (isShort && hasPendingRef.current && CONFIRM_PHRASES.test(transcript)) {
+    if (intent === 'confirm') {
       onConfirmRef.current(); onInterimRef.current('')
       return
     }
-    if (isShort && hasPendingRef.current && CANCEL_PHRASES.test(transcript)) {
+    if (intent === 'cancel') {
       onCancelRef.current(); onInterimRef.current('')
       return
     }

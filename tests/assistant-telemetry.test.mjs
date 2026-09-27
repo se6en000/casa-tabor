@@ -1,3 +1,4 @@
+import { voiceFinalIntent } from '../src/lib/voiceTurnTaking.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -302,10 +303,12 @@ test('voice confirmation keeps the drawer open and relies on explicit dismiss ph
   assert.doesNotMatch(drawer, /onConfirm:[\s\S]{0,320}setTimeout\(onClose, 350\)/)
   assert.doesNotMatch(drawer, /onCancel:[\s\S]{0,320}setTimeout\(onClose, 350\)/)
   assert.match(assistant, /const GOODBYE_PHRASES = /)
-  assert.match(speech, /const DISMISS_PHRASES = /)
   assert.doesNotMatch(assistant, /GOODBYE_PHRASES = [^\n]*thank you/)
-  assert.doesNotMatch(speech, /DISMISS_PHRASES = [^\n]*thank you/)
-  assert.match(speech, /DISMISS_PHRASES = [^\n]*go away/)
+  // The speech hook sorts each sentence with voiceFinalIntent (tests/voice-final-intent.test.mjs):
+  // "go away" ends the session, "thank you" doesn't.
+  assert.match(speech, /voiceFinalIntent\(transcript, \{ hasPending: hasPendingRef\.current \}\)/)
+  assert.equal(voiceFinalIntent('go away'), 'dismiss')
+  assert.notEqual(voiceFinalIntent('thank you'), 'dismiss')
 })
 
 test('confirmed actions preserve client trace provenance on the server', () => {

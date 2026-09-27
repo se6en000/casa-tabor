@@ -22,6 +22,10 @@ import { pigmentStyleFor } from './lanes'
 // existing one (useAIAssistant, execute-ai-action); only the presentation is new.
 
 const ANSWER_IDLE_MS = 60_000
+/** Quiet this long after a plain answer, and the band slips away. */
+const ANSWERED_SILENCE_MS = 8_000
+/** Longer while a card, "which one?" or a question back waits for the person. */
+const WAITING_SILENCE_MS = 30_000
 
 /** "Open softball" from "Softball: Huskies @ Wellington Knights"; long titles give their first words. */
 const shortTitle = (title: string) => {
@@ -47,10 +51,12 @@ export interface WallAssistantBandProps {
   useTurn?: typeof useAssistantTurn
   /** Drive minutes to a place, arriving at a time; the fixture passes a fixed one. */
   lookupDrive?: DriveLookup
+  /** The microphone; the screenshot fixture passes a stand-in its tests can speak through. */
+  useSpeech?: typeof useSpeechInput
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta }: WallAssistantBandProps) {
-  const { messages, loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput }: WallAssistantBandProps) {
+  const { messages, asidesInARow = 0, loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
   const action = pending?.toolAction ?? null
@@ -89,7 +95,13 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const dictateRef = useRef<'expected' | 'happened' | null>(null)
   const heardRef = useRef('')
 
-  const speech = useSpeechInput({
+  const [relisten, setRelisten] = useState(0)
+  const pendingRef = useRef(pending)
+  pendingRef.current = pending
+  // Something is waiting on the person: a card, "which one?", or a question back.
+  const waitingOnYou = Boolean(pending) || Boolean(which) || /\?\s*$/.test(answer?.content ?? '')
+
+  const speech = useSpeech({
     onInterim: (text) => {
       lastTouch.current = Date.now()
       setInterim(text)
@@ -116,22 +128,53 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       setInterim('')
       setNote(null)
       void send(step.toSend)
-      // Press-to-talk, like the full assistant: the mic turns off after each question.
+      // The mic pauses while Casa thinks, and opens again when the answer lands (below).
       stopRef.current()
     },
     onDismiss: () => {
       if (!reportingRef.current) onClose()
     },
-    onConfirm: () => void confirm(),
-    onCancel: cancel,
+    // A spoken yes or no to the card: done, and the conversation goes on.
+    onConfirm: () => {
+      stopRef.current()
+      void confirm()
+    },
+    onCancel: () => {
+      stopRef.current()
+      cancel()
+      setRelisten((n) => n + 1)
+    },
     hasPendingAction: Boolean(pending),
     autoDismissOnFailure: true,
+    // Quiet for a while, or gibberish twice: the band slips away — but a card waiting for a
+    // yes stays on screen (the mic just closes), so it can still be tapped.
+    silenceDismissMs: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS,
     onAutoDismiss: () => {
-      if (!question && !reportingRef.current) onClose()
+      if (pendingRef.current || reportingRef.current) return
+      onClose()
     },
   })
 
   stopRef.current = () => void speech.stop()
+
+  // The band keeps listening (P3.13): once an answer lands (or a yes/no is done), the mic opens
+  // again by itself — no wake word for every sentence — until "go away", silence, or gibberish.
+  // Two asides in a row (the room is just talking, not to Casa): the band quietly slips away.
+  useEffect(() => {
+    if (asidesInARow >= 2 && !pendingRef.current && !reportingRef.current) onClose()
+  }, [asidesInARow, onClose])
+
+  const busy = loading || Boolean(answer?.streaming) || working
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (wasBusy.current && !busy) setRelisten((n) => n + 1)
+    wasBusy.current = busy
+  }, [busy])
+  useEffect(() => {
+    if (relisten === 0 || reportingRef.current) return
+    captured.current = ''
+    void speech.start()
+  }, [relisten]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start listening on open, and again each time the mic or wake word asks.
   useEffect(() => {
@@ -304,7 +347,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </button>
         <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{state}</div>
         <div className="whitespace-pre-line text-center text-wall-label text-wall-night-ink-2">
-          {state === 'NEEDS A YES' ? 'Say yes or no,\nor tap below' : 'Say the wake word,\nor tap the mic'}
+          {state === 'NEEDS A YES'
+            ? 'Say yes, or change\nanything on it'
+            : state === 'LISTENING' && question
+              ? 'Keep talking, or\nsay “that’s all”'
+              : 'Say the wake word,\nor tap the mic'}
         </div>
       </div>
 

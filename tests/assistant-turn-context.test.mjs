@@ -186,3 +186,14 @@ test('a question the listed calendar can answer is marked so; anything else is n
   assert.equal(readTurnResolution({ act: 'question' }).answerable, false)
   assert.equal(readTurnResolution({ act: 'other', answerable: true }).answerable, false)
 })
+
+test('words not said to Casa (someone else in the room, the TV) are an aside: no answer, and a draft stays open', () => {
+  const draft = { tool: 'create_event', args: { title: 'Dentist' } }
+  const aside = readTurnResolution({ act: 'aside', closes_draft: false, standalone: 'Owen get your shoes on' }, { draft })
+  assert.equal(aside.act, 'aside')
+  assert.equal(aside.closesDraft, false, 'an aside never calls off the draft')
+  assert.equal(aside.isQuestion, false)
+  // The prompt asks for it only when the words are clearly not for Casa.
+  const prompt = buildTurnPrompt({ messages: [{ role: 'user', content: 'Owen get your shoes on' }], family: [], nowLine: 'now', utcOffset: '-04:00', nowIso: '2026-09-26T21:00:00Z' })
+  assert.match(prompt, /"aside": the words clearly weren't said to Casa/)
+})

@@ -98,6 +98,8 @@ export interface AIMessage {
       }
   /** The server called off the card that was waiting for a yes ("never mind"). */
   closesDraft?: boolean
+  /** Words the wall's open mic heard that weren't said to Casa: shown nowhere, answered with nothing. */
+  aside?: boolean
   toolAction?: {
     tool: string
     args: Record<string, unknown>

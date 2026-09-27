@@ -27,6 +27,8 @@ export type { AIMessage }
 interface AssistantServerPayload {
   type?: string
   closes_draft?: boolean
+  /** The words weren't said to Casa (heard by the wall's open mic): no reply. */
+  aside?: boolean
   code?: string
   message?: string
   text?: string
@@ -549,6 +551,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         conversationState: data?.conversation_state,
         // "Never mind" to an open card: the server says so, and the card closes.
         ...(data?.closes_draft === true ? { closesDraft: true } : {}),
+        ...(data?.aside === true ? { aside: true } : {}),
         ...sourceMetadata,
       }
     }

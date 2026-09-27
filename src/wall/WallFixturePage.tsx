@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { ProfileSessionContext } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import type { FamilyMember } from '../types'
-import { fixtureTurn } from './assistantFixture'
+import { fixtureTurn, useFixtureSpeech } from './assistantFixture'
 import WallAssistantBand from './WallAssistantBand'
 import { useFixtureFonts } from './fixtureFonts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -74,6 +74,7 @@ export default function WallFixturePage() {
         planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
         onDraft={setAssistantDraft}
         useTurn={useTurn}
+        useSpeech={useFixtureSpeech}
         lookupDrive={async () => 24}
       />
     </ProfileSessionContext.Provider>

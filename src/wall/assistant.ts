@@ -49,9 +49,10 @@ export function answerEventId(message: AIMessage | null): string | null {
 export type BandState = 'READY' | 'LISTENING' | 'THINKING' | 'ANSWERED' | 'NEEDS A YES'
 
 export function bandState(input: { listening: boolean; loading: boolean; answer: AIMessage | null; pending: AIMessage | null }): BandState {
+  // A card waiting for a yes says so, even while the mic stays open for the answer (P3.13).
+  if (input.pending && !input.loading) return 'NEEDS A YES'
   if (input.listening) return 'LISTENING'
   if (input.loading || input.answer?.streaming) return 'THINKING'
-  if (input.pending) return 'NEEDS A YES'
   return input.answer ? 'ANSWERED' : 'READY'
 }
 
@@ -129,4 +130,24 @@ export function nextStep(answer: AIMessage | null): { label: string; say: string
   const sentences = answer.content.trim().split(/(?<=[.!?])\s+/)
   if (!sentences.some((x) => x.endsWith('?') && /\b(want me to|should I|shall I|would you like me to|do you want me to)\b/i.test(x))) return null
   return { label: 'Yes, do that', say: 'Yes, do that' }
+}
+
+/**
+ * The conversation without asides — words the wall's open mic heard that weren't said to Casa
+ * (P3.13): each aside and the question it answered are dropped. `asidesInARow` counts the run
+ * at the end, so the band can slip away when the room is just talking.
+ */
+export function withoutAsides<T extends Pick<AIMessage, 'role'> & { aside?: boolean }>(messages: T[]): { messages: T[]; asidesInARow: number } {
+  const kept: T[] = []
+  let asidesInARow = 0
+  for (const m of messages) {
+    if (m.role === 'assistant' && m.aside) {
+      if (kept.at(-1)?.role === 'user') kept.pop()
+      asidesInARow += 1
+      continue
+    }
+    if (m.role === 'assistant') asidesInARow = 0
+    kept.push(m)
+  }
+  return { messages: kept, asidesInARow }
 }

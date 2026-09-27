@@ -773,7 +773,9 @@ Deno.serve(async (req) => {
   const turnRulesOff = dryRun && (context as Record<string, unknown> | undefined)?.turn_rules_off === true
   const turnContext = image || turnRulesOff ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
   const turnResolution = turnContext?.resolution ?? null
-  if (turnResolution && !turnContext?.card && !turnContext?.cancelledDraft && !turnContext?.answer && !turnContext?.clarify && Array.isArray(messages) && messages.length > 0) {
+  // Words not said to Casa, heard by the wall's open mic (P3.13): no reply, nothing changes.
+  const asideOnWall = turnResolution?.act === 'aside' && context?.page === 'wall'
+  if (turnResolution && !asideOnWall && !turnContext?.card && !turnContext?.cancelledDraft && !turnContext?.answer && !turnContext?.clarify && Array.isArray(messages) && messages.length > 0) {
     const last = messages[messages.length - 1]
     if (turnResolution.standalone && last?.role === 'user' && turnResolution.standalone !== String(last.content ?? '').trim()) {
       messages = [...messages.slice(0, -1), { ...last, content: turnResolution.standalone }]
@@ -1123,6 +1125,12 @@ Deno.serve(async (req) => {
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
+  if (asideOnWall) {
+    return {
+      status: 200,
+      payload: { type: 'text', text: '', aside: true, semantic_intent: 'conversation.aside', conversation_state: incomingConversationState ?? null, correlation_id: cid },
+    }
+  }
   if (turnContext?.card) {
     const { tool, args, about } = turnContext.card
     return {

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AIMessage } from '../hooks/useAISession'
-import { answerEventId, latestExchange, pendingAction } from './assistant'
+import { answerEventId, latestExchange, pendingAction, withoutAsides } from './assistant'
 import type { useAssistantTurn } from './useAssistantTurn'
 
 // Canned conversations for the screenshot fixture (`/__wall-fixture?band=…`), one per
@@ -58,23 +58,41 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
 /** A stand-in for `useAssistantTurn` that plays one scene; sending adds the words to the thread. */
 export function fixtureTurn(scene: string): typeof useAssistantTurn {
   return function useFixtureTurn() {
-    const [messages, setMessages] = useState<AIMessage[]>(() => BAND_SCENES[scene]?.() ?? [])
+    const [allMessages, setMessages] = useState<AIMessage[]>(() => BAND_SCENES[scene]?.() ?? [])
+    const { messages, asidesInARow } = withoutAsides(allMessages)
+    // Like the real one: a moment of thinking, then an answer (a question gets a plain reply).
+    const [loading, setLoading] = useState(false)
+    const [working, setWorking] = useState(false)
     const { question, answer } = latestExchange(messages)
     const pending = pendingAction(messages)
     const setStatus = (id: string, status: NonNullable<AIMessage['toolAction']>['status'], extra: { args?: Record<string, unknown> } = {}) =>
       setMessages((list) => list.map((m) => (m.id === id && m.toolAction ? { ...m, toolAction: { ...m.toolAction, status, ...extra } } : m)))
     return {
       messages,
-      loading: false,
-      send: async (text: string) => setMessages((list) => [...list, user(text)]),
+      asidesInARow,
+      loading,
+      send: async (text: string) => {
+        setMessages((list) => [...list, user(text)])
+        setLoading(true)
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        // "psst …" plays someone in the room talking, not to Casa (an aside).
+        setMessages((list) => [...list, /^psst\b/i.test(text) ? { ...said(''), aside: true } : said(`You said: ${text}.`)])
+        setLoading(false)
+      },
       session: null,
       question,
       answer,
       pending,
       pointAt: answerEventId(answer),
-      confirm: async () => { if (pending) setStatus(pending.id, 'done') },
+      confirm: async () => {
+        if (!pending) return
+        setWorking(true)
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        setStatus(pending.id, 'done')
+        setWorking(false)
+      },
       cancel: () => { if (pending) setStatus(pending.id, 'cancelled') },
-      working: false,
+      working,
       note: null,
       setNote: () => {},
       forReport: () => ({ messages, seenAt: {}, sessionId: null, previous: null }),
@@ -83,4 +101,29 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
       },
     } as unknown as ReturnType<typeof useAssistantTurn>
   }
+}
+
+/**
+ * A stand-in microphone for the fixture (`useSpeechInput`'s shape): Playwright speaks through
+ * `window.__mic` — `say(text)` hears a sentence, `quiet()` is silence running out, `yes()` /
+ * `no()` answer a card — and `window.__mic.starts` counts how often the band opened the mic.
+ */
+export function useFixtureSpeech(options: Parameters<typeof import('../hooks/useSpeechInput').useSpeechInput>[0]) {
+  const [listening, setListening] = useState(false)
+  const latest = useRef(options)
+  useEffect(() => { latest.current = options })
+  const mic = (window as unknown as { __mic?: Record<string, unknown> }).__mic ??= { starts: 0 }
+  mic.say = (text: string) => { latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
+  mic.quiet = () => { setListening(false); latest.current.onAutoDismiss?.('wake_silence') }
+  mic.yes = () => latest.current.onConfirm()
+  mic.no = () => latest.current.onCancel()
+  mic.bye = () => { setListening(false); latest.current.onDismiss() }
+  mic.listening = listening
+  return {
+    listening,
+    connecting: false,
+    start: async () => { mic.starts = Number(mic.starts) + 1; setListening(true) },
+    stop: async () => setListening(false),
+    finish: () => setListening(false),
+  } as unknown as ReturnType<typeof import('../hooks/useSpeechInput').useSpeechInput>
 }
