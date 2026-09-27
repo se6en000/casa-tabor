@@ -36,7 +36,7 @@ const rows = [
   { for_name: 'Jebb', for_member_id: null, idea: 'soccer sweatshirt', created_at: '2026-09-17T12:00:00Z' },
 ]
 
-test('never to the person they are for', () => {
+test('on a phone that knows who is holding it, never the ideas for that person', () => {
   const forJake = giftIdeasForViewer(rows, { viewerMemberId: 'm-jake', page: 'phone', forName: null })
   assert.deepEqual(forJake.ideas.map((i) => i.idea), ['ceramic class', 'soccer sweatshirt'])
   const forKelly = giftIdeasForViewer(rows, { viewerMemberId: 'm-kelly', page: 'phone', forName: null })
@@ -44,12 +44,10 @@ test('never to the person they are for', () => {
   assert.deepEqual(giftIdeasForViewer(rows, { viewerMemberId: 'm-kelly', page: 'phone', forName: 'kelly' }).ideas, [])
 })
 
-test('never read out on the shared wall, or to someone the phone does not know', () => {
-  for (const who of [{ viewerMemberId: 'm-jake', page: 'wall' }, { viewerMemberId: null, page: 'phone' }]) {
-    const out = giftIdeasForViewer(rows, { ...who, forName: null })
-    assert.equal(out.ideas, undefined)
-    assert.match(out.private, /phone/)
-  }
+// Jake, 2026-09-27: "I'd still like it all to show up on the wall as well as phone. Later I can make it more private."
+test('on the wall, all of them for now', () => {
+  assert.deepEqual(giftIdeasForViewer(rows, { viewerMemberId: 'm-kelly', page: 'wall', forName: null }).ideas.map((i) => i.idea), ['ceramic class', 'new grill brush', 'soccer sweatshirt'])
+  assert.deepEqual(giftIdeasForViewer(rows, { viewerMemberId: null, page: 'wall', forName: 'Kelly' }).ideas.map((i) => i.idea), ['ceramic class'])
 })
 
 test('the turn reader sends gift ideas to the full assistant, not to the calendar', () => {

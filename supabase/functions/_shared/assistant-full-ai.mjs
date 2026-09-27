@@ -50,7 +50,7 @@ function describeDraft(pending, utcOffset) {
 /** One plain paragraph, then the data it answers from. */
 export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [] }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, or a gift idea for someone), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Gift ideas are private: read them back only from get_gift_ideas, and only what it returns. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, or a gift idea for someone), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -109,7 +109,7 @@ export const FULL_AI_TOOLS = [
   },
   // Gift ideas (P3.19 step 2): kept for the planner, never shown to the person they're for.
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
-  { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone). Only on the asker\'s phone; on the wall it says so.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
+  { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone).', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
   // Lookups (read only; the answer comes back to you, nothing changes).
   { name: 'search_web', description: 'Search the web for current facts (opening hours, events in town, anything not in the family data).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
   { name: 'search_places', description: 'Find a business or place near home (name, address, phone).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' }, city: { type: 'STRING' } }, required: ['query'] } },
@@ -250,16 +250,14 @@ export function flubSignal(messages) {
 }
 
 /**
- * Gift ideas the asker may see (P3.19 step 2): only on a phone that knows who is holding it, and
- * never the ideas for that person — a surprise stays a surprise. On the shared wall, none.
+ * Gift ideas the asker may see (P3.19 step 2). Jake, 2026-09-27: "I'd still like it all to show up on
+ * the wall as well as phone. Later I can make it more private." So the wall reads them all; a phone
+ * that knows who is holding it still leaves out the ideas for that person.
  */
 export function giftIdeasForViewer(rows, { viewerMemberId, page, forName }) {
-  if (!viewerMemberId || page === 'wall') {
-    return { private: 'Gift ideas are kept on your phone, so nobody they are for can see them. Ask me there.' }
-  }
   const wanted = forName ? String(forName).trim().toLowerCase() : null
   const ideas = (rows ?? [])
-    .filter((r) => r.for_member_id !== viewerMemberId)
+    .filter((r) => page === 'wall' || !viewerMemberId || r.for_member_id !== viewerMemberId)
     .filter((r) => !wanted || String(r.for_name).toLowerCase() === wanted)
     .map((r) => ({ for: r.for_name, idea: r.idea, saved: String(r.created_at).slice(0, 10) }))
   return { ideas }
