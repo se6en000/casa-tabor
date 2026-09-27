@@ -1662,6 +1662,38 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'add_to_coming_up' || tool === 'change_coming_up_item') {
+      // Coming up (P3.19): one event on the list with its step and notice, or done / snooze / not needed.
+      const key = normalizeOptionalText(args.id, 80)
+      if (!key) throw new Error('Which calendar item?')
+      const now = new Date()
+      const patch = tool === 'add_to_coming_up'
+        ? { custom_step: normalizeOptionalText(args.step, 200), custom_lead_days: Math.min(120, Math.max(1, Number(args.notice_days) || 7)), done_at: null, dismissed_at: null, snoozed_until: null }
+        : args.action === 'done' ? { done_at: now.toISOString() }
+        : args.action === 'not_needed' ? { dismissed_at: now.toISOString() }
+        : { snoozed_until: new Date(now.getTime() + 7 * 86400e3).toISOString().slice(0, 10) }
+      const { error } = await sb.from('coming_up_state').upsert({ item_key: key, ...patch, updated_at: now.toISOString() }, { onConflict: 'item_key' })
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, key, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'add_coming_up_rule') {
+      const match = normalizeOptionalText(args.match, 120)?.toLowerCase()
+      if (!match) throw new Error('A rule needs words to look for')
+      const leadDays = args.notice_days == null ? null : Math.min(120, Math.max(1, Number(args.notice_days) || 7))
+      // A newer rule for the same words replaces the older one.
+      await sb.from('coming_up_rules').update({ removed_at: new Date().toISOString() }).eq('match', match).is('removed_at', null)
+      const { data, error } = await sb.from('coming_up_rules')
+        .insert({ match, step: normalizeOptionalText(args.step, 200), lead_days: leadDays, off: args.off === true })
+        .select('id, match, step, lead_days, off').single()
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, rule: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'add_gift_idea') {
       // Gift ideas (P3.19 step 2): saved on a yes; read back only on the asker's phone.
       const forName = normalizeOptionalText(args.for_name, 120)

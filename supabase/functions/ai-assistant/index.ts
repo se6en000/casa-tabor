@@ -169,7 +169,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, mentionedIds } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -237,7 +237,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -1248,6 +1248,9 @@ Deno.serve(async (req) => {
         if (call.name === 'get_recipe') {
           const { data } = await sb.from('recipes').select('name, servings, cook_time, recipe_ingredients(raw_text, name, quantity, unit, optional, sort_order), recipe_steps(step_number, instruction)').eq('id', String(call.args?.id ?? '')).maybeSingle()
           result = data ? data as Record<string, unknown> : { error: 'No recipe with that id' }
+        } else if (call.name === 'get_coming_up') {
+          const { data, error } = await sb.functions.invoke('coming-up', { body: { action: 'list' } })
+          result = error ? { error: 'The Coming up list could not be read' } : comingUpForModel(data?.items ?? [], data?.rules ?? [], { today: String(data?.today ?? ''), withinDays: call.args?.within_days as number | undefined })
         } else if (call.name === 'get_gift_ideas') {
           // Surprise-safe (P3.19 step 2): only on the asker's phone, never the ideas for them.
           const { data } = await sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at').limit(100)
@@ -6093,6 +6096,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     // `context`, not the later `utcOffset` const: this is called before that line runs.
     const utcOffsetForDisplay = (context?.utcOffset as string | undefined) ?? '-04:00'
     if (name === 'create_event') return `Create: **${args.title}** · ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`
+    if (name === 'add_to_coming_up') return `Add to Coming up: **${String(args.title ?? '')}** · ${String(args.step ?? '')} · ${Number(args.notice_days)} day${Number(args.notice_days) === 1 ? '' : 's'} ahead`
+    if (name === 'add_coming_up_rule') return args.off === true
+      ? `Coming up rule: **never flag "${String(args.match ?? '')}"**`
+      : `Coming up rule: **every "${String(args.match ?? '')}"**${args.step ? ` · ${String(args.step)}` : ''}${args.notice_days != null ? ` · ${Number(args.notice_days)} days ahead` : ''}`
+    if (name === 'change_coming_up_item') return `Coming up: **${String(args.title ?? '')}** · ${args.action === 'done' ? 'done' : args.action === 'not_needed' ? 'not needed' : 'snooze a week'}`
     if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0

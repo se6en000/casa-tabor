@@ -50,7 +50,7 @@ function describeDraft(pending, utcOffset) {
 /** One plain paragraph, then the data it answers from. */
 export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [] }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, or a gift idea for someone), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -110,6 +110,11 @@ export const FULL_AI_TOOLS = [
   // Gift ideas (P3.19 step 2): kept for the planner, never shown to the person they're for.
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
   { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone).', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
+  // Coming up (P3.19): what needs planning ahead, each with a next step and days of notice.
+  { name: 'add_to_coming_up', description: 'Propose putting one calendar item [id] on the Coming up list: what to get ready (the next step, in a few words) and how many days of notice.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, step: { type: 'STRING' }, notice_days: { type: 'INTEGER' } }, required: ['id', 'step', 'notice_days'] } },
+  { name: 'add_coming_up_rule', description: 'Propose an "every time" rule for the Coming up list: any calendar item whose name has these words gets this step and this many days of notice — or, with off, is never flagged.', parameters: { type: 'OBJECT', properties: { match: { type: 'STRING', description: 'The fewest words that pick these items out by name, e.g. "spirit day", "dentist" (every word must be in the name)' }, step: { type: 'STRING' }, notice_days: { type: 'INTEGER' }, off: { type: 'BOOLEAN' } }, required: ['match'] } },
+  { name: 'change_coming_up_item', description: 'Propose marking a Coming up item [id]: done, snooze (a week) or not_needed.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, action: { type: 'STRING', enum: ['done', 'snooze', 'not_needed'] } }, required: ['id', 'action'] } },
+  { name: 'get_coming_up', description: 'The Coming up list: what needs starting within the next days (default 14), each with its next step, plan-by date and gift ideas, how many more are later, and the family\'s "every time" rules.', parameters: { type: 'OBJECT', properties: { within_days: { type: 'INTEGER' } } } },
   // Lookups (read only; the answer comes back to you, nothing changes).
   { name: 'search_web', description: 'Search the web for current facts (opening hours, events in town, anything not in the family data).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
   { name: 'search_places', description: 'Find a business or place near home (name, address, phone).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' }, city: { type: 'STRING' } }, required: ['query'] } },
@@ -122,7 +127,7 @@ export const FULL_AI_TOOLS = [
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
-export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas'])
+export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up'])
 
 /** "YYYY-MM-DDTHH:MM" local → ISO with the family's offset, or null when it isn't a real, sensible moment. */
 function localToIso(value, utcOffset, now) {
@@ -139,10 +144,32 @@ function localToIso(value, utcOffset, now) {
 }
 const names = (v) => (Array.isArray(v) ? v.map((n) => String(n).trim()).filter(Boolean) : [])
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+/** Days of notice for Coming up: a whole number, one day to four months. */
+const noticeDays = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(120, Math.max(1, Math.round(Number(v)))) : null)
 
 /** The model's tool call as the usual card, or { error } when it fails a hard check. */
 export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [] }) {
   const a = call?.args ?? {}
+  if (call?.name === 'add_to_coming_up' || call?.name === 'change_coming_up_item') {
+    const target = events.find((e) => e.id === a.id)
+    if (!target) return { error: "That isn't on the calendar, so it can't go on Coming up. Add it first, or make it an every-time rule." }
+    if (call.name === 'change_coming_up_item') {
+      if (!['done', 'snooze', 'not_needed'].includes(a.action)) return { error: 'Coming up items can be done, snoozed or not needed.' }
+      return { tool: 'change_coming_up_item', args: { id: target.id, title: target.title, action: a.action } }
+    }
+    const step = text(a.step)
+    if (!step) return { error: 'I need to know what to get ready.' }
+    return { tool: 'add_to_coming_up', args: { id: target.id, title: target.title, step, notice_days: noticeDays(a.notice_days) ?? 7 } }
+  }
+  if (call?.name === 'add_coming_up_rule') {
+    const match = text(a.match)?.toLowerCase() ?? null
+    if (!match) return { error: 'I need the words to look for in the calendar names.' }
+    const off = a.off === true
+    const step = off ? null : text(a.step)
+    const notice = off ? null : noticeDays(a.notice_days)
+    if (!off && !step && notice == null) return { error: 'A rule needs a step, a notice, or off.' }
+    return { tool: 'add_coming_up_rule', args: { match, step, notice_days: notice, off } }
+  }
   if (call?.name === 'add_gift_idea') {
     const who = text(a.for)
     const idea = text(a.idea)
@@ -261,4 +288,20 @@ export function giftIdeasForViewer(rows, { viewerMemberId, page, forName }) {
     .filter((r) => !wanted || String(r.for_name).toLowerCase() === wanted)
     .map((r) => ({ for: r.for_name, idea: r.idea, saved: String(r.created_at).slice(0, 10) }))
   return { ideas }
+}
+
+/**
+ * What get_coming_up hands the model: up to five items to start within `withinDays` (by plan-by
+ * date), how many more there are in all (so it never has to count), and a reminder to say it briefly — a list read out on a wall should be short.
+ */
+export function comingUpForModel(items, rules, { today, withinDays = 14 } = {}) {
+  const days = Math.min(120, Math.max(1, Number(withinDays) || 14))
+  const until = new Date(Date.parse(`${today}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
+  const soon = (items ?? []).filter((i) => i.pokeOn <= until).slice(0, 5)
+  return {
+    items: soon.map((i) => ({ id: i.key, title: i.title, date: i.date, days_away: i.daysAway, next_step: i.nextStep, plan_by: i.pokeOn, late: i.late || undefined, gift_ideas: i.ideas?.length ? i.ideas : undefined })),
+    more: (items ?? []).length - soon.length,
+    rules: (rules ?? []).map((r) => (r.off ? `never flag "${r.match}"` : `every "${r.match}": ${[r.step, r.lead_days ? `${r.lead_days} days ahead` : null].filter(Boolean).join(', ')}`)),
+    say: 'Briefly: these, late first, one short line each; then, if more is above 0, that there are that many more.',
+  }
 }

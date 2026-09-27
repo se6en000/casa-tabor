@@ -36,10 +36,7 @@ const localDate = (e) => {
 const addDays = (date, days) => new Date(Date.parse(`${date}T12:00:00Z`) + days * DAY).toISOString().slice(0, 10)
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / DAY)
 
-function classify(e) {
-  const kept = /date we keep · (birthday|anniversary|remembrance)/i.exec(String(e.description ?? ''))
-  if (kept) return { kind: kept[1].toLowerCase(), ...KEPT[kept[1].toLowerCase()] }
-  if (isRoutineCopy(e.title)) return null
+const builtIn = (e) => {
   for (const k of KINDS) {
     if (k.allDayOnly && !e.all_day) continue
     if (k.re.test(e.title)) return k
@@ -47,19 +44,36 @@ function classify(e) {
   return null
 }
 
+/** The family's own words win: something added by voice, then their "every time" rules, then Casa's kinds. */
+function classify(e, rules, custom) {
+  const kept = /date we keep · (birthday|anniversary|remembrance)/i.exec(String(e.description ?? ''))
+  if (kept) return { kind: kept[1].toLowerCase(), ...KEPT[kept[1].toLowerCase()] }
+  if (custom?.custom_step) return { kind: 'added', lead: custom.custom_lead_days ?? 7, step: custom.custom_step }
+  if (isRoutineCopy(e.title)) return null
+  const title = String(e.title).toLowerCase()
+  const rule = rules.find((r) => r.match && String(r.match).toLowerCase().split(/\s+/).filter(Boolean).every((w) => title.includes(w)))
+  const base = builtIn(e)
+  if (rule) {
+    if (rule.off) return null
+    return { kind: base?.kind ?? 'rule', gifts: base?.gifts, lead: rule.lead_days ?? base?.lead ?? 7, step: rule.step || base?.step || 'Get ready' }
+  }
+  return base
+}
+
 /**
  * The digest as of `now`: items whose poke falls within six weeks (or has passed) and that haven't
  * happened, minus the ones marked done, not needed, or snoozed. In poke order.
- * `state`: { [key]: { done_at?, dismissed_at?, snoozed_until? } }.
+ * `state`: { [key]: { done_at?, dismissed_at?, snoozed_until?, custom_step?, custom_lead_days? } }.
+ * `rules`: the family's "every time" rules: { match (words in the title), step?, lead_days?, off? }.
  */
-export function buildComingUp({ now, events, giftIdeas = [], state = {} }) {
+export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [] }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const horizon = addDays(today, COMING_UP_WEEKS * 7)
   const seen = new Set()
   const items = []
   const sorted = [...(events ?? [])].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)))
   for (const e of sorted) {
-    const k = classify(e)
+    const k = classify(e, rules, state[e.id])
     if (!k) continue
     const date = localDate(e)
     if (date < today) continue

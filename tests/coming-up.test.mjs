@@ -85,3 +85,32 @@ test('only six weeks of events, but dates we keep from two months out', () => {
   assert.ok(!items.some((i) => i.key === 'far'))
   assert.ok(items.some((i) => i.key === 'carl'))
 })
+
+// Jake, 2026-09-27: "if there's a spirit day coming up for Emme and Owen I would like to know because
+// they usually need specific kind of T-shirts … I need a way to easily mark it so it goes on the list."
+test('something you add by voice goes on the list with your step and your notice', () => {
+  const spirit = ev('spirit', "St. Patrick's Spirit Day", '2026-10-16T08:00:00-04:00')
+  assert.equal(buildComingUp({ now, events: [spirit] }).length, 0, 'Casa would not catch it on its own')
+  const state = { spirit: { custom_step: 'Green shirts for Emme and Owen', custom_lead_days: 5 } }
+  const [item] = buildComingUp({ now, events: [spirit], state })
+  assert.equal(item.nextStep, 'Green shirts for Emme and Owen')
+  assert.equal(item.pokeOn, '2026-10-11')
+  assert.equal(item.kind, 'added')
+})
+
+test('an "every time" rule catches each one, before Casa\'s own kinds', () => {
+  const rules = [{ match: 'spirit day', step: 'Themed shirts for Emme and Owen', lead_days: 5 }]
+  const items = buildComingUp({ now, rules, events: [ev('v', "Valentine's Spirit Day", '2026-10-14T08:00:00-04:00'), ev('p', 'Pajama Spirit Day', '2026-10-28T08:00:00-04:00')] })
+  assert.deepEqual(items.map((i) => [i.title, i.nextStep, i.pokeOn]), [
+    ["Valentine's Spirit Day", 'Themed shirts for Emme and Owen', '2026-10-09'],
+    ['Pajama Spirit Day', 'Themed shirts for Emme and Owen', '2026-10-23'],
+  ])
+})
+
+test('a rule can switch a kind off, or just change its notice', () => {
+  const off = buildComingUp({ now, events, giftIdeas, rules: [{ match: 'dentist', off: true }] })
+  assert.ok(!off.some((i) => i.title.startsWith('Dentist')))
+  const longer = byKey(buildComingUp({ now, events, giftIdeas, rules: [{ match: 'tryouts', lead_days: 21 }] }))
+  assert.equal(longer['try1'].pokeOn, '2026-09-28')
+  assert.equal(longer['try1'].nextStep, 'Check what’s needed and who drives', 'keeps Casa\'s step when the rule has none')
+})

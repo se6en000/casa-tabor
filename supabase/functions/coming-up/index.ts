@@ -42,20 +42,23 @@ Deno.serve(async (req) => {
     }
 
     // Two months for birthdays plus the six-week window: look ~110 days out.
-    const [eventsRes, giftsRes, stateRes] = await Promise.all([
+    const [eventsRes, giftsRes, stateRes, rulesRes] = await Promise.all([
       sb.from('events').select('id, title, start_time, end_time, all_day, event_type, description')
         .is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
         .gte('start_time', new Date(now.getTime() - 86400e3).toISOString())
         .lt('start_time', new Date(now.getTime() + 110 * 86400e3).toISOString())
         .order('start_time').limit(1000),
       sb.from('gift_ideas').select('for_name, idea').is('done_at', null).is('dismissed_at', null).order('created_at'),
-      sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on'),
+      sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on, custom_step, custom_lead_days'),
+      // Newest first: when two rules fit, the newer one wins.
+      sb.from('coming_up_rules').select('match, step, lead_days, off').is('removed_at', null).order('created_at', { ascending: false }),
     ])
-    for (const r of [eventsRes, giftsRes, stateRes]) if (r.error) throw new Error(r.error.message)
+    for (const r of [eventsRes, giftsRes, stateRes, rulesRes]) if (r.error) throw new Error(r.error.message)
     const state = Object.fromEntries((stateRes.data ?? []).map((s: Record<string, unknown>) => [s.item_key as string, s]))
-    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state }) as Item[]
+    const rules = rulesRes.data ?? []
+    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules }) as Item[]
 
-    if (action === 'list') return json({ items, today })
+    if (action === 'list') return json({ items, rules, today })
 
     const push = async (title: string, text: string, tag: string) => {
       const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body: text, url: '/', tag } })
