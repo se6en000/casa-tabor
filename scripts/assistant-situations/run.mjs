@@ -4,13 +4,18 @@
 // nothing is ever saved. Situations are bound to the family's real calendar, read only.
 //
 //   node scripts/assistant-situations/run.mjs [--set=dev|heldout|fresh] [--seed=7] [--only=id] [--page=wall] [--json=out.json]
+//     [--thinking=0,1024]  play every situation once per thinking budget, with the same words, alternating
+//                          which goes first (dry runs may override the server's budget); omit for the server's own
+//     [--live=live.json]   rewrite this file after every turn (for a page that watches the run)
 //
 // --set=dev      the phrasings in situations.mjs (one picked per turn by the seed)
 // --set=heldout  the phrasings in heldout.mjs (not used while fixing things)
 // --set=fresh    new phrasings written by Gemini for this run, from what each turn means
+// --set=life     lifelike conversations (life.mjs): small talk, slips, corrections, "that one"
 import { loadWorld, SUPABASE_URL, ANON_KEY, sql } from './world.mjs'
 import { SITUATIONS } from './situations.mjs'
 import { HELDOUT } from './heldout.mjs'
+import { LIFE } from './life.mjs'
 import { freshPhrasings, judge } from './llm.mjs'
 import fs from 'node:fs'
 
@@ -19,6 +24,11 @@ const SET = arg('set', 'dev')
 const PAGE = arg('page', 'wall')
 const ONLY = arg('only', null)
 const JSON_OUT = arg('json', null)
+const LIST = SET === 'life' ? LIFE : SITUATIONS
+// "0", "1024", or "1024-norules" (thinking budget; -norules skips the server's turn-reading rules).
+const VARIANTS = arg('thinking', null)?.split(',').map((v) => ({ thinking: Number(v.split('-')[0]), rulesOff: v.endsWith('-norules') })) ?? [null]
+const labelOf = (v) => (v == null ? 'server' : `thinking ${v.thinking}${v.rulesOff ? ' · rules off' : ''}`)
+const LIVE = arg('live', null)
 const SEED = Number(arg('seed', String(Math.floor(Math.random() * 1e6))))
 let seed = SEED
 const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648)
@@ -33,7 +43,7 @@ const fill = (text, b) => text.replace(/\{(\w+)\}/g, (m, k) => {
 const words = (s) => new Set(String(s ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !['for', 'the', 'and', 'with', 'appointment'].includes(w)))
 const sameDraft = (a, b) => a && b && a.tool === b.tool && [...words(a.args.title)].some((w) => words(b.args.title).has(w))
 
-async function ask(messages, family) {
+async function ask(messages, family, thinking = null) {
   const state = [...messages].reverse().find((m) => m.role === 'assistant' && m.conversationState)?.conversationState
   const pending = [...messages].reverse().find((m) => m.role === 'assistant' && m.toolAction?.status === 'pending')?.toolAction
   const session = ask.session ??= crypto.randomUUID()
@@ -47,6 +57,7 @@ async function ask(messages, family) {
         page: PAGE, assistant_mode: 'general', experience_mode: 'do', currentDate: new Date().toISOString(), utcOffset: '-04:00',
         family, homeCity: 'West Palm Beach', conversationState: state,
         pendingAction: pending ? { tool: pending.tool, args: pending.args } : undefined,
+        ...(thinking != null ? { thinking_budget_override: thinking.thinking, ...(thinking.rulesOff ? { turn_rules_off: true } : {}) } : {}),
       },
       session_id: session, correlation_id: `${session}:${messages.length}`, turn_id: String(messages.length),
       lane: 'text', client_build: 'situations', client_trace_source: 'assistant-situations', stream: false, dry_run: true,
@@ -66,13 +77,22 @@ async function aiHeadroom() {
   // The breaker's own window: the last hour, or since it was last resumed if that's later.
   const since = b.resumed_at && Date.parse(b.resumed_at) > Date.now() - 3600e3 ? new Date(b.resumed_at).toISOString() : new Date(Date.now() - 3600e3).toISOString()
   const [hour] = await sql(`select count(*)::int as calls, coalesce(sum(total_tokens), 0)::bigint as tokens from ai_provider_calls where occurred_at >= '${since}'`)
-  return { paused: b.paused === true, calls: hour.calls, tokens: Number(hour.tokens), callCap: b.hourly_call_cap ?? 600, tokenCap: b.hourly_token_cap ?? 1500000 }
+  // Dollars too (the breaker also caps spend per hour and per day), at Gemini 2.5 Flash list price.
+  const usd = `coalesce(sum((coalesce(input_tokens,0) * 0.30 + (coalesce(output_tokens,0) + coalesce(thought_tokens,0)) * 2.50) / 1e6), 0)::float`
+  const [spend] = await sql(`select ${usd.replace('sum(', `sum(case when occurred_at >= '${since}' then `).replace('/ 1e6)', '/ 1e6 end)')} as hour_usd, ${usd} as day_usd from ai_provider_calls where occurred_at >= (date_trunc('day', now() at time zone 'America/New_York') at time zone 'America/New_York')`)
+  return { paused: b.paused === true, calls: hour.calls, tokens: Number(hour.tokens), callCap: b.hourly_call_cap ?? 600, tokenCap: b.hourly_token_cap ?? 1500000, hourUsd: spend.hour_usd, dayUsd: spend.day_usd, hourUsdCap: b.hourly_cost_cap_usd ?? 0.5, dayUsdCap: b.daily_cost_cap_usd ?? 2 }
 }
 const PER_TURN_CALLS = 4
 const room = await aiHeadroom()
-const planned = SITUATIONS.filter((s) => !ONLY || s.id === ONLY).reduce((n, s) => n + s.turns.length, 0) * PER_TURN_CALLS
+const planned = LIST.filter((s) => !ONLY || s.id === ONLY).reduce((n, s) => n + s.turns.length, 0) * PER_TURN_CALLS * VARIANTS.length
 if (room.paused) {
   console.error('Casa AI is paused (circuit breaker). Resume it in Settings → System Health first; nothing was run.')
+  process.exit(2)
+}
+// A thinking turn can cost ~2.5x a plain one; a turn is budgeted at $0.008 to stay on the safe side.
+const plannedUsd = planned / PER_TURN_CALLS * 0.008
+if (room.hourUsd + plannedUsd > room.hourUsdCap * 0.8 || room.dayUsd + plannedUsd > room.dayUsdCap * 0.8) {
+  console.error(`Not enough AI spend left: $${room.hourUsd.toFixed(2)} this hour (cap $${room.hourUsdCap}), $${room.dayUsd.toFixed(2)} today (cap $${room.dayUsdCap}); this run may cost ~$${plannedUsd.toFixed(2)}. Try later.`)
   process.exit(2)
 }
 if (room.calls + planned > room.callCap * HEADROOM || room.tokens > room.tokenCap * HEADROOM) {
@@ -85,23 +105,52 @@ const family = world.family.map((m) => ({ id: m.id, name: m.name, full_name: m.f
 const results = []
 console.log(`Situations · set=${SET} · page=${PAGE} · seed=${SEED} · ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}`)
 
-for (const situation of SITUATIONS.filter((s) => !ONLY || s.id === ONLY)) {
+const live = { set: SET, seed: SEED, variants: VARIANTS.map(labelOf), startedAt: new Date().toISOString(), situations: [] }
+const writeLive = () => { if (LIVE) fs.writeFileSync(LIVE, JSON.stringify(live, null, 2)) }
+let order = 0
+for (const situation of LIST.filter((s) => !ONLY || s.id === ONLY)) {
   const bound = situation.bind(world)
   if (!bound) {
     console.log(`\n· ${situation.id}: not playable on this calendar right now (skipped)`)
     results.push({ id: situation.id, skipped: true })
     continue
   }
+  // The same words for every variant: picked once per turn.
+  const sayings = []
+  for (const [i, turn] of situation.turns.entries()) {
+    const pool = SET === 'life' ? turn.say : SET === 'heldout' ? HELDOUT[situation.id]?.[i] ?? [] : SET === 'fresh' ? await freshPhrasings(fill(turn.means ?? '', bound), fill(turn.say[0], bound)).catch(() => []) : turn.say
+    sayings.push(fill(pick(pool.length ? pool : turn.say), bound))
+  }
+  const liveSituation = { id: situation.id, gist: situation.gist, runs: {} }
+  live.situations.push(liveSituation)
+  // Alternate which variant goes first, so drift over the run lands on both alike.
+  const shift = order++ % VARIANTS.length
+  const variants = [...VARIANTS.slice(shift), ...VARIANTS.slice(0, shift)]
+  for (const variant of variants) {
+    const label = labelOf(variant)
+    const liveRun = { turns: [], done: false }
+    liveSituation.runs[label] = liveRun
+    writeLive()
+    const played = await play(situation, bound, sayings, variant, label, (t) => { liveRun.turns.push(t); writeLive() })
+    liveRun.done = true
+    liveRun.pass = played.every((t) => t.pass)
+    writeLive()
+    results.push({ id: situation.id, variant, pass: played.every((t) => t.pass), turns: played })
+  }
+}
+live.finishedAt = new Date().toISOString()
+writeLive()
+
+async function play(situation, bound, sayings, variant, label, onTurn) {
   ask.session = null
   const messages = []
   let lastCard = null
   const turns = []
-  console.log(`\n■ ${situation.id} — ${situation.gist}`)
+  console.log(`\n■ ${situation.id} [${label}] — ${situation.gist}`)
   for (const [i, turn] of situation.turns.entries()) {
-    const pool = SET === 'heldout' ? HELDOUT[situation.id]?.[i] ?? [] : SET === 'fresh' ? await freshPhrasings(fill(turn.means, bound), fill(turn.say[0], bound)).catch(() => []) : turn.say
-    const said = fill(pick(pool.length ? pool : turn.say), bound)
+    const said = sayings[i]
     messages.push({ id: `u${i}`, role: 'user', content: said })
-    const { body, ms } = await ask(messages, family)
+        const { body, ms } = await ask(messages, family, variant)
     if (body.code === 'ai_paused' || /circuit breaker/i.test(String(body.text ?? body.message ?? ''))) {
       console.error('\nCasa AI paused mid-run (circuit breaker) — stopping now.')
       process.exit(2)
@@ -149,20 +198,24 @@ for (const situation of SITUATIONS.filter((s) => !ONLY || s.id === ONLY)) {
       if (verdict.pass) break
     }
     if (card) lastCard = card
-    turns.push({ turnContext: body.turn_context ?? null, said, reply: reply.slice(0, 300), card: card && { tool: card.tool, display: card.display, args: card.args }, ms, ...verdict })
+    const record = { turnContext: body.turn_context ?? null, said, reply: reply.slice(0, 600), card: card && { tool: card.tool, display: card.display, args: card.args }, ms, correlationId: `${ask.session}:${messages.length - 1}`, ...verdict }
+    turns.push(record)
+    onTurn(record)
     console.log(`  ${verdict.pass ? '✓' : '✗'} "${said}"  (${ms} ms${ms > 30000 ? ' — SLOW' : ''})`)
     console.log(`      → ${card ? `CARD ${card.display}` : reply.slice(0, 160).replace(/\n/g, ' ')}`)
     if (body.turn_context) console.log(`      ⋯ read as ${body.turn_context.act}${body.turn_context.is_question ? ' (question)' : ''}${body.turn_context.rewritten ? `: "${body.turn_context.standalone}"` : ''} · ${body.turn_context.ms} ms`)
     if (!verdict.pass) console.log(`      ✗ ${verdict.problems.join('; ')}`)
   }
-  const pass = turns.every((t) => t.pass)
-  results.push({ id: situation.id, pass, turns })
+  return turns
 }
 
+for (const variant of VARIANTS) {
+  const played = results.filter((r) => !r.skipped && r.variant === variant)
+  const turnTotal = played.flatMap((r) => r.turns)
+  console.log(`\n${labelOf(variant)}: ${played.filter((r) => r.pass).length}/${played.length} situations · ${turnTotal.filter((t) => t.pass).length}/${turnTotal.length} turns · set=${SET} seed=${SEED}`)
+}
 const played = results.filter((r) => !r.skipped)
 const passed = played.filter((r) => r.pass).length
-const turnTotal = played.flatMap((r) => r.turns)
-console.log(`\n${passed}/${played.length} situations · ${turnTotal.filter((t) => t.pass).length}/${turnTotal.length} turns · set=${SET} seed=${SEED}`)
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify({ set: SET, page: PAGE, seed: SEED, at: new Date().toISOString(), results }, null, 2))
 void sql
 process.exitCode = passed === played.length ? 0 : 1

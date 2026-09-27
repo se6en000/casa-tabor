@@ -169,6 +169,11 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 
+// Thinking for the drawer's turn and the answers it writes (Gemini 2.5 Flash takes a token
+// budget; "medium" per Jake, 2026-09-26 — it had been 0, or 512 for the full profile).
+// Each call gets this much extra output room so the thinking never cuts the answer short.
+const DRAWER_THINKING_BUDGET = 1024
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -239,21 +244,26 @@ async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null
   return value
 }
 
+/** Thinking takes time: a call that thinks gets this much longer before it's given up on. */
+function thinkingAllowanceMs(thinkingBudget: number): number {
+  return thinkingBudget > 0 ? 8_000 : 0
+}
+
 /** One small JSON call to the family's configured Gemini model (tracked like every other call). */
-async function geminiJson(sb: TurnDb, prompt: string, purpose: string, cid: string, timeoutMs: number): Promise<unknown> {
+async function geminiJson(sb: TurnDb, prompt: string, purpose: string, cid: string, timeoutMs: number, thinkingBudget = 0): Promise<unknown> {
   const config = await loadLlmConfig(sb)
   const apiKey = String(config?.api_key ?? '')
   const model = String(config?.model ?? DEFAULT_GEMINI_MODEL)
   if (!apiKey) throw new Error('no model configured')
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const timer = setTimeout(() => controller.abort(), timeoutMs + thinkingAllowanceMs(thinkingBudget))
   try {
     const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget } },
       }),
       signal: controller.signal,
     }, { callPurpose: purpose, correlationId: cid, model })
@@ -335,13 +345,14 @@ async function resolveTurnContext(
   messages: Array<{ role: string; content: string }>,
   context: Record<string, unknown> | null | undefined,
   cid: string,
+  thinkingBudget = 0,
 ): Promise<TurnContext> {
   const none: TurnContext = { resolution: null, card: null, cancelledDraft: null, answer: null, clarify: null, referents: [], originalText: null, ms: 0 }
   if (!Array.isArray(messages) || !hasTurnToRead(messages)) return none
   const started = Date.now()
   // Never the reason a turn is slow: past its budget, the turn goes on as it was said.
-  const budget = new Promise<TurnContext>((resolve) => setTimeout(() => resolve({ ...none, ms: Date.now() - started }), TURN_BUDGET_MS))
-  return await Promise.race([readTurn(sb, messages, context, cid, started), budget])
+  const budget = new Promise<TurnContext>((resolve) => setTimeout(() => resolve({ ...none, ms: Date.now() - started }), TURN_BUDGET_MS + 2 * thinkingAllowanceMs(thinkingBudget)))
+  return await Promise.race([readTurn(sb, messages, context, cid, started, thinkingBudget), budget])
 }
 
 async function readTurn(
@@ -350,6 +361,7 @@ async function readTurn(
   context: Record<string, unknown> | null | undefined,
   cid: string,
   started: number,
+  thinkingBudget = 0,
 ): Promise<TurnContext> {
   const none: TurnContext = { resolution: null, card: null, cancelledDraft: null, answer: null, clarify: null, referents: [], originalText: null, ms: 0 }
   const pendingAction = context?.pendingAction as { tool?: string; args?: Record<string, unknown> } | undefined
@@ -364,7 +376,7 @@ async function readTurn(
     const loaded = await loadReferents(sb, [...new Set([...ids, ...upcomingIds])], family)
     const referents = ids.flatMap((id) => loaded.filter((e) => e.id === id))
     const upcoming = loaded.filter((e) => !ids.includes(e.id))
-    const raw = await geminiJson(sb, buildTurnPrompt({ messages, draft, referents, upcoming, family, nowLine, utcOffset, nowIso: String(context?.currentDate ?? new Date().toISOString()) }), 'turn-context', cid, TURN_CONTEXT_TIMEOUT_MS)
+    const raw = await geminiJson(sb, buildTurnPrompt({ messages, draft, referents, upcoming, family, nowLine, utcOffset, nowIso: String(context?.currentDate ?? new Date().toISOString()) }), 'turn-context', cid, TURN_CONTEXT_TIMEOUT_MS, thinkingBudget)
     const asked = context?.conversationState as { activeEntityType?: string; pendingMutation?: { tool?: string } } | undefined
     const pendingChange = asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change'
     const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange })
@@ -405,7 +417,7 @@ async function readTurn(
     } else if (resolution.act === 'question' && (about || resolution.answerable)) {
       // About one item, or answerable from the next two weeks it's holding: answered from those facts.
       const focus = about ? [about, ...loaded.filter((e) => e !== about)] : [...referents, ...loaded.filter((e) => !referents.includes(e))]
-      const { text, mentioned } = await answerFromCalendar(sb, resolution.standalone ?? originalText, focus, context, cid)
+      const { text, mentioned } = await answerFromCalendar(sb, resolution.standalone ?? originalText, focus, context, cid, thinkingBudget)
       out.answer = { text, about, mentioned }
     }
     return { ...out, ms: Date.now() - started }
@@ -436,6 +448,7 @@ async function answerFromCalendar(
   events: TurnReferent[],
   context: Record<string, unknown> | null | undefined,
   cid: string,
+  thinkingBudget = 0,
 ): Promise<{ text: string; mentioned: TurnReferent[] }> {
   const utcOffset = (context?.utcOffset as string) ?? '-04:00'
   let known = events
@@ -449,7 +462,7 @@ Now: ${localNowLine(String(context?.currentDate ?? new Date().toISOString()), ut
 Calendar:
 ${known.map(line).join('\n')}
 Question: ${question}
-Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them]}`, 'question-answer', cid, 6000) as { answer?: string; mentioned?: string[] }
+Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them]}`, 'question-answer', cid, 6000, thinkingBudget) as { answer?: string; mentioned?: string[] }
   const mentioned = (Array.isArray(out?.mentioned) ? out.mentioned : []).flatMap((id) => known.filter((e) => e.id === id))
   return { text: String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.', mentioned }
 }
@@ -674,6 +687,12 @@ Deno.serve(async (req) => {
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const dryRun = dryRunRaw === true
+  // Side-by-side tests only (scripts/assistant-situations --thinking=…): a dry run may ask for
+  // another thinking budget. Real turns never can — they always use DRAWER_THINKING_BUDGET.
+  const thinkingOverrideRaw = (context as Record<string, unknown> | undefined)?.thinking_budget_override
+  const drawerThinkingBudget = dryRun && typeof thinkingOverrideRaw === 'number' && Number.isInteger(thinkingOverrideRaw) && thinkingOverrideRaw >= 0 && thinkingOverrideRaw <= 2048
+    ? thinkingOverrideRaw
+    : DRAWER_THINKING_BUDGET
   const privateConversationId = typeof privateConversationIdRaw === 'string' && privateConversationIdRaw.trim()
     ? privateConversationIdRaw.trim()
     : null
@@ -748,7 +767,10 @@ Deno.serve(async (req) => {
   // The turn in its conversation, read before anything else looks at the latest message:
   // a revision or a call-off of the open draft is answered directly (in run()), and any
   // other turn goes on as a complete request, pointed at the calendar item it's about.
-  const turnContext = image ? null : await resolveTurnContext(sb, messages, context, cid)
+  // Side-by-side tests only: a dry run may skip the turn-reading rules, so the model with its
+  // tools handles the turn by itself (does the rule layer help or hurt?). Real turns always read.
+  const turnRulesOff = dryRun && (context as Record<string, unknown> | undefined)?.turn_rules_off === true
+  const turnContext = image || turnRulesOff ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget)
   const turnResolution = turnContext?.resolution ?? null
   if (turnResolution && !turnContext?.card && !turnContext?.cancelledDraft && !turnContext?.answer && !turnContext?.clarify && Array.isArray(messages) && messages.length > 0) {
     const last = messages[messages.length - 1]
@@ -5232,8 +5254,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
         generation_config: {
           temperature: 0.3,
-          max_output_tokens: Math.min(4096, Math.max(384, authoritativeRead.count * 80)),
-          thinking_config: { thinking_budget: 0 },
+          max_output_tokens: drawerThinkingBudget + Math.min(4096, Math.max(384, authoritativeRead.count * 80)),
+          thinking_config: { thinking_budget: drawerThinkingBudget },
         },
       }, {
         stream: wantStream,
@@ -5299,16 +5321,16 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       model,
       maxOutputTokens: experienceMode === 'talk_plan'
         ? 4096
-        : intentRouting.profile === 'full'
+        : drawerThinkingBudget + (intentRouting.profile === 'full'
           ? 2048
           : intentRouting.profile === 'recipe'
             ? 1536
             : intentRouting.profile === 'general'
               ? 1024
-              : 768,
+              : 768),
       thinking: experienceMode === 'talk_plan'
         ? effectiveWorkload.thinking
-        : { kind: 'budget', value: intentRouting.profile === 'full' ? 512 : 0 },
+        : { kind: 'budget', value: drawerThinkingBudget },
       temperature: experienceMode === 'talk_plan' ? undefined : 0.4,
     })
     const hasFunctionDeclarations = primaryTools.length > 0
@@ -5452,8 +5474,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           : [{ role: 'user', parts: [{ text: cookingRequestText }] }],
         generation_config: {
           temperature: 0.2,
-          max_output_tokens: 2048,
-          thinking_config: { thinking_budget: 0 },
+          max_output_tokens: drawerThinkingBudget + 2048,
+          thinking_config: { thinking_budget: drawerThinkingBudget },
         },
       }
       const recoveryStartMs = Date.now()
@@ -5776,10 +5798,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             ? body.generation_config
             : buildGeminiGenerationConfig({
                 model,
-                maxOutputTokens: 1024,
+                maxOutputTokens: model.startsWith('gemini-3') ? 1024 : drawerThinkingBudget + 1024,
                 thinking: model.startsWith('gemini-3')
                   ? { kind: 'level', value: 'low' }
-                  : { kind: 'budget', value: 0 },
+                  : { kind: 'budget', value: drawerThinkingBudget },
                 temperature: model.startsWith('gemini-3') ? undefined : 0.3,
               })
           const secondaryBody = {
@@ -6791,7 +6813,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const proposesChange = (out.payload.type === 'tool_action' && WRITE_TOOLS.has(String(out.payload.tool))) || out.payload.type === 'tool_action_batch'
     if (turnResolution?.isQuestion && proposesChange) {
       appendServerTrace('server_ai_assistant_question_kept', String(out.payload.tool ?? out.payload.type), { tool: out.payload.tool ?? null })
-      const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid)
+      const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid, drawerThinkingBudget)
         .catch(() => ({ text: 'I couldn’t find that just now.', mentioned: [] as TurnReferent[] }))
       const text = answered.text
       out = { status: 200, payload: { type: 'text', text, conversation_state: answerState(answered.mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'conversation.question_kept', correlation_id: cid } }
