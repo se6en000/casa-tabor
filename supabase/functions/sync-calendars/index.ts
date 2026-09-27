@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { INITIAL_SYNC_FUTURE_DAYS, INITIAL_SYNC_PAST_DAYS, shouldImportGoogleItem } from '../_shared/google-sync-window.mjs'
 import {
   loadMemberGoogleConnection,
   markGoogleConnectionFailure,
@@ -18,8 +19,6 @@ const CORS = {
 // falls back to a full reconciliation (see below) instead of hard-failing, so
 // legitimate large batches (e.g. deleting a recurring series) self-recover.
 const MAX_INCREMENTAL_CANCELLATIONS = 100
-const INITIAL_SYNC_PAST_DAYS = 7
-const INITIAL_SYNC_FUTURE_DAYS = 90
 
 function toErrorMessage(cause: unknown): string {
   if (cause instanceof Error) return cause.message
@@ -143,7 +142,7 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
           if (!isFullReconciliation) pendingCancellations.push(ev)
           continue
         }
-        if (isFullReconciliation && !isWithinInitialSyncWindow(ev, now)) continue
+        if (!shouldImportGoogleItem(ev, now, isFullReconciliation)) continue
         await upsertEvent(sb, connection, ev, accessToken, emailToId)
         upserted++
       }
@@ -188,7 +187,7 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
         pulled += page2.items?.length ?? 0
         for (const ev of page2.items ?? []) {
           if (ev.status === 'cancelled') continue
-          if (isFullReconciliation && !isWithinInitialSyncWindow(ev, now)) continue
+          if (!shouldImportGoogleItem(ev, now, isFullReconciliation)) continue
           await upsertEvent(sb, connection, ev, accessToken, emailToId)
           upserted++
         }
@@ -261,17 +260,6 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
     await markGoogleConnectionFailure(sb, connection.id, error)
     throw error
   }
-}
-
-function isWithinInitialSyncWindow(ev: Record<string, unknown>, now: number): boolean {
-  const start = ev.start as { dateTime?: string; date?: string } | undefined
-  const end = ev.end as { dateTime?: string; date?: string } | undefined
-  const startTime = start?.dateTime ?? start?.date
-  const endTime = end?.dateTime ?? end?.date
-  if (!startTime || !endTime) return false
-  const rangeStart = now - INITIAL_SYNC_PAST_DAYS * 86400000
-  const rangeEnd = now + INITIAL_SYNC_FUTURE_DAYS * 86400000
-  return new Date(endTime).getTime() >= rangeStart && new Date(startTime).getTime() <= rangeEnd
 }
 
 async function linkCanonicalOccurrence(
