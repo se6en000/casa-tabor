@@ -2,11 +2,22 @@ const COMPLETE_SHORT_COMMAND = /^(?:yes|yeah|yep|no|nope|cancel|stop|confirm|oka
 const INCOMPLETE_ENDING = /\b(?:a|an|the|to|for|from|with|at|in|on|of|and|or|but|because|if|when|where|what|which|who|whose|my|your|our|their|this|that|these|those|is|are|was|were|do|does|did|can|could|will|would|should|don't|doesn't|didn't|can't|couldn't|won't|wouldn't|shouldn't)$/i
 const FILLER_ONLY = /^(?:uh+|um+|erm+|hmm+|mm+|ah+|noise|[.?!, -]+)$/i
 
+// A request cut off at a pause: a verb still waiting for its object ("can you book"), a trailing
+// "um", or a name's possessive with nothing after it ("to book Liv's") — unless the possessive
+// is the answer itself ("it's Kelly's"). Heard on the wall 2026-09-26 (P3.13).
+const WAITING_VERB = /\b(?:book|schedule|put|remind me|remind|call|text|move|change|set up|bring|take|pick up|drop off|tell|ask|like|um+|uh+|so)$/i
+const POSSESSIVE_ENDING = /(\S+)\s+[a-z]+['’]s$/i
+const PREDICATE_BEFORE = /^(?:it['’]?s|that['’]?s|this is|is|was|are|were|its)$/i
+
 export function isIncompleteVoiceFragment(value) {
-  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+  // The transcriber adds punctuation to whatever it heard; a trailing "?" doesn't finish a thought.
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim().replace(/[.?!,;:…\s]+$/, '')
   if (!text || COMPLETE_SHORT_COMMAND.test(text)) return false
   const words = text.split(' ')
   if (INCOMPLETE_ENDING.test(text)) return true
+  if (words.length >= 2 && WAITING_VERB.test(text)) return true
+  const possessive = POSSESSIVE_ENDING.exec(text)
+  if (possessive && !PREDICATE_BEFORE.test(possessive[1])) return true
   if (words.length <= 2 && /^(?:what(?:'s| is)?|where(?:'s| is)?|who(?:'s| is)?|how(?:'s| is)?|why|can you|could you|would you|i want|i need|let's|lets)\b/i.test(text)) return true
   return /^(?:do|did|can|could|would|should|will)\s+(?:we|you|i|they|he|she)\s+(?:have|need|want|know|see|find|get|go|make|bring)$/i.test(text)
 }

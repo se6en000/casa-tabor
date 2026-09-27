@@ -11,9 +11,14 @@ echo "[refresh] Syncing watchdog script"
 scp -q "$(dirname "$0")/casa-watchdog.sh" "${PI_HOST}:/home/jake/casa-watchdog.sh"
 echo "[refresh] Syncing STT bridge modules to ${PI_HOST}:${PI_WHISPER_DIR}"
 ssh "$PI_HOST" "mkdir -p '${PI_WHISPER_DIR}' /home/jake/sensor-bridge"
+# Like the sensor bridge below: restart the voice bridge only when its code changed.
+WHISPER_BEFORE=$(ssh "$PI_HOST" "md5sum '${PI_WHISPER_DIR}/main.py' 2>/dev/null | cut -d' ' -f1" || true)
 scp -q \
   "$(dirname "$0")/whisper-bridge-main.py" \
   "${PI_HOST}:${PI_WHISPER_DIR}/main.py"
+WHISPER_AFTER=$(ssh "$PI_HOST" "md5sum '${PI_WHISPER_DIR}/main.py' | cut -d' ' -f1")
+WHISPER_RESTART=""
+[ "$WHISPER_BEFORE" != "$WHISPER_AFTER" ] && WHISPER_RESTART="XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user restart casa-whisper-bridge.service &&"
 scp -q \
   "$(dirname "$0")/stt_flux_shadow.py" \
   "${PI_HOST}:${PI_WHISPER_DIR}/stt_flux_shadow.py"
@@ -48,6 +53,7 @@ ssh "$PI_HOST" "
   XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user daemon-reload &&
   XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user enable --now casa-sensor-bridge.service casa-whisper-bridge.service &&
   ${BRIDGE_RESTART}
+  ${WHISPER_RESTART}
   sudo install -m 0644 /tmp/casa-watchdog.service /etc/systemd/system/casa-watchdog.service &&
   sudo install -m 0644 /tmp/casa-watchdog.timer /etc/systemd/system/casa-watchdog.timer &&
   rm -f /tmp/casa-watchdog.service /tmp/casa-watchdog.timer &&

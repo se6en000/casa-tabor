@@ -12,6 +12,7 @@ import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
 import { useAssistantTurn } from './useAssistantTurn'
+import { createAssistantTraceContext, emitAssistantTrace } from '../lib/assistantTelemetry'
 import { routeEta, useDriveMinutes, type DriveLookup } from './useDriveMinutes'
 import WallAssistantCard from './WallAssistantCard'
 import { pigmentStyleFor } from './lanes'
@@ -22,10 +23,10 @@ import { pigmentStyleFor } from './lanes'
 // existing one (useAIAssistant, execute-ai-action); only the presentation is new.
 
 const ANSWER_IDLE_MS = 60_000
-/** Quiet this long after a plain answer, and the band slips away. */
-const ANSWERED_SILENCE_MS = 8_000
+/** Quiet this long after a plain answer, and the band slips away (8 s was too short to think in; Jake, 2026-09-26). */
+const ANSWERED_SILENCE_MS = 20_000
 /** Longer while a card, "which one?" or a question back waits for the person. */
-const WAITING_SILENCE_MS = 30_000
+const WAITING_SILENCE_MS = 45_000
 
 /** "Open softball" from "Softball: Huskies @ Wellington Knights"; long titles give their first words. */
 const shortTitle = (title: string) => {
@@ -104,7 +105,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // Something is waiting on the person: a card, "which one?", or a question back.
   const waitingOnYou = Boolean(pending) || Boolean(which) || /\?\s*$/.test(answer?.content ?? '')
 
+  // Why the mic did what it did (a session that ended, a sentence held for the rest), in the
+  // same trace table as the old drawer's, so "it went away while I was thinking" can be traced.
+  const voiceTrace = useRef(createAssistantTraceContext({ page: 'wall', lane: 'voice', source: 'wall_band' }))
   const speech = useSpeech({
+    onTrace: (event, payload) => emitAssistantTrace(event, voiceTrace.current, { payload: { ...payload, silence_window_ms: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS } }),
     onInterim: (text) => {
       lastTouch.current = Date.now()
       setInterim(text)

@@ -40,3 +40,32 @@ test('a change to the draft is never read as a yes or a no', () => {
   assert.equal(voiceFinalIntent('yes but put Emme on it too', { hasPending: true }), 'send')
   assert.equal(voiceFinalIntent('ok and add Liv', { hasPending: true }), 'send')
 })
+
+import { isIncompleteVoiceFragment } from '../src/lib/voiceTurnTaking.mjs'
+
+test('a thought cut off at a pause is held for the rest, even with the punctuation the transcriber added', () => {
+  // Heard on the wall 2026-09-26: "When is the best day next week to book Liv's?" — Jake was mid-thought.
+  for (const said of [
+    "When is the best day next week to book Liv's?",
+    'can you book',
+    'remind me to.',
+    'add a dentist for Emme and',
+    "what's on Kelly's",
+    'put Owen down for um',
+  ]) {
+    assert.equal(isIncompleteVoiceFragment(said), true, said)
+  }
+})
+
+test('a finished sentence still goes straight through', () => {
+  for (const said of [
+    "When is the best day next week to book Liv's batting practice with coach Danny?",
+    "what's on tomorrow",
+    "it's Kelly's",
+    'what time is it',
+    'yes',
+    'add milk',
+  ]) {
+    assert.equal(isIncompleteVoiceFragment(said), false, said)
+  }
+})

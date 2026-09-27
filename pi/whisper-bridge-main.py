@@ -25,7 +25,9 @@ DG_URL = (
     '&interim_results=true'
     '&smart_format=true'
     '&punctuate=true'
-    '&endpointing=500'
+    # A pause this long (ms) ends a sentence. 500 cut people off mid-thought ("to book Liv's …",
+    # 2026-09-26); the app still holds an unfinished-sounding sentence for the rest.
+    '&endpointing=1000'
     '&utterance_end_ms=1800'
     '&vad_events=true'
 )
