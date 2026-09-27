@@ -91,11 +91,12 @@ if (room.paused) {
 }
 // A thinking turn can cost ~2.5x a plain one; a turn is budgeted at $0.008 to stay on the safe side.
 const plannedUsd = planned / PER_TURN_CALLS * 0.008
-if (room.hourUsd + plannedUsd > room.hourUsdCap * 0.8 || room.dayUsd + plannedUsd > room.dayUsdCap * 0.8) {
+// --spend-watched: a person is watching the breaker and chose to run anyway (it still stops the moment AI pauses).
+if (!process.argv.includes('--spend-watched') && (room.hourUsd + plannedUsd > room.hourUsdCap * 0.8 || room.dayUsd + plannedUsd > room.dayUsdCap * 0.8)) {
   console.error(`Not enough AI spend left: $${room.hourUsd.toFixed(2)} this hour (cap $${room.hourUsdCap}), $${room.dayUsd.toFixed(2)} today (cap $${room.dayUsdCap}); this run may cost ~$${plannedUsd.toFixed(2)}. Try later.`)
   process.exit(2)
 }
-if (room.calls + planned > room.callCap * HEADROOM || room.tokens > room.tokenCap * HEADROOM) {
+if (!process.argv.includes('--spend-watched') && (room.calls + planned > room.callCap * HEADROOM || room.tokens > room.tokenCap * HEADROOM)) {
   console.error(`Not enough AI headroom this hour: ${room.calls} calls / ${room.tokens} tokens used, this run needs ~${planned} calls; the breaker trips at ${room.callCap} calls / ${room.tokenCap} tokens. Try later.`)
   process.exit(2)
 }

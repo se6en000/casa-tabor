@@ -62,12 +62,15 @@ export async function loadWorld(now = new Date()) {
       spoken: e.title.split(/[:@·(–—]| - /)[0].trim().toLowerCase(),
     }
   })
-  const timed = enriched.filter((e) => !e.all_day && e.event_type !== 'reminder')
+  // Synced copies of school-routine runs ("Drop off Emme @ Palm Beach Public …") aren't events the
+  // assistant should change (Jake, 2026-09-26): never test targets, never counted — only real events.
+  const routineCopy = (e) => /^(drop off|pick up|pickup|dropoff)\b.*@/i.test(e.title)
+  const timed = enriched.filter((e) => !e.all_day && e.event_type !== 'reminder' && !routineCopy(e))
   const byDay = new Map()
   for (const e of timed) byDay.set(e.local.date, [...(byDay.get(e.local.date) ?? []), e])
   // Everything on a day — reminders and all-day items too — so a judge grades against all of it.
   const allOn = (date) => enriched.filter((e) => (e.all_day ? String(e.start_time).slice(0, 10) : e.local.date) === date)
-    .map((e) => `${e.all_day ? 'all day' : e.local.hhmm} ${e.title}${e.event_type === 'reminder' ? ' (reminder)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''}${e.drivers.length ? ` — drivers: ${e.drivers.join(', ')}` : ''}${e.place ? ` — place: ${e.place}` : ''}`)
+    .map((e) => `${e.all_day ? 'all day' : e.local.hhmm} ${e.title}${e.event_type === 'reminder' ? ' (reminder)' : ''}${routineCopy(e) ? ' (school-run copy)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''}${e.drivers.length ? ` — drivers: ${e.drivers.join(', ')}` : ''}${e.place ? ` — place: ${e.place}` : ''}`)
   const todayLocal = localParts(now.toISOString()).date
   return { now, offset: OFFSET, family, kids, parents, events: enriched, timed, byDay, allOn, todayLocal, localParts }
 }
