@@ -186,11 +186,92 @@ export function extractDesiredRoutineSeries(
   return results
 }
 
+/** A live Casa series that could be one of a child's school-run exceptions. */
+export interface ExistingRoutineSeries {
+  seriesId: string
+  templateId?: string
+  title: string
+  byDay: string | null
+  gid: string | null
+  ownership: string
+  createdAt: string
+  occurrences?: number
+  /** The template knows its Google id (Casa-made); imported templates don't. */
+  templateGoogleId?: string | null
+}
+
+export interface RoutineSeriesSyncPlan {
+  keep: ExistingRoutineSeries[]
+  retire: Array<ExistingRoutineSeries & { deleteGoogle: boolean }>
+  create: DesiredRoutineSeries[]
+}
+
+const sameRun = (d: Pick<DesiredRoutineSeries, 'title' | 'dayCode'>, e: ExistingRoutineSeries) =>
+  e.byDay === d.dayCode && e.title.toLowerCase().trim() === d.title.toLowerCase().trim()
+
+/**
+ * What a routine save should do with the series already there (2026-09-27: Emme's Thursday runs had
+ * piled up as 2 + 3 Google series, each held twice in Casa). One series is kept per wanted run —
+ * an imported one first (it carries the dates), then the one with the most dates, then the oldest;
+ * every other match, and anything no longer wanted, retires. A Google copy is deleted only when no
+ * kept series points at it, and only once.
+ */
+export function planRoutineSeriesSync(
+  desired: Array<Pick<DesiredRoutineSeries, 'key' | 'title' | 'dayCode'>>,
+  existing: ExistingRoutineSeries[],
+): RoutineSeriesSyncPlan {
+  const rank = (e: ExistingRoutineSeries) => (e.ownership === 'google_adopted' ? 0 : 1)
+  const ordered = existing
+    .map((e, index) => ({ e, index }))
+    .sort((a, b) => rank(a.e) - rank(b.e)
+      || (b.e.occurrences ?? 0) - (a.e.occurrences ?? 0)
+      || a.e.createdAt.localeCompare(b.e.createdAt)
+      || a.index - b.index)
+    .map(({ e }) => e)
+  const keep: ExistingRoutineSeries[] = []
+  const create: DesiredRoutineSeries[] = []
+  for (const d of desired) {
+    const match = ordered.find((e) => sameRun(d, e))
+    if (match) keep.push(match)
+    else create.push(d as DesiredRoutineSeries)
+  }
+  const keptIds = new Set(keep.map((k) => k.seriesId))
+  const keptGids = new Set(keep.map((k) => k.gid).filter(Boolean))
+  // Each Google copy is deleted once, by a retiring copy that knows its Google id when there is one.
+  const retiring = existing.filter((e) => !keptIds.has(e.seriesId))
+  const deleter = new Map<string, string>()
+  for (const e of [...retiring].sort((a, b) => Number(Boolean(b.templateGoogleId)) - Number(Boolean(a.templateGoogleId)))) {
+    if (e.gid && !keptGids.has(e.gid) && !deleter.has(e.gid)) deleter.set(e.gid, e.seriesId)
+  }
+  const retire = retiring.map((e) => ({ ...e, deleteGoogle: Boolean(e.gid && deleter.get(e.gid) === e.seriesId) }))
+  return { keep, retire, create }
+}
+
+const routineSyncQueue = new Map<string, Promise<unknown>>()
+
+/** Runs a child's routine sync after any sync already running for that child, never alongside it. */
+export function runRoutineSyncOnce<T>(memberId: string, run: () => Promise<T>): Promise<T> {
+  const previous = routineSyncQueue.get(memberId) ?? Promise.resolve()
+  const next = previous.catch(() => undefined).then(run)
+  routineSyncQueue.set(memberId, next)
+  void next.finally(() => { if (routineSyncQueue.get(memberId) === next) routineSyncQueue.delete(memberId) }).catch(() => undefined)
+  return next
+}
+
 /**
  * Reconciles routine exceptions with Google Calendar and Casa Tabor recurrence engine.
  * Guarantees zero duplicate single events and zero orphaned Google series.
  */
-export async function syncMemberRoutineExceptions(
+export function syncMemberRoutineExceptions(
+  supabase: SupabaseClient,
+  memberId: string,
+  routine: FamilyRoutine,
+  members: FamilyMember[] = [],
+): Promise<{ added: number; removed: number; retained: number }> {
+  return runRoutineSyncOnce(memberId, () => syncMemberRoutineExceptionsNow(supabase, memberId, routine, members))
+}
+
+async function syncMemberRoutineExceptionsNow(
   supabase: SupabaseClient,
   memberId: string,
   routine: FamilyRoutine,
@@ -203,85 +284,60 @@ export async function syncMemberRoutineExceptions(
   const nowIso = new Date().toISOString()
   const purgeIso = new Date(Date.now() + 30 * 86400000).toISOString()
 
-  // 1. Query existing active series templates for this child
-  const { data: existingTemplates } = await supabase
-    .from('events')
-    .select('id, title, start_time, end_time, rrule, google_event_id, google_calendar_id, record_kind')
-    .eq('record_kind', 'series_template')
+  // 1. Every live series that could be one of this child's school runs — Casa-made or imported from
+  // Google (imported templates are stored cancelled, so templates alone missed them).
+  const { data: seriesRows } = await supabase
+    .from('event_series')
+    .select('id, ownership, created_at, recurrence_lines, google_recurring_event_id, template:events!event_series_template_event_id_fkey(id, title, rrule, deleted_at, google_event_id)')
+    .eq('status', 'active')
     .is('deleted_at', null)
-    .neq('status', 'cancelled')
-    .or(`title.ilike.%Drop off ${childName}%,title.ilike.%Pick up ${childName}%`)
-
-  const activeTemplates = existingTemplates || []
-  let added = 0
-  let removed = 0
-  let retained = 0
-
-  // 2. Identify templates to delete (no longer in desired set)
-  for (const t of activeTemplates) {
-    const isMatchingDesired = desired.some((d) => {
-      return (
-        t.rrule?.includes(`BYDAY=${d.dayCode}`) &&
-        t.title.toLowerCase().trim() === d.title.toLowerCase().trim()
-      )
+  type SeriesRow = {
+    id: string; ownership: string; created_at: string; recurrence_lines: string[] | null; google_recurring_event_id: string | null
+    template: { id: string; title: string; rrule: string | null; deleted_at: string | null; google_event_id: string | null } | null
+  }
+  const childTitle = new RegExp(`^(Drop off|Pick up) ${childName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} @`, 'i')
+  const existing: ExistingRoutineSeries[] = ((seriesRows ?? []) as unknown as SeriesRow[])
+    .filter((r) => r.template && !r.template.deleted_at && childTitle.test(r.template.title))
+    .map((r) => {
+      const rule = [...(r.recurrence_lines ?? []), r.template?.rrule ?? ''].join(';')
+      return {
+        seriesId: r.id,
+        templateId: r.template!.id,
+        title: r.template!.title,
+        byDay: rule.match(/BYDAY=([A-Z]{2})/)?.[1] ?? null,
+        gid: r.google_recurring_event_id,
+        ownership: r.ownership,
+        createdAt: r.created_at,
+        templateGoogleId: r.template!.google_event_id,
+      }
     })
+  const plan = planRoutineSeriesSync(desired, existing)
+  let added = 0
+  const removed = plan.retire.length
+  const retained = plan.keep.length
 
-    if (!isMatchingDesired) {
-      // Delete from Google Calendar
-      if (t.google_event_id) {
-        try {
-          await supabase.functions.invoke('delete-google-event', {
-            body: { event_id: t.id },
-          })
-        } catch (err) {
-          console.warn('[routineRecurrenceCoordinator] Failed to delete Google recurring event:', err)
+  // 2. Retire extra copies and runs no longer wanted; delete a Google copy only when nothing kept uses it.
+  for (const r of plan.retire) {
+    if (r.deleteGoogle && r.templateId) {
+      try {
+        // An imported template doesn't carry its Google id; give it the series' so the delete can find it.
+        if (!r.templateGoogleId && r.gid) {
+          await supabase.from('events').update({ google_event_id: r.gid }).eq('id', r.templateId)
         }
+        await supabase.functions.invoke('delete-google-event', { body: { event_id: r.templateId } })
+      } catch (err) {
+        console.warn('[routineRecurrenceCoordinator] Failed to delete Google recurring event:', err)
       }
-
-      // Retire template in Supabase
-      await supabase
-        .from('events')
-        .update({ status: 'cancelled', deleted_at: nowIso, purge_after: purgeIso })
-        .eq('id', t.id)
-
-      // Retire event_series
-      const { data: sRow } = await supabase
-        .from('event_series')
-        .select('id')
-        .eq('template_event_id', t.id)
-        .maybeSingle()
-
-      if (sRow) {
-        await supabase
-          .from('event_series')
-          .update({ status: 'deleted', deleted_at: nowIso, purge_after: purgeIso })
-          .eq('id', sRow.id)
-
-        // Cancel all materialized occurrences
-        await supabase
-          .from('events')
-          .update({ status: 'cancelled', deleted_at: nowIso, purge_after: purgeIso })
-          .eq('series_id', sRow.id)
-      }
-
-      removed++
     }
+    await supabase.from('event_series').update({ status: 'deleted', deleted_at: nowIso, purge_after: purgeIso }).eq('id', r.seriesId)
+    if (r.templateId) {
+      await supabase.from('events').update({ status: 'cancelled', deleted_at: nowIso, purge_after: purgeIso }).eq('id', r.templateId)
+    }
+    await supabase.from('events').update({ status: 'cancelled', deleted_at: nowIso, purge_after: purgeIso }).eq('series_id', r.seriesId)
   }
 
-  // 3. Create newly added or updated desired series
-  for (const d of desired) {
-    const existing = activeTemplates.find((t) => {
-      return (
-        t.rrule?.includes(`BYDAY=${d.dayCode}`) &&
-        t.title.toLowerCase().trim() === d.title.toLowerCase().trim()
-      )
-    })
-
-    if (existing) {
-      retained++
-      continue
-    }
-
+  // 3. Create the wanted runs that have no series yet
+  for (const d of plan.create) {
     // Compute canonical first occurrence date
     const firstDate = getFirstOccurrenceDate(startDateStr, d.dayOfWeek)
     const startIso = `${firstDate}T${d.startTimeLocal}:00-04:00`
@@ -347,6 +403,7 @@ export async function syncMemberRoutineExceptions(
       })
       const gData = gRes.data
       const gEventId = gData?.google_event_id
+      const connectionId: string | null = gData?.connection_id ?? null
 
       if (gEventId) {
         // Register event_series row
@@ -358,6 +415,8 @@ export async function syncMemberRoutineExceptions(
           status: 'active',
           ownership: 'casa',
           google_recurring_event_id: gEventId,
+          // Without its connection the importer didn't recognise Casa's own push and adopted it a second time.
+          source_connection_id: connectionId,
           created_at: nowIso,
           updated_at: nowIso,
         })

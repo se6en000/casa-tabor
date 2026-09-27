@@ -28,6 +28,10 @@ test('the importer (Google → Casa series) and the outbox (Casa series → Goog
   }
 })
 
-test('the materializer stays off for now: switched on, it would add duplicate school runs', () => {
+test('the materializer is back on daily, once the duplicate school runs were retired', () => {
+  const later = readFileSync(new URL('../supabase/migrations/20260927210000_materializer_back_on.sql', import.meta.url), 'utf8')
   assert.doesNotMatch(sql, /cron\.schedule\(\s*'materialize-recurring-events'/)
+  assert.match(later, /'materialize-recurring-events',\s+'17 7 \* \* \*'/)
+  assert.match(later, /timeout_milliseconds := 10000/)
+  assert.match(later, /vault\.decrypted_secrets/)
 })
