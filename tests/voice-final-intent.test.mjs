@@ -28,6 +28,10 @@ test('with a draft waiting, a short no cancels the draft and a short yes confirm
   assert.equal(voiceFinalIntent('nah cancel that', { hasPending: true }), 'cancel')
   assert.equal(voiceFinalIntent('yes add it', { hasPending: true }), 'confirm')
   assert.equal(voiceFinalIntent('ok', { hasPending: true }), 'confirm')
+  // Heard on the wall 2026-09-27: "Yes. Change it." to a rename card showed the same card again.
+  for (const said of ['Yes. Change it.', 'yes update it', 'ok save that', 'yeah move it', 'yes book it']) {
+    assert.equal(voiceFinalIntent(said, { hasPending: true }), 'confirm', said)
+  }
   assert.equal(voiceFinalIntent('go away', { hasPending: true }), 'dismiss')
 })
 

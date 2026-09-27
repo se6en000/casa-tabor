@@ -29,6 +29,8 @@ interface AssistantServerPayload {
   closes_draft?: boolean
   /** The words weren't said to Casa (heard by the wall's open mic): no reply. */
   aside?: boolean
+  /** The person said yes to the card on screen: save it. */
+  confirms_draft?: boolean
   code?: string
   message?: string
   text?: string
@@ -552,6 +554,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         // "Never mind" to an open card: the server says so, and the card closes.
         ...(data?.closes_draft === true ? { closesDraft: true } : {}),
         ...(data?.aside === true ? { aside: true } : {}),
+        ...(data?.confirms_draft === true ? { confirmsDraft: true } : {}),
         ...sourceMetadata,
       }
     }

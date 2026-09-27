@@ -1337,6 +1337,11 @@ Deno.serve(async (req) => {
       },
     }
   }
+  // "Yes, change it" in any words: the band or phone saves the card on screen, as a tap on Yes would
+  // (before, the turn went on and came back as the same card again — heard 2026-09-27).
+  if (turnResolution?.act === 'confirm_draft' && openDraft(context?.pendingAction as { tool: string; args: Record<string, unknown> } | undefined)) {
+    return { status: 200, payload: { type: 'text', text: '', confirms_draft: true, semantic_intent: 'conversation.confirm_draft', conversation_state: incomingConversationState ?? null, correlation_id: cid } }
+  }
   if (turnContext?.cancelledDraft) {
     return {
       status: 200,

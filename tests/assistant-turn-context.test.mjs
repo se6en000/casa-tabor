@@ -217,3 +217,12 @@ test('a question about the draft on screen is answered with the draft in view ("
   assert.match(buildAnswerPrompt({ question: 'q', calendarLines: [], nowLine: 'now', draft, utcOffset: '-04:00', overlaps: [] }), /Overlapping the draft's time \(worked out exactly\): nothing/)
   assert.doesNotMatch(buildAnswerPrompt({ question: 'q', calendarLines: [], nowLine: 'now', draft: null, utcOffset: '-04:00' }), /ON SCREEN/)
 })
+
+test('a yes to the draft that reaches the server confirms it — never the same card again', async () => {
+  const { readFileSync } = await import('node:fs')
+  const server = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  assert.match(server, /turnResolution\?\.act === 'confirm_draft' && openDraft\(/)
+  assert.match(server, /confirms_draft: true/)
+  const client = readFileSync(new URL('../src/wall/useAssistantTurn.ts', import.meta.url), 'utf8')
+  assert.match(client, /answer\?\.confirmsDraft/)
+})

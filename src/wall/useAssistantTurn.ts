@@ -80,6 +80,14 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     setNote('Done.')
   }, [pending, working, events, session?.id, updateMessageToolStatus, queryClient, surface])
 
+  // A yes the server heard ("yes, change it"): save the card on screen, once.
+  const confirmedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!answer?.confirmsDraft || !pending || confirmedFor.current === answer.id) return
+    confirmedFor.current = answer.id
+    void confirm()
+  }, [answer?.confirmsDraft, answer?.id, pending, confirm])
+
   const cancel = useCallback(() => {
     if (!pending) return
     updateMessageToolStatus(pending.id, 'cancelled')

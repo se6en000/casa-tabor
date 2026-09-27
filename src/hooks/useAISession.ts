@@ -100,6 +100,8 @@ export interface AIMessage {
   closesDraft?: boolean
   /** Words the wall's open mic heard that weren't said to Casa: shown nowhere, answered with nothing. */
   aside?: boolean
+  /** The server heard a yes to the card on screen ("yes, change it"): the client saves it. */
+  confirmsDraft?: boolean
   toolAction?: {
     tool: string
     args: Record<string, unknown>

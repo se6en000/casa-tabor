@@ -35,7 +35,8 @@ export function isLikelyUnusableVoiceTranscript(value, confidence) {
 // words (and filler); a goodbye word inside a real sentence ("is it close to school",
 // "never mind that, when does softball start") goes to Casa like anything else.
 const FILLER = new Set(['ok', 'okay', 'thanks', 'thank', 'you', 'casa', 'alexa', 'hey', 'alright', 'cool', 'um', 'uh', 'so', 'please', 'actually', 'oh'])
-const YES_WORDS = new Set(['yes', 'yeah', 'yep', 'yup', 'ok', 'okay', 'sure', 'confirm', 'go', 'ahead', 'do', 'it', 'sounds', 'good', 'correct', 'right', 'that', 'add', 'save', 'please', 'perfect', 'great', 'absolutely', 'proceed', 'looks'])
+// The card's own verb counts too: "yes, change it", "yeah move it" (heard 2026-09-27).
+const YES_WORDS = new Set(['yes', 'yeah', 'yep', 'yup', 'ok', 'okay', 'sure', 'confirm', 'go', 'ahead', 'do', 'it', 'sounds', 'good', 'correct', 'right', 'that', 'add', 'save', 'please', 'perfect', 'great', 'absolutely', 'proceed', 'looks', 'change', 'update', 'move', 'rename', 'book', 'schedule', 'set', 'make', 'remove', 'delete'])
 const YES_CORE = /\b(yes|yeah|yep|yup|ok|okay|sure|confirm|go ahead|do it|sounds good|correct|perfect|absolutely|proceed|save it|add it)\b/
 const NO_WORDS = new Set(['no', 'nope', 'nah', 'cancel', 'that', 'it', 'never', 'mind', 'nevermind', 'forget', 'scratch', 'stop', 'abort', 'undo', 'dont', 'do', 'not', 'add', 'leave', 'as', 'is'])
 const NO_CORE = /\b(no|nope|nah|cancel|never mind|nevermind|forget it|scratch that|stop|abort|undo|dont|do not)\b/
