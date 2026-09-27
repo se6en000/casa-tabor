@@ -261,6 +261,14 @@ async function importConnection(
       )
       if (adoptionError) throw new Error(adoptionError.message)
       adopted = Number(adoption.created ?? 0)
+      // A new series, or a Google edit to a series' time or rule: refill its dates now, so the
+      // change shows in Casa without waiting on the materializer (20260927170000).
+      for (const seriesId of (adoption.rematerialize ?? []) as string[]) {
+        const { error: materializeError } = await supabase.functions.invoke('materialize-recurring-events', {
+          body: { series_id: seriesId },
+        })
+        if (materializeError) console.warn('[import-google-recurrence] refill notice', seriesId, materializeError.message)
+      }
     }
     linked = await linkInstances(
       supabase,
