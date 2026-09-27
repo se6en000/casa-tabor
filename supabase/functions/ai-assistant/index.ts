@@ -333,7 +333,7 @@ const TURN_BUDGET_MS = 7000
 /** Version D's one call gets room to think, so time limits don't decide the comparison. */
 const FULL_AI_TIMEOUT_MS = 20_000
 /** The hybrid for real turns (P3.17). */
-const HYBRID_LAYER2_LIVE = false
+const HYBRID_LAYER2_LIVE = true
 
 /** The next two weeks of the calendar, for reading what a turn refers to. */
 async function loadUpcomingIds(sb: TurnDb): Promise<string[]> {
@@ -1200,6 +1200,7 @@ Deno.serve(async (req) => {
     const lookupDeps = { cid, context: (context ?? {}) as Record<string, any>, apiKey, model, provider: 'gemini', braveKey, mapsKey, homeAddress: home, routeEtaCache, providerFetch: providerFetch as never, mapsFetch: mapsFetch as never, experienceMode, latestUserText: null, callIndex: 2 }
     const deadline = Date.now() + FULL_AI_TIMEOUT_MS
     let parts: Array<Record<string, unknown>> = []
+    let retriedEmpty = false
     // Up to three rounds: a lookup's answer goes back to the model, which then answers or proposes.
     for (let round = 0; round < 3; round++) {
       const controller = new AbortController()
@@ -1226,6 +1227,12 @@ Deno.serve(async (req) => {
         return { status: 200, payload: { type: 'text', text: 'The AI model took too long to respond. Please try again.', semantic_intent: 'full_ai.timeout', correlation_id: cid } }
       } finally {
         clearTimeout(timer)
+      }
+      // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all: ask once more.
+      if (!parts.length && !retriedEmpty) {
+        retriedEmpty = true
+        round -= 1
+        continue
       }
       const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
       if (!reads.length) break

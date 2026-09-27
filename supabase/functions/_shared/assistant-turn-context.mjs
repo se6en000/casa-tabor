@@ -131,7 +131,7 @@ ${before.map((m) => `${m.role === 'user' ? 'PERSON' : 'CASA'}: ${String(m.conten
 
 LATEST FROM THE PERSON: "${String(latest?.content ?? '')}"
 
-First, was it said to Casa at all? The wall's microphone stays open between turns, so it can hear the room. "aside": the words clearly weren't said to Casa — the person talking to someone else ("Owen get your shoes on", "honey where are my keys"), a TV or radio, a half-sentence to themselves — and have nothing to do with the conversation with Casa. Only when that's clear; anything that could be for Casa is not an aside. For an aside, "closes_draft" is false and nothing else is needed.
+First, was it said to Casa at all? The wall's microphone stays open between turns, so it can hear the room. "aside": the words clearly weren't said to Casa — the person talking to someone else ("Owen get your shoes on", "honey where are my keys"), a TV or radio, a half-sentence to themselves — and have nothing to do with the conversation with Casa. Only when that's clear; anything that could be for Casa is not an aside. Telling Casa something — a thanks, a fact, a need ("thanks, oh and we're out of milk btw", "we're low on eggs", "Kelly's running late") — is talking to Casa, never an aside; so is anything about the family's plans, groceries or home. For an aside, "closes_draft" is false and nothing else is needed.
 
 Then "closes_draft": true if the person drops or calls off the draft above (only when there is one) — whether or not they also want something else in the same message.
 

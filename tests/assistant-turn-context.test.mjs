@@ -196,4 +196,6 @@ test('words not said to Casa (someone else in the room, the TV) are an aside: no
   // The prompt asks for it only when the words are clearly not for Casa.
   const prompt = buildTurnPrompt({ messages: [{ role: 'user', content: 'Owen get your shoes on' }], family: [], nowLine: 'now', utcOffset: '-04:00', nowIso: '2026-09-26T21:00:00Z' })
   assert.match(prompt, /"aside": the words clearly weren't said to Casa/)
+  // Heard in the test runs 2026-09-26: "thanks. oh and we're out of milk btw" came back as an aside.
+  assert.match(prompt, /Telling Casa something — a thanks, a fact, a need \("thanks, oh and we're out of milk btw"/)
 })
