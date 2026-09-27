@@ -169,7 +169,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, mentionedIds } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, mentionedIds } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -237,7 +237,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -1248,6 +1248,10 @@ Deno.serve(async (req) => {
         if (call.name === 'get_recipe') {
           const { data } = await sb.from('recipes').select('name, servings, cook_time, recipe_ingredients(raw_text, name, quantity, unit, optional, sort_order), recipe_steps(step_number, instruction)').eq('id', String(call.args?.id ?? '')).maybeSingle()
           result = data ? data as Record<string, unknown> : { error: 'No recipe with that id' }
+        } else if (call.name === 'get_gift_ideas') {
+          // Surprise-safe (P3.19 step 2): only on the asker's phone, never the ideas for them.
+          const { data } = await sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at').limit(100)
+          result = giftIdeasForViewer(data ?? [], { viewerMemberId: activeMemberId, page: context?.page ?? null, forName: call.args?.for ?? null })
         } else if (call.name === 'search_family_notes') {
           // The same retrieval the old path loaded on every turn — here only when D asks.
           const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)
@@ -1263,7 +1267,7 @@ Deno.serve(async (req) => {
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
-      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries }))
+      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family }))
     if (changes.length) {
       if (changes.some((c) => 'error' in c)) {
         autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
@@ -6089,6 +6093,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     // `context`, not the later `utcOffset` const: this is called before that line runs.
     const utcOffsetForDisplay = (context?.utcOffset as string | undefined) ?? '-04:00'
     if (name === 'create_event') return `Create: **${args.title}** · ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`
+    if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
       const steps = Array.isArray(args.steps) ? args.steps.length : 0

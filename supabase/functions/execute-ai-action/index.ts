@@ -1662,6 +1662,23 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'add_gift_idea') {
+      // Gift ideas (P3.19 step 2): saved on a yes; read back only on the asker's phone.
+      const forName = normalizeOptionalText(args.for_name, 120)
+      const idea = normalizeOptionalText(args.idea, 1000)
+      if (!forName || !idea) throw new Error('A gift idea needs who it is for and the idea')
+      const forMemberId = normalizeOptionalText(args.for_member_id, 80)
+      const { data, error } = await sb
+        .from('gift_ideas')
+        .insert({ for_name: forName, for_member_id: forMemberId, idea, source: lane === 'voice' ? 'voice' : 'assistant' })
+        .select('id, for_name, idea')
+        .single()
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, gift_idea: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'add_grocery_items') {
       const result = await saveGroceryItems(sb, args.items)
       return new Response(JSON.stringify({
