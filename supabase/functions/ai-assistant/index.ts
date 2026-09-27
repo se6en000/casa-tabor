@@ -169,10 +169,11 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 
-// Thinking for the drawer's turn and the answers it writes (Gemini 2.5 Flash takes a token
-// budget; "medium" per Jake, 2026-09-26 — it had been 0, or 512 for the full profile).
-// Each call gets this much extra output room so the thinking never cuts the answer short.
-const DRAWER_THINKING_BUDGET = 1024
+// Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
+// the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
+// (1,024) was no more right (14 vs 13 of 22 turns) and ~3x slower (6.8 s vs 2.4 s typical), and
+// skipping the turn-reading rules fell to 6/22 — so the fast path with the rules stays. A dry run
+// can still set a budget (`thinking_budget_override`), for the next side-by-side test.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -687,12 +688,12 @@ Deno.serve(async (req) => {
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const dryRun = dryRunRaw === true
-  // Side-by-side tests only (scripts/assistant-situations --thinking=…): a dry run may ask for
-  // another thinking budget. Real turns never can — they always use DRAWER_THINKING_BUDGET.
+  // Side-by-side tests only (scripts/assistant-situations --thinking=…): a dry run may ask for a
+  // thinking budget. Real turns never can: null keeps each call's own fast setting.
   const thinkingOverrideRaw = (context as Record<string, unknown> | undefined)?.thinking_budget_override
   const drawerThinkingBudget = dryRun && typeof thinkingOverrideRaw === 'number' && Number.isInteger(thinkingOverrideRaw) && thinkingOverrideRaw >= 0 && thinkingOverrideRaw <= 2048
     ? thinkingOverrideRaw
-    : DRAWER_THINKING_BUDGET
+    : null
   const privateConversationId = typeof privateConversationIdRaw === 'string' && privateConversationIdRaw.trim()
     ? privateConversationIdRaw.trim()
     : null
@@ -770,7 +771,7 @@ Deno.serve(async (req) => {
   // Side-by-side tests only: a dry run may skip the turn-reading rules, so the model with its
   // tools handles the turn by itself (does the rule layer help or hurt?). Real turns always read.
   const turnRulesOff = dryRun && (context as Record<string, unknown> | undefined)?.turn_rules_off === true
-  const turnContext = image || turnRulesOff ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget)
+  const turnContext = image || turnRulesOff ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
   const turnResolution = turnContext?.resolution ?? null
   if (turnResolution && !turnContext?.card && !turnContext?.cancelledDraft && !turnContext?.answer && !turnContext?.clarify && Array.isArray(messages) && messages.length > 0) {
     const last = messages[messages.length - 1]
@@ -5254,8 +5255,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
         generation_config: {
           temperature: 0.3,
-          max_output_tokens: drawerThinkingBudget + Math.min(4096, Math.max(384, authoritativeRead.count * 80)),
-          thinking_config: { thinking_budget: drawerThinkingBudget },
+          max_output_tokens: (drawerThinkingBudget ?? 0) + Math.min(4096, Math.max(384, authoritativeRead.count * 80)),
+          thinking_config: { thinking_budget: drawerThinkingBudget ?? 0 },
         },
       }, {
         stream: wantStream,
@@ -5321,7 +5322,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       model,
       maxOutputTokens: experienceMode === 'talk_plan'
         ? 4096
-        : drawerThinkingBudget + (intentRouting.profile === 'full'
+        : (drawerThinkingBudget ?? 0) + (intentRouting.profile === 'full'
           ? 2048
           : intentRouting.profile === 'recipe'
             ? 1536
@@ -5330,7 +5331,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               : 768),
       thinking: experienceMode === 'talk_plan'
         ? effectiveWorkload.thinking
-        : { kind: 'budget', value: drawerThinkingBudget },
+        : { kind: 'budget', value: drawerThinkingBudget ?? (intentRouting.profile === 'full' ? 512 : 0) },
       temperature: experienceMode === 'talk_plan' ? undefined : 0.4,
     })
     const hasFunctionDeclarations = primaryTools.length > 0
@@ -5474,8 +5475,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           : [{ role: 'user', parts: [{ text: cookingRequestText }] }],
         generation_config: {
           temperature: 0.2,
-          max_output_tokens: drawerThinkingBudget + 2048,
-          thinking_config: { thinking_budget: drawerThinkingBudget },
+          max_output_tokens: (drawerThinkingBudget ?? 0) + 2048,
+          thinking_config: { thinking_budget: drawerThinkingBudget ?? 0 },
         },
       }
       const recoveryStartMs = Date.now()
@@ -5798,10 +5799,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             ? body.generation_config
             : buildGeminiGenerationConfig({
                 model,
-                maxOutputTokens: model.startsWith('gemini-3') ? 1024 : drawerThinkingBudget + 1024,
+                maxOutputTokens: model.startsWith('gemini-3') ? 1024 : (drawerThinkingBudget ?? 0) + 1024,
                 thinking: model.startsWith('gemini-3')
                   ? { kind: 'level', value: 'low' }
-                  : { kind: 'budget', value: drawerThinkingBudget },
+                  : { kind: 'budget', value: drawerThinkingBudget ?? 0 },
                 temperature: model.startsWith('gemini-3') ? undefined : 0.3,
               })
           const secondaryBody = {
@@ -6813,7 +6814,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const proposesChange = (out.payload.type === 'tool_action' && WRITE_TOOLS.has(String(out.payload.tool))) || out.payload.type === 'tool_action_batch'
     if (turnResolution?.isQuestion && proposesChange) {
       appendServerTrace('server_ai_assistant_question_kept', String(out.payload.tool ?? out.payload.type), { tool: out.payload.tool ?? null })
-      const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid, drawerThinkingBudget)
+      const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid, drawerThinkingBudget ?? 0)
         .catch(() => ({ text: 'I couldn’t find that just now.', mentioned: [] as TurnReferent[] }))
       const text = answered.text
       out = { status: 200, payload: { type: 'text', text, conversation_state: answerState(answered.mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'conversation.question_kept', correlation_id: cid } }

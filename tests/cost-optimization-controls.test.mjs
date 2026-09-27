@@ -146,13 +146,12 @@ test('low-risk background functions use the shared model resolver but ai-assista
   assert.match(aiAssistant, /const DEFAULT_GEMINI_MODEL = PRIMARY_GEMINI_MODEL/)
 })
 
-test('the drawer thinks on a fixed, bounded budget (medium, per Jake 2026-09-26) and output stays bounded', () => {
-  assert.match(aiAssistant, /const DRAWER_THINKING_BUDGET = 1024\n/)
-  assert.match(aiAssistant, /kind: 'budget', value: drawerThinkingBudget/)
-  // Only a dry run (the side-by-side test) may change it; the family's turns never can.
-  assert.match(aiAssistant, /const turnRulesOff = dryRun && /)
+test('routine assistant profiles keep thinking off (tested 2026-09-26: thinking was ~3x slower, no more right) and use bounded output', () => {
+  assert.match(aiAssistant, /kind: 'budget', value: drawerThinkingBudget \?\? \(intentRouting\.profile === 'full' \? 512 : 0\)/)
+  // Only a dry run (a side-by-side test) may set a budget or skip the rules; the family's turns never can.
   assert.match(aiAssistant, /const drawerThinkingBudget = dryRun && typeof thinkingOverrideRaw === 'number'/)
-  assert.match(aiAssistant, /: drawerThinkingBudget \+ \(intentRouting\.profile === 'full'/)
+  assert.match(aiAssistant, /\? thinkingOverrideRaw\n\s+: null\n/)
+  assert.match(aiAssistant, /const turnRulesOff = dryRun && /)
   assert.match(aiAssistant, /intentRouting\.profile === 'general'\s+\? 1024\s+: 768/)
   assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
 })
