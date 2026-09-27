@@ -810,6 +810,13 @@ export default function DisplaySettingsPage() {
               desc="Pi bridge streams readings to Supabase."
             />
 
+            <Toggle
+              checked={config.led_night_glow}
+              onChange={v => set('led_night_glow', v)}
+              label="Night glow"
+              desc="A faint candle glow on the LED strip in the evening, while nobody is talking to Casa."
+            />
+
             <SliderRow
               label="Min Brightness"
               desc="Floor when room is very dark (lux < 1). DDC scale 0–100."

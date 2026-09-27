@@ -1,6 +1,8 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { isLedNight, wallLedMode } from './led'
+import type { BandState } from './assistant'
 import { ProfileSessionContext } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import type { FamilyMember } from '../types'
@@ -56,6 +58,11 @@ export default function WallFixturePage() {
     dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
   }
   // The assistant band with a canned conversation (design section 06): `?band=add|change|which|answer`.
+  const ledLog = ((window as unknown as { __led?: { mode: string; outcomes: string[] } }).__led ??= { mode: 'off', outcomes: [] })
+  const recordLed = useCallback((b: { state: BandState; micOpen: boolean }) => {
+    ledLog.mode = wallLedMode({ bandOpen: true, bandState: b.state, micOpen: b.micOpen, night: isLedNight(now), glowEnabled: true })
+  }, [ledLog, now])
+  const recordOutcome = useCallback((kind: 'confirm' | 'cancel') => { ledLog.outcomes.push(kind) }, [ledLog])
   const scene = new URLSearchParams(window.location.search).get('band')
   const useTurn = useMemo(() => (scene ? fixtureTurn(scene) : null), [scene])
   const [bandOpen, setBandOpen] = useState(true)
@@ -75,6 +82,9 @@ export default function WallFixturePage() {
         onDraft={setAssistantDraft}
         useTurn={useTurn}
         useSpeech={useFixtureSpeech}
+        // The LED strip, as the wall would drive it (P3.14): recorded for the tests.
+        onLed={recordLed}
+        onOutcome={recordOutcome}
         lookupDrive={async () => 24}
       />
     </ProfileSessionContext.Provider>

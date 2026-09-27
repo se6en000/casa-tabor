@@ -18,9 +18,15 @@ scp -q \
   "$(dirname "$0")/stt_flux_shadow.py" \
   "${PI_HOST}:${PI_WHISPER_DIR}/stt_flux_shadow.py"
 echo "[refresh] Syncing sensor bridge module to ${PI_HOST}:/home/jake/sensor-bridge"
+# A running service keeps its old code (enable --now doesn't restart it): restart the bridge
+# below when its code changed, and only then, so ordinary ships don't blip the sensors.
+BRIDGE_BEFORE=$(ssh "$PI_HOST" "md5sum /home/jake/sensor-bridge/main.py 2>/dev/null | cut -d' ' -f1" || true)
 scp -q \
   "$(dirname "$0")/sensor-bridge/main.py" \
   "${PI_HOST}:/home/jake/sensor-bridge/main.py"
+BRIDGE_AFTER=$(ssh "$PI_HOST" "md5sum /home/jake/sensor-bridge/main.py | cut -d' ' -f1")
+BRIDGE_RESTART=""
+[ "$BRIDGE_BEFORE" != "$BRIDGE_AFTER" ] && BRIDGE_RESTART="XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user restart casa-sensor-bridge.service &&"
 echo "[refresh] Syncing service unit files"
 ssh "$PI_HOST" "mkdir -p /home/jake/.config/systemd/user"
 scp -q \
@@ -41,6 +47,7 @@ ssh "$PI_HOST" "
   chmod +x /home/jake/casa-watchdog.sh &&
   XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user daemon-reload &&
   XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user enable --now casa-sensor-bridge.service casa-whisper-bridge.service &&
+  ${BRIDGE_RESTART}
   sudo install -m 0644 /tmp/casa-watchdog.service /etc/systemd/system/casa-watchdog.service &&
   sudo install -m 0644 /tmp/casa-watchdog.timer /etc/systemd/system/casa-watchdog.timer &&
   rm -f /tmp/casa-watchdog.service /tmp/casa-watchdog.timer &&

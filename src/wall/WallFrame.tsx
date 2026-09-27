@@ -8,6 +8,7 @@ import { useHomeWeather } from '../hooks/useHomeWeather'
 import { useWakeWord } from '../hooks/useWakeWord'
 import type { FamilyMember } from '../types'
 import WallAssistantBand from './WallAssistantBand'
+import { useWallLed } from './useWallLed'
 import { toggleChecklistItem } from './useWallChecklist'
 import { useFamilyDay } from './useFamilyDay'
 import { createEventByTouch } from './createEvent'
@@ -28,6 +29,7 @@ export default function WallFrame() {
     setListenNonce((n) => n + 1)
   }, [])
   const closeBand = useCallback(() => setBandOpen(false), [])
+  const { onBandLed, onOutcome } = useWallLed(bandOpen, now)
   // The assistant's card is told from the same engine the wall runs; its draft is previewed on the Score.
   const [assistantDraft, setAssistantDraft] = useState<WallEvent | null>(null)
   const planDay = useCallback(
@@ -49,6 +51,8 @@ export default function WallFrame() {
       members={members}
       planDay={planDay}
       onDraft={setAssistantDraft}
+      onLed={onBandLed}
+      onOutcome={onOutcome}
       onOpenEvent={(id) => {
         setBandOpen(false)
         setOpenRequest({ id, nonce: Date.now() })

@@ -3,10 +3,11 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 const SENSOR_BRIDGE = 'http://127.0.0.1:8765'
 const FEEDBACK_LOCK_MS = 2800  // how long confirm/cancel block phase sync
 
-type LedMode = 'listening' | 'processing' | 'confirm' | 'cancel' | 'off'
+type LedMode = 'listening' | 'processing' | 'waiting' | 'glow' | 'confirm' | 'cancel' | 'off'
 
-function callLed(mode: LedMode) {
-  fetch(`${SENSOR_BRIDGE}/led/${mode}`, { method: 'POST' }).catch(() => {})
+/** `night`: the same moment in dim amber (the Family Wall's evening; P3.14). */
+function callLed(mode: LedMode, night = false) {
+  fetch(`${SENSOR_BRIDGE}/led/${mode}${night ? '?night=true' : ''}`, { method: 'POST' }).catch(() => {})
 }
 
 /**
@@ -15,15 +16,18 @@ function callLed(mode: LedMode) {
  * so the burst animation always completes before returning to listening.
  */
 export function useLedStrip() {
-  const currentMode  = useRef<LedMode>('off')
+  // What the strip is showing, day or night ("listening:night").
+  const currentMode  = useRef<string>('off')
+  const nightRef     = useRef(false)
   const lockedUntil  = useRef<number>(0)
   const desiredMode  = useRef<LedMode>('off')
   const unlockTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const setMode = useCallback((mode: LedMode) => {
-    if (currentMode.current === mode) return
-    currentMode.current = mode
-    callLed(mode)
+    const shown = `${mode}${nightRef.current ? ':night' : ''}`
+    if (currentMode.current === shown) return
+    currentMode.current = shown
+    callLed(mode, nightRef.current)
   }, [])
 
   const setFeedback = useCallback((mode: 'confirm' | 'cancel') => {
@@ -57,6 +61,10 @@ export function useLedStrip() {
     }
   }, [])
 
+  /** Day or night colours for what follows. */
+  const setNight = useCallback((night: boolean) => { nightRef.current = night }, [])
+  const waiting = useCallback(() => setPhaseMode('waiting'), [setPhaseMode])
+  const glow = useCallback(() => setPhaseMode('glow'), [setPhaseMode])
   const listening = useCallback(() => setPhaseMode('listening'), [setPhaseMode])
   const processing = useCallback(() => setPhaseMode('processing'), [setPhaseMode])
   const confirm = useCallback(() => setFeedback('confirm'), [setFeedback])
@@ -65,8 +73,11 @@ export function useLedStrip() {
   return useMemo(() => ({
     listening,
     processing,
+    waiting,
+    glow,
     confirm,
     cancel,
     off,
-  }), [listening, processing, confirm, cancel, off])
+    setNight,
+  }), [listening, processing, waiting, glow, confirm, cancel, off, setNight])
 }

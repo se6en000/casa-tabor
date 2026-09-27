@@ -7,7 +7,7 @@ import WallKeyboard from './WallKeyboard'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne } from './assistant'
+import { bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -51,11 +51,14 @@ export interface WallAssistantBandProps {
   useTurn?: typeof useAssistantTurn
   /** Drive minutes to a place, arriving at a time; the fixture passes a fixed one. */
   lookupDrive?: DriveLookup
+  /** What the LED strip should show for the band (P3.14), and a card's outcome (saved / not). */
+  onLed?: (band: { state: BandState; micOpen: boolean }) => void
+  onOutcome?: (kind: 'confirm' | 'cancel') => void
   /** The microphone; the screenshot fixture passes a stand-in its tests can speak through. */
   useSpeech?: typeof useSpeechInput
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -189,6 +192,22 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   useEffect(() => () => onPointAt(null), [onPointAt])
 
   const state = bandState({ listening: speech.listening || speech.connecting, loading, answer, pending })
+
+  // The LED strip (P3.14): what the band is doing, and a card's outcome as a warm or rust swell.
+  const micOpen = speech.listening || speech.connecting
+  useEffect(() => onLed?.({ state, micOpen }), [state, micOpen, onLed])
+  const lastPending = useRef<string | null>(null)
+  useEffect(() => {
+    if (pending) {
+      lastPending.current = pending.id
+      return
+    }
+    const id = lastPending.current
+    lastPending.current = null
+    const status = id ? messages.find((m) => m.id === id)?.toolAction?.status : null
+    if (status === 'done') onOutcome?.('confirm')
+    else if (status === 'cancelled' || status === 'error') onOutcome?.('cancel')
+  }, [pending, messages, onOutcome])
 
   // Slides away a minute after the answer if nobody carries on.
   useEffect(() => {

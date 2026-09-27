@@ -491,3 +491,24 @@ test('wall assistant: talk not meant for Casa gets no answer and leaves no trace
   await mic(page, () => window.__mic.say('psst honey where are my keys'))
   await expect(section).toHaveCount(0)
 })
+
+// The LED strip follows the band (P3.14), as the fixture records it (window.__led).
+const led = (page) => page.evaluate(() => window.__led)
+
+test('wall assistant: the strip shows listening, then waiting for a yes, and a spoken no swells rust', async ({ page }) => {
+  await band(page, 'answer')
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+  await expect.poll(async () => (await led(page)).mode).toBe('listening')
+  await band(page, 'add')
+  await expect(page.getByRole('region', { name: 'Assistant' }).getByText('NEEDS A YES')).toBeVisible()
+  await expect.poll(async () => (await led(page)).mode).toBe('waiting')
+  await mic(page, () => window.__mic.no())
+  await expect.poll(async () => (await led(page)).outcomes).toEqual(['cancel'])
+})
+
+test('wall assistant: a spoken yes swells warm gold on the strip', async ({ page }) => {
+  await band(page, 'change')
+  await expect(page.getByRole('region', { name: 'Assistant' }).getByText('CHANGE · NOT SAVED YET')).toBeVisible()
+  await mic(page, () => window.__mic.yes())
+  await expect.poll(async () => (await led(page)).outcomes).toEqual(['confirm'])
+})

@@ -1239,10 +1239,16 @@ _voice_until = 0.0
 _color_lock   = threading.Lock()
 _spi_last_target = None
 
-DEEP_BLUE = (30, 58, 138)      # #1E3A8A
-CYAN = (34, 211, 238)          # #22D3EE
-SOFT_WHITE = (224, 242, 254)   # #E0F2FE
-PURPLE = (124, 58, 237)        # #7C3AED
+# The Family Wall's palette (P3.14, 2026-09-26): brass and gold by day; at night the same
+# moments in a warmer amber at about a third of the brightness; rust only for "didn't happen".
+BRASS = (168, 132, 80)         # wall brass #A88450
+GOLD = (201, 164, 106)         # night brass #C9A46A
+WARM_WHITE = (255, 226, 170)   # a gold-white highlight
+AMBER = (210, 120, 40)         # night warmth
+CANDLE = (255, 120, 20)        # the idle night glow
+RUST = (154, 74, 42)           # wall rust #9A4A2A
+NIGHT_SCALE = 0.33
+_led_night = False
 
 def _mix(c1: tuple[int, int, int], c2: tuple[int, int, int], a: float) -> tuple[float, float, float]:
     a = max(0.0, min(1.0, a))
@@ -1309,6 +1315,49 @@ def _write_pixels(spi, pixels: list[tuple[int, int, int]]):
 def _clamp(val: int) -> int:
     return max(0, min(LED_MAX_BRIGHT, val))
 
+def _limit(c: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Keep a colour under the brightness cap by scaling all channels together (hue kept)."""
+    peak = max(c)
+    return _scale(c, LED_MAX_BRIGHT / peak) if peak > LED_MAX_BRIGHT else c
+
+def _frame_color(mode: str, i: int, t: float, voice_env: float, night: bool) -> tuple[float, float, float]:
+    """One LED's colour for a mode at time t (seconds). Pure, so it can be checked off the Pi."""
+    return _limit(_frame_color_raw(mode, i, t, voice_env, night))
+
+def _frame_color_raw(mode: str, i: int, t: float, voice_env: float, night: bool) -> tuple[float, float, float]:
+    breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / (3.4 if night else 2.6))
+    warm = AMBER if night else BRASS
+    scale = NIGHT_SCALE if night else 1.0
+    if mode == "listening":
+        # Warm breathing, a slow gold sweep, and a ripple from the centre while someone speaks.
+        base = _scale(_mix(warm, GOLD, 0.25 + 0.35 * breathing), 0.18 + 0.22 * breathing)
+        head = (t / 1.6) * NUM_LEDS
+        dist = abs(i - (head % NUM_LEDS))
+        dist = min(dist, NUM_LEDS - dist)
+        sweep = _scale(_mix(GOLD, WARM_WHITE, 0.4), 0.30 * max(0.0, 1.0 - dist / 11.0))
+        center = (NUM_LEDS - 1) / 2.0
+        d = abs(i - center) / max(center, 1.0)
+        ripple = _scale(WARM_WHITE, 0.45 * voice_env * max(0.0, math.sin((d * 11.0) - (t * 16.0))))
+        return _scale(_add(_add(base, sweep), ripple), scale)
+    if mode == "processing":
+        # A soft gold shimmer travelling along the strip while Casa thinks.
+        think = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 1.1)
+        base = _scale(_mix(warm, GOLD, 0.5), 0.14 + 0.20 * think)
+        head = (t / 0.9) * NUM_LEDS
+        dist = abs(i - (head % NUM_LEDS))
+        dist = min(dist, NUM_LEDS - dist)
+        shimmer = _scale(_mix(GOLD, WARM_WHITE, 0.35), 0.26 * max(0.0, 1.0 - dist / 7.0))
+        return _scale(_add(base, shimmer), scale)
+    if mode == "waiting":
+        # Waiting for a yes: steady gold with a slow, gentle pulse (candle-steady at night).
+        pulse = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 3.0)
+        return _scale(_mix(warm, GOLD, 0.6), (0.30 + 0.12 * pulse) * scale)
+    if mode == "glow":
+        # Night idle: a faint candle glow with a slow, uneven flicker.
+        flicker = 0.85 + 0.10 * math.sin(t * 1.3 + i * 0.7) + 0.05 * math.sin(t * 3.1 + i * 1.9)
+        return _scale(CANDLE, 0.07 * flicker)
+    return (0.0, 0.0, 0.0)
+
 def _comet_loop():
     """Breathing halo + listening sweep + reactive ripple + processing pulse."""
     if not SPI_AVAILABLE:
@@ -1330,42 +1379,10 @@ def _comet_loop():
             voice_env += (voice_target - voice_env) * 0.35
 
             targets: list[tuple[float, float, float]] = []
-            breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 2.6)
+            with _color_lock:
+                night = _led_night
             for i in range(NUM_LEDS):
-                if mode == "listening":
-                    base_color = _mix(DEEP_BLUE, CYAN, 0.22 + 0.35 * breathing)
-                    base = _scale(base_color, 0.18 + 0.22 * breathing)
-
-                    sweep_head = (t / 1.25) * NUM_LEDS
-                    dist = abs(i - (sweep_head % NUM_LEDS))
-                    dist = min(dist, NUM_LEDS - dist)
-                    sweep = max(0.0, 1.0 - dist / 11.0)
-                    sweep_color = _mix(CYAN, SOFT_WHITE, 0.45)
-                    sweep_layer = _scale(sweep_color, 0.30 * sweep)
-
-                    # Voice ripple from strip center; loudness scales amplitude.
-                    center = (NUM_LEDS - 1) / 2.0
-                    d = abs(i - center) / max(center, 1.0)
-                    ripple = max(0.0, math.sin((d * 11.0) - (t * 16.0)))
-                    ripple_layer = _scale(SOFT_WHITE, (0.45 * voice_env) * ripple)
-
-                    targets.append(_add(_add(base, sweep_layer), ripple_layer))
-                elif mode == "processing":
-                    think = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 0.95)
-                    base_color = _mix(DEEP_BLUE, PURPLE, 0.62)
-                    base = _scale(base_color, 0.18 + 0.28 * think)
-
-                    # Tight moving highlight so "thinking" feels active.
-                    head = (t / 0.85) * NUM_LEDS
-                    dist = abs(i - (head % NUM_LEDS))
-                    dist = min(dist, NUM_LEDS - dist)
-                    highlight = max(0.0, 1.0 - dist / 7.0)
-                    hl_color = _mix(PURPLE, SOFT_WHITE, 0.30)
-                    hl_layer = _scale(hl_color, 0.26 * highlight)
-
-                    targets.append(_add(base, hl_layer))
-                else:
-                    targets.append((0.0, 0.0, 0.0))
+                targets.append(_frame_color(mode, i, t, voice_env, night))
 
             # Smooth frame-to-frame transitions.
             pixels: list[tuple[int, int, int]] = []
@@ -1446,21 +1463,46 @@ def _start_burst(r: int, g: int, b: int):
     _burst_thread = threading.Thread(target=_run_burst, args=(r, g, b, 2.0), daemon=True)
     _burst_thread.start()
 
+def _set_night(night: bool):
+    global _led_night
+    with _color_lock:
+        _led_night = bool(night)
+
 @app.post("/led/listening")
-def led_listening():
-    """Listening mode: breathing halo + circular sweep + voice-reactive ripple."""
+def led_listening(night: bool = False):
+    """Listening mode: warm breathing, a gold sweep and a voice ripple (dimmer amber at night)."""
+    _set_night(night)
     with _led_lock:
         _set_mode("listening")
         _ensure_comet_running()
     return {"ok": True, "mode": "listening"}
 
 @app.post("/led/processing")
-def led_processing():
-    """Processing mode: tighter/faster pulse with purple tint."""
+def led_processing(night: bool = False):
+    """Thinking: a soft gold shimmer travelling along the strip."""
+    _set_night(night)
     with _led_lock:
         _set_mode("processing")
         _ensure_comet_running()
     return {"ok": True, "mode": "processing"}
+
+@app.post("/led/waiting")
+def led_waiting(night: bool = False):
+    """A card is waiting for a yes: steady gold with a gentle pulse."""
+    _set_night(night)
+    with _led_lock:
+        _set_mode("waiting")
+        _ensure_comet_running()
+    return {"ok": True, "mode": "waiting"}
+
+@app.post("/led/glow")
+def led_glow():
+    """Night, nobody talking to Casa: a faint candle glow."""
+    _set_night(True)
+    with _led_lock:
+        _set_mode("glow")
+        _ensure_comet_running()
+    return {"ok": True, "mode": "glow"}
 
 @app.post("/led/voice-level")
 async def led_voice_level(req: Request):
@@ -1479,16 +1521,17 @@ async def led_voice_level(req: Request):
     _set_voice_level(level)
     return {"ok": True, "level": max(0.0, min(1.0, level))}
 
+# Burst colours stay under LED_MAX_BRIGHT per channel, so the cap never bleaches their hue.
 @app.post("/led/confirm")
-def led_confirm():
-    """Green burst overlays the comet, then comet resumes with current target."""
-    _start_burst(0, 100, 0)
+def led_confirm(night: bool = False):
+    """Saved: a warm gold-white swell, then back to the current mode."""
+    _start_burst(*((60, 36, 8) if night else (128, 100, 44)))
     return {"ok": True, "mode": "confirm"}
 
 @app.post("/led/cancel")
-def led_cancel():
-    """Red burst overlays the comet, then comet resumes with current target."""
-    _start_burst(100, 0, 0)
+def led_cancel(night: bool = False):
+    """Cancelled or didn't work: a short fade in the wall's rust."""
+    _start_burst(*((40, 16, 6) if night else (110, 48, 24)))
     return {"ok": True, "mode": "cancel"}
 
 @app.post("/led/off")
