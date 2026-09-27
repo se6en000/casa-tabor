@@ -9,10 +9,13 @@ import type { FamilyMember } from '../types'
 import { answerEventId, latestExchange, pendingAction, withoutAsides } from './assistant'
 import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
 import { conversationForReport, type ReportConversation } from './bugReport'
+import { sendBugReport } from '../lib/remoteVoiceTrace'
 
 // The last conversation with something in it, kept past its band or sheet closing, so a
 // report opened afterwards still carries it.
 let lastConversation: ReportConversation | null = null
+/** A card turned down this soon after it appeared is reported automatically (P3.17). */
+const QUICK_CANCEL_MS = 10_000
 
 /**
  * One conversation with the assistant as the Wall's band and the phone both hold it:
@@ -81,7 +84,25 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     if (!pending) return
     updateMessageToolStatus(pending.id, 'cancelled')
     setNote('Okay, nothing changed.')
-  }, [pending, updateMessageToolStatus])
+    // A card turned down within seconds is often a card that got it wrong (P3.17): filed with
+    // the conversation as an automatic report (a weaker signal than a correction — reviewed by pattern).
+    const shownAt = Date.parse(seenAt.current[pending.id] ?? '')
+    if (Number.isFinite(shownAt) && Date.now() - shownAt < QUICK_CANCEL_MS) {
+      void sendBugReport({
+        event: 'auto_bug_report',
+        detail: `card_cancelled_fast: ${pending.toolAction?.displayText ?? pending.toolAction?.tool ?? ''}`.slice(0, 300),
+        sessionId: session?.id,
+        page: surface,
+        payload: {
+          signal: 'card_cancelled_fast',
+          page: surface,
+          seconds_shown: Math.round((Date.now() - shownAt) / 100) / 10,
+          card: pending.toolAction ? { tool: pending.toolAction.tool, args: pending.toolAction.args, shown: pending.toolAction.displayText } : null,
+          conversation: allMessages.slice(-10).map((m) => ({ role: m.role, content: m.content.slice(0, 600) })),
+        },
+      }).catch(() => {})
+    }
+  }, [pending, updateMessageToolStatus, session?.id, surface, allMessages])
 
   /** Changes the waiting action in place (a driver picked on the card), without a round trip. */
   const setPendingArgs = useCallback((patch: Record<string, unknown>) => {

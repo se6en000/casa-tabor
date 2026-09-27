@@ -22,17 +22,19 @@ const q = async (query) => {
 }
 
 const reports = await q(`select received_at, session_id, detail, payload, device_id, source_href
-  from ai_drawer_debug_events where event = 'user_bug_report' and received_at > now() - interval '${hours} hours'
+  from ai_drawer_debug_events where event in ('user_bug_report', 'auto_bug_report') and received_at > now() - interval '${hours} hours'
   order by received_at desc limit 20`)
 if (reports.length === 0) console.log(`No bug reports in the last ${hours} hours.`)
 for (const r of reports) {
   const p = r.payload ?? {}
   console.log('━'.repeat(80))
-  console.log(`${r.received_at} · ${p.context?.viewer ?? '?'} · ${p.context?.surface ?? '?'} · build ${p.context?.build ?? '?'}`)
+  // Automatic reports (P3.17) carry a signal instead of the bug icon's context.
+  if (p.signal) console.log(`${r.received_at} · AUTO · ${p.signal} · ${p.page ?? '?'} · layer ${p.layer ?? '?'}`)
+  else console.log(`${r.received_at} · ${p.context?.viewer ?? '?'} · ${p.context?.surface ?? '?'} · build ${p.context?.build ?? '?'}`)
   console.log(`  ${r.detail}`)
   if (p.heard) console.log(`  heard: "${p.heard}"`)
   for (const m of p.conversation ?? []) {
-    console.log(`  ${m.at ?? '        '} ${m.role === 'user' ? 'YOU' : 'CASA'}: ${m.text}${m.action ? `  [${m.action.tool} ${m.action.status}: ${m.action.shown}]` : ''}${m.images ? `  [${m.images} image(s)]` : ''}`)
+    console.log(`  ${m.at ?? '        '} ${m.role === 'user' ? 'YOU' : 'CASA'}: ${m.text ?? m.content}${m.action ? `  [${m.action.tool} ${m.action.status}: ${m.action.shown}]` : ''}${m.images ? `  [${m.images} image(s)]` : ''}`)
   }
   console.log(`  context: ${JSON.stringify(p.context)}`)
   if (r.session_id) {

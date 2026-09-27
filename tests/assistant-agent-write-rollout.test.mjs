@@ -60,7 +60,8 @@ test('a pending batch proposal from the client is forwarded to ai-agent-write, m
 
 test('write rollout forwards a calendar_batch_create proposal to the client as its own batch type, normalized the same way single tool actions are', () => {
   assert.match(assistant, /agentWriteData\.type === 'tool_action_batch'/)
-  const batchSection = assistant.slice(assistant.indexOf("'tool_action_batch'"))
+  // The agent-write planner's batch (version D has its own batch earlier in the file, P3.17).
+  const batchSection = assistant.slice(assistant.indexOf("agentWriteData.type === 'tool_action_batch'"))
   // Batch items must go through the same legacy-arg normalization a single
   // tool_action already does (normalizeLegacyCalendarActionArgs) -- the
   // client/execute-ai-action layer expects that shape regardless of whether

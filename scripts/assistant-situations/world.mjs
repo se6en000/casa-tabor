@@ -72,5 +72,9 @@ export async function loadWorld(now = new Date()) {
   const allOn = (date) => enriched.filter((e) => (e.all_day ? String(e.start_time).slice(0, 10) : e.local.date) === date)
     .map((e) => `${e.all_day ? 'all day' : e.local.hhmm} ${e.title}${e.event_type === 'reminder' ? ' (reminder)' : ''}${routineCopy(e) ? ' (school-run copy)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''}${e.drivers.length ? ` — drivers: ${e.drivers.join(', ')}` : ''}${e.place ? ` — place: ${e.place}` : ''}`)
   const todayLocal = localParts(now.toISOString()).date
-  return { now, offset: OFFSET, family, kids, parents, events: enriched, timed, byDay, allOn, todayLocal, localParts }
+  // For the abilities set (P3.17): what the rest of layer 2 answers from, read only.
+  const groceries = await sql(`select id, name, quantity, checked from grocery_items where deleted_at is null order by name limit 200`)
+  const contacts = await sql(`select name, relationship, phone from saved_contacts where confirmed and phone is not null order by name limit 100`)
+  const recipes = await sql(`select r.id, r.name, (select count(*)::int from recipe_ingredients i where i.recipe_id = r.id) as ingredients from recipes r order by r.name limit 100`)
+  return { now, offset: OFFSET, family, kids, parents, events: enriched, timed, byDay, allOn, todayLocal, localParts, groceries, contacts, recipes }
 }

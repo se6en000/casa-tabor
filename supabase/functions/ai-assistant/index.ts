@@ -168,7 +168,8 @@ import {
 } from '../_shared/assistant-reminder-intent.mjs'
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
-import { FULL_AI_TOOLS, buildFullAiSystem, fullAiCard, fullAiContents, fullAiWindow, mentionedIds } from '../_shared/assistant-full-ai.mjs'
+import { runLookup } from './lookups.ts'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, mentionedIds } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -317,7 +318,8 @@ type TurnContext = {
   card: { tool: string; args: Record<string, unknown>; about: TurnReferent | null } | null
   cancelledDraft: { tool: string } | null
   /** A question about one calendar item, answered from its facts. */
-  answer: { text: string; about: TurnReferent | null; mentioned: TurnReferent[] } | null
+  /** `calendarSays` false: the calendar doesn't hold the answer (the hybrid's layer 2 can look it up). */
+  answer: { text: string; about: TurnReferent | null; mentioned: TurnReferent[]; calendarSays?: boolean } | null
   /** A change that could mean several items: which one? (The change is kept for the answer.) */
   clarify: { question: string; candidates: TurnReferent[]; changes: Record<string, unknown> | null } | null
   referents: TurnReferent[]
@@ -330,6 +332,8 @@ const TURN_UPCOMING_CAP = 60
 const TURN_BUDGET_MS = 7000
 /** Version D's one call gets room to think, so time limits don't decide the comparison. */
 const FULL_AI_TIMEOUT_MS = 20_000
+/** The hybrid for real turns (P3.17). */
+const HYBRID_LAYER2_LIVE = false
 
 /** The next two weeks of the calendar, for reading what a turn refers to. */
 async function loadUpcomingIds(sb: TurnDb): Promise<string[]> {
@@ -421,8 +425,8 @@ async function readTurn(
     } else if (resolution.act === 'question' && (about || resolution.answerable)) {
       // About one item, or answerable from the next two weeks it's holding: answered from those facts.
       const focus = about ? [about, ...loaded.filter((e) => e !== about)] : [...referents, ...loaded.filter((e) => !referents.includes(e))]
-      const { text, mentioned } = await answerFromCalendar(sb, resolution.standalone ?? originalText, focus, context, cid, thinkingBudget)
-      out.answer = { text, about, mentioned }
+      const { text, mentioned, calendarSays } = await answerFromCalendar(sb, resolution.standalone ?? originalText, focus, context, cid, thinkingBudget)
+      out.answer = { text, about, mentioned, calendarSays }
     }
     return { ...out, ms: Date.now() - started }
   } catch (error) {
@@ -466,9 +470,9 @@ Now: ${localNowLine(String(context?.currentDate ?? new Date().toISOString()), ut
 Calendar:
 ${known.map(line).join('\n')}
 Question: ${question}
-Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them]}`, 'question-answer', cid, 6000, thinkingBudget) as { answer?: string; mentioned?: string[] }
+Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them], "calendar_says": false if the calendar above doesn't hold what was asked (a drive time, the weather, anything outside it), else true}`, 'question-answer', cid, 6000, thinkingBudget) as { answer?: string; mentioned?: string[]; calendar_says?: boolean }
   const mentioned = (Array.isArray(out?.mentioned) ? out.mentioned : []).flatMap((id) => known.filter((e) => e.id === id))
-  return { text: String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.', mentioned }
+  return { text: String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.', mentioned, calendarSays: out?.calendar_says !== false }
 }
 
 async function saveUndatedCalendarDraft(
@@ -777,6 +781,10 @@ Deno.serve(async (req) => {
   // Version D (P3.16): Gemini with the family's data in its context and a few broad tools — its
   // own path, no rules. Dry runs only (side-by-side tests); real turns never take it.
   const fullAi = dryRun && (context as Record<string, unknown> | undefined)?.full_ai === true
+  // The hybrid's layer 2 (P3.17): off for real turns until the side-by-side runs hold up; a dry run
+  // can turn it on (`hybrid: true`) or off (`hybrid: false`) to compare.
+  const hybridRequested = (context as Record<string, unknown> | undefined)?.hybrid
+  const hybridLayer2 = dryRun && typeof hybridRequested === 'boolean' ? hybridRequested : HYBRID_LAYER2_LIVE
   const turnContext = image || turnRulesOff || fullAi ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
   const turnResolution = turnContext?.resolution ?? null
   // Words not said to Casa, heard by the wall's open mic (P3.13): no reply, nothing changes.
@@ -1131,21 +1139,51 @@ Deno.serve(async (req) => {
   }
 
   /** Version D (P3.16): one Gemini call with the family's data in context; changes come back as the usual cards. */
-  const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string): Promise<{ status: number; payload: Record<string, unknown> }> => {
+  // Automatic bug reports (P3.17): when D flubs, the conversation is filed next to the bug-icon
+  // reports (event "auto_bug_report", `node scripts/bug-reports.mjs`), for review by pattern.
+  // Real turns only — the side-by-side test runs would drown the list.
+  const autoBugReport = (signal: string, detail: string, extra: Record<string, unknown> = {}) => {
+    if (dryRun) return
+    appendServerTrace('auto_bug_report', `${signal}: ${detail}`.slice(0, 300), {
+      signal,
+      layer: 'hybrid',
+      page: context?.page ?? null,
+      conversation: (Array.isArray(messages) ? messages : []).slice(-10).map((m) => ({ role: m.role, content: String(m.content ?? '').slice(0, 600) })),
+      pending_action: context?.pendingAction ?? null,
+      ...extra,
+    })
+  }
+
+  // `handBack`: as the hybrid's layer 2, a time-out, an empty answer or a change that fails a hard
+  // check returns null, and the turn carries on down the old path as before.
+  const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
     const config = await loadLlmConfig(sb)
     const apiKey = String(config?.api_key ?? '')
     const model = String(config?.model ?? DEFAULT_GEMINI_MODEL)
     const utcOffset = typeof context?.utcOffset === 'string' ? context.utcOffset : '-04:00'
     const now = new Date(String(context?.currentDate ?? new Date().toISOString()))
     const { from, until } = fullAiWindow(now, utcOffset)
-    const [familyRows, idRows, groceryRows] = await Promise.all([
+    // Everything D answers from, in its context rather than behind search tools.
+    const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows] = await Promise.all([
       sb.from('family_members').select('id, name, role, can_drive').order('sort_order'),
       sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
         .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
-      sb.from('grocery_items').select('name, quantity, checked').is('deleted_at', null).eq('checked', false).order('name').limit(150),
+      sb.from('grocery_items').select('id, name, quantity, checked').is('deleted_at', null).order('checked').order('name').limit(200),
+      sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+      sb.from('saved_places').select('name, address, city, phone').eq('confirmed', true).order('name').limit(80),
+      sb.from('saved_contacts').select('name, relationship, phone, email, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name)').eq('confirmed', true).order('name').limit(120),
+      sb.from('recipes').select('id, name').order('last_used_at', { ascending: false, nullsFirst: false }).limit(60),
     ])
     const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
     const events = await loadReferents(sb, ((idRows.data ?? []) as Array<{ id: string }>).map((r) => r.id), family)
+    const groceries = (groceryRows.data ?? []) as Array<{ id: string; name: string; quantity: string | null; checked: boolean }>
+    const homeCfg = (homeRow.data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
+    const home = [homeCfg?.address, homeCfg?.city, homeCfg?.state, homeCfg?.zip].filter(Boolean).join(', ')
+    const places = ((placeRows.data ?? []) as Array<{ name: string; address: string | null; city: string | null; phone: string | null }>)
+      .map((p) => ({ name: p.name, address: [p.address, p.city].filter(Boolean).join(', ') || null, phone: p.phone }))
+    const contacts = ((contactRows.data ?? []) as Array<{ name: string; relationship: string | null; phone: string | null; email: string | null; primary_place: { name?: string } | null }>)
+      .map((c) => ({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email, place: c.primary_place?.name ?? null }))
+    const recipes = (recipeRows.data ?? []) as Array<{ id: string; name: string }>
     const state = incomingConversationState as Record<string, unknown> | null
     const onScreenIds = [
       ...(typeof state?.activeEventId === 'string' ? [state.activeEventId] : []),
@@ -1153,46 +1191,92 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const system = buildFullAiSystem({ family, events, groceries: (groceryRows.data ?? []) as Array<{ name: string; quantity: string | null }>, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null })
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), FULL_AI_TIMEOUT_MS)
-    let body: Record<string, unknown> | null = null
-    try {
-      const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents: fullAiContents(messages as Array<{ role: string; content: string }>),
-          tools: [{ function_declarations: FULL_AI_TOOLS }],
-          tool_config: { function_calling_config: { mode: 'AUTO' } },
-          // Gemini's own dynamic thinking: it decides how much to think.
-          generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
-        }),
-        signal: controller.signal,
-      }, { callPurpose: 'full-ai', correlationId: cid, model })
-      body = await res.json()
-    } catch {
-      return { status: 200, payload: { type: 'text', text: 'The AI model took too long to respond. Please try again.', semantic_intent: 'full_ai.timeout', correlation_id: cid } }
-    } finally {
-      clearTimeout(timer)
+    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes })
+    const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
+    // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
+    const lastUser = [...contents].reverse().find((c) => c.role === 'user')
+    if (lastUser && rawImagesList.length) lastUser.parts.push(...rawImagesList.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })))
+
+    const lookupDeps = { cid, context: (context ?? {}) as Record<string, any>, apiKey, model, provider: 'gemini', braveKey, mapsKey, homeAddress: home, routeEtaCache, providerFetch: providerFetch as never, mapsFetch: mapsFetch as never, experienceMode, latestUserText: null, callIndex: 2 }
+    const deadline = Date.now() + FULL_AI_TIMEOUT_MS
+    let parts: Array<Record<string, unknown>> = []
+    // Up to three rounds: a lookup's answer goes back to the model, which then answers or proposes.
+    for (let round = 0; round < 3; round++) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), Math.max(1000, deadline - Date.now()))
+      try {
+        const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents,
+            tools: [{ function_declarations: FULL_AI_TOOLS }],
+            tool_config: { function_calling_config: { mode: 'AUTO' } },
+            // Gemini's own dynamic thinking: it decides how much to think.
+            generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
+          }),
+          signal: controller.signal,
+        }, { callPurpose: 'full-ai', correlationId: cid, model, callIndex: round + 1 })
+        const body = await res.json() as Record<string, unknown>
+        parts = (((body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> } }> | undefined)?.[0]?.content?.parts) ?? [])
+      } catch {
+        autoBugReport('timeout', `no answer within ${FULL_AI_TIMEOUT_MS / 1000} s`, { round })
+        if (handBack) return null
+        return { status: 200, payload: { type: 'text', text: 'The AI model took too long to respond. Please try again.', semantic_intent: 'full_ai.timeout', correlation_id: cid } }
+      } finally {
+        clearTimeout(timer)
+      }
+      const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
+      if (!reads.length) break
+      const answers = await Promise.all(reads.map(async (p) => {
+        const call = p.functionCall as { name: string; args: Record<string, unknown> }
+        let result: Record<string, unknown> | null = null
+        if (call.name === 'get_recipe') {
+          const { data } = await sb.from('recipes').select('name, servings, cook_time, recipe_ingredients(raw_text, name, quantity, unit, optional, sort_order), recipe_steps(step_number, instruction)').eq('id', String(call.args?.id ?? '')).maybeSingle()
+          result = data ? data as Record<string, unknown> : { error: 'No recipe with that id' }
+        } else if (call.name === 'search_family_notes') {
+          // The same retrieval the old path loaded on every turn — here only when D asks.
+          const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)
+          result = found ? { notes: found.evidence.map((e: Record<string, unknown>) => ({ source: e.source_type, title: e.title, excerpt: e.excerpt })) } : { error: 'The family notes search failed' }
+        } else {
+          result = await runLookup(call.name, call.args ?? {}, lookupDeps).catch(() => ({ error: 'That lookup failed' }))
+        }
+        if (result && typeof result === 'object' && 'error' in result) autoBugReport('lookup_failed', `${call.name}: ${String((result as { error: unknown }).error)}`, { tool: call.name, args: call.args })
+        return { functionResponse: { name: call.name, response: result ?? { error: 'Unknown lookup' } } }
+      }))
+      contents.push({ role: 'model', parts }, { role: 'user', parts: answers })
+      parts = []
     }
-    const parts = (((body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> } }> | undefined)?.[0]?.content?.parts) ?? [])
-    const call = parts.find((p) => p.functionCall)?.functionCall as { name: string; args: Record<string, unknown> } | undefined
-    if (call) {
-      const card = fullAiCard(call, { events, utcOffset, now })
-      if ('error' in card) return { status: 200, payload: { type: 'text', text: card.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
+
+    const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
+      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries }))
+    if (changes.length) {
+      if (changes.some((c) => 'error' in c)) {
+        autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
+        if (handBack) return null
+        const failed = changes.find((c) => 'error' in c) as { error: string }
+        return { status: 200, payload: { type: 'text', text: failed.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
+      }
+      const cards = changes as Array<{ tool: string; args: Record<string, unknown> }>
+      if (cards.length > 1) {
+        // Several changes at once (a flyer with three dates): one batch, each still needing a yes.
+        return { status: 200, payload: { type: 'tool_action_batch', actions: cards.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: buildDisplayText(c.tool, c.args) })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
+      }
+      const card = cards[0]
       const about = events.find((e) => e.id === card.args.id) ?? null
       return { status: 200, payload: { type: 'tool_action', tool: card.tool, args: card.args, display_text: buildDisplayText(card.tool, card.args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
     }
     const text = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+    if (!text) autoBugReport('empty', 'no words and no change', { finish: parts.length })
+    if (!text && handBack) return null
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
     return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
   // (buildDisplayText is declared further down this pipeline, so D's cards read exactly like A's.)
-  if (fullAi) return await runFullAi(buildDisplayText)
+  if (fullAi) return (await runFullAi(buildDisplayText))!
   if (asideOnWall) {
     return {
       status: 200,
@@ -1226,7 +1310,8 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (turnContext?.answer) {
+  // A question the calendar can't answer (a drive time, the weather) goes on to layer 2, which can look it up.
+  if (turnContext?.answer && !(hybridLayer2 && turnContext.answer.calendarSays === false)) {
     return {
       status: 200,
       payload: {
@@ -1421,6 +1506,19 @@ Deno.serve(async (req) => {
         telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
       },
     }
+  }
+
+  // The hybrid (P3.17, Jake 2026-09-26): every turn the rules above don't take goes to version D —
+  // Gemini with the family's data in context, the old path's lookups as tools, photos, recipes and
+  // groceries — instead of the old path, on the Wall and phone. A turn D can't finish (time-out,
+  // empty, a change failing a hard check) still carries on below until the old path is retired.
+  if (hybridLayer2 && experienceMode !== 'talk_plan' && ['wall', 'phone'].includes(String(context?.page ?? ''))) {
+    // The person telling Casa the last answer missed ("that's not what I said", or asking again).
+    const flub = flubSignal(Array.isArray(messages) ? messages as Array<{ role: string; content: string }> : [])
+    if (flub) autoBugReport(flub, String(latestUserText ?? '').slice(0, 200))
+    const layer2 = await runFullAi(buildDisplayText, true)
+    if (layer2) return { ...layer2, payload: { ...layer2.payload, layer: 'hybrid' } }
+    appendServerTrace('server_ai_assistant_hybrid_handback', 'D handed the turn back to the old path', {})
   }
 
   // Load config, saved places, contacts, grocery list, events in parallel
@@ -3787,34 +3885,6 @@ Deno.serve(async (req) => {
     return normalizeSearchText(value).split(' ').filter((token) => token.length > 1)
   }
 
-  function sanitizeTravelLocation(value: string): string {
-    return value
-      .replace(/\b(right now|now|today|tomorrow|tonight|please|thanks)\b/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  function inferTravelDestinationFromText(text: string): string | null {
-    if (!text) return null
-    const cleaned = text.replace(/\s+/g, ' ').trim()
-    const toMatches = Array.from(cleaned.matchAll(/\bto\s+(.+?)(?=\s+(?:right now|now|today|tomorrow|tonight|when|how|what)\b|[?.!,]|$)/gi))
-    const toCandidate = toMatches.length > 0 ? toMatches[toMatches.length - 1]?.[1] : null
-    if (toCandidate) return sanitizeTravelLocation(toCandidate).replace(/^home\s+to\s+/i, '').replace(/^drive\s+from\s+/i, '').trim() || null
-    const atMatch = cleaned.match(/\bat\s+(.+?)(?:\s+at\s+\d|\s+(?:today|tomorrow|tonight|when|how|what)\b|[?.!,]|$)/i)
-    if (atMatch?.[1]) return sanitizeTravelLocation(atMatch[1]).trim() || null
-    return null
-  }
-
-  function inferTravelOriginFromText(text: string): string | null {
-    if (!text) return null
-    const cleaned = text.replace(/\s+/g, ' ').trim()
-    const fromMatch = cleaned.match(/\bfrom\s+(.+?)\s+to\s+/i)
-    if (!fromMatch?.[1]) return null
-    const inferred = sanitizeTravelLocation(fromMatch[1])
-    if (!inferred || /^home$/i.test(inferred)) return null
-    return inferred
-  }
-
   // Build context strings
   const familyNames = familyMembers
     .flatMap((member: { name?: unknown }) => typeof member?.name === 'string' ? [member.name] : [])
@@ -4936,346 +5006,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       return payload
     }
 
-    if (name === 'search_places') {
-      const query = args.query as string
-      const city = (args.city as string) || (context.homeCity as string) || 'West Palm Beach'
-      try {
-        const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'X-Goog-Api-Key': mapsKey,
-            'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location',
-          },
-          body: JSON.stringify({ textQuery: `${query} near ${city}`, maxResultCount: 3 }),
-        }, { correlationId: cid })
-        const data = await res.json()
-        const places = (data.places ?? []).map((p: { displayName?: { text: string }; formattedAddress?: string; nationalPhoneNumber?: string }) => ({
-          name: p.displayName?.text,
-          address: p.formattedAddress,
-          phone: p.nationalPhoneNumber,
-        }))
-        const payload = { places, count: places.length }
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count}`)
-        return payload
-      } catch {
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=fetch_failed`)
-        return { places: [], count: 0 }
-      }
-    }
-
-    if (name === 'get_weather_forecast') {
-      const rawLocation = String(args.location ?? '').trim()
-      const location = rawLocation || String(context.homeCity ?? 'West Palm Beach')
-      const requestedHours = Number(args.hours_ahead ?? 12)
-      const hoursAhead = Number.isFinite(requestedHours) ? Math.max(1, Math.min(24, Math.round(requestedHours))) : 12
-
-      const weatherCodeLabel = (code: number | null): string => {
-        const map: Record<number, string> = {
-          0: 'Clear sky',
-          1: 'Mainly clear',
-          2: 'Partly cloudy',
-          3: 'Overcast',
-          45: 'Fog',
-          48: 'Depositing rime fog',
-          51: 'Light drizzle',
-          53: 'Moderate drizzle',
-          55: 'Dense drizzle',
-          56: 'Light freezing drizzle',
-          57: 'Dense freezing drizzle',
-          61: 'Slight rain',
-          63: 'Moderate rain',
-          65: 'Heavy rain',
-          66: 'Light freezing rain',
-          67: 'Heavy freezing rain',
-          71: 'Slight snow',
-          73: 'Moderate snow',
-          75: 'Heavy snow',
-          77: 'Snow grains',
-          80: 'Slight rain showers',
-          81: 'Moderate rain showers',
-          82: 'Violent rain showers',
-          85: 'Slight snow showers',
-          86: 'Heavy snow showers',
-          95: 'Thunderstorm',
-          96: 'Thunderstorm with slight hail',
-          99: 'Thunderstorm with heavy hail',
-        }
-        return map[code ?? -1] ?? 'Unknown'
-      }
-
-      try {
-        const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
-        geoUrl.searchParams.set('name', location)
-        geoUrl.searchParams.set('count', '1')
-        geoUrl.searchParams.set('language', 'en')
-        geoUrl.searchParams.set('format', 'json')
-        const geoRes = await fetch(geoUrl.toString())
-        const geoData = await geoRes.json()
-        const place = geoData?.results?.[0]
-        if (!place || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
-          return { location, found: false, error: `Could not resolve weather location: ${location}` }
-        }
-
-        const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast')
-        forecastUrl.searchParams.set('latitude', String(place.latitude))
-        forecastUrl.searchParams.set('longitude', String(place.longitude))
-        forecastUrl.searchParams.set('timezone', 'auto')
-        forecastUrl.searchParams.set('forecast_days', '3')
-        forecastUrl.searchParams.set('temperature_unit', 'fahrenheit')
-        forecastUrl.searchParams.set('windspeed_unit', 'mph')
-        forecastUrl.searchParams.set('precipitation_unit', 'inch')
-        forecastUrl.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,uv_index')
-        forecastUrl.searchParams.set('hourly', 'temperature_2m,precipitation_probability,precipitation,weather_code')
-        forecastUrl.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset')
-        const fcRes = await fetch(forecastUrl.toString())
-        const fcData = await fcRes.json()
-        if (!fcRes.ok) {
-          return { location, found: false, error: 'Weather provider request failed' }
-        }
-
-        const nowIso = String(fcData?.current?.time ?? '')
-        const hourlyTime = Array.isArray(fcData?.hourly?.time) ? fcData.hourly.time : []
-        const idxNow = Math.max(0, hourlyTime.findIndex((t: string) => t >= nowIso))
-        const endIdx = Math.min(hourlyTime.length, idxNow + hoursAhead)
-
-        const hourly = hourlyTime.slice(idxNow, endIdx).map((time: string, i: number) => {
-          const at = idxNow + i
-          return {
-            time,
-            temp_f: fcData?.hourly?.temperature_2m?.[at] ?? null,
-            precip_probability: fcData?.hourly?.precipitation_probability?.[at] ?? null,
-            precip_mm: fcData?.hourly?.precipitation?.[at] ?? null,
-            weather_code: fcData?.hourly?.weather_code?.[at] ?? null,
-            weather_label: weatherCodeLabel(fcData?.hourly?.weather_code?.[at] ?? null),
-          }
-        })
-
-        const dailyTime = Array.isArray(fcData?.daily?.time) ? fcData.daily.time : []
-        const daily = dailyTime.slice(0, 3).map((date: string, i: number) => ({
-          date,
-          temp_max_f: fcData?.daily?.temperature_2m_max?.[i] ?? null,
-          temp_min_f: fcData?.daily?.temperature_2m_min?.[i] ?? null,
-          precip_probability_max: fcData?.daily?.precipitation_probability_max?.[i] ?? null,
-          uv_index_max: fcData?.daily?.uv_index_max?.[i] ?? null,
-          weather_code: fcData?.daily?.weather_code?.[i] ?? null,
-          weather_label: weatherCodeLabel(fcData?.daily?.weather_code?.[i] ?? null),
-          sunrise: fcData?.daily?.sunrise?.[i] ?? null,
-          sunset: fcData?.daily?.sunset?.[i] ?? null,
-        }))
-
-        const payload = {
-          found: true,
-          location: `${place.name}${place.admin1 ? `, ${place.admin1}` : ''}${place.country_code ? ` (${place.country_code})` : ''}`,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          timezone: fcData?.timezone ?? null,
-          current: {
-            time: fcData?.current?.time ?? null,
-            temp_f: fcData?.current?.temperature_2m ?? null,
-            feels_like_f: fcData?.current?.apparent_temperature ?? null,
-            humidity: fcData?.current?.relative_humidity_2m ?? null,
-            precip_mm: fcData?.current?.precipitation ?? null,
-            wind_mph: fcData?.current?.wind_speed_10m ?? null,
-            uv_index: fcData?.current?.uv_index ?? null,
-            weather_code: fcData?.current?.weather_code ?? null,
-            weather_label: weatherCodeLabel(fcData?.current?.weather_code ?? null),
-          },
-          hourly,
-          daily,
-          rain_expected_next_hours: hourly.some((h: { precip_probability?: number; precip_mm?: number }) => (h.precip_probability ?? 0) >= 40 || (h.precip_mm ?? 0) > 0.5),
-          alerts: {
-            provider: 'open-meteo',
-            official_alerts_available: false,
-            note: 'Open-Meteo endpoint used here does not provide official government warning feeds.',
-          },
-        }
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.daily.length}`)
-        return payload
-      } catch {
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=weather_fetch_failed`)
-        return { location, found: false, error: 'Unable to reach weather provider' }
-      }
-    }
-
-    if (name === 'get_travel_eta') {
-      let destination = String(args.destination ?? '').trim()
-      if (!destination && context.focusedEvent) {
-        const fe = context.focusedEvent as { address?: string | null; location_name?: string | null; title?: string }
-        destination = String(fe.address || fe.location_name || fe.title || '').trim()
-      }
-      if (!destination) return { found: false, error: 'Missing destination for travel ETA' }
-      const origin = String(args.origin ?? '').trim() || homeAddress || String(context.homeCity ?? '')
-      if (!origin) return { found: false, error: 'No origin available. Configure home address in Settings.' }
-
-      const arrivalTimeIso = typeof args.arrival_time === 'string' ? String(args.arrival_time) : null
-      const departureTimeIso = typeof args.departure_time === 'string' ? String(args.departure_time) : null
-      const rawBuffer = Number(args.buffer_mins ?? 10)
-      const bufferMins = Number.isFinite(rawBuffer) ? Math.max(0, Math.min(45, Math.round(rawBuffer))) : 10
-
-      let payload = await computeCachedTravelEta({
-        mapsKey,
-        origin,
-        destination,
-        arrivalTimeIso,
-        departureTimeIso,
-        bufferMins,
-      }, routeEtaCache)
-      if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
-        const cleanedDestination = sanitizeTravelLocation(destination)
-        const cleanedOriginRaw = sanitizeTravelLocation(origin)
-        const cleanedOrigin = /^home$/i.test(cleanedOriginRaw) ? (homeAddress || String(context.homeCity ?? '')) : cleanedOriginRaw
-        if ((cleanedDestination && cleanedDestination !== destination) || (cleanedOrigin && cleanedOrigin !== origin)) {
-          payload = await computeCachedTravelEta({
-            mapsKey,
-            origin: cleanedOrigin || origin,
-            destination: cleanedDestination || destination,
-            arrivalTimeIso,
-            departureTimeIso,
-            bufferMins,
-          }, routeEtaCache)
-        }
-      }
-      if (!payload.found && /no route found/i.test(String(payload.error ?? ''))) {
-        const inferredDestination = inferTravelDestinationFromText(String(latestUserText ?? ''))
-        if (inferredDestination) {
-          const inferredOrigin = inferTravelOriginFromText(String(latestUserText ?? ''))
-          payload = await computeCachedTravelEta({
-            mapsKey,
-            origin: inferredOrigin || homeAddress || String(context.homeCity ?? '') || origin,
-            destination: inferredDestination,
-            arrivalTimeIso,
-            departureTimeIso,
-            bufferMins,
-          }, routeEtaCache)
-        }
-      }
-      console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} found=${payload.found ? 1 : 0}`)
-      return payload
-    }
-
-    if (name === 'search_web') {
-      const rawQuery = String(args.query ?? '').trim()
-      const parsedMax = Number(args.max_results ?? 5)
-      const maxResults = Number.isFinite(parsedMax) ? Math.max(1, Math.min(8, Math.round(parsedMax))) : 5
-      if (!rawQuery) return { results: [], count: 0, error: 'Missing query' }
-
-      let query = rawQuery
-      if (context.focusedEvent) {
-        const fe = context.focusedEvent as { location_name?: string | null; address?: string | null; title?: string }
-        const venue = fe.location_name || fe.title || ''
-        const address = fe.address || ''
-        const deicticAnchor = [venue, address].filter(Boolean).join(' ')
-        if (deicticAnchor && /\b(hotel|resort|venue|restaurant|clinic|doctor|school|stadium|park|here|nearby|around)\b/i.test(query)) {
-          if (!query.toLowerCase().includes(venue.toLowerCase()) && (!address || !query.toLowerCase().includes(address.toLowerCase()))) {
-            query = `${query} near ${deicticAnchor}`
-          }
-        }
-      }
-
-      // Server-side math interceptor: catch tip/percentage/arithmetic queries
-      const mathIntercept =
-        /^[\s\d.+\-*/x×÷()]+$/.test(query) ||
-        /\b\d+\s*(percent|%)\s*(tip|off|of|on)\s+\$?\d+/i.test(query) ||
-        /\btip\b.*\$?\d+/i.test(query) ||
-        /\b(what\s+is|calc(ulate)?|compute|solve)\b.{0,30}\b\d+\b.{0,20}\b\d+\b/i.test(query) ||
-        /\b\d+\s*(divided\s+by|times|plus|minus|multiplied)\s*\d+/i.test(query)
-      if (mathIntercept) {
-        return { results: [], count: 0, math_query: true, hint: 'This is a math/calculation query. Answer directly from reasoning — no web search needed.' }
-      }
-
-      if (!braveKey && provider === 'gemini' && apiKey) {
-        try {
-          const subUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-          const subRes = await providerFetch(subUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `Search the web and provide comprehensive, factual findings with key sources, dates, and locations for: ${query}` }] }],
-              tools: [{ google_search: {} }],
-              generationConfig: {
-                maxOutputTokens: 1024,
-                temperature: 0.3,
-                thinkingConfig: { thinkingBudget: 0 },
-              },
-            }),
-          }, { correlationId: cid, lane: experienceMode, callIndex: llmTelemetry.llm_calls + 1 })
-          const subData = await subRes.json()
-          if (!subRes.ok) {
-            const message = subData?.error?.message ?? 'Google Search failed'
-            console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=provider message=${message}`)
-            return { results: [], count: 0, error: message }
-          }
-          const cand = subData?.candidates?.[0]
-          const parts = cand?.content?.parts ?? []
-          const text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim()
-          const metadata = cand?.groundingMetadata
-          const chunks = (metadata?.groundingChunks ?? []) as Array<{ web?: { title?: string; uri?: string } }>
-          const results = chunks.slice(0, maxResults).map((chunk, idx) => ({
-            title: chunk.web?.title ?? `Source ${idx + 1}`,
-            url: chunk.web?.uri ?? '',
-            snippet: text.slice(0, 300),
-            source: chunk.web?.title ?? 'Google Search',
-            age: null,
-          }))
-          const payload = {
-            results,
-            count: results.length > 0 ? results.length : (text ? 1 : 0),
-            query,
-            findings: text,
-          }
-          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count} via=gemini_google_search`)
-          return payload
-        } catch {
-          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=gemini_google_search_failed`)
-          return { results: [], count: 0, error: 'Google Search failed' }
-        }
-      }
-
-      if (!braveKey) return { results: [], count: 0, error: 'Web search provider not configured' }
-
-      try {
-        const url = new URL('https://api.search.brave.com/res/v1/web/search')
-        url.searchParams.set('q', query)
-        url.searchParams.set('count', String(maxResults))
-        url.searchParams.set('safesearch', 'moderate')
-
-        const res = await fetch(url.toString(), {
-          headers: {
-            'Accept': 'application/json',
-            'X-Subscription-Token': braveKey,
-          },
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          const message = data?.error?.detail ?? data?.error ?? 'Brave search failed'
-          const payload = { results: [], count: 0, error: message }
-          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=provider`)
-          return payload
-        }
-
-        const results = (data?.web?.results ?? []).map((item: {
-          title?: string
-          url?: string
-          description?: string
-          age?: string
-          page_age?: string
-          profile?: { long_name?: string }
-        }) => ({
-          title: item.title ?? '',
-          url: item.url ?? '',
-          snippet: item.description ?? '',
-          source: item.profile?.long_name ?? null,
-          age: item.age ?? item.page_age ?? null,
-        }))
-        const payload = { results, count: results.length, query }
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count}`)
-        return payload
-      } catch {
-        console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=network`)
-        return { results: [], count: 0, error: 'Unable to reach Brave Search' }
-      }
-    }
+    // Web, places, weather and drive times live in lookups.ts (shared with version D, P3.17).
+    const looked = await runLookup(name, args, { cid, context: context as Record<string, any>, apiKey, model, provider, braveKey, mapsKey, homeAddress, routeEtaCache, providerFetch: providerFetch as never, mapsFetch: mapsFetch as never, experienceMode, latestUserText, callIndex: llmTelemetry.llm_calls + 1 })
+    if (looked) return looked
 
     return { error: 'Unknown tool' }
   }

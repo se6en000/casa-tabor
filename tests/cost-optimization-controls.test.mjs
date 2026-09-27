@@ -153,6 +153,8 @@ test('routine assistant profiles keep thinking off (tested 2026-09-26: thinking 
   assert.match(aiAssistant, /\? thinkingOverrideRaw\n\s+: null\n/)
   assert.match(aiAssistant, /const turnRulesOff = dryRun && /)
   assert.match(aiAssistant, /const fullAi = dryRun && /)
+  // The hybrid's layer 2 is switched for real turns by one constant; only a dry run can override it.
+  assert.match(aiAssistant, /const hybridLayer2 = dryRun && typeof hybridRequested === 'boolean' \? hybridRequested : HYBRID_LAYER2_LIVE/)
   assert.match(aiAssistant, /intentRouting\.profile === 'general'\s+\? 1024\s+: 768/)
   assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
 })

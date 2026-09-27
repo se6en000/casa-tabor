@@ -12,10 +12,12 @@
 // --set=heldout  the phrasings in heldout.mjs (not used while fixing things)
 // --set=fresh    new phrasings written by Gemini for this run, from what each turn means
 // --set=life     lifelike conversations (life.mjs): small talk, slips, corrections, "that one"
+// --set=abilities the rest of layer 2 (abilities.mjs): weather, drive times, contacts, groceries, recipes, the web
 import { loadWorld, SUPABASE_URL, ANON_KEY, sql } from './world.mjs'
 import { SITUATIONS } from './situations.mjs'
 import { HELDOUT } from './heldout.mjs'
 import { LIFE } from './life.mjs'
+import { ABILITIES } from './abilities.mjs'
 import { freshPhrasings, judge } from './llm.mjs'
 import fs from 'node:fs'
 
@@ -24,11 +26,12 @@ const SET = arg('set', 'dev')
 const PAGE = arg('page', 'wall')
 const ONLY = arg('only', null)
 const JSON_OUT = arg('json', null)
-const LIST = SET === 'life' ? LIFE : SITUATIONS
+const LIST = SET === 'life' ? LIFE : SET === 'abilities' ? ABILITIES : SITUATIONS
 // "0", "1024", "1024-norules" (thinking budget; -norules skips the server's turn-reading rules),
-// or "full" (version D: Gemini with the family's data in context and a few broad tools, P3.16).
-const VARIANTS = arg('thinking', null)?.split(',').map((v) => (v === 'full' ? { full: true } : { thinking: Number(v.split('-')[0]), rulesOff: v.endsWith('-norules') })) ?? [null]
-const labelOf = (v) => (v == null ? 'server' : v.full ? 'full AI' : `thinking ${v.thinking}${v.rulesOff ? ' · rules off' : ''}`)
+// "full" (version D: Gemini with the family's data in context and a few broad tools, P3.16), or
+// "classic" / "hybrid" (the rules, then the old path or D for what they don't take, P3.17).
+const VARIANTS = arg('thinking', null)?.split(',').map((v) => (v === 'full' ? { full: true } : v === 'hybrid' ? { hybrid: true } : v === 'classic' ? { hybrid: false } : { thinking: Number(v.split('-')[0]), rulesOff: v.endsWith('-norules') })) ?? [null]
+const labelOf = (v) => (v == null ? 'server' : v.full ? 'full AI' : v.hybrid === true ? 'hybrid' : v.hybrid === false ? 'classic' : `thinking ${v.thinking}${v.rulesOff ? ' · rules off' : ''}`)
 const LIVE = arg('live', null)
 const SEED = Number(arg('seed', String(Math.floor(Math.random() * 1e6))))
 let seed = SEED
@@ -58,7 +61,7 @@ async function ask(messages, family, thinking = null) {
         page: PAGE, assistant_mode: 'general', experience_mode: 'do', currentDate: new Date().toISOString(), utcOffset: '-04:00',
         family, homeCity: 'West Palm Beach', conversationState: state,
         pendingAction: pending ? { tool: pending.tool, args: pending.args } : undefined,
-        ...(thinking?.full ? { full_ai: true } : thinking != null ? { thinking_budget_override: thinking.thinking, ...(thinking.rulesOff ? { turn_rules_off: true } : {}) } : {}),
+        ...(thinking?.full ? { full_ai: true } : typeof thinking?.hybrid === 'boolean' ? { hybrid: thinking.hybrid } : thinking != null ? { thinking_budget_override: thinking.thinking, ...(thinking.rulesOff ? { turn_rules_off: true } : {}) } : {}),
       },
       session_id: session, correlation_id: `${session}:${messages.length}`, turn_id: String(messages.length),
       lane: 'text', client_build: 'situations', client_trace_source: 'assistant-situations', stream: false, dry_run: true,
@@ -120,7 +123,7 @@ for (const situation of LIST.filter((s) => !ONLY || s.id === ONLY)) {
   // The same words for every variant: picked once per turn.
   const sayings = []
   for (const [i, turn] of situation.turns.entries()) {
-    const pool = SET === 'life' ? turn.say : SET === 'heldout' ? HELDOUT[situation.id]?.[i] ?? [] : SET === 'fresh' ? await freshPhrasings(fill(turn.means ?? '', bound), fill(turn.say[0], bound)).catch(() => []) : turn.say
+    const pool = SET === 'life' || SET === 'abilities' ? turn.say : SET === 'heldout' ? HELDOUT[situation.id]?.[i] ?? [] : SET === 'fresh' ? await freshPhrasings(fill(turn.means ?? '', bound), fill(turn.say[0], bound)).catch(() => []) : turn.say
     sayings.push(fill(pick(pool.length ? pool : turn.say), bound))
   }
   const liveSituation = { id: situation.id, gist: situation.gist, runs: {} }
