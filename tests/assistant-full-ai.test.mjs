@@ -75,9 +75,9 @@ test('D has the old path\'s other abilities: grocery changes, recipes, and looku
 test('grocery changes are cards on items that exist; a recipe needs a name, ingredients and steps', () => {
   const groceries = [{ id: 'g1', name: 'milk', quantity: '1', checked: false }]
   const ctx = { events, utcOffset, now, groceries }
-  assert.deepEqual(fullAiCard({ name: 'check_grocery_item', args: { item_id: 'g1', checked: true } }, ctx), { tool: 'check_grocery_item', args: { item_id: 'g1', checked: true } })
-  assert.deepEqual(fullAiCard({ name: 'update_grocery_item_quantity', args: { item_id: 'g1', quantity: '2' } }, ctx), { tool: 'update_grocery_item_quantity', args: { item_id: 'g1', quantity: '2' } })
-  assert.deepEqual(fullAiCard({ name: 'remove_grocery_item', args: { item_id: 'g1' } }, ctx), { tool: 'remove_grocery_item', args: { item_id: 'g1' } })
+  assert.deepEqual(fullAiCard({ name: 'check_grocery_item', args: { item_id: 'g1', checked: true } }, ctx), { tool: 'check_grocery_item', args: { item_id: 'g1', item_name: 'milk', checked: true } }, 'the card names the item, as the old path\'s did')
+  assert.deepEqual(fullAiCard({ name: 'update_grocery_item_quantity', args: { item_id: 'g1', quantity: '2' } }, ctx), { tool: 'update_grocery_item_quantity', args: { item_id: 'g1', item_name: 'milk', quantity: '2' } })
+  assert.deepEqual(fullAiCard({ name: 'remove_grocery_item', args: { item_id: 'g1' } }, ctx), { tool: 'remove_grocery_item', args: { item_id: 'g1', item_name: 'milk' } })
   assert.deepEqual(fullAiCard({ name: 'clear_checked_grocery_items', args: {} }, ctx), { tool: 'clear_checked_grocery_items', args: {} })
   assert.match(fullAiCard({ name: 'remove_grocery_item', args: { item_id: 'nope' } }, ctx).error, /grocery list/)
   assert.equal(fullAiCard({ name: 'create_recipe', args: { name: 'Tacos', ingredients: [{ name: 'tortillas' }], steps: ['Warm them'] } }, ctx).tool, 'create_recipe')

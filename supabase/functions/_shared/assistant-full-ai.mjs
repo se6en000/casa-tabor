@@ -178,11 +178,12 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [] }) {
   if (['check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity'].includes(call?.name)) {
     const item = groceries.find((g) => g.id === a.item_id)
     if (!item) return { error: "That item isn't on the grocery list." }
-    if (call.name === 'check_grocery_item') return { tool: call.name, args: { item_id: item.id, checked: a.checked !== false } }
-    if (call.name === 'remove_grocery_item') return { tool: call.name, args: { item_id: item.id } }
+    // The card names the item ("Mark Apple juice as done"), as the old path's did.
+    if (call.name === 'check_grocery_item') return { tool: call.name, args: { item_id: item.id, item_name: item.name, checked: a.checked !== false } }
+    if (call.name === 'remove_grocery_item') return { tool: call.name, args: { item_id: item.id, item_name: item.name } }
     const quantity = text(a.quantity)
     if (!quantity) return { error: 'What quantity should it be?' }
-    return { tool: call.name, args: { item_id: item.id, quantity } }
+    return { tool: call.name, args: { item_id: item.id, item_name: item.name, quantity } }
   }
   if (call?.name === 'clear_checked_grocery_items') return { tool: call.name, args: {} }
   if (call?.name === 'create_recipe') {

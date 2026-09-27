@@ -1517,9 +1517,12 @@ Deno.serve(async (req) => {
 
   // The hybrid (P3.17, Jake 2026-09-26): every turn the rules above don't take goes to version D —
   // Gemini with the family's data in context, the old path's lookups as tools, photos, recipes and
-  // groceries — instead of the old path, on the Wall and phone. A turn D can't finish (time-out,
-  // empty, a change failing a hard check) still carries on below until the old path is retired.
-  if (hybridLayer2 && experienceMode !== 'talk_plan' && ['wall', 'phone'].includes(String(context?.page ?? ''))) {
+  // groceries — instead of the old path. A turn D can't finish (time-out, empty, a change failing a
+  // hard check) still carries on below: the safety net, kept for a week of automatic bug reports
+  // (until 2026-10-04), then deleted with the old path.
+  // Every surface (the Wall, the phone, and the classic app's drawer — P3.17, Jake chose "after a week
+  // of reports"); planning mode (Talk & Plan) isn't used (0 turns in 30 days) and retires with the old path.
+  if (hybridLayer2 && experienceMode !== 'talk_plan') {
     // The person telling Casa the last answer missed ("that's not what I said", or asking again).
     const flub = flubSignal(Array.isArray(messages) ? messages as Array<{ role: string; content: string }> : [])
     if (flub) autoBugReport(flub, String(latestUserText ?? '').slice(0, 200))
