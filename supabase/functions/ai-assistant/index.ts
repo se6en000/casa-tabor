@@ -168,6 +168,7 @@ import {
 } from '../_shared/assistant-reminder-intent.mjs'
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
+import { FULL_AI_TOOLS, buildFullAiSystem, fullAiCard, fullAiContents, fullAiWindow, mentionedIds } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -327,6 +328,8 @@ type TurnContext = {
 const TURN_UPCOMING_DAYS = 14
 const TURN_UPCOMING_CAP = 60
 const TURN_BUDGET_MS = 7000
+/** Version D's one call gets room to think, so time limits don't decide the comparison. */
+const FULL_AI_TIMEOUT_MS = 20_000
 
 /** The next two weeks of the calendar, for reading what a turn refers to. */
 async function loadUpcomingIds(sb: TurnDb): Promise<string[]> {
@@ -771,7 +774,10 @@ Deno.serve(async (req) => {
   // Side-by-side tests only: a dry run may skip the turn-reading rules, so the model with its
   // tools handles the turn by itself (does the rule layer help or hurt?). Real turns always read.
   const turnRulesOff = dryRun && (context as Record<string, unknown> | undefined)?.turn_rules_off === true
-  const turnContext = image || turnRulesOff ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
+  // Version D (P3.16): Gemini with the family's data in its context and a few broad tools — its
+  // own path, no rules. Dry runs only (side-by-side tests); real turns never take it.
+  const fullAi = dryRun && (context as Record<string, unknown> | undefined)?.full_ai === true
+  const turnContext = image || turnRulesOff || fullAi ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
   const turnResolution = turnContext?.resolution ?? null
   // Words not said to Casa, heard by the wall's open mic (P3.13): no reply, nothing changes.
   const asideOnWall = turnResolution?.act === 'aside' && context?.page === 'wall'
@@ -1124,7 +1130,69 @@ Deno.serve(async (req) => {
     })
   }
 
+  /** Version D (P3.16): one Gemini call with the family's data in context; changes come back as the usual cards. */
+  const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string): Promise<{ status: number; payload: Record<string, unknown> }> => {
+    const config = await loadLlmConfig(sb)
+    const apiKey = String(config?.api_key ?? '')
+    const model = String(config?.model ?? DEFAULT_GEMINI_MODEL)
+    const utcOffset = typeof context?.utcOffset === 'string' ? context.utcOffset : '-04:00'
+    const now = new Date(String(context?.currentDate ?? new Date().toISOString()))
+    const { from, until } = fullAiWindow(now, utcOffset)
+    const [familyRows, idRows, groceryRows] = await Promise.all([
+      sb.from('family_members').select('id, name, role, can_drive').order('sort_order'),
+      sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
+        .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
+      sb.from('grocery_items').select('name, quantity, checked').is('deleted_at', null).eq('checked', false).order('name').limit(150),
+    ])
+    const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
+    const events = await loadReferents(sb, ((idRows.data ?? []) as Array<{ id: string }>).map((r) => r.id), family)
+    const state = incomingConversationState as Record<string, unknown> | null
+    const onScreenIds = [
+      ...(typeof state?.activeEventId === 'string' ? [state.activeEventId] : []),
+      ...(Array.isArray(state?.eventIds) ? (state.eventIds as string[]) : []),
+      ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
+    ]
+    const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
+    const system = buildFullAiSystem({ family, events, groceries: (groceryRows.data ?? []) as Array<{ name: string; quantity: string | null }>, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null })
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FULL_AI_TIMEOUT_MS)
+    let body: Record<string, unknown> | null = null
+    try {
+      const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: system }] },
+          contents: fullAiContents(messages as Array<{ role: string; content: string }>),
+          tools: [{ function_declarations: FULL_AI_TOOLS }],
+          tool_config: { function_calling_config: { mode: 'AUTO' } },
+          // Gemini's own dynamic thinking: it decides how much to think.
+          generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
+        }),
+        signal: controller.signal,
+      }, { callPurpose: 'full-ai', correlationId: cid, model })
+      body = await res.json()
+    } catch {
+      return { status: 200, payload: { type: 'text', text: 'The AI model took too long to respond. Please try again.', semantic_intent: 'full_ai.timeout', correlation_id: cid } }
+    } finally {
+      clearTimeout(timer)
+    }
+    const parts = (((body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> } }> | undefined)?.[0]?.content?.parts) ?? [])
+    const call = parts.find((p) => p.functionCall)?.functionCall as { name: string; args: Record<string, unknown> } | undefined
+    if (call) {
+      const card = fullAiCard(call, { events, utcOffset, now })
+      if ('error' in card) return { status: 200, payload: { type: 'text', text: card.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
+      const about = events.find((e) => e.id === card.args.id) ?? null
+      return { status: 200, payload: { type: 'tool_action', tool: card.tool, args: card.args, display_text: buildDisplayText(card.tool, card.args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
+    }
+    const text = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+    const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
+    return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'full_ai.answer', correlation_id: cid } }
+  }
+
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
+  // (buildDisplayText is declared further down this pipeline, so D's cards read exactly like A's.)
+  if (fullAi) return await runFullAi(buildDisplayText)
   if (asideOnWall) {
     return {
       status: 200,

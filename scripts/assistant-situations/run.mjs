@@ -25,9 +25,10 @@ const PAGE = arg('page', 'wall')
 const ONLY = arg('only', null)
 const JSON_OUT = arg('json', null)
 const LIST = SET === 'life' ? LIFE : SITUATIONS
-// "0", "1024", or "1024-norules" (thinking budget; -norules skips the server's turn-reading rules).
-const VARIANTS = arg('thinking', null)?.split(',').map((v) => ({ thinking: Number(v.split('-')[0]), rulesOff: v.endsWith('-norules') })) ?? [null]
-const labelOf = (v) => (v == null ? 'server' : `thinking ${v.thinking}${v.rulesOff ? ' · rules off' : ''}`)
+// "0", "1024", "1024-norules" (thinking budget; -norules skips the server's turn-reading rules),
+// or "full" (version D: Gemini with the family's data in context and a few broad tools, P3.16).
+const VARIANTS = arg('thinking', null)?.split(',').map((v) => (v === 'full' ? { full: true } : { thinking: Number(v.split('-')[0]), rulesOff: v.endsWith('-norules') })) ?? [null]
+const labelOf = (v) => (v == null ? 'server' : v.full ? 'full AI' : `thinking ${v.thinking}${v.rulesOff ? ' · rules off' : ''}`)
 const LIVE = arg('live', null)
 const SEED = Number(arg('seed', String(Math.floor(Math.random() * 1e6))))
 let seed = SEED
@@ -57,7 +58,7 @@ async function ask(messages, family, thinking = null) {
         page: PAGE, assistant_mode: 'general', experience_mode: 'do', currentDate: new Date().toISOString(), utcOffset: '-04:00',
         family, homeCity: 'West Palm Beach', conversationState: state,
         pendingAction: pending ? { tool: pending.tool, args: pending.args } : undefined,
-        ...(thinking != null ? { thinking_budget_override: thinking.thinking, ...(thinking.rulesOff ? { turn_rules_off: true } : {}) } : {}),
+        ...(thinking?.full ? { full_ai: true } : thinking != null ? { thinking_budget_override: thinking.thinking, ...(thinking.rulesOff ? { turn_rules_off: true } : {}) } : {}),
       },
       session_id: session, correlation_id: `${session}:${messages.length}`, turn_id: String(messages.length),
       lane: 'text', client_build: 'situations', client_trace_source: 'assistant-situations', stream: false, dry_run: true,

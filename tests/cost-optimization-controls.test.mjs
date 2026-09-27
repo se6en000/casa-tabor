@@ -152,6 +152,7 @@ test('routine assistant profiles keep thinking off (tested 2026-09-26: thinking 
   assert.match(aiAssistant, /const drawerThinkingBudget = dryRun && typeof thinkingOverrideRaw === 'number'/)
   assert.match(aiAssistant, /\? thinkingOverrideRaw\n\s+: null\n/)
   assert.match(aiAssistant, /const turnRulesOff = dryRun && /)
+  assert.match(aiAssistant, /const fullAi = dryRun && /)
   assert.match(aiAssistant, /intentRouting\.profile === 'general'\s+\? 1024\s+: 768/)
   assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
 })
