@@ -337,3 +337,28 @@ export function carryOverChange(storedChanges, answerChanges, target, utcOffset)
   const merged = { ...stored, ...answer }
   return Object.keys(merged).length > 0 ? merged : null
 }
+
+/**
+ * The rules' answer to a question, from the calendar — with the draft on screen in view, so
+ * "does that clash with anything" is about the item being added, not a search for a saved one
+ * (P3.15, found in the thinking test 2026-09-26).
+ */
+export function buildAnswerPrompt({ question, calendarLines, nowLine, draft, utcOffset, overlaps = [] }) {
+  const onScreen = draft
+    ? `\nON SCREEN, NOT SAVED YET: ${describeDraft(draft, utcOffset).replace(/\n\s+/g, '; ')}\n("that", "it" or "the appointment" can mean the draft.)\nOverlapping the draft's time (worked out exactly): ${overlaps.length ? overlaps.join(', ') : 'nothing'}.\n`
+    : ''
+  return `You are Casa, a family's home assistant. Answer the question from the family calendar below in plain spoken sentences, local times — short, but name every item a list question asks for. Items are in order of relevance: the first is what the question is about when it's about one thing. If the calendar doesn't say, say so plainly. Don't propose or make any change.
+Now: ${nowLine}
+Calendar:
+${calendarLines.join('\n')}
+${onScreen}Question: ${question}
+Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them], "calendar_says": false if the calendar above doesn't hold what was asked (a drive time, the weather, anything outside it), else true}`
+}
+
+/** The timed calendar items whose time overlaps the draft's (all-day items don't clash). */
+export function draftOverlaps(draft, events) {
+  const start = Date.parse(draft?.args?.start ?? '')
+  const end = Date.parse(draft?.args?.end ?? '') || start + 60 * 60e3
+  if (!Number.isFinite(start) || draft?.args?.all_day) return []
+  return (events ?? []).filter((e) => !e.all_day && e.id !== draft.args.id && Date.parse(e.start_time) < end && Date.parse(e.end_time) > start)
+}

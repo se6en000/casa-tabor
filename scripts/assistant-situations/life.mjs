@@ -85,13 +85,16 @@ export const LIFE = [
         busy: busy.name, firstId: first.id, movedTo: plusMinutes(first.start_time, 30),
         facts: {
           timedItemsPerDay: Object.fromEntries(days.map((d) => [`${d.name} ${d.date}`, d.events.length])),
+          // School-run drop-offs and pick-ups aren't test targets, but they do make a day busy: an answer
+          // that counts them is right too (2026-09-27, P3.15).
+          timedItemsPerDayCountingSchoolRuns: Object.fromEntries(days.map((d) => [`${d.name} ${d.date}`, w.allOn(d.date).filter((line) => !line.startsWith('all day') && !line.includes('(reminder)')).length])),
           busiestDay: `${busy.name} ${busy.date}`, onBusiestDay: w.allOn(busy.date),
           firstThingThatDay: { title: first.title, starts: first.local.hhmm, place: first.place, drivers: first.drivers },
         },
       }
     },
     turns: [
-      { say: ["i'm trying to get my head around next week. which day is gonna be the craziest"], expect: { card: 'none', answer: 'Names the busiest day (see facts: timedItemsPerDay / busiestDay; a day tied for busiest is fine) and roughly why.' } },
+      { say: ["i'm trying to get my head around next week. which day is gonna be the craziest"], expect: { card: 'none', answer: 'Names the busiest day, or the busiest few, by either count in the facts (timedItemsPerDay, or timedItemsPerDayCountingSchoolRuns; ties are fine), from the family calendar — not from outside events or holidays.' } },
       { say: ['ok walk me through {busy}'], expect: { card: 'none', answer: 'Lists what is on that day (see facts: onBusiestDay).' } },
       { say: ['can the first one on that day start like a half hour later'], expect: { card: 'update_event', checks: (b) => [card.target(b.firstId), card.movedTo(b.movedTo)] } },
       { say: ["hmm no actually leave it, sorry, it's fine where it is"], expect: { card: 'none', answer: 'Acknowledges that nothing changes; the time stays as it was.' } },

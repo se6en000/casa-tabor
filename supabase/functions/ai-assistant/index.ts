@@ -19,7 +19,7 @@ import { normalizeAssistantExperienceMode } from '../_shared/assistant-experienc
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
 import { formatLocal, humanWhen, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
 import { driversLine } from '../_shared/assistant-event-drivers.mjs'
-import { applyDraftChanges, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange } from '../_shared/assistant-turn-context.mjs'
+import { applyDraftChanges, buildAnswerPrompt, draftOverlaps, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange } from '../_shared/assistant-turn-context.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -460,17 +460,23 @@ async function answerFromCalendar(
 ): Promise<{ text: string; mentioned: TurnReferent[] }> {
   const utcOffset = (context?.utcOffset as string) ?? '-04:00'
   let known = events
-  if (known.length < 2) {
+  // With a draft on screen, the whole next two weeks — "does that clash" needs every item on its day.
+  const hasDraft = Boolean(openDraft(context?.pendingAction as { tool: string; args: Record<string, unknown> } | undefined))
+  if (known.length < 2 || hasDraft) {
     const family = (Array.isArray(context?.family) ? context.family : []) as Array<{ id: string; name: string }>
     known = await loadReferents(sb, [...new Set([...events.map((e) => e.id), ...(await loadUpcomingIds(sb))])], family)
   }
   const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${formatLocal(e.start_time, utcOffset)}${e.all_day ? ' (all day)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
-  const out = await geminiJson(sb, `You are Casa, a family's home assistant. Answer the question from the family calendar below in plain spoken sentences, local times — short, but name every item a list question asks for. Items are in order of relevance: the first is what the question is about when it's about one thing. If the calendar doesn't say, say so plainly. Don't propose or make any change.
-Now: ${localNowLine(String(context?.currentDate ?? new Date().toISOString()), utcOffset)}
-Calendar:
-${known.map(line).join('\n')}
-Question: ${question}
-Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them], "calendar_says": false if the calendar above doesn't hold what was asked (a drive time, the weather, anything outside it), else true}`, 'question-answer', cid, 6000, thinkingBudget) as { answer?: string; mentioned?: string[]; calendar_says?: boolean }
+  const draft = openDraft(context?.pendingAction as { tool: string; args: Record<string, unknown> } | undefined)
+  const prompt = buildAnswerPrompt({
+    question,
+    calendarLines: known.map(line),
+    nowLine: localNowLine(String(context?.currentDate ?? new Date().toISOString()), utcOffset),
+    draft,
+    utcOffset,
+    overlaps: draft ? draftOverlaps(draft, known).map((e) => `${e.title} (${formatLocal(e.start_time, utcOffset)})`) : [],
+  })
+  const out = await geminiJson(sb, prompt, 'question-answer', cid, 6000, thinkingBudget) as { answer?: string; mentioned?: string[]; calendar_says?: boolean }
   const mentioned = (Array.isArray(out?.mentioned) ? out.mentioned : []).flatMap((id) => known.filter((e) => e.id === id))
   return { text: String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.', mentioned, calendarSays: out?.calendar_says !== false }
 }

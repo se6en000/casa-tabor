@@ -199,3 +199,21 @@ test('words not said to Casa (someone else in the room, the TV) are an aside: no
   // Heard in the test runs 2026-09-26: "thanks. oh and we're out of milk btw" came back as an aside.
   assert.match(prompt, /Telling Casa something — a thanks, a fact, a need \("thanks, oh and we're out of milk btw"/)
 })
+
+test('a question about the draft on screen is answered with the draft in view ("does that clash with anything that day")', async () => {
+  const { buildAnswerPrompt, draftOverlaps } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  // Whether anything overlaps is worked out by the server, not guessed: on 2026-09-27 the model said a
+  // 3:30 dentist visit "clashes with" a 10 AM appointment.
+  const day = [
+    { id: 'w1', title: 'Academic Scholarship Webinar', start_time: '2026-09-29T14:30:00-04:00', end_time: '2026-09-29T15:15:00-04:00', all_day: false },
+    { id: 'w2', title: 'Soccer', start_time: '2026-09-29T16:00:00-04:00', end_time: '2026-09-29T17:00:00-04:00', all_day: false },
+    { id: 'w3', title: 'Grandma visiting', start_time: '2026-09-29T00:00:00-04:00', end_time: '2026-09-30T00:00:00-04:00', all_day: true },
+  ]
+  assert.deepEqual(draftOverlaps(draft, day).map((e) => e.id), ['w2'], 'only what overlaps 3:30–4:30; not the 2:30 webinar that ends at 3:15, not an all-day item')
+  const prompt = buildAnswerPrompt({ question: 'does that clash with anything that day', calendarLines: ['- [w1] Academic Scholarship Webinar — Tue, Sep 29, 2:30 PM'], nowLine: 'now', draft, utcOffset: '-04:00', overlaps: ['Soccer'] })
+  assert.match(prompt, /ON SCREEN, NOT SAVED YET: .*Dentist/)
+  assert.match(prompt, /"that", "it" or "the appointment" can mean the draft/)
+  assert.match(prompt, /Overlapping the draft's time \(worked out exactly\): Soccer/)
+  assert.match(buildAnswerPrompt({ question: 'q', calendarLines: [], nowLine: 'now', draft, utcOffset: '-04:00', overlaps: [] }), /Overlapping the draft's time \(worked out exactly\): nothing/)
+  assert.doesNotMatch(buildAnswerPrompt({ question: 'q', calendarLines: [], nowLine: 'now', draft: null, utcOffset: '-04:00' }), /ON SCREEN/)
+})
