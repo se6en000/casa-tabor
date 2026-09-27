@@ -6,6 +6,7 @@
 //   'send_digest'              → Sunday evening push: what's coming up (cron coming-up-sunday-digest)
 //   'send_pokes'               → morning push for items whose plan-by day is today, once each (cron coming-up-daily-pokes)
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { memberNamed } from '../_shared/family-names.mjs'
 import { buildComingUp } from '../_shared/coming-up.mjs'
 
 const CORS = {
@@ -42,23 +43,32 @@ Deno.serve(async (req) => {
     }
 
     // Two months for birthdays plus the six-week window: look ~110 days out.
-    const [eventsRes, giftsRes, stateRes, rulesRes] = await Promise.all([
+    const [eventsRes, giftsRes, stateRes, rulesRes, familyRes] = await Promise.all([
       sb.from('events').select('id, title, start_time, end_time, all_day, event_type, description')
         .is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
         .gte('start_time', new Date(now.getTime() - 86400e3).toISOString())
         .lt('start_time', new Date(now.getTime() + 110 * 86400e3).toISOString())
         .order('start_time').limit(1000),
-      sb.from('gift_ideas').select('for_name, idea').is('done_at', null).is('dismissed_at', null).order('created_at'),
+      sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at'),
       sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on, custom_step, custom_lead_days'),
       // Newest first: when two rules fit, the newer one wins.
       sb.from('coming_up_rules').select('match, step, lead_days, off').is('removed_at', null).order('created_at', { ascending: false }),
+      // Ideas saved under a full name ("Olivia") still belong on that person's birthday.
+      sb.from('family_members').select('id, name, full_name'),
     ])
     for (const r of [eventsRes, giftsRes, stateRes, rulesRes]) if (r.error) throw new Error(r.error.message)
     const state = Object.fromEntries((stateRes.data ?? []).map((s: Record<string, unknown>) => [s.item_key as string, s]))
     const rules = rulesRes.data ?? []
-    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules }) as Item[]
+    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [] }) as Item[]
 
-    if (action === 'list') return json({ items, rules, today })
+    // The screens show every gift idea (on the wall too, for now — Jake, 2026-09-27).
+    // Each under the family member's own name, so "Olivia" and "Liv" are one person on screen.
+    const family = familyRes.data ?? []
+    const ideas = (giftsRes.data ?? []).map((g) => {
+      const member = family.find((m) => m.id === g.for_member_id) ?? memberNamed(g.for_name, family)
+      return { ...g, for_name: member?.name ?? g.for_name }
+    })
+    if (action === 'list') return json({ items, rules, today, ideas })
 
     const push = async (title: string, text: string, tag: string) => {
       const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body: text, url: '/', tag } })

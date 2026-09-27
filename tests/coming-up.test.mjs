@@ -114,3 +114,21 @@ test('a rule can switch a kind off, or just change its notice', () => {
   assert.equal(longer['try1'].pokeOn, '2026-09-28')
   assert.equal(longer['try1'].nextStep, 'Check what’s needed and who drives', 'keeps Casa\'s step when the rule has none')
 })
+
+// Jake's bug report 2026-09-27 3:24 PM: an idea saved "for Olivia" is Liv's (full name Olivia Tabor),
+// so it belongs on "Liv's birthday" — a person by any of their names, whole words only.
+test('a birthday gathers the ideas saved under any of that person\'s names', () => {
+  const family = [{ id: 'm-liv', name: 'Liv', full_name: 'Olivia Tabor' }, { id: 'm-owen', name: 'Owen', full_name: 'Owen Tabor' }]
+  const birthdays = [
+    allDay('liv', "Liv's birthday", '2026-11-02', 'Casa · date we keep · birthday'),
+    allDay('oliver', "Oliver's birthday", '2026-11-03', 'Casa · date we keep · birthday'),
+  ]
+  const ideas = [
+    { for_name: 'Olivia', for_member_id: null, idea: 'a gymnastics coach' },
+    { for_name: 'Liv', for_member_id: 'm-liv', idea: 'a leotard' },
+    { for_name: 'Owen', for_member_id: 'm-owen', idea: 'a skateboard' },
+  ]
+  const items = byKey(buildComingUp({ now, events: birthdays, giftIdeas: ideas, family }))
+  assert.deepEqual(items['liv'].ideas, ['a gymnastics coach', 'a leotard'])
+  assert.deepEqual(items['oliver'].ideas, [])
+})

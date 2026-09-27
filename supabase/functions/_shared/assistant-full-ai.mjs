@@ -4,6 +4,7 @@
 // and four broad tools for changes only. Every change still comes back as the usual card that
 // needs a yes, and still meets the server's hard checks (a real date, an event that exists,
 // never a school-run copy). Dry runs only (`context.full_ai`), for side-by-side tests.
+import { memberNamed } from './family-names.mjs'
 
 /** Synced copies of school-routine runs ("Drop off Emme @ Palm Beach Public …"): never changed. */
 export function isRoutineCopy(title) {
@@ -54,7 +55,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
-    `FAMILY:\n${family.map((m) => `- ${m.name} (${[m.role, m.can_drive ? 'drives' : null].filter(Boolean).join(', ')})`).join('\n')}`,
+    `FAMILY:\n${family.map((m) => `- ${m.name} (${[m.full_name && m.full_name !== m.name ? m.full_name : null, m.role, m.can_drive ? 'drives' : null].filter(Boolean).join(', ')})`).join('\n')}`,
     `CALENDAR (today through three weeks out; [id] first):\n${events.map((e) => `- ${describeEvent(e, utcOffset)}`).join('\n') || '- nothing'}`,
     `GROCERY LIST ([id] first):\n${groceries.map((g) => `- ${g.id ? `[${g.id}] ` : ''}${g.name}${g.quantity ? ` (${g.quantity})` : ''}${g.checked ? ' · checked off' : ''}`).join('\n') || '- empty'}`,
   ]
@@ -175,7 +176,7 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     const idea = text(a.idea)
     if (!who) return { error: 'I need to know who the gift idea is for.' }
     if (!idea) return { error: 'I need the gift idea itself.' }
-    const member = family.find((m) => m.name.toLowerCase() === who.toLowerCase()) ?? null
+    const member = memberNamed(who, family)
     return { tool: 'add_gift_idea', args: { for_name: member?.name ?? who, for_member_id: member?.id ?? null, idea } }
   }
   const badDate = { error: "That isn't a real date and time I can put on the calendar." }
@@ -281,11 +282,14 @@ export function flubSignal(messages) {
  * the wall as well as phone. Later I can make it more private." So the wall reads them all; a phone
  * that knows who is holding it still leaves out the ideas for that person.
  */
-export function giftIdeasForViewer(rows, { viewerMemberId, page, forName }) {
+export function giftIdeasForViewer(rows, { viewerMemberId, page, forName, family = [] }) {
+  // An idea saved as "Olivia" is Liv's even when it wasn't linked to her when it was saved.
+  const whose = (r) => r.for_member_id ?? memberNamed(r.for_name, family)?.id ?? null
+  const wantedMember = forName ? memberNamed(forName, family) : null
   const wanted = forName ? String(forName).trim().toLowerCase() : null
   const ideas = (rows ?? [])
-    .filter((r) => page === 'wall' || !viewerMemberId || r.for_member_id !== viewerMemberId)
-    .filter((r) => !wanted || String(r.for_name).toLowerCase() === wanted)
+    .filter((r) => page === 'wall' || !viewerMemberId || whose(r) !== viewerMemberId)
+    .filter((r) => !wanted || (wantedMember ? whose(r) === wantedMember.id : String(r.for_name).trim().toLowerCase() === wanted))
     .map((r) => ({ for: r.for_name, idea: r.idea, saved: String(r.created_at).slice(0, 10) }))
   return { ideas }
 }

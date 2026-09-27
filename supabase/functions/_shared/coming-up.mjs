@@ -3,6 +3,7 @@
 // were ignored (3,414 checklist items, 20 checked; 92% of email prep items dismissed), so this one
 // stays small: a handful of kinds, one step each, and a poke on the day it's worth doing.
 // Shared by the `coming-up` function (wall, phone, pushes) and its tests.
+import { memberNamed, namesOf } from './family-names.mjs'
 
 const DAY = 86400e3
 const TZ = 'America/New_York'
@@ -66,7 +67,14 @@ function classify(e, rules, custom) {
  * `state`: { [key]: { done_at?, dismissed_at?, snoozed_until?, custom_step?, custom_lead_days? } }.
  * `rules`: the family's "every time" rules: { match (words in the title), step?, lead_days?, off? }.
  */
-export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [] }) {
+// Whose idea it is, by every name they go by ("Olivia" → Liv's birthday); anyone else by the name saved.
+const ideaNames = (g, family) => {
+  const member = (g.for_member_id && family.find((m) => m.id === g.for_member_id)) || memberNamed(g.for_name, family)
+  return member ? namesOf(member) : [String(g.for_name ?? '').trim().toLowerCase()].filter(Boolean)
+}
+const wholeWord = (title, name) => new RegExp(`(^|[^a-z])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z])`, 'i').test(title)
+
+export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [], family = [] }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const horizon = addDays(today, COMING_UP_WEEKS * 7)
   const seen = new Set()
@@ -90,7 +98,7 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     if (s.snoozed_until && s.snoozed_until > today) continue
     const title = String(e.title).trim()
     const ideas = k.gifts
-      ? giftIdeas.filter((g) => g.for_name && title.toLowerCase().includes(String(g.for_name).toLowerCase())).map((g) => g.idea)
+      ? giftIdeas.filter((g) => ideaNames(g, family).some((n) => wholeWord(title, n))).map((g) => g.idea)
       : undefined
     items.push({ key: e.id, kind: k.kind, title, date, daysAway: daysBetween(today, date), nextStep: k.step, pokeOn, late: pokeOn < today, ...(ideas ? { ideas } : {}) })
   }

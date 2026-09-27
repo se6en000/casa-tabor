@@ -65,3 +65,44 @@ test('saved server-side only: its own table with row security and no client acce
   const action = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
   assert.match(action, /if \(tool === 'add_gift_idea'\)[\s\S]{0,600}\.from\('gift_ideas'\)\s+\.insert\(/)
 })
+
+// Jake's bug report 2026-09-27 3:24 PM: "Gift idea for Olivia …" saved, then "What are some gift ideas
+// for Liv?" → none. Liv's full name is Olivia Tabor: a person is the same person by any of their names —
+// when saving, when reading back, and when keeping ideas off the phone of the person they're for.
+const namedFamily = [
+  { id: 'm-jake', name: 'Jake', full_name: 'Jacob Tabor', role: 'parent' },
+  { id: 'm-liv', name: 'Liv', full_name: 'Olivia Tabor', role: 'child' },
+  { id: 'm-emme', name: 'Emme', full_name: 'Emerson Tabor', role: 'child' },
+]
+
+test('a gift idea is linked to the family member by any of their names', () => {
+  const card = (who) => fullAiCard({ name: 'add_gift_idea', args: { for: who, idea: 'a gymnastics coach' } }, { ...ctx, family: namedFamily }).args
+  for (const who of ['Olivia', 'olivia tabor', 'Liv', 'LIV']) assert.deepEqual([card(who).for_name, card(who).for_member_id], ['Liv', 'm-liv'], who)
+  assert.equal(card('Emerson').for_member_id, 'm-emme')
+  assert.equal(card('Tabor').for_member_id, null) // a family name alone is nobody in particular
+})
+
+test('ideas read back for a person whichever of their names was used, either way round', () => {
+  const saved = [
+    { for_name: 'Olivia', for_member_id: null, idea: 'a gymnastics coach', created_at: '2026-09-27T19:23:44Z' },
+    { for_name: 'Liv', for_member_id: 'm-liv', idea: 'a leotard', created_at: '2026-09-27T19:30:00Z' },
+    { for_name: 'Jebb', for_member_id: null, idea: 'soccer sweatshirt', created_at: '2026-09-17T12:00:00Z' },
+  ]
+  const ask = (forName) => giftIdeasForViewer(saved, { viewerMemberId: 'm-jake', page: 'phone', forName, family: namedFamily }).ideas.map((i) => i.idea)
+  for (const who of ['Liv', 'Olivia', 'olivia tabor']) assert.deepEqual(ask(who), ['a gymnastics coach', 'a leotard'], who)
+  assert.deepEqual(ask('jebb'), ['soccer sweatshirt'])
+})
+
+test('an idea saved under a nickname or full name never reaches that person\'s phone', () => {
+  const saved = [
+    { for_name: 'Olivia', for_member_id: null, idea: 'a gymnastics coach', created_at: '2026-09-27T19:23:44Z' },
+    { for_name: 'Jebb', for_member_id: null, idea: 'soccer sweatshirt', created_at: '2026-09-17T12:00:00Z' },
+  ]
+  assert.deepEqual(giftIdeasForViewer(saved, { viewerMemberId: 'm-liv', page: 'phone', forName: null, family: namedFamily }).ideas.map((i) => i.idea), ['soccer sweatshirt'])
+})
+
+test('the assistant is told each person\'s full name, so "Olivia" reads as Liv', async () => {
+  const { buildFullAiSystem } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const system = buildFullAiSystem({ family: namedFamily, events: [], groceries: [], pending: [], onScreenIds: [], utcOffset: '-04:00', now: new Date('2026-09-27T12:00:00-04:00') })
+  assert.match(system, /Liv \(Olivia Tabor/)
+})

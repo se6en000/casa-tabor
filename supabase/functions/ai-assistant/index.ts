@@ -1171,7 +1171,7 @@ Deno.serve(async (req) => {
     const { from, until } = fullAiWindow(now, utcOffset)
     // Everything D answers from, in its context rather than behind search tools.
     const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows] = await Promise.all([
-      sb.from('family_members').select('id, name, role, can_drive').order('sort_order'),
+      sb.from('family_members').select('id, name, full_name, role, can_drive').order('sort_order'),
       sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
         .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
       sb.from('grocery_items').select('id, name, quantity, checked').is('deleted_at', null).order('checked').order('name').limit(200),
@@ -1254,7 +1254,7 @@ Deno.serve(async (req) => {
         } else if (call.name === 'get_gift_ideas') {
           // Surprise-safe (P3.19 step 2): only on the asker's phone, never the ideas for them.
           const { data } = await sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at').limit(100)
-          result = giftIdeasForViewer(data ?? [], { viewerMemberId: activeMemberId, page: context?.page ?? null, forName: call.args?.for ?? null })
+          result = giftIdeasForViewer(data ?? [], { viewerMemberId: activeMemberId, page: context?.page ?? null, forName: call.args?.for ?? null, family })
         } else if (call.name === 'search_family_notes') {
           // The same retrieval the old path loaded on every turn — here only when D asks.
           const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)
