@@ -1239,15 +1239,22 @@ _voice_until = 0.0
 _color_lock   = threading.Lock()
 _spi_last_target = None
 
-# The Family Wall's palette (P3.14, 2026-09-26): brass and gold by day; at night the same
-# moments in a warmer amber at about a third of the brightness; rust only for "didn't happen".
-BRASS = (168, 132, 80)         # wall brass #A88450
-GOLD = (201, 164, 106)         # night brass #C9A46A
-WARM_WHITE = (255, 226, 170)   # a gold-white highlight
-AMBER = (210, 120, 40)         # night warmth
-CANDLE = (255, 120, 20)        # the idle night glow
+# The Family Wall's palette. Jake, 2026-09-27: "a deep yellow gold … too bright for my eyes,
+# especially at night … as warm as possible … more mellow, less bright." So: no white in any of
+# it (blue kept near zero), deep gold by day at about half the old peak, a warmer ember at night
+# at about a third of that; rust only for "didn't happen". Each colour is the hue at full red; a
+# moment's brightness is its level (0–1) times the day or night peak.
+DEEP_GOLD = (255, 140, 10)     # by day
+GOLD_GLINT = (255, 150, 16)    # the brighter touch by day (a voice, the travelling light)
+EMBER = (255, 95, 8)           # at night
+EMBER_GLINT = (255, 108, 12)   # the brighter touch at night
 RUST = (154, 74, 42)           # wall rust #9A4A2A
-NIGHT_SCALE = 0.33
+DAY_PEAK = 60                  # red channel at full level, by day (was up to 128)
+NIGHT_PEAK = 20                # at night
+CONFIRM_DAY = (60, 34, 3)      # "saved": a deep gold swell
+CONFIRM_NIGHT = (20, 8, 1)
+CANCEL_DAY = (56, 24, 9)       # "didn't happen": a short rust fade
+CANCEL_NIGHT = (18, 7, 3)
 _led_night = False
 
 def _mix(c1: tuple[int, int, int], c2: tuple[int, int, int], a: float) -> tuple[float, float, float]:
@@ -1324,38 +1331,36 @@ def _frame_color(mode: str, i: int, t: float, voice_env: float, night: bool) -> 
     """One LED's colour for a mode at time t (seconds). Pure, so it can be checked off the Pi."""
     return _limit(_frame_color_raw(mode, i, t, voice_env, night))
 
+def _tone(color: tuple[int, int, int], level: float, night: bool) -> tuple[float, float, float]:
+    """A palette hue at a level (0–1) of the day or night peak."""
+    peak = NIGHT_PEAK if night else DAY_PEAK
+    return _scale(color, max(0.0, min(1.0, level)) * peak / 255.0)
+
 def _frame_color_raw(mode: str, i: int, t: float, voice_env: float, night: bool) -> tuple[float, float, float]:
-    breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / (3.4 if night else 2.6))
-    warm = AMBER if night else BRASS
-    scale = NIGHT_SCALE if night else 1.0
+    base, glint = (EMBER, EMBER_GLINT) if night else (DEEP_GOLD, GOLD_GLINT)
     if mode == "listening":
-        # Warm breathing, a slow gold sweep, and a ripple from the centre while someone speaks.
-        base = _scale(_mix(warm, GOLD, 0.25 + 0.35 * breathing), 0.18 + 0.22 * breathing)
-        head = (t / 1.6) * NUM_LEDS
-        dist = abs(i - (head % NUM_LEDS))
-        dist = min(dist, NUM_LEDS - dist)
-        sweep = _scale(_mix(GOLD, WARM_WHITE, 0.4), 0.30 * max(0.0, 1.0 - dist / 11.0))
+        # Your turn: the whole strip breathes as one, slowly; a voice brightens it from the centre.
+        breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / (4.2 if night else 3.4))
+        level = 0.50 + 0.22 * breathing
         center = (NUM_LEDS - 1) / 2.0
         d = abs(i - center) / max(center, 1.0)
-        ripple = _scale(WARM_WHITE, 0.45 * voice_env * max(0.0, math.sin((d * 11.0) - (t * 16.0))))
-        return _scale(_add(_add(base, sweep), ripple), scale)
+        ripple = 0.28 * voice_env * max(0.0, math.sin((d * 9.0) - (t * 12.0)))
+        return _add(_tone(base, level, night), _tone(glint, ripple, night))
     if mode == "processing":
-        # A soft gold shimmer travelling along the strip while Casa thinks.
-        think = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 1.1)
-        base = _scale(_mix(warm, GOLD, 0.5), 0.14 + 0.20 * think)
-        head = (t / 0.9) * NUM_LEDS
+        # Casa's turn: a dim strip with one soft light travelling along it.
+        head = (t / 1.1) * NUM_LEDS
         dist = abs(i - (head % NUM_LEDS))
         dist = min(dist, NUM_LEDS - dist)
-        shimmer = _scale(_mix(GOLD, WARM_WHITE, 0.35), 0.26 * max(0.0, 1.0 - dist / 7.0))
-        return _scale(_add(base, shimmer), scale)
+        light = max(0.0, 1.0 - dist / 8.0)
+        return _add(_tone(base, 0.18, night), _tone(glint, 0.80 * light * light, night))
     if mode == "waiting":
-        # Waiting for a yes: steady gold with a slow, gentle pulse (candle-steady at night).
+        # Waiting for a yes: steady, with a slow, gentle pulse.
         pulse = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 3.0)
-        return _scale(_mix(warm, GOLD, 0.6), (0.30 + 0.12 * pulse) * scale)
+        return _tone(base, 0.55 + 0.10 * pulse, night)
     if mode == "glow":
-        # Night idle: a faint candle glow with a slow, uneven flicker.
+        # Night idle: a faint ember with a slow, uneven flicker.
         flicker = 0.85 + 0.10 * math.sin(t * 1.3 + i * 0.7) + 0.05 * math.sin(t * 3.1 + i * 1.9)
-        return _scale(CANDLE, 0.07 * flicker)
+        return _tone(EMBER, 0.35 * flicker, True)
     return (0.0, 0.0, 0.0)
 
 def _comet_loop():
@@ -1470,7 +1475,7 @@ def _set_night(night: bool):
 
 @app.post("/led/listening")
 def led_listening(night: bool = False):
-    """Listening mode: warm breathing, a gold sweep and a voice ripple (dimmer amber at night)."""
+    """Listening: the whole strip breathes in deep gold (ember at night); a voice brightens it."""
     _set_night(night)
     with _led_lock:
         _set_mode("listening")
@@ -1479,7 +1484,7 @@ def led_listening(night: bool = False):
 
 @app.post("/led/processing")
 def led_processing(night: bool = False):
-    """Thinking: a soft gold shimmer travelling along the strip."""
+    """Thinking: one soft light travelling along a dim strip."""
     _set_night(night)
     with _led_lock:
         _set_mode("processing")
@@ -1497,7 +1502,7 @@ def led_waiting(night: bool = False):
 
 @app.post("/led/glow")
 def led_glow():
-    """Night, nobody talking to Casa: a faint candle glow."""
+    """Night, nobody talking to Casa: a faint ember glow."""
     _set_night(True)
     with _led_lock:
         _set_mode("glow")
@@ -1524,14 +1529,14 @@ async def led_voice_level(req: Request):
 # Burst colours stay under LED_MAX_BRIGHT per channel, so the cap never bleaches their hue.
 @app.post("/led/confirm")
 def led_confirm(night: bool = False):
-    """Saved: a warm gold-white swell, then back to the current mode."""
-    _start_burst(*((60, 36, 8) if night else (128, 100, 44)))
+    """Saved: a deep gold swell, then back to the current mode."""
+    _start_burst(*(CONFIRM_NIGHT if night else CONFIRM_DAY))
     return {"ok": True, "mode": "confirm"}
 
 @app.post("/led/cancel")
 def led_cancel(night: bool = False):
     """Cancelled or didn't work: a short fade in the wall's rust."""
-    _start_burst(*((40, 16, 6) if night else (110, 48, 24)))
+    _start_burst(*(CANCEL_NIGHT if night else CANCEL_DAY))
     return {"ok": True, "mode": "cancel"}
 
 @app.post("/led/off")
