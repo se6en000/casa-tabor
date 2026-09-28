@@ -180,6 +180,24 @@
   50%      { opacity: 1; }
 }
 
+/* The Wall's assistant band (listening vs thinking at a glance, 2026-09-27): movement and
+   fading only, so the Pi's Chromium can run them smoothly. */
+@keyframes wall-listen-ring {
+  0%   { transform: scale(1);    opacity: 0.6; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+@keyframes wall-think-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes wall-edge-breathe {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+@keyframes wall-edge-sweep {
+  0%   { transform: translateX(-480px); }
+  100% { transform: translateX(1920px); }
+}
+
 @keyframes ai-glow-border {
   0%   { box-shadow: 0 0 0 1.5px rgba(201,169,110,0.5),  0 0 12px  4px rgba(201,169,110,0.15); }
   25%  { box-shadow: 0 0 0 1.5px rgba(167,139,250,0.55), 0 0 20px  8px rgba(167,139,250,0.20); }
@@ -1205,6 +1223,12 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
   0% { transform: scale(0.2) rotate(0deg); opacity: 0; }
   40% { transform: scale(1.2) rotate(45deg); opacity: 1; }
   100% { transform: scale(1.6) rotate(90deg); opacity: 0; }
+}
+
+/* The assistant band over the night face (2026-09-27, Jake: "very little differentiation between
+   the AI and the calendar"): a raised, warmer surface than the dark ground. */
+.wall-band-over-night {
+  --color-wall-band: var(--color-wall-night-band);
 }
 
 /* Family Wall evening posture: every wall-* role takes its dark-ground value,

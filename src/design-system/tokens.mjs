@@ -157,6 +157,8 @@ export const DESIGN_TOKENS = {
     'wall-brass-ink': '#7A5A26',
     'wall-rust': '#9A4A2A',
     'wall-on-pigment': '#F6F1E8',
+    // The assistant band's surface: the wall's ink by day; raised and warmer over the night face.
+    'wall-band': '#26221D',
     'wall-pigment-1': '#4A4640',
     'wall-pigment-2': '#5F7382',
     'wall-pigment-3': '#6E4556',
@@ -173,6 +175,7 @@ export const DESIGN_TOKENS = {
     'wall-night-brass-ink': '#C9A46A',
     'wall-night-rust': '#D07A56',
     'wall-night-on-pigment': '#221E1A',
+    'wall-night-band': '#3A3128',
     'wall-night-pigment-1': '#BDB3A5',
     'wall-night-pigment-2': '#93A7B5',
     'wall-night-pigment-3': '#B98D9E',

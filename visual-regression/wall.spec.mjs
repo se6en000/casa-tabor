@@ -585,3 +585,17 @@ test('wall assistant: a tip retires once its ability has been used twice', async
   await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
   await expect(section.getByText(/gift idea/i)).toHaveCount(0)
 })
+
+// Jake, 2026-09-27: "when the AI is open in dark mode … very little differentiation between the AI
+// and the calendar". Over the evening face the band is raised and warmer, with a brass edge, and
+// the calendar behind steps back.
+test('wall assistant: over the evening face the band is a raised layer with a brass edge', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00&band=answer')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  const bg = await section.evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(bg).toBe('rgb(58, 49, 40)')
+  await expect(section.getByText('Is anyone driving to softball tomorrow?')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-over-evening.png')
+})

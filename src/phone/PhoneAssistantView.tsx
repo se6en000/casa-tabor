@@ -215,9 +215,13 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
               className="h-[48px] min-w-0 flex-1 rounded-full border border-solid border-wall-stone bg-wall-on-pigment px-[16px] text-phone-body text-wall-ink outline-none"
             />
             {mic && (
-              <button type="button" aria-label={mic.listening ? 'Stop listening' : 'Talk'} onClick={mic.toggle} className={`flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-ink bg-transparent p-0 text-wall-ink ${mic.listening ? 'ring-[6px] ring-wall-ink/15' : ''}`}>
-                <Mic size={20} />
-              </button>
+              // Listening looks like the wall's: a solid brass mic with a ring pulsing out.
+              <span className="relative flex h-[48px] w-[48px] shrink-0">
+                {mic.listening && <span aria-hidden="true" className="absolute inset-0 animate-[wall-listen-ring_2.4s_ease-out_infinite] rounded-full border-2 border-solid border-wall-brass" />}
+                <button type="button" aria-label={mic.listening ? 'Stop listening' : 'Talk'} onClick={mic.toggle} className={`relative flex h-[48px] w-[48px] items-center justify-center rounded-full border-2 border-solid p-0 ${mic.listening ? 'border-wall-brass bg-wall-brass text-wall-on-pigment' : 'border-wall-ink bg-transparent text-wall-ink'}`}>
+                  <Mic size={20} />
+                </button>
+              </span>
             )}
             <button type="submit" aria-label="Send" disabled={!text.trim() || thinking} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment disabled:opacity-40">
               <ArrowUp size={20} />

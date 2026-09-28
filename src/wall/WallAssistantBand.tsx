@@ -366,28 +366,57 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   return (
     <section
       aria-label="Assistant"
-      className="absolute bottom-0 left-0 z-10 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-ink px-[64px] py-[44px] font-body text-wall-on-pigment"
+      className="absolute bottom-0 left-0 z-10 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()
       }}
     >
+      {/* The top edge: always a brass line, so the band never blends into the calendar; it
+          breathes while Casa listens and a light sweeps across it while Casa thinks. */}
+      <div aria-hidden="true" className="pointer-events-none absolute left-[32px] right-[32px] top-0 h-[6px] overflow-hidden rounded-b-full">
+        {state === 'LISTENING'
+          ? <div className="h-full w-full animate-[wall-edge-breathe_2.4s_ease-in-out_infinite] bg-wall-night-brass" />
+          : state === 'THINKING'
+            ? <>
+                <div className="h-[3px] w-full bg-wall-night-brass/50" />
+                <div className="absolute left-0 top-0 h-full w-[480px] animate-[wall-edge-sweep_1.6s_linear_infinite] rounded-full bg-wall-night-brass" />
+              </>
+            : <div className="h-[3px] w-full bg-wall-night-brass/70" />}
+      </div>
       <div className="flex w-[200px] shrink-0 flex-col items-center gap-[16px]">
-        <button
-          type="button"
-          aria-label={speech.listening ? 'Stop listening' : 'Talk'}
-          onClick={() => { if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
-          className={`flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass bg-transparent p-0 text-wall-night-brass ${speech.listening ? 'ring-[14px] ring-wall-night-brass/25' : ''}`}
-        >
-          <Mic size={44} strokeWidth={1.6} />
-        </button>
-        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{state}</div>
+        <div className="relative flex h-[132px] w-[132px] items-center justify-center">
+          {/* Listening: your turn — a solid brass mic with rings pulsing out. */}
+          {state === 'LISTENING' && (
+            <>
+              <span aria-hidden="true" className="absolute inset-0 animate-[wall-listen-ring_2.4s_ease-out_infinite] rounded-full border-[3px] border-solid border-wall-night-brass" />
+              <span aria-hidden="true" className="absolute inset-0 animate-[wall-listen-ring_2.4s_ease-out_1.2s_infinite] rounded-full border-[3px] border-solid border-wall-night-brass" />
+            </>
+          )}
+          {/* Thinking: Casa's turn — an open ring with a brass arc going round it. */}
+          {state === 'THINKING' && (
+            <span aria-hidden="true" className="absolute -inset-[14px] animate-[wall-think-spin_1.2s_linear_infinite] rounded-full border-[4px] border-solid border-transparent border-t-wall-night-brass border-r-wall-night-brass" />
+          )}
+          <button
+            type="button"
+            aria-label={speech.listening ? 'Stop listening' : 'Talk'}
+            onClick={() => { if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
+            className={`relative flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass p-0 ${state === 'LISTENING' ? 'bg-wall-night-brass text-wall-ink' : 'bg-transparent text-wall-night-brass'}`}
+          >
+            <Mic size={44} strokeWidth={state === 'LISTENING' ? 2 : 1.6} />
+          </button>
+        </div>
+        <div className={`font-bold tracking-[0.2em] text-wall-night-brass ${state === 'LISTENING' || state === 'THINKING' ? 'text-wall-heading' : 'text-wall-label'}`}>{state}</div>
         <div className="whitespace-pre-line text-center text-wall-label text-wall-night-ink-2">
           {state === 'NEEDS A YES'
             ? 'Say yes, or change\nanything on it'
-            : state === 'LISTENING' && question
-              ? 'Keep talking, or\nsay “that’s all”'
-              : 'Say the wake word,\nor tap the mic'}
+            : state === 'THINKING'
+              ? 'One moment'
+              : state === 'LISTENING' && question
+                ? 'Keep talking, or\nsay “that’s all”'
+                : state === 'LISTENING'
+                  ? 'Go ahead'
+                  : 'Say the wake word,\nor tap the mic'}
         </div>
       </div>
 
@@ -400,7 +429,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">THIS CONVERSATION</div>
           <div className="flex flex-col gap-[12px] text-wall-detail leading-[1.35]">
             {thread.map((t, i) => (
-              <div key={i} className={t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-night-stone px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}>
+              <div key={i} className={t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}>
                 {t.text}
               </div>
             ))}
@@ -450,7 +479,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         ) : (
         <>
         <div className="font-display text-wall-quote font-medium italic">
-          {shownQuestion ? `“${shownQuestion}”` : 'Ask about the day, or ask to add something.'}
+          {shownQuestion ? `“${shownQuestion}”` : state === 'LISTENING' ? 'Go ahead — I’m listening.' : 'Ask about the day, or ask to add something.'}
         </div>
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
 

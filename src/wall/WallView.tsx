@@ -327,6 +327,8 @@ export default function WallView(props: WallViewProps) {
       />
     )
   }
+  // The dark evening face is on show (the day-ahead layout in the evening).
+  const nightFace = !comingUpOpen && evening && (!sameDay(dayOnShow, now) || !picked)
   const onLaunchFace = !comingUpOpen && sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
 
   return (
@@ -342,7 +344,14 @@ export default function WallView(props: WallViewProps) {
       {!onLaunchFace && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
       {!onLaunchFace && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
       {!onLaunchFace && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
-      {!selected && overlay}
+      {!selected && overlay && (
+        // Over the night face the band is raised and the calendar steps back a little, so the
+        // conversation reads as a layer of its own (Jake, 2026-09-27).
+        <div className={`contents ${nightFace ? 'wall-band-over-night' : ''}`}>
+          {nightFace && <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-wall-night-ground/40" />}
+          {overlay}
+        </div>
+      )}
       {shown.preview && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
           Previewing {POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
