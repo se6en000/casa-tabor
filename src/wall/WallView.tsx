@@ -18,6 +18,8 @@ import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
+import WallComingUp from './WallComingUp'
+import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
@@ -68,6 +70,8 @@ export interface WallViewProps {
   toggleChecklist?: (item: WallChecklistItem) => void
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
+  /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
+  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -82,7 +86,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent, comingUp = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -97,6 +101,8 @@ export default function WallView(props: WallViewProps) {
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
+  // Coming up, opened from the week strip's eighth tile: shown until "Back", or 2 idle minutes.
+  const [comingUpUntil, setComingUpUntil] = useState(0)
 
   const eventsById = useMemo(() => new Map(allEvents.map((e) => [e.id, e as EditableEvent])), [allEvents])
   // Surprise-safe: a celebration's prep (the gift, the card) never reaches the wall, where the honoree can see it.
@@ -146,6 +152,12 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setPreview(null), Math.max(0, preview.until - Date.now()))
     return () => window.clearTimeout(timer)
   }, [preview])
+  useEffect(() => {
+    const left = comingUpUntil - Date.now()
+    if (left <= 0) return
+    const timer = window.setTimeout(() => setComingUpUntil(0), left)
+    return () => window.clearTimeout(timer)
+  }, [comingUpUntil])
   useEffect(() => {
     if (!dayPreview) return
     const timer = window.setTimeout(() => setDayPreview(null), Math.max(0, dayPreview.until - Date.now()))
@@ -229,22 +241,43 @@ export default function WallView(props: WallViewProps) {
 
   const openMenu = () => setMenuOpen(true)
   const decisionsOn = (date: Date) => weekDecisions.filter((d) => sameDay(d.date, date))
-  const showDay = (date: Date) => setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
+  // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
+  const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
+  const showDay = (date: Date) => {
+    setComingUpUntil(0)
+    setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
+  }
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = week.length > 1 ? (
     <WallWeek
       days={weekDays(week, members, weekDecisions, now, checklist)}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
-      shownKey={dayOnShow.toDateString()}
+      shownKey={comingUpOpen ? '' : dayOnShow.toDateString()}
       onSelect={showDay}
+      comingUp={comingUp ? { ...comingUpTile(comingUp.items, comingUp.today), open: comingUpOpen, onOpen: () => { setDayPreview(null); setComingUpUntil(Date.now() + PREVIEW_MS) } } : null}
     />
   ) : null
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
   const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
 
   let face
-  if (!sameDay(dayOnShow, now) || (evening && !picked)) {
+  if (comingUpOpen && comingUp) {
+    face = (
+      <WallComingUp
+        now={now}
+        items={comingUp.items}
+        ideas={comingUp.ideas}
+        today={comingUp.today}
+        onAct={async (key, action) => {
+          setComingUpUntil(Date.now() + PREVIEW_MS)
+          await comingUp.act(key, action)
+        }}
+        onBack={() => setComingUpUntil(0)}
+        week={weekStrip}
+      />
+    )
+  } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
     // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
     const plan = planFor(dayOnShow)
     const isAuto = sameDay(dayOnShow, autoDay) && !picked
@@ -294,7 +327,7 @@ export default function WallView(props: WallViewProps) {
       />
     )
   }
-  const onLaunchFace = sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
+  const onLaunchFace = !comingUpOpen && sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
 
   return (
     <div

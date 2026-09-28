@@ -14,6 +14,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
+import type { ComingUpItem, GiftIdea } from './comingUp'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -30,6 +31,17 @@ const CHECKLIST = [
   { id: 'c5', event_id: 'baseball', label: 'Cleats', checked: false, sort_order: 2 },
   { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
 ]
+
+// Coming up (board 07a), shaped like the live list on 2026-09-27, dated from the fixture day.
+const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { inDays: number; pokeIn: number }> = [
+  { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning appointment', nextStep: 'Make sure it works with work', inDays: 3, pokeIn: -4, late: true },
+  { key: 'cu-columbus', kind: 'no_school', title: 'Columbus Day', nextStep: 'No school? Who’s with the kids', inDays: 15, pokeIn: 0, late: false },
+  { key: 'cu-dentist', kind: 'appointment', title: 'Dentist (Dr. Ledakis)', nextStep: 'Make sure it works with work', inDays: 12, pokeIn: 5, late: false },
+  { key: 'cu-forms', kind: 'deadline', title: 'Liv’s athletics forms due', nextStep: 'Get it done', inDays: 15, pokeIn: 6, late: false },
+  { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 68, pokeIn: 8, late: false, ideas: ['A fly-fishing reel'] },
+  { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving', nextStep: 'Hosting or going?', inDays: 60, pokeIn: 30, late: false },
+]
+const IDEAS: GiftIdea[] = [{ for_name: 'Carl', idea: 'A fly-fishing reel' }, { for_name: 'Jebb', idea: 'A soccer-team sweatshirt and T-shirt' }]
 
 export default function WallFixturePage() {
   const fontsReady = useFixtureFonts()
@@ -89,6 +101,9 @@ export default function WallFixturePage() {
       />
     </ProfileSessionContext.Provider>
   ) : null
+  const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => COMING_UP.map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
+  const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null
@@ -105,7 +120,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} />
+        } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} comingUp={comingUp} />
     </div>
     } />
     </Routes>

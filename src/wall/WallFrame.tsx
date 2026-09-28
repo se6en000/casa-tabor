@@ -13,6 +13,7 @@ import { toggleChecklistItem } from './useWallChecklist'
 import { useFamilyDay } from './useFamilyDay'
 import { createEventByTouch } from './createEvent'
 import WallView from './WallView'
+import { useComingUp } from './useComingUp'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
@@ -61,5 +62,6 @@ export default function WallFrame() {
   ) : null
   const createEvent = (args: Record<string, unknown>) => createEventByTouch(queryClient, args, 'wall')
 
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} />
+  const comingUp = useComingUp()
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act } : null} />
 }

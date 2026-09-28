@@ -400,6 +400,10 @@
       {
         "path": "src/phone/PhoneAssistantCard.tsx",
         "reason": "Phone (Family Wall family): the assistant card's yes / no and driver buttons and the which-one tiles (boards 06e/06f), part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallComingUp.tsx",
+        "reason": "Family Wall: Coming up (board 07a, approved 2026-09-27) — Done / Snooze / Not needed, Gift ideas and Back to today are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52px targets."
       }
     ]
   }

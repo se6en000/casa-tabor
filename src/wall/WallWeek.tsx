@@ -13,9 +13,11 @@ export interface WallWeekProps {
   /** The day on show (today unless one was tapped). */
   shownKey: string
   onSelect: (date: Date) => void
+  /** The eighth tile (board 07a): what needs planning; opens Coming up. */
+  comingUp?: { count: number; startNow: number; open: boolean; onOpen: () => void } | null
 }
 
-export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect }: WallWeekProps) {
+export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null }: WallWeekProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ''
   return (
     <section aria-label="Next seven days" className="flex shrink-0 flex-col">
@@ -57,6 +59,24 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect 
             </button>
           )
         })}
+        {comingUp && (
+          <button
+            type="button"
+            aria-label={`Coming up: ${comingUp.count} to plan${comingUp.startNow ? `, ${comingUp.startNow} to start now` : ''}`}
+            aria-pressed={comingUp.open}
+            onClick={(event) => {
+              event.stopPropagation()
+              comingUp.onOpen()
+            }}
+            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-brass/10 text-left text-wall-ink ${comingUp.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
+          >
+            <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">COMING UP</span>
+            <span className="font-display text-wall-heading font-bold leading-none">{comingUp.count} to plan</span>
+            <span className={`truncate text-wall-label font-bold ${comingUp.startNow ? 'text-wall-rust' : 'text-wall-ink-2'}`}>
+              {comingUp.startNow ? `${comingUp.startNow} to start now` : 'Nothing to start yet'}
+            </span>
+          </button>
+        )}
       </div>
     </section>
   )
