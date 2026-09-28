@@ -132,3 +132,15 @@ test('a birthday gathers the ideas saved under any of that person\'s names', () 
   assert.deepEqual(items['liv'].ideas, ['a gymnastics coach', 'a leotard'])
   assert.deepEqual(items['oliver'].ideas, [])
 })
+
+test('an item says whose gift ideas it carries, so a phone can keep them from that person', () => {
+  const family = [{ id: 'm-liv', name: 'Liv', full_name: 'Olivia Tabor' }]
+  const items = byKey(buildComingUp({
+    now,
+    events: [allDay('liv', "Liv's birthday", '2026-11-02', 'Casa · date we keep · birthday'), allDay('jebb', "Jebb's birthday", '2026-11-05', 'Casa · date we keep · birthday')],
+    giftIdeas: [{ for_name: 'Olivia', for_member_id: null, idea: 'a gymnastics coach' }, { for_name: 'Jebb', for_member_id: null, idea: 'a sweatshirt' }],
+    family,
+  }))
+  assert.deepEqual(items['liv'].ideasFor, ['m-liv'])
+  assert.deepEqual(items['jebb'].ideasFor, [])
+})

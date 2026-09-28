@@ -404,6 +404,10 @@
       {
         "path": "src/wall/WallComingUp.tsx",
         "reason": "Family Wall: Coming up (board 07a, approved 2026-09-27) — Done / Snooze / Not needed, Gift ideas and Back to today are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52px targets."
+      },
+      {
+        "path": "src/phone/PhoneComingUp.tsx",
+        "reason": "The phone lens: Coming up (board 07b, approved 2026-09-27) — Done / Snooze / Not needed, part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
       }
     ]
   }

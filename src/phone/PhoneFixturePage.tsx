@@ -18,6 +18,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 import type { PhoneLine } from './assistant'
 import { previewEvent, withDriver } from '../wall/editing'
 import { eventsFor, routinesFor, withKeptFrom, type KeepFrom } from '../wall/audience'
+import type { ComingUpItem } from '../wall/comingUp'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -70,6 +71,14 @@ function FixtureAssistant({ onClose, onAdd }: { onClose: () => void; onAdd: () =
   )
 }
 
+// Coming up (board 07b), dated from the fixture day (Sep 25): Kelly's birthday carries an idea for her.
+const COMING_UP: ComingUpItem[] = [
+  { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning appointment', nextStep: 'Make sure it works with work', date: '2026-09-28', pokeOn: '2026-09-21', daysAway: 3, late: true },
+  { key: 'cu-columbus', kind: 'no_school', title: 'Columbus Day', nextStep: 'No school? Who’s with the kids', date: '2026-10-12', pokeOn: '2026-09-28', daysAway: 17, late: false },
+  { key: 'cu-kelly', kind: 'birthday', title: 'Kelly’s birthday', nextStep: 'Pick a gift', date: '2026-11-20', pokeOn: '2026-09-29', daysAway: 56, late: false, ideas: ['That ceramic class in Delray'], ideasFor: ['kelly'] },
+  { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving Day', nextStep: 'Hosting or going?', date: '2026-11-26', pokeOn: '2026-10-27', daysAway: 62, late: false },
+]
+
 export default function PhoneFixturePage() {
   const fontsReady = useFixtureFonts()
   const params = new URLSearchParams(window.location.search)
@@ -81,6 +90,7 @@ export default function PhoneFixturePage() {
   const [checklist, setChecklist] = useState(CHECKLIST)
   const [evs, setEvs] = useState(events as unknown as WallEvent[])
   const [keep, setKeep] = useState<KeepFrom>({})
+  const [comingUp, setComingUp] = useState(COMING_UP)
   // Only what this phone's person may see, as the live phone does (audience.ts).
   const audience = { kind: 'member' as const, memberId: viewerId }
   const shown = eventsFor(audience, evs, members as WallMember[], keep)
@@ -106,6 +116,7 @@ export default function PhoneFixturePage() {
               week={week}
               events={shown}
               keepFrom={keep}
+              comingUp={{ items: comingUp, today: '2026-09-25', act: async (key) => setComingUp((list) => list.filter((i) => i.key !== key)) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               checklist={checklist}
               scan={async () => SCANNED}

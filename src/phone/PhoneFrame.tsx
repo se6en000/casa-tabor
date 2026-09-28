@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { saveDraft } from '../wall/saveDraft'
 import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
+import { useComingUp } from '../wall/useComingUp'
 import { toggleChecklistItem } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
@@ -27,6 +28,7 @@ export default function PhoneFrame() {
   )
   const { data: contacts = [] } = useSavedContacts()
   const { data: places = [] } = useSavedPlaces()
+  const comingUp = useComingUp()
   return (
     <PhoneView
       now={now}
@@ -46,6 +48,7 @@ export default function PhoneFrame() {
       setKeptFrom={setKeptFrom}
       contacts={contacts}
       places={places}
+      comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act } : null}
     />
   )
 }

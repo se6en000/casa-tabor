@@ -68,8 +68,9 @@ function classify(e, rules, custom) {
  * `rules`: the family's "every time" rules: { match (words in the title), step?, lead_days?, off? }.
  */
 // Whose idea it is, by every name they go by ("Olivia" → Liv's birthday); anyone else by the name saved.
+const ideaOwner = (g, family) => (g.for_member_id && family.find((m) => m.id === g.for_member_id)) || memberNamed(g.for_name, family)
 const ideaNames = (g, family) => {
-  const member = (g.for_member_id && family.find((m) => m.id === g.for_member_id)) || memberNamed(g.for_name, family)
+  const member = ideaOwner(g, family)
   return member ? namesOf(member) : [String(g.for_name ?? '').trim().toLowerCase()].filter(Boolean)
 }
 const wholeWord = (title, name) => new RegExp(`(^|[^a-z])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z])`, 'i').test(title)
@@ -97,10 +98,11 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     if (s.done_at || s.dismissed_at) continue
     if (s.snoozed_until && s.snoozed_until > today) continue
     const title = String(e.title).trim()
-    const ideas = k.gifts
-      ? giftIdeas.filter((g) => ideaNames(g, family).some((n) => wholeWord(title, n))).map((g) => g.idea)
-      : undefined
-    items.push({ key: e.id, kind: k.kind, title, date, daysAway: daysBetween(today, date), nextStep: k.step, pokeOn, late: pokeOn < today, ...(ideas ? { ideas } : {}) })
+    const matched = k.gifts ? giftIdeas.filter((g) => ideaNames(g, family).some((n) => wholeWord(title, n))) : null
+    const ideas = matched?.map((g) => g.idea)
+    // Whose ideas these are (family members only), so a phone can keep them from that person.
+    const ideasFor = matched ? [...new Set(matched.map((g) => ideaOwner(g, family)?.id).filter(Boolean))] : null
+    items.push({ key: e.id, kind: k.kind, title, date, daysAway: daysBetween(today, date), nextStep: k.step, pokeOn, late: pokeOn < today, ...(ideas ? { ideas, ideasFor } : {}) })
   }
   return items.sort((a, b) => a.pokeOn.localeCompare(b.pokeOn) || a.date.localeCompare(b.date))
 }

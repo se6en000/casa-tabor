@@ -13,6 +13,8 @@ import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
 import PhoneScanSheet from './PhoneScanSheet'
+import PhoneComingUp, { comingUpSummary } from './PhoneComingUp'
+import { forViewer, type ComingUpAction, type ComingUpItem } from '../wall/comingUp'
 import type { ScannedItem } from '../utils/documentScanner'
 import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
@@ -55,6 +57,8 @@ export interface PhoneViewProps {
   /** Keep from… (05g): who each event is kept from, and the change. */
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
+  /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
+  comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -87,8 +91,9 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [] }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
+  const [weekView, setWeekView] = useState<'week' | 'coming'>('week')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan } | null>(null)
@@ -286,9 +291,39 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   )
 
   const days = weekDays(week, members, [], now, checklist)
-  const weekScreen = (
+  const comingUpItems = comingUp ? forViewer(comingUp.items, viewerId) : []
+  const weekSwitch = comingUp ? (
+    <div role="group" aria-label="Week or Coming up" className="flex shrink-0 rounded-full border border-solid border-wall-stone p-[3px]">
+      {(['week', 'coming'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={weekView === v}
+          onClick={() => setWeekView(v)}
+          className={`h-[44px] whitespace-nowrap rounded-full border-0 px-[10px] text-phone-detail ${weekView === v ? 'bg-wall-ink font-semibold text-wall-on-pigment' : 'bg-transparent text-wall-ink-2'}`}
+        >
+          {v === 'week' ? 'This week' : 'Coming up'}
+        </button>
+      ))}
+    </div>
+  ) : null
+  const weekScreen = comingUp && weekView === 'coming' ? (
+    <div className="flex flex-col gap-[6px]">
+      <div className="flex items-end justify-between gap-[10px]">
+        <div className="flex min-w-0 flex-col">
+          <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{comingUpSummary(comingUpItems, comingUp.today)}</span>
+          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Coming up</h1>
+        </div>
+        {weekSwitch}
+      </div>
+      <PhoneComingUp items={comingUpItems} today={comingUp.today} onAct={comingUp.act} />
+    </div>
+  ) : (
     <div className="flex flex-col gap-[10px]">
-      <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
+      <div className="flex items-end justify-between gap-[10px]">
+        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
+        {weekSwitch}
+      </div>
       {days.map((d, i) => (
         <button
           key={d.key}

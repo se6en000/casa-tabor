@@ -14,6 +14,8 @@ export interface ComingUpItem {
   pokeOn: string
   late: boolean
   ideas?: string[]
+  /** The family members those ideas are for — a phone keeps them from that person. */
+  ideasFor?: string[]
 }
 export interface GiftIdea { for_name: string; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'
@@ -97,4 +99,9 @@ export function comingUpPages(items: ComingUpItem[], today: string, sizes = COMI
     start = end
   }
   return pages
+}
+
+/** On a phone: never the gift ideas meant for whoever is holding it (as the assistant does). */
+export function forViewer(items: ComingUpItem[], viewerId: string): ComingUpItem[] {
+  return items.map((i) => (i.ideas && viewerId && i.ideasFor?.includes(viewerId) ? { ...i, ideas: undefined } : i))
 }

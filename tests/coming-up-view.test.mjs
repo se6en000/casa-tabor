@@ -79,3 +79,10 @@ test('a short list is one page, as before', () => {
   assert.deepEqual(pages[0].map((col) => col.map((e) => e.item.key)), [['ac', 'columbus', 'dentist'], ['carl', 'thanks']])
   assert.deepEqual(comingUpPages([], today), [])
 })
+
+test('on a phone, an item keeps its gift ideas from the person they are for', async () => {
+  const { forViewer } = await import('../src/wall/comingUp.ts')
+  const liv = item('liv', '2026-09-27', '2026-11-02', 36, { kind: 'birthday', ideas: ['a gymnastics coach'], ideasFor: ['m-liv'] })
+  assert.equal(forViewer([liv], 'm-liv')[0].ideas, undefined)
+  assert.deepEqual(forViewer([liv], 'm-jake')[0].ideas, ['a gymnastics coach'])
+})
