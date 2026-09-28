@@ -74,7 +74,10 @@ const TODOS: TodoList = {
       todoItem('td-heater', 'Troubleshoot the water heater E05 error', { shape: 'fix', minutes: 30, nextStep: 'Look up E05 for this model', needs: ['Hot water'] }),
       todoItem('td-arlo', 'Install the Arlo camera with solar', { shape: 'fix', minutes: 60, needs: ['Daylight'] }),
     ],
-    nudge: [todoItem('td-tub', 'Run the washing machine tub clean', { shape: 'nudge', minutes: 30 })],
+    nudge: [
+      todoItem('td-trash', 'Trash out to the street', { shape: 'nudge', minutes: 5, due: '2026-09-25', dueAt: new Date(2026, 8, 25, 20, 0).toISOString() }),
+      todoItem('td-tub', 'Run the washing machine tub clean', { shape: 'nudge', minutes: 30 }),
+    ],
     dated: [],
     unsorted: [],
   },

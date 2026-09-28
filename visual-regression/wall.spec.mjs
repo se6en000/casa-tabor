@@ -76,7 +76,7 @@ test('wall: tapping an item opens its details; Edit shows what changes before sa
   expect(await field.evaluate((el) => { const text = el.firstElementChild; return text.scrollWidth <= text.clientWidth + 1 })).toBe(true)
   for (let i = 0; i < 24; i += 1) await wall.getByRole('button', { name: 'Delete' }).click()
   await expect(sheet.getByText('was Softball: Huskies @ RPB Cascade')).toBeVisible()
-  await wall.getByRole('button', { name: 'Done' }).click()
+  await wall.getByLabel('Keyboard').getByRole('button', { name: 'Done' }).click()
 
   await sheet.getByRole('button', { name: 'Cancel' }).click()
   await expect(sheet.getByRole('button', { name: 'Edit' })).toBeVisible()
@@ -298,7 +298,7 @@ test('wall: Edit with nothing changed shows Done, and one tap closes the whole s
   await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
   await wall.getByRole('button', { name: 'Edit' }).click()
   await expect(wall.getByRole('button', { name: 'Save' })).toHaveCount(0)
-  await wall.getByRole('button', { name: 'Done' }).click()
+  await wall.getByRole('region', { name: /details$/ }).getByRole('button', { name: 'Done' }).click()
   await expect(wall.getByRole('region', { name: /details$/ })).toHaveCount(0)
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
@@ -714,4 +714,32 @@ test('wall: swiping past Coming up reaches To do', async ({ page }) => {
   await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
   await touchSwipe(page, [1100, 600], [1500, 600])
   await expect(page.getByText('6 things to plan')).toBeVisible()
+})
+
+// The surface of To do (board 09a): tonight's nudge on the evening face; one small job in a quiet stretch.
+test('wall: tonight\'s nudge leads the evening face with Done; a quiet stretch offers one small job (board 09a)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const tonight = page.getByRole('region', { name: 'Tonight’s reminder', exact: true })
+  await expect(tonight.getByText('TONIGHT · 8:00')).toBeVisible()
+  await expect(tonight.getByText('Trash out to the street')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('evening-nudge.png')
+  await tonight.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByRole('region', { name: 'Tonight’s reminder', exact: true })).toHaveCount(0)
+  await expect(page.getByText('TOMORROW', { exact: true }).first()).toBeVisible()
+
+  // Not before two hours ahead.
+  await page.goto('/__wall-fixture?at=2026-09-25T17:30:00')
+  await expect(page.getByRole('region', { name: 'Tonight’s reminder', exact: true })).toHaveCount(0)
+})
+
+test('wall: in a quiet stretch, one small job with Done', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
+  await expect(page.getByText(/A quiet stretch/)).toBeVisible()
+  const meanwhile = page.getByRole('region', { name: 'Meanwhile' })
+  await expect(meanwhile.getByText(/MEANWHILE · \d+ MIN/)).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-meanwhile.png')
+  await meanwhile.getByRole('button', { name: 'Done' }).click()
+  await expect(meanwhile.getByText(/MEANWHILE/)).toBeVisible() // the next one that fits takes its place
 })

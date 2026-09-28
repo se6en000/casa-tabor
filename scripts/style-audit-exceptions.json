@@ -412,6 +412,10 @@
       {
         "path": "src/wall/WallTodos.tsx",
         "reason": "Family Wall: To do (board 09b, approved 2026-09-28) — Done, Not now, the snooze choices, group headers and Yes/Keep are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
+      },
+      {
+        "path": "src/wall/WallNudge.tsx",
+        "reason": "Family Wall: tonight's nudge and the quiet-stretch step (board 09a, approved 2026-09-28) — Done and Later tonight are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52–64px targets."
       }
     ]
   }

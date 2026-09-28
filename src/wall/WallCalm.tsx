@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
 import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
@@ -36,10 +36,12 @@ export interface WallCalmProps {
   onOpenDecisions?: () => void
   /** Tomorrow speaking up in the afternoon. */
   tomorrow?: TomorrowNote | null
+  /** One small job for the quiet stretch (P3.22, board 09a). */
+  meanwhile?: ReactNode
 }
 
 /** The calm posture (board 02b): a big clock, where everyone is, and the day in miniature. */
-export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, decisionCount = 0, onOpenDecisions, tomorrow = null }: WallCalmProps) {
+export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, decisionCount = 0, onOpenDecisions, tomorrow = null, meanwhile = null }: WallCalmProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const next = useMemo(() => (plan ? calmNextLine(describeNextMove(selectNextMove(plan, now), members, now)) : null), [plan, members, now])
   const clock = formatWallClock(now)
@@ -85,6 +87,7 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
               </button>
             ))}
           </div>
+          {meanwhile}
         </div>
       </div>
 

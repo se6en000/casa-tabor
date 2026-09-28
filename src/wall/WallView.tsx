@@ -22,7 +22,8 @@ import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
-import { todoTile, type TodoAction, type TodoList } from './todos'
+import { quietStep, todoTile, tonightNudge, type TodoAction, type TodoList } from './todos'
+import { WallNudge, WallQuietStep } from './WallNudge'
 import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
@@ -113,6 +114,8 @@ export default function WallView(props: WallViewProps) {
   const [comingUpUntil, setComingUpUntil] = useState(0)
   // To do, opened from its tile (or a swipe past Coming up): up until "Back", or 2 idle minutes.
   const [todoUntil, setTodoUntil] = useState(0)
+  // "Later tonight" on a nudge: off the wall for 45 minutes (the watch's reminder is untouched).
+  const [nudgeLater, setNudgeLater] = useState<{ id: string; until: number } | null>(null)
 
   const eventsById = useMemo(() => new Map(allEvents.map((e) => [e.id, e as EditableEvent])), [allEvents])
   // Surprise-safe: a celebration's prep (the gift, the card) never reaches the wall, where the honoree can see it.
@@ -307,6 +310,19 @@ export default function WallView(props: WallViewProps) {
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
   const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
 
+  // The surface of To do (board 09a): tonight's nudge on the evening face, one small job in a quiet stretch.
+  const nudgeItem = todos ? tonightNudge(todos.list, now) : null
+  const nudge = nudgeItem && !(nudgeLater?.id === nudgeItem.id && Date.now() < nudgeLater.until) ? nudgeItem : null
+  const tonight = nudge && todos ? (
+    <WallNudge
+      item={nudge}
+      onDone={() => void todos.act({ action: 'done', id: nudge.id })}
+      onLater={() => setNudgeLater({ id: nudge.id, until: Date.now() + 45 * 60_000 })}
+    />
+  ) : null
+  const smallJob = todos ? quietStep(todos.list, now, move?.leaveAt ?? null) : null
+  const meanwhile = smallJob && todos ? <WallQuietStep item={smallJob} onDone={() => void todos.act({ action: 'done', id: smallJob.id })} /> : null
+
   let face
   if (todoOpen && todos) {
     face = (
@@ -365,10 +381,11 @@ export default function WallView(props: WallViewProps) {
         onSeeAllPacking={() => setPackingOpen(true)}
         week={weekStrip}
         onBack={picked ? () => setDayPreview(null) : undefined}
+        tonight={evening && !picked ? tonight : null}
       />
     )
   } else if (shown.posture === 'calm') {
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} tomorrow={tomorrowNote} />
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} tomorrow={tomorrowNote} meanwhile={meanwhile} />
   } else {
     // The full day (also Today tapped in the evening).
     face = (

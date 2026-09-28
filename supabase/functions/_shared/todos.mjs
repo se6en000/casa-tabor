@@ -46,6 +46,8 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         nextStep: d.next_step ?? null,
         needs,
         due,
+        // The time too, for a nudge ("trash out at 8").
+        dueAt: r.has_due_date ? new Date(r.start_time).toISOString() : null,
         // Only a real date can be late; an undated to-do is never "overdue".
         overdue: Boolean(due && due < today),
         snoozedUntil,

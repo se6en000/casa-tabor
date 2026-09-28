@@ -38,6 +38,8 @@ export interface WallEveningProps {
   week?: ReactNode
   /** Shown when a day was tapped (not the day the wall picked by itself). */
   onBack?: () => void
+  /** Tonight's nudge (P3.22, board 09a): takes the header's right side from the big date. */
+  tonight?: ReactNode
 }
 
 /** Rows per packing column, and columns, that fit beside the decision and the first departure. */
@@ -74,7 +76,7 @@ function PackingGroupView({ group, onToggleItem, onOpenEvent }: { group: FittedP
  * deciding, what to get and pack, and the first departure. In the evening it is
  * tomorrow, dark; by day it is whichever day was tapped in the week strip.
  */
-export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack, tonight = null }: WallEveningProps) {
   // A day that hasn't started reads as plans ("Leaves at 11:56"): its Score is drawn from its start.
   const asOf = useMemo(() => {
     if (!plan || plan.date.toDateString() === now.toDateString()) return now
@@ -102,6 +104,10 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
           <div className="font-display text-wall-date italic text-wall-ink-2">{label}</div>
         </div>
         <div className="w-px shrink-0 bg-wall-rule" />
+        {tonight ? (
+          // Clear of the +, mic and MT buttons in the top right.
+          <div className="flex min-w-0 flex-1 items-center pr-[220px]">{tonight}</div>
+        ) : (
         <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
           <div className="flex min-w-0 flex-col gap-[8px]">
             <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">{heading}</div>
@@ -121,6 +127,7 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
             </button>
           )}
         </div>
+        )}
       </header>
 
       <WallScore score={score} now={asOf} heading={`${weekday} · WHO'S WHERE`} compact interaction={interaction} />
