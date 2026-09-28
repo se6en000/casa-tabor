@@ -113,3 +113,14 @@ test("an all-day event says its own day: Kelly's Birthday (stored at UTC midnigh
   const view = eventView({ eventId: 'bd', plan: null, events: [birthday], members, viewerId: 'jake-id', checklist: [] })
   assert.equal(view.when, 'SAT · ALL DAY')
 })
+
+// Board 08a on the phone: an event with nobody on it still shows in Family, marked "No one yet".
+test('Family shows an event with nobody on it, marked "No one yet" (not under anyone\'s filter)', () => {
+  const nobody = { id: 'portfolio', title: 'Portfolio trigger review', start_time: at(25, 9, 0).toISOString(), end_time: at(25, 9, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', members: [] }
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, nobody] })
+  const item = familyItems(plan, members, null).find((i) => i.id === 'portfolio')
+  assert.ok(item, 'listed')
+  assert.equal(item.sub, 'No one yet')
+  assert.deepEqual(item.people, [])
+  assert.ok(!familyItems(plan, members, 'kelly').some((i) => i.id === 'portfolio'))
+})

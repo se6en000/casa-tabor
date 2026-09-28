@@ -47,6 +47,8 @@ export interface WallEventSheetProps {
   onCreate?: (args: Record<string, unknown>) => Promise<void>
   /** The event as the draft would save it (null when nothing changed), for the Score behind the sheet. */
   onPreview: (event: EditableEvent | null) => void
+  /** Open straight into editing on the Who tab — from the "No one yet" row (board 08a). */
+  startOn?: 'who'
 }
 
 const midnight = (d: Date) => {
@@ -84,8 +86,8 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   // Adding by touch: the same sheet, opening straight into editing with the keyboard on the title.
   const isNew = event.id === NEW_EVENT_ID
   const [kind, setKind] = useState<'event' | 'reminder'>(event.event_type === 'reminder' ? 'reminder' : 'event')
-  const [mode, setMode] = useState<Mode>(isNew ? 'edit' : 'details')
-  const [tab, setTab] = useState<'when' | 'who'>('when')
+  const [mode, setMode] = useState<Mode>(isNew || props.startOn === 'who' ? 'edit' : 'details')
+  const [tab, setTab] = useState<'when' | 'who'>(props.startOn === 'who' ? 'who' : 'when')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [keyboard, setKeyboard] = useState<KeyboardTarget>(isNew ? 'title' : null)
   const [hourPicker, setHourPicker] = useState(false)
@@ -414,6 +416,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                   <button
                     key={t}
                     type="button"
+                    aria-pressed={tab === t}
                     onClick={() => { setKeyboard(null); setTab(t) }}
                     className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${tab === t ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
                   >

@@ -102,6 +102,8 @@ export default function WallView(props: WallViewProps) {
   // The + sheet: a blank item on the day on show.
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Opened from the "No one yet" row: straight to who's on it (board 08a).
+  const [selectedForWho, setSelectedForWho] = useState(false)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
   // Coming up, opened from the week strip's eighth tile: shown until "Back", or 2 idle minutes.
   const [comingUpUntil, setComingUpUntil] = useState(0)
@@ -184,7 +186,10 @@ export default function WallView(props: WallViewProps) {
   }, [selectedId, eventsById])
 
   const interaction: ScoreInteraction = {
-    onSelect: setSelectedId,
+    onSelect: (id) => {
+      setSelectedForWho(false)
+      setSelectedId(id)
+    },
     selectable: (id) => eventsById.has(id),
     highlight: selectedId
       ? { sourceId: selectedId, draft: Boolean(draftPreview) }
@@ -194,6 +199,11 @@ export default function WallView(props: WallViewProps) {
           ? { sourceId: pointAt, draft: false }
         : null,
     onOpenDecision: tripActions ? () => setDecisionsOpen(true) : undefined,
+    onAssign: (id) => {
+      if (!eventsById.has(id)) return
+      setSelectedForWho(true)
+      setSelectedId(id)
+    },
   }
   const openPerson = (memberId: string) => {
     const id = today ? eventForPerson(today, memberId, now, (sourceId) => eventsById.has(sourceId)) : null
@@ -389,10 +399,12 @@ export default function WallView(props: WallViewProps) {
           checklist={checklist}
           onClose={() => {
             setSelectedId(null)
+            setSelectedForWho(false)
             setDraftPreview(null)
           }}
           onPreview={setDraftPreview}
           onDelete={deleteEvent}
+          startOn={selectedForWho ? 'who' : undefined}
         />
       )}
       {adding && !selected && (

@@ -64,7 +64,14 @@ export default function WallFixturePage() {
   next.setDate(next.getDate() + 1)
   // Trip decisions live in memory here (the real wall saves them to settings).
   const [tripState, setTripState] = useState<WallTripState>({})
-  const [evs, setEvs] = useState(events as unknown as WallEvent[])
+  // `?nobody=1` (board 08a): Jake's portfolio review with nobody on it, as on 2026-09-28.
+  const [evs, setEvs] = useState(() => [
+    ...(events as unknown as WallEvent[]),
+    ...(new URLSearchParams(window.location.search).get('nobody') ? [{
+      id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
+      all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
+    } as unknown as WallEvent] : []),
+  ])
   const [checklist, setChecklist] = useState(CHECKLIST)
   const plan = (date: Date) =>
     buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: evs, tripState: dayState(tripState, date) })

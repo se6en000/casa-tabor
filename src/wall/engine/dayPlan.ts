@@ -153,6 +153,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   const trips: Trip[] = []
   const gaps: DayGap[] = []
   const unplaced: DayPlan['unplaced'] = []
+  const nobody: DayPlan['nobody'] = []
   const allDay: DayPlan['allDay'] = []
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
 
@@ -268,6 +269,8 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       allDay.push({ sourceId: event.id, title: event.title, memberIds: participants })
       continue
     }
+    // Nobody on it at all: no lane to draw it on, so it goes on the "No one yet" row (board 08a).
+    if (refs.length === 0) nobody.push({ sourceId: event.id, title: event.title, start, end })
 
     const placeStatus = classifyPlace(event, homeAddress)
     if (placeStatus !== 'away') {
@@ -417,5 +420,5 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     t.travelerIds.forEach((id) => activeMemberIds.add(id))
   }
 
-  return { date, lanes, trips, activeMemberIds, unplaced, allDay, gaps, sharedDestinations }
+  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations }
 }

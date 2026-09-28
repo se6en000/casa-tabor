@@ -58,6 +58,8 @@ export interface Score {
   everyoneHomeBy: { x: number; label: string; flip: boolean; laneIndex: number } | null
   /** All-day items (a birthday, "no school"): context for the day, drawn as one row under the hours, not in time. */
   allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }> }>
+  /** Timed items with nobody on them, placed in time on the "No one yet" row (board 08a). */
+  nobody: Array<{ sourceId: string; title: string; x: number; width: number }>
 }
 
 const MIN_BLOCK_WIDTH = 8
@@ -229,5 +231,10 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
       .map((id) => ({ id, initial: nameOf(id)?.charAt(0) ?? '?', pigmentIndex: pigmentFor(id) })),
   }))
 
-  return { lanes, everyoneHomeBy, allDay }
+  const nobody = plan.nobody.flatMap((item) => {
+    const at = span(item.start, item.end)
+    return at ? [{ sourceId: item.sourceId, title: item.title, ...at }] : []
+  })
+
+  return { lanes, everyoneHomeBy, allDay, nobody }
 }

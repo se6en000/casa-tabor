@@ -178,3 +178,15 @@ test('all-day items ride along to the Score: title, and the people in lane order
   assert.deepEqual(score.allDay.map((a) => [a.sourceId, a.title, a.people.map((p) => p.id)]), [['spirit-day-all', 'Spirit Day · wear school colors', ['emme', 'owen']]])
   assert.equal(score.allDay[0].people[0].pigmentIndex, pigmentOf(score, 'emme'))
 })
+
+// Board 08a: events with nobody on them are placed on the "No one yet" row, at their real time.
+test('the "No one yet" row: each one-less event at its time, and none when there are none', () => {
+  const nobody = { id: 'portfolio', title: 'Portfolio trigger review', start_time: at(25, 9, 0).toISOString(), end_time: at(25, 9, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', members: [] }
+  const score = buildScore(buildDayPlan({ date: FRIDAY, members, routines, events: [...events, nobody] }), members, at(25, 8, 9))
+  assert.equal(score.nobody.length, 1)
+  const [row] = score.nobody
+  assert.equal(row.sourceId, 'portfolio')
+  assert.equal(row.title, 'Portfolio trigger review')
+  assert.ok(row.x > 0 && row.width > 0)
+  assert.equal(buildScore(fridayPlan(), members, at(25, 8, 9)).nobody.length, 0)
+})

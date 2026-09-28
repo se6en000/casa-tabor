@@ -123,6 +123,8 @@ export interface DayPlan {
   activeMemberIds: Set<string>
   /** Timed items with no place recorded, e.g. a pickup reminder with no address. */
   unplaced: Array<{ sourceId: string; title: string; at: Date; memberIds: string[] }>
+  /** Timed items with nobody on them — the "No one yet" row (board 08a), so nothing goes missing. */
+  nobody: Array<{ sourceId: string; title: string; start: Date; end: Date }>
   /** All-day items (birthdays, spirit days) shown as notes, not lane blocks. */
   allDay: Array<{ sourceId: string; title: string; memberIds: string[] }>
   gaps: DayGap[]

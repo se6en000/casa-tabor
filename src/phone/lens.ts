@@ -159,6 +159,11 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
       people: order([...trip.travelerIds, ...(trip.driverId ? [trip.driverId] : [])]),
     })
   }
+  // Nobody on it yet (board 08a): it still shows, marked, in time order.
+  for (const n of plan.nobody) {
+    if (items.has(n.sourceId)) continue
+    items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, title: n.title, sub: 'No one yet', people: [] })
+  }
   // All-day items head the day; one for nobody in particular is for everyone.
   const allDay: FamilyItem[] = plan.allDay.map((a) => ({
     id: a.sourceId, time: 'All day', at: plan.date, title: a.title, sub: '', people: order(a.memberIds),

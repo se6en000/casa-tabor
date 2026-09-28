@@ -643,3 +643,22 @@ test('wall: a swipe is ignored while the assistant band is open', async ({ page 
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
 })
+
+// Board 08a (approved 2026-09-28): an event with nobody on it waits on a "No one yet" row.
+test('wall: an event with nobody on it waits on the "No one yet" row; a tap opens it on Who', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T08:09:00&nobody=1')
+  const score = page.getByRole('region', { name: "TODAY · WHO'S WHERE" })
+  await expect(score.getByText('No one yet')).toBeVisible()
+  await expect(score.getByText('Portfolio trigger review')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('no-one-yet.png')
+  await score.getByRole('button', { name: /Portfolio trigger review: no one on it yet/ }).click()
+  const sheet = page.getByRole('region', { name: /Portfolio trigger review/ })
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Who/ })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('wall: no "No one yet" row when everything has someone', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T08:09:00')
+  await expect(page.getByText('No one yet')).toHaveCount(0)
+})

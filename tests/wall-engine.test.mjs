@@ -331,3 +331,14 @@ test('with different drivers there is no chain (and nothing is merged)', () => {
   assert.equal(pickup.continuesTo, undefined)
   assert.equal(trip(plan, (t) => t.id === 'event:hangout').chainedFrom, undefined)
 })
+
+// Board 08a (Jake, 2026-09-28): the portfolio review had nobody on it and simply wasn't on the
+// Score. A timed event with no one attached is listed for the "No one yet" row instead.
+test('a timed event with nobody on it is kept for the "No one yet" row, not dropped', () => {
+  const nobody = { id: 'portfolio', title: 'Portfolio trigger review', start_time: at(25, 9, 0).toISOString(), end_time: at(25, 9, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [] }
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, nobody] })
+  assert.deepEqual(plan.nobody.map((n) => [n.sourceId, n.title, time(n.start), time(n.end)]), [['portfolio', 'Portfolio trigger review', time(at(25, 9, 0)), time(at(25, 9, 30))]])
+  assert.ok(![...plan.lanes.values()].flat().some((s) => s.sourceId === 'portfolio'), 'not on anyone\'s lane')
+  // Events with people, all-day notes and routine copies never land there.
+  assert.ok(!friday().nobody.length, 'the fixture day has no one-less events')
+})

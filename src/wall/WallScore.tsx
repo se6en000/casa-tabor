@@ -94,6 +94,8 @@ export interface ScoreInteraction {
   /** Calendar/routine source id → the open decision about it; shown as a "?" on its block. */
   marks?: Record<string, string>
   onOpenDecision?: (decisionKey: string) => void
+  /** The "No one yet" row: open the event to say who's on it (board 08a). */
+  onAssign?: (sourceId: string) => void
 }
 
 export interface WallScoreProps {
@@ -131,9 +133,11 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
   const lanes = score?.lanes ?? []
   const labels = useLabelFit(score)
   const at = LANE_GEOMETRY[compact ? 'compact' : 'full']
+  // The "No one yet" row (board 08a) adds its own height rather than squeezing the lanes.
+  const hasNobody = Boolean(score && score.nobody.length > 0)
 
   return (
-    <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? 'h-[382px]' : 'h-[500px]'}`}>
+    <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}>
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
           {heading}
@@ -292,6 +296,40 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             </div>
           </div>
         ))}
+        {score && score.nobody.length > 0 && (
+          // Board 08a: an event with nobody on it has no lane, so it waits here — a gap to fill,
+          // drawn like the other gaps (dashed, brass-ink), not an alarm. Only when there is one.
+          <div data-nobody className={`flex shrink-0 border-0 border-t border-dashed border-wall-brass bg-wall-brass/5 ${compact ? 'h-[48px]' : 'h-[66px]'}`}>
+            <div className="flex w-[300px] shrink-0 items-center gap-[14px]">
+              <span aria-hidden="true" className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-wall-brass-ink font-display text-wall-heading font-bold text-wall-brass-ink">?</span>
+              <div className="min-w-0">
+                <div className="font-display text-wall-name font-bold italic text-wall-ink-2">No one yet</div>
+                {!compact && <div className="text-wall-label text-wall-ink-2">Tap one to say who</div>}
+              </div>
+            </div>
+            <div className="w-[20px] shrink-0" />
+            <div className="relative w-[1512px]">
+              {score.nobody.map((item) => (
+                <div key={item.sourceId}>
+                  <div className={`absolute ${at.label} truncate whitespace-nowrap text-wall-detail font-semibold`} style={{ left: item.x, maxWidth: TIMELINE_WIDTH - item.x }}>
+                    {item.title}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`${item.title}: no one on it yet — say who`}
+                    disabled={!interaction?.onAssign}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      interaction?.onAssign?.(item.sourceId)
+                    }}
+                    className={`absolute ${at.bar} rounded-[6px] border-2 border-dashed border-wall-brass-ink bg-transparent p-0`}
+                    style={{ left: item.x - Math.max(0, (MIN_HIT_WIDTH - item.width) / 2), width: Math.max(item.width, MIN_HIT_WIDTH) }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {score?.everyoneHomeBy && (
