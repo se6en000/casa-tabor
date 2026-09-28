@@ -31,7 +31,7 @@ export default function PhoneComingUp({ items, today, onAct }: PhoneComingUpProp
     <div className="flex flex-col">
       {sections.map((s) => (
         <section key={s.heading} aria-label={s.heading} className="flex flex-col">
-          <h2 className="m-0 mt-[8px] pb-[6px] text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">{s.heading}</h2>
+          <h2 className="m-0 mt-[8px] pb-[6px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">{s.heading}</h2>
           {s.items.map((item) => {
             const day = new Date(`${item.date}T12:00:00Z`)
             return (

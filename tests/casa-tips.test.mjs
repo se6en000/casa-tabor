@@ -35,3 +35,11 @@ test('otherwise it rotates, and never runs out', () => {
   const all = Object.fromEntries(CASA_TIPS.flatMap((t) => (t.uses ? [[t.id, 5]] : [])))
   assert.ok(pickTip({ question: 'hmm', usage: all, seed: 3 }), 'still a tip when all are known')
 })
+
+test('"Casa, what can you do?" is answered from the same list, briefly, pointing at "What can I say?"', async () => {
+  const { buildFullAiSystem } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: [], onScreenIds: [], utcOffset: '-04:00', now: new Date('2026-09-27T12:00:00-04:00') })
+  assert.match(system, /WHAT YOU CAN DO/)
+  for (const t of CASA_TIPS) assert.ok(system.includes(t.text), t.id)
+  assert.match(system, /What can I say\?/)
+})

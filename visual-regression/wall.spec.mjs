@@ -555,3 +555,33 @@ test('wall: Coming up with a long list — nothing runs under the week strip; "N
   await page.getByRole('button', { name: 'First page' }).click()
   await expect(page.getByText('EDS Air Conditioning Appointment')).toBeVisible()
 })
+
+// Tips while Casa thinks (board 07e): one fitting tip under THINKING; "What can I say?" lists them by topic.
+test('wall assistant: while Casa thinks, a tip that fits the question; "What can I say?" lists the rest (board 07e)', async ({ page }) => {
+  await band(page, 'thinking')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
+  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(section.getByText(/gift idea/i).first()).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-thinking-tip.png')
+  await section.getByRole('button', { name: 'What can I say?' }).click()
+  for (const topic of ['CALENDAR', 'COMING UP', 'GIFT IDEAS', 'GROCERIES & RECIPES', 'TALKING TO CASA']) await expect(section.getByText(topic, { exact: true })).toBeVisible()
+  await expect(section.getByText(/Any spirit day, give me 5 days/)).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-what-can-i-say.png')
+  await section.getByRole('button', { name: 'Close the list' }).click()
+  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+})
+
+test('wall assistant: a tip retires once its ability has been used twice', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  await page.evaluate(() => localStorage.setItem('casa-tip-usage', JSON.stringify({ 'gift-save': 2, 'gift-list': 2 })))
+  await band(page, 'thinking')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(section.getByText(/gift idea/i)).toHaveCount(0)
+})

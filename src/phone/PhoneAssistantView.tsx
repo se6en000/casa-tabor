@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Bug, ChevronLeft, Loader2, Mic } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUp, Bug, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
 import type { WhichOne } from '../wall/assistant'
 import type { AssistantCard } from '../wall/assistantCard'
 import type { WallMember } from '../wall/engine/types'
 import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
+import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
 
 // Say it (board 05e): the family's assistant on the phone — the same one the wall's band
 // talks to. Type (or use the keyboard's dictation, or the mic), read the answer, and a
@@ -50,6 +51,16 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
   const [happened, setHappened] = useState('')
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
   const endRef = useRef<HTMLDivElement>(null)
+  // "What can I say?" (board 07f) and a tip while Casa thinks (07e), from the wall's own list.
+  const [saying, setSaying] = useState(false)
+  const lastAsked = [...lines].reverse().find((l) => l.role === 'user')
+  const noted = useRef<string | null>(null)
+  useEffect(() => {
+    if (!lastAsked || noted.current === lastAsked.id) return
+    noted.current = lastAsked.id
+    noteSaid(lastAsked.text)
+  }, [lastAsked])
+  const tip = useMemo(() => (thinking ? tipFor(lastAsked?.text ?? null, lines.length) : null), [thinking, lastAsked?.text, lines.length])
 
   // The newest line in view as the conversation grows.
   useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [lines.length, thinking, pending, note, card, which])
@@ -87,14 +98,27 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
   return (
     <section aria-label="Ask Casa" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-        <button type="button" aria-label="Back" onClick={reporting ? backToTalk : onClose} className={round}><ChevronLeft size={20} /></button>
-        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : 'Ask Casa'}</h1>
+        <button type="button" aria-label="Back" onClick={reporting ? backToTalk : saying ? () => setSaying(false) : onClose} className={round}><ChevronLeft size={20} /></button>
+        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : saying ? 'What can I say?' : 'Ask Casa'}</h1>
+        {!reporting && !saying && (
+          <button type="button" aria-label="What can I say?" onClick={() => setSaying(true)} className={`${round} text-wall-brass-ink`}><CircleHelp size={20} /></button>
+        )}
         {!reporting && (
           <button type="button" aria-label="Report a problem" onClick={() => setReporting(true)} className={`${round} text-wall-ink-2`}><Bug size={18} /></button>
         )}
       </div>
 
-      {reporting ? (
+      {saying && !reporting ? (
+        <div className="flex flex-1 flex-col gap-[4px] overflow-y-auto overscroll-contain px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[14px]">
+          <div className="text-phone-detail text-wall-ink-2">Say it however you like — these are just the ideas. Ask “Casa, what can you do?” to hear a few.</div>
+          {tipsByTopic().map((g) => (
+            <section key={g.topic} aria-label={g.topic} className="flex flex-col">
+              <h2 className="m-0 mt-[12px] pb-[6px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">{g.topic.toUpperCase()}</h2>
+              {g.tips.map((t) => <div key={t.id} className="border-0 border-t border-solid border-wall-stone py-[8px] text-phone-body text-wall-ink">{t.text}</div>)}
+            </section>
+          ))}
+        </div>
+      ) : reporting ? (
         <div className="flex flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[16px]">
           <div className="text-phone-detail text-wall-ink-2">The whole conversation goes with it, with the time.</div>
           <div className="flex flex-wrap gap-[8px]">
@@ -145,7 +169,15 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
               ),
             )}
             {thinking && (
-              <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Thinking…</div>
+              <div className="flex flex-col gap-[6px]">
+                <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Thinking…</div>
+                {tip && (
+                  <div className="flex flex-col gap-[4px] rounded-[14px] bg-phone-card px-[14px] py-[10px]">
+                    <span className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">WHILE CASA THINKS · A TIP</span>
+                    <span className="text-phone-detail text-wall-ink">{tip}</span>
+                  </div>
+                )}
+              </div>
             )}
             {card ? (
               <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />

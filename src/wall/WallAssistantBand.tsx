@@ -16,6 +16,7 @@ import { createAssistantTraceContext, emitAssistantTrace } from '../lib/assistan
 import { routeEta, useDriveMinutes, type DriveLookup } from './useDriveMinutes'
 import WallAssistantCard from './WallAssistantCard'
 import { pigmentStyleFor } from './lanes'
+import { noteSaid, tipFor, tipsByTopic } from './tips'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
 // shows what it heard large, answers in a sentence or two, points at the wall,
@@ -197,6 +198,17 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   useEffect(() => () => onPointAt(null), [onPointAt])
 
   const state = bandState({ listening: speech.listening || speech.connecting, loading, answer, pending })
+  // Tips while Casa thinks (board 07e): one per question, steady while it thinks; each question
+  // asked is counted so a tip retires once that ability is known. "What can I say?" lists them all.
+  const [sayOpen, setSayOpen] = useState(false)
+  const noted = useRef<string | null>(null)
+  useEffect(() => {
+    if (!question || noted.current === question) return
+    noted.current = question
+    noteSaid(question)
+    setSayOpen(false)
+  }, [question])
+  const tip = useMemo(() => (state === 'THINKING' ? tipFor(question ?? null, messages.length) : null), [state, question, messages.length])
 
   // The LED strip (P3.14): what the band is doing, and a card's outcome as a warm or rust swell.
   const micOpen = speech.listening || speech.connecting
@@ -419,7 +431,24 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </div>
       ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
-        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : 'LISTENING'}</div>
+        <div className="flex items-center justify-between gap-[24px]">
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : 'LISTENING'}</div>
+          <button type="button" aria-pressed={sayOpen} onClick={() => setSayOpen((open) => !open)} className="flex h-[48px] shrink-0 items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment">
+            <span aria-hidden="true" className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-night-brass text-wall-label font-bold text-wall-night-brass">?</span>
+            {sayOpen ? 'Close the list' : 'What can I say?'}
+          </button>
+        </div>
+        {sayOpen ? (
+          <div className="grid grid-cols-5 gap-[28px]">
+            {tipsByTopic().map((g) => (
+              <div key={g.topic} className="flex flex-col gap-[10px]">
+                <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{g.topic.toUpperCase()}</div>
+                {g.tips.map((t) => <div key={t.id} className="text-wall-detail text-wall-night-ink-2">{t.text}</div>)}
+              </div>
+            ))}
+          </div>
+        ) : (
+        <>
         <div className="font-display text-wall-quote font-medium italic">
           {shownQuestion ? `“${shownQuestion}”` : 'Ask about the day, or ask to add something.'}
         </div>
@@ -468,6 +497,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         )}
         {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
 
+        {tip ? (
+          <div className="mt-auto flex max-w-[1180px] flex-col gap-[8px] rounded-[20px] border border-solid border-wall-night-brass/35 bg-wall-night-brass/10 px-[26px] py-[22px]">
+            <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHILE CASA THINKS · A TIP</div>
+            <div className="text-wall-body leading-[1.35]">{tip}</div>
+          </div>
+        ) : (
         <div className="mt-auto flex gap-[14px]">
           {offer && (
             <button type="button" className={lightPill} disabled={loading} onClick={() => { setNote(null); void send(offer.say) }}>
@@ -486,6 +521,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             Done
           </button>
         </div>
+        )}
+        </>
+        )}
       </div>
       )}
     </section>

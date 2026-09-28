@@ -308,3 +308,17 @@ test('phone: Week › Coming up — what needs planning, answers take an item of
   await expect(kellys.getByText('Kelly’s birthday')).toBeVisible()
   await expect(kellys.getByText(/ceramic class/)).toHaveCount(0)
 })
+
+test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them by topic (boards 07e/07f)', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'thinking')
+  await expect(ask.getByText('Thinking…')).toBeVisible()
+  await expect(ask.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(ask.getByText(/gift idea/i).first()).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-thinking-tip.png')
+  await ask.getByRole('button', { name: 'What can I say?' }).click()
+  await expect(ask.getByRole('heading', { name: 'What can I say?' })).toBeVisible()
+  for (const topic of ['Calendar', 'Coming up', 'Gift ideas', 'Groceries & recipes', 'Talking to Casa']) await expect(ask.getByRole('region', { name: topic })).toBeAttached()
+  await expect(phone).toHaveScreenshot('phone-what-can-i-say.png')
+  await ask.getByRole('button', { name: 'Back' }).click()
+  await expect(ask.getByRole('heading', { name: 'Ask Casa' })).toBeVisible()
+})

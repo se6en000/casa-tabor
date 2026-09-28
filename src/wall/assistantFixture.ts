@@ -53,6 +53,8 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Could Kelly take it instead?'),
     said('Kelly’s free then. Want me to make her the driver for softball? Jake would be off the hook.', { conversationState: { activeEntityType: 'event', activeEventId: 'softball', expectedFollowUp: 'event_follow_up', establishedAt: '' } }),
   ],
+  // 07e: a question still thinking — the tip line shows under it.
+  thinking: () => [user('When’s Carl’s birthday again?')],
 }
 
 /** A stand-in for `useAssistantTurn` that plays one scene; sending adds the words to the thread. */
@@ -61,7 +63,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
     const [allMessages, setMessages] = useState<AIMessage[]>(() => BAND_SCENES[scene]?.() ?? [])
     const { messages, asidesInARow } = withoutAsides(allMessages)
     // Like the real one: a moment of thinking, then an answer (a question gets a plain reply).
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(scene === 'thinking')
     const [working, setWorking] = useState(false)
     const { question, answer } = latestExchange(messages)
     const pending = pendingAction(messages)

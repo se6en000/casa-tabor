@@ -5,6 +5,7 @@
 // needs a yes, and still meets the server's hard checks (a real date, an event that exists,
 // never a school-run copy). Dry runs only (`context.full_ai`), for side-by-side tests.
 import { memberNamed } from './family-names.mjs'
+import { tipsByTopic } from './casa-tips.mjs'
 
 /** Synced copies of school-routine runs ("Drop off Emme @ Palm Beach Public …"): never changed. */
 export function isRoutineCopy(title) {
@@ -64,6 +65,8 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   if (contacts.length) sections.push(`CONTACTS:\n${contacts.map((c) => `- ${[c.name, c.relationship, c.phone, c.email, c.place].filter(Boolean).join(' · ')}`).join('\n')}`)
   if (recipes.length) sections.push(`RECIPES (open one with get_recipe):\n${recipes.map((r) => `- [${r.id}] ${r.name}`).join('\n')}`)
   if (pending) sections.push(`ON SCREEN, WAITING FOR A YES: ${describeDraft(pending, utcOffset)} — a follow-up about it changes this same card (call the same tool again with the whole corrected item).`)
+  // "Casa, what can you do?" (P3.19 3c): the same list as the tips and "What can I say?".
+  sections.push(`WHAT YOU CAN DO (asked what you can do or what to say: two or three short examples from different topics, then that "What can I say?" on the screen lists them all):\n${tipsByTopic().map((g) => `${g.topic}: ${g.tips.map((t) => t.text).join(' | ')}`).join('\n')}`)
   if (onScreenIds?.length) sections.push(`JUST DISCUSSED (in the order you named them): ${onScreenIds.map((id) => `[${id}]`).join(', ')}`)
   return sections.join('\n\n')
 }
