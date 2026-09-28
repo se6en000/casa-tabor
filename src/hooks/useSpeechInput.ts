@@ -5,7 +5,7 @@ import {
   reconcileTranscriptRevision,
   STT_TURN_PROTOCOL,
 } from '../lib/sttTurnProtocol.mjs'
-import { isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript, voiceFinalIntent } from '../lib/voiceTurnTaking.mjs'
+import { heldFragmentAfterWait, isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript, voiceFinalIntent } from '../lib/voiceTurnTaking.mjs'
 
 
 /** DeepGram STT bridge — HTTP for probe/display, WS for streaming */
@@ -223,16 +223,19 @@ export function useSpeechInput({
   const scheduleFragmentTimeout = () => {
     stopFragmentTimer()
     fragmentTimerRef.current = setTimeout(() => {
-      const abandoned = pendingFragmentRef.current
-      const abandonedUtteranceId = pendingFragmentUtteranceIdRef.current
+      const held = pendingFragmentRef.current
+      const heldUtteranceId = pendingFragmentUtteranceIdRef.current
       pendingFragmentRef.current = ''
       pendingFragmentUtteranceIdRef.current = ''
       fragmentTimerRef.current = null
       const nextUtteranceId = createUtteranceId()
+      // Nothing more came: send what was said (Casa can ask if it was cut short) rather than
+      // dropping it — on the wall's band the held words used to vanish (2026-09-27).
+      const toSend = heldFragmentAfterWait(held)
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
-          type: 'discard',
-          utterance_id: abandonedUtteranceId,
+          type: toSend ? 'commit' : 'discard',
+          utterance_id: heldUtteranceId,
           next_utterance_id: nextUtteranceId,
         }))
       }
@@ -240,12 +243,15 @@ export function useSpeechInput({
       listeningStartRef.current = Date.now()
       speechStartedAtRef.current = 0
       onInterimRef.current('')
-      onTraceRef.current?.('asr_fragment_discarded', {
-        utterance_id: abandonedUtteranceId,
+      onTraceRef.current?.(toSend ? 'asr_fragment_sent_after_wait' : 'asr_fragment_discarded', {
+        utterance_id: heldUtteranceId,
         reason: 'continuation_timeout',
-        word_count: abandoned ? abandoned.split(/\s+/).length : 0,
+        word_count: held ? held.split(/\s+/).length : 0,
       })
-      if (abandoned) onIncompleteRef.current?.(abandoned)
+      if (toSend) {
+        setPhaseSync('processing')
+        handleFinalRef.current(toSend)
+      }
     }, 4500)
   }
   // No deps — uses only refs, so triggerFinal/startBridge are created once and never stale
@@ -285,6 +291,8 @@ export function useSpeechInput({
     onFinalRef.current(transcript.trim(), { confidence: lastConfidenceRef.current })
     onFinalRef.current('__SEND__', { confidence: lastConfidenceRef.current })
   }, [])
+  // handleFinalTranscript is created once (no deps), so the ref never needs refreshing.
+  const handleFinalRef = useRef(handleFinalTranscript)
 
   const triggerFinal = useCallback((text: string, metadata: { endpointReason?: string } = {}) => {
     stopSilenceTimer()

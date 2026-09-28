@@ -73,7 +73,7 @@ test('voice turn lifecycle separates provider segments from committed turns', ()
 test('active continuation speech cannot expire a held ASR fragment', () => {
   assert.match(speech, /if \(pendingFragmentRef\.current\) scheduleFragmentTimeout\(\)/)
   assert.match(speech, /pendingFragmentUtteranceIdRef\.current = utteranceIdRef\.current/)
-  assert.match(speech, /utterance_id: abandonedUtteranceId/)
+  assert.match(speech, /utterance_id: heldUtteranceId/)
 })
 
 test('AI forensics reports the new client pipeline stages', () => {

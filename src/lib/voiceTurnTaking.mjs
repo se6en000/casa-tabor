@@ -60,3 +60,14 @@ export function voiceFinalIntent(value, { hasPending = false } = {}) {
   if (words.length <= 6 && onlyOf(words, BYE_WORDS) && BYE_CORE.test(text)) return 'dismiss'
   return 'send'
 }
+
+/**
+ * A sentence held for more (it sounded cut off) once the wait for more runs out: what to send.
+ * What was said goes to Casa, which can ask if it really was cut short; only nothing, or filler,
+ * is let go (Jake, 2026-09-27: held words were being thrown away).
+ */
+export function heldFragmentAfterWait(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+  if (!text || FILLER_ONLY.test(text.replace(/[.?!,;:…\s]+$/, ''))) return null
+  return text
+}
