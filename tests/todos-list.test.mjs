@@ -1,0 +1,108 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { buildTodoList } from '../supabase/functions/_shared/todos.mjs'
+
+// P3.22 (board 09b): Next up is 3–5 things worth doing now; everything else folds by kind. The
+// wall shows the next small thing, never the pile (the old prep lists: 3,414 items, 20 checked).
+const today = '2026-09-28'
+const r = (id, title, extra = {}) => ({ id, title, status: 'confirmed', has_due_date: false, start_time: '2026-09-28T04:00:00Z', created_at: '2026-09-20T12:00:00Z', ...extra })
+const d = (shape, extra = {}) => ({ shape, minutes: null, cost_cents: null, next_step: null, needs: [], snoozed_until: null, snooze_count: 0, project_id: null, ...extra })
+const reminders = [
+  r('heater', 'Troubleshoot the water heater E05'),
+  r('anthony', 'Call Anthony about house insurance alternatives'),
+  r('gfi', 'Replace the outside GFI outlet', { has_due_date: true, start_time: '2026-09-19T21:00:00Z' }),
+  r('windshield', 'Look up Tesla windshield rebate'),
+  r('pool', 'Look for a cable to fix the pool'),
+  r('tire', 'Replace tire sensor'),
+  r('arlo', 'Install Arlo camera with solar'),
+  r('trash', 'Trash out to the street'),
+  r('forms', 'Liv athletics forms', { has_due_date: true, start_time: '2026-09-30T21:00:00Z' }),
+  r('tryouts', 'Tryout info', { has_due_date: true, start_time: '2026-10-19T21:00:00Z' }),
+  r('mystery', 'Thing'),
+  r('quotes', 'Paint the house: get 3 quotes'),
+]
+const details = {
+  heater: d('fix', { minutes: 20, next_step: 'check the gas valve, then reset it', needs: ['Hot water'] }),
+  anthony: d('quick', { minutes: 10, next_step: 'call him back', needs: ['Call'] }),
+  gfi: d('fix', { minutes: 45, cost_cents: 2500, next_step: 'buy a 20A outdoor GFI', needs: ['Safety'] }),
+  windshield: d('quick', { minutes: 15, needs: ['Look-up'] }),
+  pool: d('quick', { minutes: 15, snoozed_until: '2026-10-01', snooze_count: 1 }),
+  tire: d('quick', { minutes: 30, cost_cents: 4000 }),
+  arlo: d('fix', { minutes: 90, snooze_count: 3 }),
+  trash: d('nudge'),
+  forms: d('dated', { minutes: 20 }),
+  tryouts: d('dated'),
+  quotes: d('project', { minutes: 30, project_id: 'paint' }),
+}
+const projects = [{ id: 'paint', title: 'Paint the house', status: 'active', aim_date: null }]
+const steps = [
+  { project_id: 'paint', position: 1, title: 'Decide: DIY or hire', done_at: '2026-09-20T12:00:00Z' },
+  { project_id: 'paint', position: 2, title: 'Walk the house', done_at: '2026-09-22T12:00:00Z' },
+  { project_id: 'paint', position: 3, title: 'Get 3 quotes', done_at: null, reminder_event_id: 'quotes' },
+  { project_id: 'paint', position: 4, title: 'Fix the wall cracks', done_at: null },
+]
+const list = buildTodoList({ reminders, details, projects, steps, today })
+const ids = (items) => items.map((i) => i.id)
+
+test('Next up: at most four, safety and real overdues first, always one quick win', () => {
+  assert.ok(list.nextUp.length >= 3 && list.nextUp.length <= 4)
+  assert.equal(list.nextUp[0].id, 'gfi', 'the safety fix, already past its date')
+  assert.ok(list.nextUp.some((i) => i.shape === 'quick'))
+})
+
+test('never in Next up: nudges, snoozed things, dated things more than 3 days off, unsorted', () => {
+  for (const id of ['trash', 'pool', 'tryouts', 'mystery']) assert.ok(!ids(list.nextUp).includes(id), id)
+})
+
+test('a dated thing joins Next up when its day is close, and says so', () => {
+  const forms = list.nextUp.find((i) => i.id === 'forms') ?? list.groups.dated.find((i) => i.id === 'forms')
+  assert.equal(forms.due, '2026-09-30')
+  assert.ok(ids(list.nextUp).includes('forms'))
+})
+
+test('the rest folds by kind; nothing appears twice; undated things are never "overdue"', () => {
+  const all = [...list.nextUp, ...Object.values(list.groups).flat()]
+  assert.equal(new Set(ids(all)).size, all.length)
+  assert.deepEqual(ids(list.groups.nudge), ['trash'])
+  assert.deepEqual(ids(list.groups.unsorted), ['mystery'])
+  assert.ok(ids(list.groups.quick).includes('pool'))
+  assert.equal(list.groups.quick.find((i) => i.id === 'pool').snoozedUntil, '2026-10-01')
+  assert.equal(list.nextUp.concat(list.groups.quick).find((i) => i.id === 'anthony').overdue, false)
+})
+
+test('projects: progress and the current step', () => {
+  assert.deepEqual(list.projects, [{ id: 'paint', title: 'Paint the house', done: 2, total: 4, next: 'Get 3 quotes', nextEventId: 'quotes', aimDate: null }])
+})
+
+test('snoozed three times sinks below the rest', () => {
+  const fixes = [...list.nextUp, ...list.groups.fix].filter((i) => i.shape === 'fix')
+  assert.equal(fixes.at(-1).id, 'arlo')
+})
+
+// Step 2: Casa's suggestions (merge / looks done / to Shopping) wait for a yes, at the top.
+test('suggestions are listed for a yes, with the other item named for a merge', () => {
+  const withSuggestions = buildTodoList({
+    reminders: [r('h1', 'Water heater E05'), r('h2', 'Water heater E05 again'), r('towels', 'Paper towels')],
+    details: {
+      h1: d('fix'),
+      h2: d('fix', { suggestion: { kind: 'merge', with: 'h1', reason: 'Same thing' } }),
+      towels: d('quick', { suggestion: { kind: 'shopping', reason: 'A grocery' } }),
+    },
+    today,
+  })
+  assert.deepEqual(withSuggestions.suggestions.map((s) => [s.id, s.kind, s.withTitle ?? null]).sort(), [['h2', 'merge', 'Water heater E05'], ['towels', 'shopping', null]])
+  // A merge candidate or a grocery isn't offered as something to do.
+  assert.ok(!withSuggestions.nextUp.some((i) => i.id === 'h2' || i.id === 'towels'))
+})
+
+// First live run: a vet visit and a shirt order, both dated a month ago, led Next up. A dated item
+// belongs in Next up only around its day (2 days late to 3 days ahead); older ones wait in Dated.
+test('a dated thing long past its day does not lead Next up', () => {
+  const list2 = buildTodoList({
+    reminders: [r('vet', 'Bring Gilbert to vet', { has_due_date: true, start_time: '2026-08-24T21:00:00Z' }), r('call', 'Call Anthony')],
+    details: { vet: d('dated', { minutes: 15 }), call: d('quick', { minutes: 10 }) },
+    today,
+  })
+  assert.deepEqual(list2.nextUp.map((i) => i.id), ['call'])
+  assert.deepEqual(list2.groups.dated.map((i) => i.id), ['vet'])
+})
