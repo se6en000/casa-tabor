@@ -599,3 +599,47 @@ test('wall assistant: over the evening face the band is a raised layer with a br
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-over-evening.png')
 })
+
+// Swipe between days (2026-09-28): touch on the Pi, two-finger trackpad on the desktop.
+const touchSwipe = (page, from, to) => page.evaluate(([from, to]) => {
+  const el = document.elementFromPoint(from[0], from[1])
+  const at = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y })
+  el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [at(...from)], changedTouches: [at(...from)] }))
+  el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [at(...to)] }))
+}, [from, to])
+const shownTile = (page) => page.getByRole('region', { name: 'Next seven days' }).locator('button[aria-pressed="true"]')
+
+test('wall: swiping moves across the days and on to Coming up; a nudge or a tap does not; off while the band is open', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  await touchSwipe(page, [1500, 600], [1100, 610])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Saturday, September 26/)
+  await touchSwipe(page, [1100, 600], [1500, 590])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  // A nudge is nothing; the right end stops at today.
+  await touchSwipe(page, [1500, 600], [1420, 600])
+  await touchSwipe(page, [1100, 600], [1500, 600])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  // Seven swipes left: through Thursday, then Coming up; one more does nothing.
+  for (let i = 0; i < 8; i++) await touchSwipe(page, [1500, 600], [1100, 600])
+  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await touchSwipe(page, [1100, 600], [1500, 600])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Thursday, October 1/)
+})
+
+test('wall: a two-finger trackpad swipe moves one day; scrolling does not', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.mouse.move(1000, 600)
+  await page.mouse.wheel(0, 400)
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  await page.mouse.wheel(200, 0)
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Saturday, September 26/)
+})
+
+test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+  await touchSwipe(page, [1500, 400], [1100, 400])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+})

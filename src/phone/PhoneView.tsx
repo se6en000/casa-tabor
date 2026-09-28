@@ -1,4 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { stepWithin, type DayStep } from '../lib/daySwipe'
+import { useDaySwipe } from '../lib/useDaySwipe'
 import { Link } from 'react-router-dom'
 import { CalendarDays, Check, ChefHat, Grid2x2, Lock, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
@@ -96,6 +98,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [weekView, setWeekView] = useState<'week' | 'coming'>('week')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
+  const [meIndex, setMeIndex] = useState<number | null>(null)
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan } | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
@@ -111,13 +114,17 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // From 7 PM, "Me" and Family default to tomorrow, read from its start (everything still ahead).
   const ahead = now.getHours() >= LOOK_AHEAD_HOUR && week.length > 1
   const focusIndex = ahead ? 1 : 0
-  const focus = week[focusIndex] ?? today
+  // Me can be swiped to another day (2026-09-28); it starts on today, or tomorrow from 7 PM.
+  const meAt = Math.min(meIndex ?? focusIndex, Math.max(0, week.length - 1))
+  const focus = week[meAt] ?? today
+  const meWeekday = focus ? focus.date.toLocaleDateString('en-US', { weekday: 'long' }) : ''
+  const meWhen = meAt === 0 ? 'today' : meAt === 1 ? 'tomorrow' : `on ${meWeekday}`
   const focusNow = useMemo(() => {
-    if (!ahead || !focus) return now
+    if (meAt === 0 || !focus) return now
     const start = new Date(focus.date)
     start.setHours(0, 0, 0, 0)
     return start
-  }, [ahead, focus, now])
+  }, [meAt, focus, now])
   const me = useMemo(() => meView({ viewerId, plan: focus, members, events, checklist, now: focusNow }), [viewerId, focus, members, events, checklist, focusNow])
   const lanePeople = members.filter((m) => m.show_on_home_sidebar !== false)
   const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
@@ -137,9 +144,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <div className="flex items-center justify-between">
         <div>
           <div className="text-phone-detail text-wall-ink-2">
-            {ahead && focus ? `Tomorrow · ${focus.date.toLocaleDateString('en-US', { weekday: 'long' })}` : `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+            {meAt === 0 || !focus
+              ? `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+              : meAt === 1 ? `Tomorrow · ${meWeekday}` : focus.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
-          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s ${ahead ? 'tomorrow' : 'day'}` : ahead ? 'Tomorrow' : 'Your day'}</h1>
+          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s ${meAt === 0 ? 'day' : meAt === 1 ? 'tomorrow' : meWeekday}` : meAt === 0 ? 'Your day' : meAt === 1 ? 'Tomorrow' : meWeekday}</h1>
         </div>
         {viewer && <Disc id={viewer.id} members={members} pigments={pigments} size="h-[40px] w-[40px] text-phone-heading" />}
       </div>
@@ -166,7 +175,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             </a>
           )}
           <div className="flex gap-[8px]">
-            {tripActions && !ahead && (me.next.departed ? (
+            {tripActions && meAt === 0 && (me.next.departed ? (
               <button type="button" onClick={() => tripActions.undoLeaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Not yet (undo)</button>
             ) : me.next.phase !== 'there' ? (
               <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Leaving now</button>
@@ -178,12 +187,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </div>
         </section>
       ) : (
-        <div className="rounded-[20px] bg-phone-card p-[18px] font-display text-phone-heading italic text-wall-ink-2">Nothing for you to drive {ahead ? 'tomorrow' : 'today'}.</div>
+        <div className="rounded-[20px] bg-phone-card p-[18px] font-display text-phone-heading italic text-wall-ink-2">Nothing for you to drive {meWhen}.</div>
       )}
 
       {me.moves.length > 0 && (
         <section aria-label="Your moves today">
-          <Label>{ahead ? 'YOUR MOVES TOMORROW' : 'YOUR MOVES TODAY'}</Label>
+          <Label>{`YOUR MOVES ${meWhen.toUpperCase()}`}</Label>
           {me.moves.map((m) => (
             <button key={m.tripIds[0]} type="button" disabled={!openable(tripOf(m)?.sourceId)} onClick={() => setOpenId(tripOf(m)?.sourceId ?? null)} className="flex w-full items-start gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-wall-ink">
               {/* Jake's note on 05a: a "Leave by" label, and the time in bold. */}
@@ -391,13 +400,29 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       key={t.id}
       type="button"
       aria-current={tab === t.id ? 'page' : undefined}
-      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') setDayIndex(null) }}
+      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') setDayIndex(null); if (t.id === 'me') setMeIndex(null) }}
       className={`flex h-[52px] w-[62px] flex-col items-center justify-center gap-[3px] border-0 bg-transparent p-0 text-phone-label ${tab === t.id ? 'font-bold text-wall-ink' : 'font-medium text-wall-ink-2'}`}
     >
       {t.icon}
       {t.label}
     </button>
   )
+
+  // Swipe between days on Me and Family (Jake, 2026-09-28: "it feels natural there"): left for the
+  // next day, right for the day before, within the week; stops at the ends; off while a sheet is up.
+  const mainRef = useRef<HTMLElement>(null)
+  const swipeDay = (step: DayStep) => {
+    const last = week.length - 1
+    if (tab === 'me') {
+      const next = stepWithin(meAt, step, last)
+      if (next != null) setMeIndex(next)
+    } else if (tab === 'family') {
+      const next = stepWithin(dayIndex ?? focusIndex, step, last)
+      if (next != null) setDayIndex(next)
+    }
+  }
+  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || scanOpen || askOpen || adding)
+  useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
   const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
@@ -406,7 +431,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
     // the top clears the notch / status bar and the tab bar clears the home indicator.
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
-      <main className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[24px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
+      <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[24px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
         {tab === 'me' && meScreen}
         {tab === 'family' && familyScreen}
         {tab === 'week' && weekScreen}

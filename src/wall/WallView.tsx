@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { stepWithin, type DayStep } from '../lib/daySwipe'
+import { useDaySwipe } from '../lib/useDaySwipe'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { blankEvent, type EditableEvent } from './editing'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
@@ -247,6 +249,23 @@ export default function WallView(props: WallViewProps) {
     setComingUpUntil(0)
     setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
   }
+  // Swipe between days (Jake, 2026-09-28): left for the next day, right for the day before, across
+  // the week strip's seven days and on to Coming up; stops at the ends. Off while anything is open
+  // on top (the band, an event, a sheet, the menu), so a conversation never changes the day.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const swipeDay = (step: DayStep) => {
+    const pages = week.length + (comingUp ? 1 : 0)
+    const index = comingUpOpen ? week.length : Math.max(0, week.findIndex((p) => sameDay(p.date, dayOnShow)))
+    const next = stepWithin(index, step, pages - 1)
+    if (next == null) return
+    if (next === week.length) {
+      setDayPreview(null)
+      setComingUpUntil(Date.now() + PREVIEW_MS)
+    } else {
+      showDay(week[next].date)
+    }
+  }
+  useDaySwipe(rootRef, swipeDay, { enabled: week.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen, minDistance: 200 })
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = week.length > 1 ? (
     <WallWeek
@@ -333,6 +352,7 @@ export default function WallView(props: WallViewProps) {
 
   return (
     <div
+      ref={rootRef}
       className="relative h-full w-full"
       // A tap that nothing else handled (a person, a count, a block stop it) wakes Calm; once awake, any touch keeps it awake.
       onClick={() => setAwakeUntil(Date.now() + WAKE_MS)}

@@ -322,3 +322,32 @@ test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them 
   await ask.getByRole('button', { name: 'Back' }).click()
   await expect(ask.getByRole('heading', { name: 'Ask Casa' })).toBeVisible()
 })
+
+// Swipe between days on Me and Family (2026-09-28: "it feels natural there").
+const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
+  const el = document.elementFromPoint(from[0], from[1])
+  const at = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y })
+  el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [at(...from)], changedTouches: [at(...from)] }))
+  el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [at(...to)] }))
+}, [from, to])
+
+test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {
+  const phone = await open(page)
+  await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
+  await phoneSwipe(page, [320, 400], [120, 410])
+  await expect(phone.getByRole('heading', { name: "Jake's tomorrow" })).toBeVisible()
+  await phoneSwipe(page, [320, 400], [120, 400])
+  await expect(phone.getByRole('heading', { name: "Jake's Sunday" })).toBeVisible()
+  await phoneSwipe(page, [200, 600], [220, 200])
+  await expect(phone.getByRole('heading', { name: "Jake's Sunday" })).toBeVisible()
+  await phone.getByRole('button', { name: 'Me', exact: true }).click()
+  await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
+
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await expect(phone.getByText('Friday, September 25')).toBeVisible()
+  await phoneSwipe(page, [320, 400], [120, 400])
+  await expect(phone.getByText('Saturday, September 26')).toBeVisible()
+  await phoneSwipe(page, [120, 400], [320, 400])
+  await phoneSwipe(page, [120, 400], [320, 400])
+  await expect(phone.getByText('Friday, September 25')).toBeVisible()
+})
