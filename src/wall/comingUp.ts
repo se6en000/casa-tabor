@@ -54,3 +54,47 @@ export function ideasByPerson(ideas: GiftIdea[]) {
   }
   return groups
 }
+
+/**
+ * The wall screen's heights at the 1920×1080 stage (measured on the fixture, 2026-09-27): a row
+ * (title and step on one line each, cut short rather than wrapped), a section heading above it, the
+ * gift-ideas line, and the space between the header and the week strip, less a little slack for
+ * the kiosk's 1.333× scale.
+ */
+export const COMING_UP_SIZES = { row: 129, heading: 39, ideas: 29, area: 676 }
+
+export interface ComingUpEntry { item: ComingUpItem; heading: string | null }
+
+/**
+ * Pages of two columns, filled by height: each page takes as many items as two columns hold, split
+ * where the taller column is shortest. A column always opens with a heading ("THIS WEEK, CONTINUED"
+ * when the section began before it).
+ */
+export function comingUpPages(items: ComingUpItem[], today: string, sizes = COMING_UP_SIZES): ComingUpEntry[][][] {
+  const flat = comingUpSections(items, today).flatMap((s) => s.items.map((item, i) => ({ item, section: s.heading, first: i === 0 })))
+  const column = (from: number, to: number): ComingUpEntry[] => flat.slice(from, to).map((e, i) => ({
+    item: e.item,
+    heading: e.first ? e.section : i === 0 ? `${e.section}, CONTINUED` : null,
+  }))
+  const height = (col: ComingUpEntry[]) => col.reduce((h, e) => h + (e.heading ? sizes.heading : 0) + sizes.row + (e.item.ideas?.length ? sizes.ideas : 0), 0)
+  const pages: ComingUpEntry[][][] = []
+  let start = 0
+  while (start < flat.length) {
+    let best: { end: number; split: number; tallest: number } | null = null
+    for (let end = flat.length; end > start && !best; end--) {
+      for (let split = start + 1; split <= end; split++) {
+        const left = column(start, split)
+        const right = column(split, end)
+        const tallest = Math.max(height(left), height(right))
+        if (tallest > sizes.area) continue
+        // On a tie, more on the left.
+        if (!best || tallest <= best.tallest) best = { end, split, tallest }
+      }
+    }
+    // A single row always fits; never loop forever on an odd size.
+    const { end, split } = best ?? { end: start + 1, split: start + 1 }
+    pages.push([column(start, split), column(split, end)].filter((c) => c.length > 0))
+    start = end
+  }
+  return pages
+}

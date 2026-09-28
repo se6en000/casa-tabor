@@ -534,3 +534,24 @@ test('wall: Coming up — the eighth tile opens it; an answer takes an item off;
   await page.getByRole('button', { name: 'Back to today' }).click()
   await expect(page.getByText('5 things to plan')).toHaveCount(0)
 })
+
+// Live on the kiosk 2026-09-27: nine items split by count ran the left column under the week strip.
+test('wall: Coming up with a long list — nothing runs under the week strip; "N more" shows the rest (board 07a)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&comingUp=live')
+  await page.getByRole('button', { name: /^Coming up: 9 to plan/ }).click()
+  await expect(page.getByText('9 things to plan')).toBeVisible()
+  const fits = () => page.evaluate(() => {
+    const strip = document.querySelector('section[aria-label="Next seven days"]').getBoundingClientRect().top
+    return [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Not needed').every((b) => b.getBoundingClientRect().bottom <= strip - 8)
+  })
+  expect(await fits()).toBe(true)
+  await expect(page).toHaveScreenshot('wall-coming-up-long.png')
+  const more = page.getByRole('button', { name: /^\d+ more$/ })
+  const left = Number((await more.textContent()).split(' ')[0])
+  await more.click()
+  await expect(page.getByText('Veterans Day')).toBeVisible()
+  expect(await page.getByRole('button', { name: 'Not needed' }).count()).toBe(left)
+  expect(await fits()).toBe(true)
+  await page.getByRole('button', { name: 'First page' }).click()
+  await expect(page.getByText('EDS Air Conditioning Appointment')).toBeVisible()
+})

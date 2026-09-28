@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { comingUpSections, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
+import { comingUpPages, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 
 // Coming up (board 07a, approved by Jake 2026-09-27): only what needs planning — each item's next
 // step, its plan-by date, the gift ideas for it, and three answers. The wall and the desktop show the
@@ -43,10 +43,11 @@ function Row({ item, today, onAct }: { item: ComingUpItem; today: string; onAct:
         <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{part({ month: 'short' })}</span>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-        <span className="font-display text-wall-date font-semibold leading-tight">{item.title}</span>
-        <span className="text-wall-body font-bold text-wall-brass-ink">{item.nextStep}</span>
+        {/* One line each, so every row is the height the columns are planned with (comingUpPages). */}
+        <span className="truncate font-display text-wall-date font-semibold leading-tight">{item.title}</span>
+        <span className="truncate text-wall-body font-bold text-wall-brass-ink">{item.nextStep}</span>
         <span className={`text-wall-detail ${item.late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{planByLine(item, today)}</span>
-        {item.ideas && item.ideas.length > 0 && <span className="text-wall-detail text-wall-ink-2">Gift ideas: {item.ideas.join('; ')}</span>}
+        {item.ideas && item.ideas.length > 0 && <span className="truncate text-wall-detail text-wall-ink-2">Gift ideas: {item.ideas.join('; ')}</span>}
       </div>
       <div className="flex shrink-0 gap-[8px]">
         <Answer label="Done" primary onClick={() => void onAct(item.key, 'done')} />
@@ -81,12 +82,14 @@ function IdeasSheet({ ideas, onClose }: { ideas: GiftIdea[]; onClose: () => void
 
 export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
-  const sections = comingUpSections(items, today)
-  const startNow = sections.find((s) => s.heading === 'START NOW')?.items.length ?? 0
-  // Two columns: the first half of the rows on the left, the rest on the right, headings carried over.
-  const rows = sections.flatMap((s) => s.items.map((item, i) => ({ item, heading: i === 0 ? s.heading : null, section: s.heading })))
-  const half = Math.ceil(rows.length / 2)
-  const columns = [rows.slice(0, half), rows.slice(half)]
+  const [pageIndex, setPageIndex] = useState(0)
+  const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
+  // Two columns filled by height; what doesn't fit goes to the next page, behind "N more".
+  const pages = comingUpPages(items, today)
+  const page = Math.min(pageIndex, Math.max(0, pages.length - 1))
+  const columns = pages[page] ?? []
+  const shownBefore = pages.slice(0, page + 1).flat(2).length
+  const more = items.length - shownBefore
   const clock = formatWallClock(now)
 
   return (
@@ -109,6 +112,8 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
             </div>
           </div>
           <div className="flex shrink-0 gap-[12px]">
+            {more > 0 && <Answer label={`${more} more`} onClick={() => setPageIndex(page + 1)} />}
+            {more === 0 && page > 0 && <Answer label="First page" onClick={() => setPageIndex(0)} />}
             <Answer label={`Gift ideas · ${ideas.length}`} onClick={() => setIdeasOpen(true)} />
             <Answer label="Back to today" onClick={onBack} />
           </div>
@@ -119,12 +124,12 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
         {items.length === 0 && (
           <div className="font-display text-wall-date italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach Casa what to watch for.</div>
         )}
-        {items.length > 0 && columns.map((col, c) => (
+        {items.length > 0 && [0, 1].map((c) => (
           <div key={c} className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            {col.map(({ item, heading, section }, i) => (
+            {(columns[c] ?? []).map(({ item, heading }) => (
               <div key={item.key}>
-                {(heading || (i === 0 && c === 1)) && (
-                  <div className="pb-[8px] pt-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{heading ?? `${section}, CONTINUED`}</div>
+                {heading && (
+                  <div className="pb-[8px] pt-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{heading}</div>
                 )}
                 <Row item={item} today={today} onAct={onAct} />
               </div>

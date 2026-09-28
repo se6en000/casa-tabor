@@ -41,6 +41,18 @@ const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { in
   { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 68, pokeIn: 8, late: false, ideas: ['A fly-fishing reel'] },
   { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving', nextStep: 'Hosting or going?', inDays: 60, pokeIn: 30, late: false },
 ]
+// The live list on the kiosk the night of 2026-09-27 (nine items; the fifth once ran under the week strip).
+const COMING_UP_LIVE: typeof COMING_UP = [
+  { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning Appointment', nextStep: 'Make sure it works with work', inDays: 3, pokeIn: -4, late: true },
+  { key: 'cu-columbus', kind: 'no_school', title: 'Celebrate Columbus Day Holiday', nextStep: 'No school? Who’s with the kids', inDays: 17, pokeIn: 3, late: false },
+  { key: 'cu-dentist', kind: 'appointment', title: 'Dentist (Dr. Ledakis)', nextStep: 'Make sure it works with work', inDays: 14, pokeIn: 7, late: false },
+  { key: 'cu-cats', kind: 'outing', title: 'Cats & Dogs Exhibition Preview', nextStep: 'Tickets, and who’s going', inDays: 15, pokeIn: 7, late: false },
+  { key: 'cu-forms', kind: 'deadline', title: 'Liv BAK Athletics Aktivate System Due', nextStep: 'Get it done', inDays: 17, pokeIn: 10, late: false },
+  { key: 'cu-tryouts', kind: 'tryout', title: 'BAK Softball Tryouts', nextStep: 'Check what’s needed and who drives', inDays: 24, pokeIn: 10, late: false },
+  { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 70, pokeIn: 10, late: false, ideas: ['A fly-fishing reel'] },
+  { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving Day', nextStep: 'Hosting or going?', inDays: 62, pokeIn: 32, late: false },
+  { key: 'cu-veterans', kind: 'no_school', title: 'Veterans Day', nextStep: 'No school? Who’s with the kids', inDays: 47, pokeIn: 33, late: false },
+]
 const IDEAS: GiftIdea[] = [{ for_name: 'Carl', idea: 'A fly-fishing reel' }, { for_name: 'Jebb', idea: 'A soccer-team sweatshirt and T-shirt' }]
 
 export default function WallFixturePage() {
@@ -102,7 +114,7 @@ export default function WallFixturePage() {
     </ProfileSessionContext.Provider>
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-  const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => COMING_UP.map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
+  const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
