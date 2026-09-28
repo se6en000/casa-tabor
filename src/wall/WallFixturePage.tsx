@@ -15,6 +15,7 @@ import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
+import type { TodoAction, TodoItem, TodoList } from './todos'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -54,6 +55,36 @@ const COMING_UP_LIVE: typeof COMING_UP = [
   { key: 'cu-veterans', kind: 'no_school', title: 'Veterans Day', nextStep: 'No school? Who’s with the kids', inDays: 47, pokeIn: 33, late: false },
 ]
 const IDEAS: GiftIdea[] = [{ for_name: 'Carl', idea: 'A fly-fishing reel' }, { for_name: 'Jebb', idea: 'A soccer-team sweatshirt and T-shirt' }]
+
+// To do (board 09b), shaped like Jake's sorted list on 2026-09-28.
+const todoItem = (id: string, title: string, extra: Partial<TodoItem>): TodoItem => ({ id, title, shape: 'quick', minutes: null, costCents: null, nextStep: null, needs: [], due: null, overdue: false, snoozedUntil: null, snoozeCount: 0, projectId: null, suggestion: null, ...extra })
+const TODOS: TodoList = {
+  nextUp: [
+    todoItem('td-gfi', 'Replace the outside GFI outlet', { shape: 'fix', minutes: 30, costCents: 2000, nextStep: 'Turn off the power to the outside outlet at the breaker', needs: ['Safety', 'Buy'] }),
+    todoItem('td-vet', 'Bring Gilbert to the vet', { minutes: 15, nextStep: 'Call the vet to book a visit', needs: ['Call'], due: '2026-08-24', overdue: true }),
+    todoItem('td-tire', 'Replace tire sensor', { shape: 'fix', minutes: 15, costCents: 5000, nextStep: 'Call a tire shop for a quote', needs: ['Call', 'Needs a pro'] }),
+    todoItem('td-anthony', 'Call Anthony about house insurance alternatives', { minutes: 15, nextStep: 'Call Anthony', needs: ['Call'] }),
+  ],
+  groups: {
+    quick: [
+      todoItem('td-windshield', 'Look up replacing the Tesla windshield and an insurance rebate', { minutes: 20, needs: ['Look-up'] }),
+      todoItem('td-pool', 'Look for a cable to fix the pool', { minutes: 15, needs: ['Look-up', 'Buy'] }),
+    ],
+    fix: [
+      todoItem('td-heater', 'Troubleshoot the water heater E05 error', { shape: 'fix', minutes: 30, nextStep: 'Look up E05 for this model', needs: ['Hot water'] }),
+      todoItem('td-arlo', 'Install the Arlo camera with solar', { shape: 'fix', minutes: 60, needs: ['Daylight'] }),
+    ],
+    nudge: [todoItem('td-tub', 'Run the washing machine tub clean', { shape: 'nudge', minutes: 30 })],
+    dated: [],
+    unsorted: [],
+  },
+  projects: [],
+  suggestions: [
+    { id: 'td-cupcakes', title: 'Pick up Owen’s birthday cupcakes', kind: 'done', reason: 'Owen’s birthday was in July', with: null, withTitle: null },
+    { id: 'td-heater2', title: 'Troubleshoot the water heater E05 error', kind: 'merge', reason: 'Same thing', with: 'td-heater', withTitle: 'Troubleshoot the water heater E05 error' },
+    { id: 'td-towels', title: 'Paper towels', kind: 'shopping', reason: 'A grocery', with: null, withTitle: null },
+  ],
+}
 
 export default function WallFixturePage() {
   const fontsReady = useFixtureFonts()
@@ -122,6 +153,16 @@ export default function WallFixturePage() {
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
+  const [todoList, setTodoList] = useState<TodoList>(TODOS)
+  const todos = {
+    list: todoList,
+    act: async (r: TodoAction) => setTodoList((l) => ({
+      ...l,
+      nextUp: l.nextUp.filter((i) => i.id !== r.id),
+      groups: r.action === 'snooze' ? l.groups : (Object.fromEntries(Object.entries(l.groups).map(([k, v]) => [k, v.filter((i) => i.id !== r.id)])) as TodoList['groups']),
+      suggestions: l.suggestions.filter((sg) => sg.id !== r.id),
+    })),
+  }
   const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
@@ -139,7 +180,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} comingUp={comingUp} />
+        } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} comingUp={comingUp} todos={todos} />
     </div>
     } />
     </Routes>

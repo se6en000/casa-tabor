@@ -21,6 +21,8 @@ import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
+import WallTodos from './WallTodos'
+import { todoTile, type TodoAction, type TodoList } from './todos'
 import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
@@ -74,6 +76,8 @@ export interface WallViewProps {
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
   comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
+  /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
+  todos?: { list: TodoList; act: (request: TodoAction) => Promise<void> } | null
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -88,7 +92,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent, comingUp = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent, comingUp = null, todos = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -107,6 +111,8 @@ export default function WallView(props: WallViewProps) {
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
   // Coming up, opened from the week strip's eighth tile: shown until "Back", or 2 idle minutes.
   const [comingUpUntil, setComingUpUntil] = useState(0)
+  // To do, opened from its tile (or a swipe past Coming up): up until "Back", or 2 idle minutes.
+  const [todoUntil, setTodoUntil] = useState(0)
 
   const eventsById = useMemo(() => new Map(allEvents.map((e) => [e.id, e as EditableEvent])), [allEvents])
   // Surprise-safe: a celebration's prep (the gift, the card) never reaches the wall, where the honoree can see it.
@@ -162,6 +168,12 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setComingUpUntil(0), left)
     return () => window.clearTimeout(timer)
   }, [comingUpUntil])
+  useEffect(() => {
+    const left = todoUntil - Date.now()
+    if (left <= 0) return
+    const timer = window.setTimeout(() => setTodoUntil(0), left)
+    return () => window.clearTimeout(timer)
+  }, [todoUntil])
   useEffect(() => {
     if (!dayPreview) return
     const timer = window.setTimeout(() => setDayPreview(null), Math.max(0, dayPreview.until - Date.now()))
@@ -255,8 +267,12 @@ export default function WallView(props: WallViewProps) {
   const decisionsOn = (date: Date) => weekDecisions.filter((d) => sameDay(d.date, date))
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
+  const todoOpen = Boolean(todos) && todoUntil > 0 && !comingUpOpen
+  const openComingUp = () => { setDayPreview(null); setTodoUntil(0); setComingUpUntil(Date.now() + PREVIEW_MS) }
+  const openTodo = () => { setDayPreview(null); setComingUpUntil(0); setTodoUntil(Date.now() + PREVIEW_MS) }
   const showDay = (date: Date) => {
     setComingUpUntil(0)
+    setTodoUntil(0)
     setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
   }
   // Swipe between days (Jake, 2026-09-28): left for the next day, right for the day before, across
@@ -264,16 +280,16 @@ export default function WallView(props: WallViewProps) {
   // on top (the band, an event, a sheet, the menu), so a conversation never changes the day.
   const rootRef = useRef<HTMLDivElement>(null)
   const swipeDay = (step: DayStep) => {
-    const pages = week.length + (comingUp ? 1 : 0)
-    const index = comingUpOpen ? week.length : Math.max(0, week.findIndex((p) => sameDay(p.date, dayOnShow)))
-    const next = stepWithin(index, step, pages - 1)
+    // After the days: Coming up, then To do.
+    const extras = [comingUp ? 'coming' : null, todos ? 'todo' : null].filter(Boolean) as Array<'coming' | 'todo'>
+    const index = comingUpOpen ? week.length + extras.indexOf('coming')
+      : todoOpen ? week.length + extras.indexOf('todo')
+      : Math.max(0, week.findIndex((p) => sameDay(p.date, dayOnShow)))
+    const next = stepWithin(index, step, week.length + extras.length - 1)
     if (next == null) return
-    if (next === week.length) {
-      setDayPreview(null)
-      setComingUpUntil(Date.now() + PREVIEW_MS)
-    } else {
-      showDay(week[next].date)
-    }
+    if (next < week.length) showDay(week[next].date)
+    else if (extras[next - week.length] === 'coming') openComingUp()
+    else openTodo()
   }
   useDaySwipe(rootRef, swipeDay, { enabled: week.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen, minDistance: 200 })
   const tomorrowDate = tomorrow?.date ?? null
@@ -282,16 +298,33 @@ export default function WallView(props: WallViewProps) {
       days={weekDays(week, members, weekDecisions, now, checklist)}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
-      shownKey={comingUpOpen ? '' : dayOnShow.toDateString()}
+      shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
       onSelect={showDay}
-      comingUp={comingUp ? { ...comingUpTile(comingUp.items, comingUp.today), open: comingUpOpen, onOpen: () => { setDayPreview(null); setComingUpUntil(Date.now() + PREVIEW_MS) } } : null}
+      comingUp={comingUp ? { ...comingUpTile(comingUp.items, comingUp.today), open: comingUpOpen, onOpen: openComingUp } : null}
+      todo={todos ? { ...todoTile(todos.list), open: todoOpen, onOpen: openTodo } : null}
     />
   ) : null
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
   const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
 
   let face
-  if (comingUpOpen && comingUp) {
+  if (todoOpen && todos) {
+    face = (
+      <WallTodos
+        now={now}
+        list={todos.list}
+        onAct={async (request) => {
+          setTodoUntil(Date.now() + PREVIEW_MS)
+          await todos.act(request)
+        }}
+        canOpen={(id) => eventsById.has(id)}
+        onOpen={(id) => setSelectedId(id)}
+        onBack={() => setTodoUntil(0)}
+        onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
+        week={weekStrip}
+      />
+    )
+  } else if (comingUpOpen && comingUp) {
     face = (
       <WallComingUp
         now={now}
@@ -357,8 +390,8 @@ export default function WallView(props: WallViewProps) {
     )
   }
   // The dark evening face is on show (the day-ahead layout in the evening).
-  const nightFace = !comingUpOpen && evening && (!sameDay(dayOnShow, now) || !picked)
-  const onLaunchFace = !comingUpOpen && sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
+  const nightFace = !comingUpOpen && !todoOpen && evening && (!sameDay(dayOnShow, now) || !picked)
+  const onLaunchFace = !comingUpOpen && !todoOpen && sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
 
   return (
     <div

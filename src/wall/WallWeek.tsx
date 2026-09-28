@@ -15,9 +15,11 @@ export interface WallWeekProps {
   onSelect: (date: Date) => void
   /** The eighth tile (board 07a): what needs planning; opens Coming up. */
   comingUp?: { count: number; startNow: number; open: boolean; onOpen: () => void } | null
+  /** The To do tile (board 09a/09b): how many are ready now; opens the list. */
+  todo?: { ready: number; line: string; open: boolean; onOpen: () => void } | null
 }
 
-export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null }: WallWeekProps) {
+export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null, todo = null }: WallWeekProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ''
   return (
     <section aria-label="Next seven days" className="flex shrink-0 flex-col">
@@ -36,21 +38,22 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
               }}
               className={`flex h-[124px] min-w-0 flex-1 flex-col justify-between rounded-[18px] bg-transparent text-left text-wall-ink ${selected ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-rule px-[20px] py-[14px]'}`}
             >
-              <div className="flex items-baseline justify-between gap-[8px]">
-                <div className="flex items-baseline gap-[10px]">
-                  <span className={`text-wall-label font-bold tracking-[0.15em] ${selected ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{day.weekday.toUpperCase()}</span>
-                  <span className="font-display text-wall-heading font-bold lining-nums">{day.dayNumber}</span>
-                </div>
+              <div className="flex items-baseline gap-[10px]">
+                <span className={`text-wall-label font-bold tracking-[0.15em] ${selected ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{day.weekday.toUpperCase()}</span>
+                <span className="font-display text-wall-heading font-bold lining-nums">{day.dayNumber}</span>
+              </div>
+              {/* The "?" sits with the dots: with nine tiles, "TOMORROW 26" leaves no room beside it. */}
+              <div aria-hidden="true" className="flex h-[28px] items-center justify-between gap-[6px]">
+                <span className="flex gap-[6px]">
+                  {day.memberIds.map((id) => (
+                    <span key={id} className={`h-[18px] w-[18px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
+                  ))}
+                </span>
                 {day.decisionCount > 0 && (
-                  <span aria-hidden="true" className="flex h-[28px] min-w-[28px] items-center justify-center rounded-full border-2 border-solid border-wall-brass px-[6px] text-wall-label font-bold text-wall-brass-ink">
+                  <span className="flex h-[28px] min-w-[28px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-brass px-[6px] text-wall-label font-bold text-wall-brass-ink">
                     ?
                   </span>
                 )}
-              </div>
-              <div aria-hidden="true" className="flex h-[18px] gap-[6px]">
-                {day.memberIds.map((id) => (
-                  <span key={id} className={`h-[18px] w-[18px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
-                ))}
               </div>
               <div className="flex items-baseline justify-between gap-[8px]">
                 <span className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.firstOut}</span>
@@ -75,6 +78,22 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
             <span className={`truncate text-wall-label font-bold ${comingUp.startNow ? 'text-wall-rust' : 'text-wall-ink-2'}`}>
               {comingUp.startNow ? `${comingUp.startNow} to start now` : 'Nothing to start yet'}
             </span>
+          </button>
+        )}
+        {todo && (
+          <button
+            type="button"
+            aria-label={`To do: ${todo.ready} ready now`}
+            aria-pressed={todo.open}
+            onClick={(event) => {
+              event.stopPropagation()
+              todo.onOpen()
+            }}
+            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-brass/10 text-left text-wall-ink ${todo.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
+          >
+            <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">TO DO</span>
+            <span className="font-display text-wall-heading font-bold leading-none">{todo.ready ? `${todo.ready} ready` : 'All clear'}</span>
+            <span className="truncate text-wall-label font-bold text-wall-ink-2">{todo.line}</span>
           </button>
         )}
       </div>

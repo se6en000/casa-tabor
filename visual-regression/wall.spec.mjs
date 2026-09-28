@@ -620,9 +620,13 @@ test('wall: swiping moves across the days and on to Coming up; a nudge or a tap 
   await touchSwipe(page, [1500, 600], [1420, 600])
   await touchSwipe(page, [1100, 600], [1500, 600])
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
-  // Seven swipes left: through Thursday, then Coming up; one more does nothing.
-  for (let i = 0; i < 8; i++) await touchSwipe(page, [1500, 600], [1100, 600])
+  // Seven swipes left: through Thursday, then Coming up; the eighth, To do; one more does nothing.
+  for (let i = 0; i < 7; i++) await touchSwipe(page, [1500, 600], [1100, 600])
   await expect(page.getByText('6 things to plan')).toBeVisible()
+  await touchSwipe(page, [1500, 600], [1100, 600])
+  await touchSwipe(page, [1500, 600], [1100, 600])
+  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await touchSwipe(page, [1100, 600], [1500, 600])
   await touchSwipe(page, [1100, 600], [1500, 600])
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Thursday, October 1/)
 })
@@ -661,4 +665,53 @@ test('wall: an event with nobody on it waits on the "No one yet" row; a tap open
 test('wall: no "No one yet" row when everything has someone', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T08:09:00')
   await expect(page.getByText('No one yet')).toHaveCount(0)
+})
+
+// To do (P3.22, board 09b, approved 2026-09-28).
+test('wall: To do — the tile opens Next up; Done and "Not now" answer an item; groups open one at a time; Casa noticed waits for a yes (board 09b)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00')
+  await page.getByRole('button', { name: /^To do: 4 ready now/ }).click()
+  await expect(page.getByText('4 ready now')).toBeVisible()
+  await expect(page.getByText('Replace the outside GFI outlet')).toBeVisible()
+  await expect(page.getByText('Quick one · was due Aug 24 · 15 min · Call')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-todo.png')
+
+  // Done takes it off.
+  const anthony = page.locator('div').filter({ hasText: /^Call Anthony about house insurance alternatives/ }).first()
+  await page.getByRole('button', { name: 'Done' }).nth(3).click()
+  await expect(page.getByText('3 ready now')).toBeVisible()
+  // Not now: a quiet link that offers when; picking one takes it out of Next up.
+  await page.getByRole('button', { name: 'Not now' }).first().click()
+  await expect(page.getByText('Not now — back in')).toBeVisible()
+  await page.getByRole('button', { name: '3 days' }).click()
+  await expect(page.getByText('2 ready now')).toBeVisible()
+
+  // One group open at a time.
+  await page.getByRole('button', { name: /^Fixes/ }).click()
+  await expect(page.getByText('Troubleshoot the water heater E05 error').first()).toBeVisible()
+  await page.getByRole('button', { name: /^Quick ones/ }).click()
+  await expect(page.getByRole('button', { name: /^Fixes/ })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('Look for a cable to fix the pool')).toBeVisible()
+
+  // Casa noticed: each waits for a yes.
+  await page.getByRole('button', { name: /^Casa noticed/ }).click()
+  await expect(page.getByText('Looks over — close it?')).toBeVisible()
+  await page.getByRole('button', { name: 'Yes' }).first().click()
+  await expect(page.getByText('Pick up Owen’s birthday cupcakes')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Back to today' }).click()
+  await expect(page.getByText('TODAY · WHO\'S WHERE')).toBeVisible()
+})
+
+test('wall: swiping past Coming up reaches To do', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await touchSwipe(page, [1500, 600], [1100, 600])
+  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await touchSwipe(page, [1500, 600], [1100, 600])
+  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await touchSwipe(page, [1100, 600], [1500, 600])
+  await expect(page.getByText('6 things to plan')).toBeVisible()
 })
