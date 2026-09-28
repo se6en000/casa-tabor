@@ -563,7 +563,7 @@ test('wall assistant: while Casa thinks, a tip that fits the question; "What can
   // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
   await section.getByRole('button', { name: 'Stop listening' }).click()
   await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
-  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(section.getByText(/^Tip: /)).toBeVisible()
   await expect(section.getByText(/gift idea/i).first()).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-thinking-tip.png')
@@ -572,7 +572,7 @@ test('wall assistant: while Casa thinks, a tip that fits the question; "What can
   await expect(section.getByText(/Any spirit day, give me 5 days/)).toBeVisible()
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-what-can-i-say.png')
   await section.getByRole('button', { name: 'Close the list' }).click()
-  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(section.getByText(/^Tip: /)).toBeVisible()
 })
 
 test('wall assistant: a tip retires once its ability has been used twice', async ({ page }) => {
@@ -582,7 +582,7 @@ test('wall assistant: a tip retires once its ability has been used twice', async
   const section = page.getByRole('region', { name: 'Assistant' })
   // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
   await section.getByRole('button', { name: 'Stop listening' }).click()
-  await expect(section.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(section.getByText(/^Tip: /)).toBeVisible()
   await expect(section.getByText(/gift idea/i)).toHaveCount(0)
 })
 

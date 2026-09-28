@@ -527,10 +527,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
 
         {tip ? (
-          <div className="mt-auto flex max-w-[1180px] flex-col gap-[8px] rounded-[20px] border border-solid border-wall-night-brass/35 bg-wall-night-brass/10 px-[26px] py-[22px]">
-            <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHILE CASA THINKS · A TIP</div>
-            <div className="text-wall-body leading-[1.35]">{tip}</div>
-          </div>
+          // One quiet line, no card: the question stays the focus (Jake, 2026-09-27; board 07e).
+          <div className="mt-auto max-w-[1180px] text-wall-detail text-wall-night-ink-2/70">Tip: {tip}</div>
         ) : (
         <div className="mt-auto flex gap-[14px]">
           {offer && (

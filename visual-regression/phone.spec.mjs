@@ -312,7 +312,7 @@ test('phone: Week › Coming up — what needs planning, answers take an item of
 test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them by topic (boards 07e/07f)', async ({ page }) => {
   const { phone, ask } = await askScene(page, 'thinking')
   await expect(ask.getByText('Thinking…')).toBeVisible()
-  await expect(ask.getByText('WHILE CASA THINKS · A TIP')).toBeVisible()
+  await expect(ask.getByText(/^Tip: /)).toBeVisible()
   await expect(ask.getByText(/gift idea/i).first()).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-thinking-tip.png')
   await ask.getByRole('button', { name: 'What can I say?' }).click()

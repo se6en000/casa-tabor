@@ -171,12 +171,7 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
             {thinking && (
               <div className="flex flex-col gap-[6px]">
                 <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Thinking…</div>
-                {tip && (
-                  <div className="flex flex-col gap-[4px] rounded-[14px] bg-phone-card px-[14px] py-[10px]">
-                    <span className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">WHILE CASA THINKS · A TIP</span>
-                    <span className="text-phone-detail text-wall-ink">{tip}</span>
-                  </div>
-                )}
+                {tip && <div className="text-phone-label text-wall-ink-2/80">Tip: {tip}</div>}
               </div>
             )}
             {card ? (
