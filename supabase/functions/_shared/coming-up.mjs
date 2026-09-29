@@ -23,7 +23,14 @@ const KINDS = [
   { kind: 'hosting', re: /\b(thanksgiving|christmas day|easter|passover|hanukkah)\b/i, lead: 30, step: 'Hosting or going?' },
   { kind: 'no_school', re: /\b(holiday|no school|columbus day|veterans day|labor day|memorial day|mlk|presidents'? day|teacher (planning|workday)|early release|spring break|winter break)\b/i, allDayOnly: true, lead: 14, step: 'No school? Who’s with the kids' },
   { kind: 'deadline', re: /\b(due|deadline|registration|register|sign[- ]?ups?|forms?|aktivate)\b/i, lead: 7, step: 'Get it done' },
-  { kind: 'party', re: /\b(party|celebration|shower|wedding|graduation|banquet|bar mitzvah|bat mitzvah|quincea)/i, lead: 14, step: 'RSVP and get a gift', gifts: true },
+  // Something to bring (Jake, 2026-09-28: "planning to bring something"): a few days is enough.
+  { kind: 'bring', re: /\b(potluck|bake sale|snack (duty|schedule)|snacks? for|class party|teacher appreciation|dish to pass|bring (a|your|snacks?))\b/i, lead: 3, step: 'Get what to bring' },
+  { kind: 'party', re: /\b(party|celebration|shower|wedding|graduation|banquet|bar mitzvah|bat mitzvah|quincea|housewarming|baptism|christening|first communion|communion|confirmation|retirement|farewell|going[- ]away|gift exchange|secret santa|white elephant)/i, lead: 14, step: 'RSVP and get a gift', gifts: true },
+  // Anyone's birthday or anniversary, not only the family's "dates we keep" (which get two months):
+  // three weeks to order a card or gift and have it arrive.
+  { kind: 'birthday', re: /\b(birthday|b-?day|anniversary)\b/i, lead: 21, step: 'Card or gift?', gifts: true },
+  { kind: 'gift_holiday', re: /\b(mother'?s day|father'?s day|valentine'?s day)\b/i, lead: 14, step: 'Card or gift?' },
+  { kind: 'sympathy', re: /\b(funeral|memorial service|celebration of life|wake|shiva)\b/i, lead: 2, step: 'Flowers or a card' },
   { kind: 'big_day', re: /\b(tryouts?|tournament|recital|concert|performance|showcase|competition|championship|camp)\b/i, lead: 14, step: 'Check what’s needed and who drives' },
   { kind: 'travel', re: /\b(flight|trip|hotel|vacation|cruise|travel)\b/i, lead: 30, step: 'Book and plan the trip' },
   { kind: 'appointment', re: /\b(dentist|doctor|pediatric\w*|orthodont\w*|check-?up|appointment|surgery|clinic|physical)\b/i, lead: 7, step: 'Make sure it works with work' },
@@ -89,11 +96,16 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     // The same thing twice: by name (repeats), or the same kind at the same moment under two names.
     const same = `${String(e.title).trim().toLowerCase()}|${k.kind}`
     const sameMoment = `${k.kind}@${e.start_time}`
-    if (seen.has(same) || seen.has(sameMoment)) continue
+    // The same person's birthday twice that day ("Carl's birthday", "Carl Tabor's birthday"; all-day
+    // dates are stored two ways, so the moments differ): once, by first name and day.
+    const who = k.kind === 'birthday' || k.kind === 'anniversary' ? String(e.title).trim().split(/[\s']/)[0].toLowerCase() : null
+    const samePerson = who ? `${k.kind}@${date}@${who}` : null
+    if (seen.has(same) || seen.has(sameMoment) || (samePerson && seen.has(samePerson))) continue
     const pokeOn = addDays(date, -k.lead)
     if (pokeOn > horizon) continue
     seen.add(same)
     seen.add(sameMoment)
+    if (samePerson) seen.add(samePerson)
     const s = state[e.id] ?? {}
     if (s.done_at || s.dismissed_at) continue
     if (s.snoozed_until && s.snoozed_until > today) continue

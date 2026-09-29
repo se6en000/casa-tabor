@@ -144,3 +144,55 @@ test('an item says whose gift ideas it carries, so a phone can keep them from th
   assert.deepEqual(items['liv'].ideasFor, ['m-liv'])
   assert.deepEqual(items['jebb'].ideasFor, [])
 })
+
+// Jake, 2026-09-28: "a bunch of birthdays in October would make it to that screen but they don't …
+// any event that requires a gift or planning to bring something should show up." Only the family's
+// "dates we keep" counted as birthdays; Heather's, Saraya's and Pilot's never showed.
+test('anyone\'s birthday or anniversary: a card or gift, three weeks ahead', () => {
+  const items = byKey(buildComingUp({ now, events: [
+    allDay('heather', "Heather's Birthday", '2026-10-07'),
+    allDay('saraya', "Saraya's Birthday", '2026-10-19'),
+    allDay('anniv2', "Mike & Sara's anniversary", '2026-10-12'),
+  ] }))
+  assert.equal(items['heather'].nextStep, 'Card or gift?')
+  assert.equal(items['heather'].pokeOn, '2026-09-16')
+  assert.equal(items['saraya'].pokeOn, '2026-09-28')
+  assert.equal(items['anniv2'].nextStep, 'Card or gift?')
+})
+
+test('a birthday party stays a party; a family "date we keep" keeps its two months', () => {
+  const items = byKey(buildComingUp({ now, events: [
+    ev('piper', "Liv going to Piper's 13th Birthday Party", '2026-10-16T17:00:00-04:00'),
+    allDay('carl', "Carl's birthday", '2026-12-04', 'Casa · date we keep · birthday'),
+  ] }))
+  assert.equal(items['piper'].nextStep, 'RSVP and get a gift')
+  assert.equal(items['carl'].nextStep, 'Pick a gift')
+})
+
+test('the same person\'s birthday twice on a day counts once', () => {
+  const items = buildComingUp({ now, events: [
+    allDay('carl', "Carl's birthday", '2026-12-03', 'Casa · date we keep · birthday'),
+    ev('carl2', "Carl Tabor's birthday", '2026-12-03T05:00:00Z', { all_day: true }),
+  ] })
+  assert.deepEqual(items.map((i) => i.key), ['carl'])
+})
+
+test('more occasions: a gift (housewarming, communion, gift exchange), something to bring, sympathy, gift holidays', () => {
+  const items = byKey(buildComingUp({ now, events: [
+    ev('house', 'Housewarming at the Garcias', '2026-10-10T18:00:00-04:00'),
+    ev('comm', "Ella's First Communion", '2026-10-18T10:00:00-04:00'),
+    ev('santa', 'Office Secret Santa', '2026-10-30T12:00:00-04:00'),
+    ev('pot', 'Class potluck', '2026-10-02T12:00:00-04:00'),
+    ev('snack', 'Softball snack duty', '2026-10-03T09:00:00-04:00'),
+    ev('fun', 'Funeral for Mr. Hayes', '2026-10-01T11:00:00-04:00'),
+    allDay('val', "Valentine's Day", '2027-02-14'),
+  ] }))
+  assert.equal(items['house'].nextStep, 'RSVP and get a gift')
+  assert.equal(items['comm'].nextStep, 'RSVP and get a gift')
+  assert.equal(items['santa'].nextStep, 'RSVP and get a gift')
+  assert.equal(items['pot'].nextStep, 'Get what to bring')
+  assert.equal(items['pot'].pokeOn, '2026-09-29')
+  assert.equal(items['snack'].nextStep, 'Get what to bring')
+  assert.equal(items['fun'].nextStep, 'Flowers or a card')
+  assert.equal(items['val'], undefined, 'February is beyond the six weeks')
+})
