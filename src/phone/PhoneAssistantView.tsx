@@ -16,6 +16,8 @@ import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
 export interface PhoneAssistantViewProps {
   lines: PhoneLine[]
   thinking: boolean
+  /** What Casa is doing on a longer think ("Searching the web: …"), in place of the tip. */
+  status?: string | null
   /** The change waiting for a yes: "Add “Jaida watching the kids” · Sat 12–3 PM". */
   pending: string | null
   working: boolean
@@ -43,7 +45,7 @@ export interface PhoneAssistantViewProps {
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -170,8 +172,8 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
             )}
             {thinking && (
               <div className="flex flex-col gap-[6px]">
-                <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Thinking…</div>
-                {tip && <div className="text-phone-label text-wall-ink-2/80">Tip: {tip}</div>}
+                <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="shrink-0 animate-spin" aria-hidden="true" /> {status ?? 'Thinking…'}</div>
+                {tip && !status && <div className="text-phone-label text-wall-ink-2/80">Tip: {tip}</div>}
               </div>
             )}
             {card ? (

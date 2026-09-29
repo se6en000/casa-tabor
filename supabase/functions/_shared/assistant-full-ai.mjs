@@ -50,9 +50,29 @@ function describeDraft(pending, utcOffset) {
 }
 
 /** One plain paragraph, then the data it answers from. */
+const shortDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`)
+
+// A project for the model (P3.25 phase 1): every step, so "what's left on the roof?" or "what should I
+// do Saturday?" is answered from the steps, not a one-line summary.
+function describeProject(p) {
+  const head = `- ${p.title}${p.aim_date ? ` · aim ${shortDay(p.aim_date)}` : ''} · ${p.done} of ${p.total} steps done`
+  if (!Array.isArray(p.steps)) return `${head}${p.next ? ` · next: ${p.next}` : ''}`
+  const nowGrp = p.steps.find((st) => !st.done)?.grp
+  return [head, ...p.steps.map((st) => {
+    const state = st.done ? 'done' : st.grp === nowGrp ? 'NOW' : 'then'
+    const bits = [
+      st.child ? `${st.title} (a project inside: ${st.child.title}, ${st.child.done} of ${st.child.total} done)` : st.title,
+      st.who, st.minutes ? effort(st.minutes) : null, st.cost_cents ? `$${Math.round(st.cost_cents / 100)}` : null,
+      st.cal_start ? (st.cal_end && st.cal_end !== st.cal_start ? `${shortDay(st.cal_start)} to ${shortDay(st.cal_end)}` : shortDay(st.cal_start)) : null,
+    ].filter(Boolean)
+    return `    ${state}: ${bits.join(' · ')}`
+  })].join('\n')
+}
+
 export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], projects = [] }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when; a big multi-step home project is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: give real ideas and your honest opinion, and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Don't steer the conversation toward adding things; offer to set things up only once a plan has taken shape. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when; a big multi-step home project is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -67,7 +87,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
     sections.push(`TO-DO LIST (his open to-dos; [id] first — if what he asks to add is already on it, say so instead of adding it again, and a project grows from it with from_id):\n${todos.map((t) => `- [${t.id}] ${t.title}${t.due ? ` · by ${day(t.due)}` : ''}`).join('\n')}`)
   }
   if (projects.length) {
-    sections.push(`PROJECTS (saved; a saved project, its steps, or a saved to-do can't be changed or deleted by voice yet — say he can tap it on the To do screen to change it; a new plan_project card would make a second project):\n${projects.map((p) => `- ${p.title} · ${p.done} of ${p.total} steps done${p.next ? ` · next: ${p.next}` : ''}`).join('\n')}`)
+    sections.push(`PROJECTS (saved, each with its steps in order — done, NOW (side by side when there are several), then the rest; a saved project, its steps, or a saved to-do can't be changed or deleted by voice yet — say he can tap it on the To do screen to change it; a new plan_project card would make a second project):\n${projects.map(describeProject).join('\n')}`)
   }
   if (home) sections.push(`HOME: ${home}`)
   if (places.length) sections.push(`SAVED PLACES:\n${places.map((p) => `- ${p.name}${p.address ? ` · ${p.address}` : ''}${p.phone ? ` · ${p.phone}` : ''}`).join('\n')}`)
@@ -132,9 +152,9 @@ export const FULL_AI_TOOLS = [
   { name: 'add_to_coming_up', description: 'Propose putting one calendar item [id] on the Coming up list: what to get ready (the next step, in a few words) and how many days of notice.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, step: { type: 'STRING' }, notice_days: { type: 'INTEGER' } }, required: ['id', 'step', 'notice_days'] } },
   { name: 'add_coming_up_rule', description: 'Propose an "every time" rule for the Coming up list: any calendar item whose name has these words gets this step and this many days of notice — or, with off, is never flagged.', parameters: { type: 'OBJECT', properties: { match: { type: 'STRING', description: 'The fewest words that pick these items out by name, e.g. "spirit day", "dentist" (every word must be in the name)' }, step: { type: 'STRING' }, notice_days: { type: 'INTEGER' }, off: { type: 'BOOLEAN' } }, required: ['match'] } },
   { name: 'change_coming_up_item', description: 'Propose marking a Coming up item [id]: done, snooze (a week) or not_needed.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, action: { type: 'STRING', enum: ['done', 'snooze', 'not_needed'] } }, required: ['id', 'action'] } },
-  { name: 'get_coming_up', description: 'The Coming up list: what needs starting within the next days (default 14), each with its next step, plan-by date and gift ideas, how many more are later, and the family\'s "every time" rules.', parameters: { type: 'OBJECT', properties: { within_days: { type: 'INTEGER' } } } },
+  { name: 'get_coming_up', description: 'The Coming up list: what needs starting within the next days (default 14), each with its next step, plan-by date and gift ideas, how many more are later, and the family\'s "every time" rules. Talking about a holiday, a season or planning ahead: within_days 120, for the whole list (a season with a starter_plan can start as a project).', parameters: { type: 'OBJECT', properties: { within_days: { type: 'INTEGER', description: '1 to 120' } } } },
   // Lookups (read only; the answer comes back to you, nothing changes).
-  { name: 'search_web', description: 'Search the web for current facts (opening hours, events in town, anything not in the family data).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+  { name: 'search_web', description: 'Search the web for current facts (opening hours, events in town, anything not in the family data), and while talking something through: ideas and what people are doing this year (add "Reddit" to the query for real people\'s ideas), prices right now, and what\'s available locally.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
   { name: 'search_places', description: 'Find a business or place near home (name, address, phone).', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' }, city: { type: 'STRING' } }, required: ['query'] } },
   { name: 'get_weather_forecast', description: 'The weather forecast (home unless a location is given).', parameters: { type: 'OBJECT', properties: { location: { type: 'STRING' }, hours_ahead: { type: 'INTEGER' } } } },
   { name: 'get_travel_eta', description: 'Drive time and when to leave (from home unless an origin is given); times are ISO.', parameters: { type: 'OBJECT', properties: { destination: { type: 'STRING' }, origin: { type: 'STRING' }, arrival_time: { type: 'STRING' }, departure_time: { type: 'STRING' } }, required: ['destination'] } },
@@ -338,9 +358,10 @@ export function giftIdeasForViewer(rows, { viewerMemberId, page, forName, family
 export function comingUpForModel(items, rules, { today, withinDays = 14 } = {}) {
   const days = Math.min(120, Math.max(1, Number(withinDays) || 14))
   const until = new Date(Date.parse(`${today}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
-  const soon = (items ?? []).filter((i) => i.pokeOn <= until).slice(0, 5)
+  // The everyday answer stays short (five); asked about a season or a plan, the whole of it.
+  const soon = (items ?? []).filter((i) => i.pokeOn <= until).slice(0, days > 14 ? 25 : 5)
   return {
-    items: soon.map((i) => ({ id: i.key, title: i.title, date: i.date, days_away: i.daysAway, next_step: i.nextStep, plan_by: i.pokeOn, late: i.late || undefined, gift_ideas: i.ideas?.length ? i.ideas : undefined })),
+    items: soon.map((i) => ({ id: i.key, title: i.title, date: i.date, days_away: i.daysAway, next_step: i.nextStep, plan_by: i.pokeOn, late: i.late || undefined, gift_ideas: i.ideas?.length ? i.ideas : undefined, starter_plan: i.startable && i.plan ? { steps: i.plan.steps, first: i.plan.first } : undefined })),
     more: (items ?? []).length - soon.length,
     rules: (rules ?? []).map((r) => (r.off ? `never flag "${r.match}"` : `every "${r.match}": ${[r.step, r.lead_days ? `${r.lead_days} days ahead` : null].filter(Boolean).join(', ')}`)),
     say: 'Briefly: these, late first, one short line each; then, if more is above 0, that there are that many more.',
@@ -370,4 +391,45 @@ export function findEventsRange(args, today) {
 /** What find_events hands the model: each event as the calendar above describes it. */
 export function describeFoundEvents(events, utcOffset) {
   return (events ?? []).map((e) => describeEvent(e, utcOffset))
+}
+
+// The hand-back to the old path (P3.17's safety net) only while that path can still answer: it loads
+// its context and calls the model inside the same 9 s request budget. On 2026-09-29 9:12 AM D spent
+// 8 s and handed back with nothing left, so the old path failed at 0 ms (a 504). Below this, D says
+// so itself.
+export const HANDBACK_MIN_MS = 4000
+export function mayHandBack(remainingMs) {
+  return remainingMs >= HANDBACK_MIN_MS
+}
+
+// Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all; the one retry
+// asks for words (tools off) instead of the same call again — the 9:12 turn came back empty twice.
+const EMPTY_RETRY_NOTE = 'This time, answer in words (your tools are off for this reply). If they asked for a change, don’t say you added, changed or saved anything — say what you would set up and that you’ll do it when they say so.'
+export function fullAiRequest({ system, contents, tools, retryAfterEmpty = false }) {
+  return {
+    system_instruction: { parts: [{ text: retryAfterEmpty ? `${system}\n\n${EMPTY_RETRY_NOTE}` : system }] },
+    contents,
+    tools: [{ function_declarations: tools }],
+    tool_config: { function_calling_config: { mode: retryAfterEmpty ? 'NONE' : 'AUTO' } },
+    // Gemini's own dynamic thinking: it decides how much to think.
+    generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
+  }
+}
+
+// What Casa is doing while he waits (P3.25 phase 1): one line on the band, sent as the turn runs.
+export function fullAiStatus(call) {
+  const args = call?.args ?? {}
+  const clip = (t) => (t.length > 60 ? `${t.slice(0, 59)}…` : t)
+  switch (call?.name) {
+    case 'search_web': return args.query ? `Searching the web: ${clip(String(args.query))}` : 'Searching the web…'
+    case 'search_places': return args.query ? `Looking up ${clip(String(args.query))}…` : 'Looking up places…'
+    case 'get_coming_up': return 'Checking Coming up…'
+    case 'find_events': return 'Looking through the calendar…'
+    case 'get_weather_forecast': return 'Checking the weather…'
+    case 'get_travel_eta': return 'Working out the drive…'
+    case 'get_recipe': return 'Opening the recipe…'
+    case 'get_gift_ideas': return 'Checking the gift ideas…'
+    case 'search_family_notes': return 'Looking through the family notes…'
+    default: return 'Looking that up…'
+  }
 }

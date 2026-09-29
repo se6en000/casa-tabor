@@ -55,6 +55,8 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   ],
   // 07e: a question still thinking — the tip line shows under it.
   thinking: () => [user('When’s Carl’s birthday again?')],
+  // P3.25 phase 1: a longer think, with the live line of what Casa is looking up.
+  'looking-up': () => [user('Let’s talk about the Halloween decorations this year')],
 }
 
 /** A stand-in for `useAssistantTurn` that plays one scene; sending adds the words to the thread. */
@@ -63,7 +65,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
     const [allMessages, setMessages] = useState<AIMessage[]>(() => BAND_SCENES[scene]?.() ?? [])
     const { messages, asidesInARow } = withoutAsides(allMessages)
     // Like the real one: a moment of thinking, then an answer (a question gets a plain reply).
-    const [loading, setLoading] = useState(scene === 'thinking')
+    const [loading, setLoading] = useState(scene === 'thinking' || scene === 'looking-up')
     const [working, setWorking] = useState(false)
     const { question, answer } = latestExchange(messages)
     const pending = pendingAction(messages)
@@ -73,6 +75,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
       messages,
       asidesInARow,
       loading,
+      status: loading && scene === 'looking-up' ? 'Searching the web: outdoor Halloween decorations Florida Reddit' : null,
       send: async (text: string) => {
         setMessages((list) => [...list, user(text)])
         setLoading(true)

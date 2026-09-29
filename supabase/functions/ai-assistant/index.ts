@@ -169,7 +169,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -331,7 +331,9 @@ const TURN_UPCOMING_DAYS = 14
 const TURN_UPCOMING_CAP = 60
 const TURN_BUDGET_MS = 7000
 /** Version D's one call gets room to think, so time limits don't decide the comparison. */
-const FULL_AI_TIMEOUT_MS = 20_000
+// Room to think and look things up while talking something through (P3.25 phase 1; Jake: "extra time
+// is fine when planning, as long as it does a good job") — the band shows what it's doing meanwhile.
+const FULL_AI_TIMEOUT_MS = 45_000
 // A project plan is a long answer, like a recipe (a live one hit the 9 s limit, 2026-09-28).
 const PROJECT_PLAN_REQUEST = /\b(?:project|break (?:it|this|that) down|steps? (?:to|for)|plan (?:out|for))\b/i
 /** The hybrid for real turns (P3.17). */
@@ -692,6 +694,8 @@ Deno.serve(async (req) => {
   // Token-producing LLM calls forward text deltas through this so the client can
   // render the answer progressively. Default no-op = identical non-streaming behavior.
   let emitToken: (delta: string) => void = () => {}
+  // A line on the band while the turn runs ("Searching the web: …"), streamed as `status` events.
+  let emitStatus: (text: string) => void = () => {}
   const modelOverride = typeof modelOverrideRaw === 'string' && modelOverrideRaw.trim().length > 0
     ? modelOverrideRaw.trim()
     : null
@@ -1198,14 +1202,24 @@ Deno.serve(async (req) => {
     const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
     const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string }>)
       .map((t) => ({ id: t.id, title: t.title, due: t.has_due_date ? nyDay(t.start_time) : null }))
-    // His saved projects, so "change that project" isn't answered with a second one.
+    // His saved projects with every step (P3.25 phase 1), so "change that project" isn't answered with
+    // a second one and "what's left on the roof?" is answered from the steps.
     const [projRes, stepRes] = await Promise.all([
-      sb.from('todo_projects').select('id, title').eq('status', 'active').limit(20),
-      sb.from('todo_steps').select('project_id, position, title, done_at'),
+      sb.from('todo_projects').select('id, title, aim_date').eq('status', 'active').limit(20),
+      sb.from('todo_steps').select('project_id, position, grp, title, who, minutes, cost_cents, cal_start, cal_end, child_project_id, done_at'),
     ])
-    const projects = ((projRes.data ?? []) as Array<{ id: string; title: string }>).map((p) => {
-      const own = ((stepRes.data ?? []) as Array<{ project_id: string; position: number; title: string; done_at: string | null }>).filter((st) => st.project_id === p.id).sort((a, b) => a.position - b.position)
-      return { id: p.id, title: p.title, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null }
+    type StepRow = { project_id: string; position: number; grp: number | null; title: string; who: string | null; minutes: number | null; cost_cents: number | null; cal_start: string | null; cal_end: string | null; child_project_id: string | null; done_at: string | null }
+    const allSteps = (stepRes.data ?? []) as StepRow[]
+    const stepsOf = (id: string) => allSteps.filter((st) => st.project_id === id).sort((a, b) => (a.grp ?? a.position) - (b.grp ?? b.position) || a.position - b.position)
+    const childIds = new Set(allSteps.map((st) => st.child_project_id).filter(Boolean))
+    const projects = ((projRes.data ?? []) as Array<{ id: string; title: string; aim_date: string | null }>).filter((p) => !childIds.has(p.id)).map((p) => {
+      const own = stepsOf(p.id)
+      const steps = own.map((st) => {
+        const inside = st.child_project_id ? ((projRes.data ?? []) as Array<{ id: string; title: string }>).find((c) => c.id === st.child_project_id) : null
+        const kids = st.child_project_id ? stepsOf(st.child_project_id) : []
+        return { title: st.title, grp: st.grp ?? st.position, done: Boolean(st.done_at), who: st.who, minutes: st.minutes, cost_cents: st.cost_cents, cal_start: st.cal_start, cal_end: st.cal_end, child: inside ? { title: inside.title, done: kids.filter((k) => k.done_at).length, total: kids.length } : null }
+      })
+      return { id: p.id, title: p.title, aim_date: p.aim_date, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null, steps }
     })
     const state = incomingConversationState as Record<string, unknown> | null
     const onScreenIds = [
@@ -1224,6 +1238,9 @@ Deno.serve(async (req) => {
     const deadline = Date.now() + FULL_AI_TIMEOUT_MS
     let parts: Array<Record<string, unknown>> = []
     let retriedEmpty = false
+    let finishReason: string | null = null
+    // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
+    const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
     // Up to three rounds: a lookup's answer goes back to the model, which then answers or proposes.
     for (let round = 0; round < 3; round++) {
       const controller = new AbortController()
@@ -1232,26 +1249,22 @@ Deno.serve(async (req) => {
         const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: system }] },
-            contents,
-            tools: [{ function_declarations: FULL_AI_TOOLS }],
-            tool_config: { function_calling_config: { mode: 'AUTO' } },
-            // Gemini's own dynamic thinking: it decides how much to think.
-            generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
-          }),
+          body: JSON.stringify(fullAiRequest({ system, contents, tools: FULL_AI_TOOLS, retryAfterEmpty: retriedEmpty })),
           signal: controller.signal,
         }, { callPurpose: 'full-ai', correlationId: cid, model, callIndex: round + 1 })
         const body = await res.json() as Record<string, unknown>
-        parts = (((body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> } }> | undefined)?.[0]?.content?.parts) ?? [])
+        const candidate = (body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> }; finishReason?: string }> | undefined)?.[0]
+        parts = candidate?.content?.parts ?? []
+        finishReason = candidate?.finishReason ?? null
       } catch {
         autoBugReport('timeout', `no answer within ${FULL_AI_TIMEOUT_MS / 1000} s`, { round })
-        if (handBack) return null
+        if (handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
         return { status: 200, payload: { type: 'text', text: 'The AI model took too long to respond. Please try again.', semantic_intent: 'full_ai.timeout', correlation_id: cid } }
       } finally {
         clearTimeout(timer)
       }
-      // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all: ask once more.
+      // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all: ask once more,
+      // for words this time (fullAiRequest's retryAfterEmpty).
       if (!parts.length && !retriedEmpty) {
         retriedEmpty = true
         round -= 1
@@ -1259,6 +1272,7 @@ Deno.serve(async (req) => {
       }
       const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
       if (!reads.length) break
+      for (const p of reads) emitStatus(fullAiStatus(p.functionCall))
       const answers = await Promise.all(reads.map(async (p) => {
         const call = p.functionCall as { name: string; args: Record<string, unknown> }
         let result: Record<string, unknown> | null = null
@@ -1305,6 +1319,7 @@ Deno.serve(async (req) => {
       }))
       contents.push({ role: 'model', parts }, { role: 'user', parts: answers })
       parts = []
+      emitStatus('Putting it together…')
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
@@ -1312,7 +1327,7 @@ Deno.serve(async (req) => {
     if (changes.length) {
       if (changes.some((c) => 'error' in c)) {
         autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
-        if (handBack) return null
+        if (handBack && mayHandBack(remainingRequestBudgetMs())) return null
         const failed = changes.find((c) => 'error' in c) as { error: string }
         return { status: 200, payload: { type: 'text', text: failed.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
       }
@@ -1326,8 +1341,8 @@ Deno.serve(async (req) => {
       return { status: 200, payload: { type: 'tool_action', tool: card.tool, args: card.args, display_text: buildDisplayText(card.tool, card.args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
     }
     const text = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
-    if (!text) autoBugReport('empty', 'no words and no change', { finish: parts.length })
-    if (!text && handBack) return null
+    if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
+    if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
     return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'full_ai.answer', correlation_id: cid } }
   }
@@ -6748,6 +6763,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       // Model output remains buffered until the final result passes the server
       // safety validator. This prevents pseudo-tool syntax from reaching UI/TTS.
       emitToken = () => {}
+      emitStatus = (text) => { try { controller.enqueue(sse('status', { text })) } catch { /* closed */ } }
       try {
         const { payload } = await run()
         if (payload.type === 'text' && typeof payload.text === 'string' && payload.text) {
@@ -6763,6 +6779,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         }))
       } finally {
         emitToken = () => {}
+        emitStatus = () => {}
         try { controller.close() } catch { /* already closed */ }
       }
     },

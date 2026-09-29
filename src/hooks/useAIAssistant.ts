@@ -306,6 +306,8 @@ export function useAIAssistant(ctx: AssistantContext) {
   const privateHistory = useAIConversationHistory()
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [loading, setLoading] = useState(false)
+  // What Casa is doing while the turn runs ("Searching the web: …"), from the stream's `status` events.
+  const [status, setStatus] = useState<string | null>(null)
   const sessionRef = useRef(session)
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
@@ -612,7 +614,8 @@ export function useAIAssistant(ctx: AssistantContext) {
     // payload. A null outcome tells the caller to use the non-streaming fallback.
     const runStreaming = async (): Promise<AssistantTurnOutcome | null> => {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 35000)
+      // A turn that thinks something through may look things up for up to 45 s (the server's own limit).
+      const timeout = setTimeout(() => controller.abort(), 60000)
       const streamMsgId = genId()
       let placeholderAdded = false
       let finalApplied = false
@@ -641,7 +644,10 @@ export function useAIAssistant(ctx: AssistantContext) {
         const handleEvent = (evt: string, dataStr: string) => {
           let payload: AssistantServerPayload
           try { payload = JSON.parse(dataStr) } catch { return }
-          if (evt === 'token') {
+          if (evt === 'status') {
+            const text = (payload as { text?: unknown }).text
+            setStatus(typeof text === 'string' && text ? text : null)
+          } else if (evt === 'token') {
             if (!firstTokenSeen) {
               firstTokenSeen = true
               emitAssistantTrace('assistant_first_token', trace, {
@@ -657,6 +663,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             setMessages(prev => prev.map(m => m.id === streamMsgId ? { ...m, content: next } : m))
           } else if (evt === 'final') {
             finalApplied = true
+            setStatus(null)
             finalOutcome = {
               resultType: payload?.type ?? 'unknown',
               safetyRejection: typeof payload?.safety_rejection === 'string' ? payload.safety_rejection : undefined,
@@ -715,6 +722,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         return null
       } finally {
         clearTimeout(timeout)
+        setStatus(null)
       }
     }
 
@@ -819,6 +827,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   return {
     messages,
     loading,
+    status,
     sessionLoading,
     session,
     send,

@@ -31,7 +31,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
 }) {
   const { profile } = useProfileSession()
   const turn = useTurn({ surface: 'phone', events, family })
-  const { messages, loading, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = turn
+  const { messages, loading, status, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = turn
 
   // The same card as the wall's band (boards 06e/06f).
   const action = pending?.toolAction ?? null
@@ -79,6 +79,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
     <PhoneAssistantView
       lines={lines}
       thinking={thinking}
+      status={status ?? null}
       pending={pending?.toolAction?.displayText ? cardText(pending.toolAction.displayText) : null}
       working={working}
       note={note}

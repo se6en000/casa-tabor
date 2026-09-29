@@ -575,6 +575,19 @@ test('wall assistant: while Casa thinks, a tip that fits the question; "What can
   await expect(section.getByText(/^Tip: /)).toBeVisible()
 })
 
+// P3.25 phase 1: while Casa looks things up for a longer think, the band says what it's doing
+// instead of a tip (Jake: "extra time is fine when planning, as long as it does a good job").
+test('wall assistant: while Casa looks something up, the band says what (the live line replaces the tip)', async ({ page }) => {
+  await band(page, 'looking-up')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
+  await expect(section.getByText('Searching the web: outdoor Halloween decorations Florida Reddit')).toBeVisible()
+  await expect(section.getByText(/^Tip: /)).toHaveCount(0)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-looking-up.png')
+})
+
 test('wall assistant: a tip retires once its ability has been used twice', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
   await page.evaluate(() => localStorage.setItem('casa-tip-usage', JSON.stringify({ 'gift-save': 2, 'gift-list': 2 })))

@@ -327,6 +327,14 @@ test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them 
   await expect(ask.getByRole('heading', { name: 'Ask Casa' })).toBeVisible()
 })
 
+// P3.25 phase 1: on a longer think, what Casa is looking up replaces "Thinking…" and the tip.
+test('phone: Ask Casa — while Casa looks something up, it says what', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'looking-up')
+  await expect(ask.getByText('Searching the web: outdoor Halloween decorations Florida Reddit')).toBeVisible()
+  await expect(ask.getByText(/^Tip: /)).toHaveCount(0)
+  await expect(phone).toHaveScreenshot('phone-looking-up.png')
+})
+
 // Swipe between days on Me and Family (2026-09-28: "it feels natural there").
 const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
   const el = document.elementFromPoint(from[0], from[1])

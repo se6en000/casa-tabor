@@ -24,7 +24,7 @@ const QUICK_CANCEL_MS = 10_000
  */
 export function useAssistantTurn({ surface, events, family, onSessionEnd }: { surface: 'wall' | 'phone'; events: EventWithDetails[]; family: FamilyMember[]; onSessionEnd?: () => void }) {
   const queryClient = useQueryClient()
-  const { messages: allMessages, loading, send, session, updateMessageToolStatus } = useAIAssistant({ page: surface, events, family, onSessionEnd })
+  const { messages: allMessages, loading, status, send, session, updateMessageToolStatus } = useAIAssistant({ page: surface, events, family, onSessionEnd })
   const [note, setNote] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
   const seenAt = useRef<Record<string, string>>({})
@@ -121,5 +121,5 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     updateMessageToolStatus(pending.id, 'pending', { args: { ...pending.toolAction.args, ...patch } } as never)
   }, [pending, updateMessageToolStatus])
 
-  return { messages, asidesInARow, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
+  return { messages, asidesInARow, loading, status, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
 }

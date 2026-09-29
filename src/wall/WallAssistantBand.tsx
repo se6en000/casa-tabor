@@ -61,7 +61,7 @@ export interface WallAssistantBandProps {
 }
 
 export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome }: WallAssistantBandProps) {
-  const { messages, asidesInARow = 0, loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+  const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
   const action = pending?.toolAction ?? null
@@ -526,7 +526,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         )}
         {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
 
-        {tip ? (
+        {status && state === 'THINKING' ? (
+          // What Casa is doing on a longer think (P3.25 phase 1): in place of the tip.
+          <div className="mt-auto max-w-[1180px] text-wall-body text-wall-night-brass">{status}</div>
+        ) : tip ? (
           // One quiet line, no card: the question stays the focus (Jake, 2026-09-27; board 07e).
           <div className="mt-auto max-w-[1180px] text-wall-detail text-wall-night-ink-2/70">Tip: {tip}</div>
         ) : (
