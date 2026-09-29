@@ -52,12 +52,12 @@ function describeDraft(pending, utcOffset) {
 /** One plain paragraph, then the data it answers from. */
 export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [] }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
     `FAMILY:\n${family.map((m) => `- ${m.name} (${[m.full_name && m.full_name !== m.name ? m.full_name : null, m.role, m.can_drive ? 'drives' : null].filter(Boolean).join(', ')})`).join('\n')}`,
-    `CALENDAR (today through three weeks out; [id] first):\n${events.map((e) => `- ${describeEvent(e, utcOffset)}`).join('\n') || '- nothing'}`,
+    `CALENDAR (today through three weeks out; [id] first — for any other date, the past, or to check whether something is on the calendar at all, call find_events):\n${events.map((e) => `- ${describeEvent(e, utcOffset)}`).join('\n') || '- nothing'}`,
     `GROCERY LIST ([id] first):\n${groceries.map((g) => `- ${g.id ? `[${g.id}] ` : ''}${g.name}${g.quantity ? ` (${g.quantity})` : ''}${g.checked ? ' · checked off' : ''}`).join('\n') || '- empty'}`,
   ]
   if (home) sections.push(`HOME: ${home}`)
@@ -113,6 +113,8 @@ export const FULL_AI_TOOLS = [
   },
   // Gift ideas (P3.19 step 2): kept for the planner, never shown to the person they're for.
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
+  // The whole calendar, past and future, reminders included (Jake, 2026-09-28: "search my whole calendar").
+  { name: 'find_events', description: 'Look up the calendar beyond the three weeks shown above, past or future: a day (from), a span (from and to), and/or words from the title or place. Reminders are included. Use it for any date not listed, or to check whether something is on the calendar.', parameters: { type: 'OBJECT', properties: { from: { type: 'STRING', description: 'YYYY-MM-DD' }, to: { type: 'STRING', description: 'YYYY-MM-DD' }, query: { type: 'STRING', description: 'words to look for' } } } },
   { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone).', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
   // Coming up (P3.19): what needs planning ahead, each with a next step and days of notice.
   { name: 'add_to_coming_up', description: 'Propose putting one calendar item [id] on the Coming up list: what to get ready (the next step, in a few words) and how many days of notice.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, step: { type: 'STRING' }, notice_days: { type: 'INTEGER' } }, required: ['id', 'step', 'notice_days'] } },
@@ -131,7 +133,7 @@ export const FULL_AI_TOOLS = [
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
-export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up'])
+export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events'])
 
 /** "YYYY-MM-DDTHH:MM" local → ISO with the family's offset, or null when it isn't a real, sensible moment. */
 function localToIso(value, utcOffset, now) {
@@ -311,4 +313,29 @@ export function comingUpForModel(items, rules, { today, withinDays = 14 } = {}) 
     rules: (rules ?? []).map((r) => (r.off ? `never flag "${r.match}"` : `every "${r.match}": ${[r.step, r.lead_days ? `${r.lead_days} days ahead` : null].filter(Boolean).join(', ')}`)),
     say: 'Briefly: these, late first, one short line each; then, if more is above 0, that there are that many more.',
   }
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+const shiftYears = (day, years) => `${Number(day.slice(0, 4)) + years}${day.slice(4)}`
+
+/**
+ * find_events' arguments made safe: a day, a span (turned round if backwards), or words searched two
+ * years either side of today. Never unbounded; no wildcard characters or tiny words reach the query.
+ * null when a date is given but isn't one.
+ */
+export function findEventsRange(args, today) {
+  const a = args ?? {}
+  const words = String(a.query ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !['the', 'and', 'for'].includes(w)).slice(0, 5)
+  const from = a.from == null || a.from === '' ? null : String(a.from)
+  const to = a.to == null || a.to === '' ? null : String(a.to)
+  if ((from && !ISO_DAY.test(from)) || (to && !ISO_DAY.test(to))) return null
+  if (!from && !to) return { from: shiftYears(today, -2), to: shiftYears(today, 2), words }
+  const start = from ?? to
+  const end = to ?? from
+  return start <= end ? { from: start, to: end, words } : { from: end, to: start, words }
+}
+
+/** What find_events hands the model: each event as the calendar above describes it. */
+export function describeFoundEvents(events, utcOffset) {
+  return (events ?? []).map((e) => describeEvent(e, utcOffset))
 }

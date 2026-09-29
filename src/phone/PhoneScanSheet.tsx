@@ -3,7 +3,7 @@ import { Bell, CalendarDays, Camera, Check, ChevronLeft, Images, Loader2 } from 
 import type { WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { ScannedItem } from '../utils/documentScanner'
-import { scanArgs, scanWhen } from './scan'
+import { addedLine, scanArgs, scanWhen } from './scan'
 
 // Scan it (board 05e): a photo of a flyer, an invite, a schedule — read by the scanner,
 // then every date comes back as a ticked draft to check. Only what's ticked is added,
@@ -15,15 +15,20 @@ export interface PhoneScanSheetProps {
   /** Reads the photos (the scanner in the app; a canned answer in the fixture). */
   scan: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
   createEvent: (args: Record<string, unknown>) => Promise<void>
+  /** Looks up the calendar on the scanned days for things already there (item id → the match). */
+  findSimilar?: (items: ScannedItem[]) => Promise<Record<string, SimilarEvent>>
   onClose: () => void
 }
 
-type Stage = 'intake' | 'reading' | 'review'
+type Stage = 'intake' | 'reading' | 'review' | 'added'
+
+/** Something already on the calendar that a scanned item probably is (a second scan of the same flyer). */
+export type SimilarEvent = { id: string; title: string; start_time: string }
 
 /** About how many characters of a title fit on one line of the review list. */
 const TITLE_LINE_CHARS = 26
 
-export default function PhoneScanSheet({ members, pigments, scan, createEvent, onClose }: PhoneScanSheetProps) {
+export default function PhoneScanSheet({ members, pigments, scan, createEvent, findSimilar, onClose }: PhoneScanSheetProps) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
   const [stage, setStage] = useState<Stage>('intake')
@@ -33,6 +38,9 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [added, setAdded] = useState(0)
+  // What went in, said plainly afterwards (Jake, 2026-09-28: "everything went away, so I can't tell").
+  const [addedLines, setAddedLines] = useState<string[]>([])
+  const [already, setAlready] = useState<Record<string, SimilarEvent>>({})
 
   const read = async (files: File[]) => {
     if (files.length === 0) return
@@ -41,9 +49,13 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
     try {
       const result = await scan(files)
       setSummary(result.summary)
-      setItems(result.items)
       setFailed({})
       setAdded(0)
+      setAddedLines([])
+      // A second scan of the same flyer: what's already on the calendar starts unticked, and says so.
+      const matches = findSimilar ? await findSimilar(result.items).catch(() => ({} as Record<string, SimilarEvent>)) : {}
+      setAlready(matches)
+      setItems(result.items.map((i) => (matches[i.id] ? { ...i, selected: false } : i)))
       setStage('review')
     } catch (e) {
       setError((e as Error).message || 'That photo couldn’t be read. Try a closer, flatter shot.')
@@ -63,18 +75,21 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
     setBusy(true)
     const misses: Record<string, string> = {}
     let count = 0
+    const lines: string[] = []
     // One at a time, so a miss says which one and the rest still go in.
     for (const item of ticked) {
       try {
         await createEvent(scanArgs(item, members))
         count += 1
+        lines.push(addedLine(item))
       } catch (e) {
         misses[item.id] = (e as Error).message || 'Adding didn’t work.'
       }
     }
     setBusy(false)
     setAdded((n) => n + count)
-    if (Object.keys(misses).length === 0) return onClose()
+    setAddedLines((all) => [...all, ...lines])
+    if (Object.keys(misses).length === 0) return setStage('added')
     // What went in leaves the list; what didn't stays, with why.
     setItems((list) => list.filter((i) => misses[i.id] || !i.selected))
     setFailed(misses)
@@ -92,7 +107,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={picked} />
       <input ref={libraryRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={picked} />
 
-      <div className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px]">
+      <div className={`flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px] ${stage === 'added' ? 'hidden' : ''}`}>
         {stage === 'intake' && (
           <div className="flex flex-col gap-[12px]">
             <p className="m-0 font-display text-phone-heading text-wall-ink">A flyer, an invite, a team schedule, a card. Every date on it comes back for you to check.</p>
@@ -162,6 +177,11 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
                       )
                     })}
                   </div>
+                  {already[item.id] && (
+                    <div className="text-phone-detail font-semibold text-wall-brass-ink">
+                      Already on your calendar: {already[item.id].title} · {new Date(already[item.id].start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. Tick it to add another.
+                    </div>
+                  )}
                   {failed[item.id] && <div role="alert" className="text-phone-detail text-wall-rust">{failed[item.id]}</div>}
                 </div>
               </div>
@@ -169,6 +189,20 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, o
           </div>
         )}
       </div>
+
+      {stage === 'added' && (
+        <div className="flex flex-1 flex-col gap-[12px] overflow-y-auto px-[20px] pt-[16px]">
+          <div className="flex items-center gap-[10px] font-display text-phone-heading font-bold text-wall-ink"><Check size={22} strokeWidth={3} aria-hidden="true" /> Added {addedLines.length === 1 ? 'it' : `all ${addedLines.length}`}</div>
+          <ul aria-label="Added" className="m-0 flex list-none flex-col p-0">
+            {addedLines.map((line) => <li key={line} className="border-0 border-t border-solid border-wall-stone py-[12px] text-phone-body text-wall-ink">{line}</li>)}
+          </ul>
+          <span className="text-phone-detail text-wall-ink-2">Events are on Google Calendar too. Ask Casa about any of them.</span>
+          <div className="flex gap-[10px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))]">
+            <button type="button" className={`${dark} flex-1`} onClick={onClose}>Done</button>
+            <button type="button" className={pill} onClick={() => { setItems([]); setAddedLines([]); setStage('intake') }}>Scan another</button>
+          </div>
+        </div>
+      )}
 
       {stage === 'review' && (
         <div className="flex shrink-0 flex-col gap-[8px] border-0 border-t border-solid border-wall-stone bg-phone-ground px-[20px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))] pt-[12px]">

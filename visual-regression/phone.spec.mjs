@@ -172,6 +172,10 @@ test('phone: + → Scan it reads a flyer into ticked drafts; only what stays tic
   await expect(phone).toHaveScreenshot('phone-scan.png')
   await sheet.getByRole('button', { name: 'Skip Picture Day' }).click()
   await sheet.getByRole('button', { name: 'Add 1' }).click()
+  // It says what went in (Jake, 2026-09-28: "everything went away, so I can't tell").
+  await expect(sheet.getByRole('list', { name: 'Added' }).getByText('Palm Beach Public PTO Fall Festival · Sun Sep 27 · 11:00 AM')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-scan-added.png')
+  await sheet.getByRole('button', { name: 'Done' }).click()
   await expect(phone.getByRole('region', { name: 'Scan it' })).toHaveCount(0)
   await phone.getByRole('button', { name: 'Week' }).click()
   await phone.getByRole('button', { name: /^SUN/ }).click()
@@ -350,4 +354,15 @@ test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me 
   await phoneSwipe(page, [120, 400], [320, 400])
   await phoneSwipe(page, [120, 400], [320, 400])
   await expect(phone.getByText('Friday, September 25')).toBeVisible()
+})
+
+test('phone: Scan it — something already on the calendar that day starts unticked and says so', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:00:00&similar=1', 'jake-id')
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  const sheet = phone.getByRole('region', { name: 'Scan it' })
+  await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await expect(sheet.getByText(/Already on your calendar: PTO Fall Festival · 11:00 AM/)).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Add Palm Beach Public PTO Fall Festival' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(sheet.getByRole('button', { name: 'Add 1' })).toBeVisible()
 })

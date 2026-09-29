@@ -54,6 +54,8 @@ export interface PhoneViewProps {
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Scan it (the + → Scan it): reads photos into drafts; added with `createEvent`. */
   scan?: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
+  /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
+  findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
   assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void }) => ReactNode
   /** Keep from… (05g): who each event is kept from, and the change. */
@@ -93,7 +95,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, findSimilar }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming'>('week')
   const [filter, setFilter] = useState<string | null>(null)
@@ -471,7 +473,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
       {askOpen && assistant?.({ onClose: () => setAskOpen(false), onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) } })}
       {scanOpen && scan && createEvent && (
-        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} onClose={() => setScanOpen(false)} />
+        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
       )}
       {addOpen && (
         <PhoneAddSheet

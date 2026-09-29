@@ -68,3 +68,26 @@ test('the review line says the day and time as printed', () => {
   assert.equal(scanWhen({ ...base, all_day: true }), 'Sat, Oct 10 · All day')
   assert.equal(scanWhen({ ...base, end_time_local: null, start_time_local: '09:30' }), 'Sat, Oct 10 · 9:30 AM')
 })
+
+// Jake's bug report 2026-09-28 8:16 PM: "I just pressed the confirm button and everything went
+// away, so I can't tell if anything got really committed" — and scanning the same flyer twice made
+// "2026 Strings Festival" on Oct 24 twice. After adding, say exactly what went in; before adding,
+// point out what's already on the calendar that day.
+import { addedLine, similarEvent } from '../src/phone/scan.ts'
+const scanItem = (x) => ({ id: 's', type: 'event', title: '', date: '', start_time_local: null, end_time_local: null, start_time: '', end_time: '', all_day: false, location_name: null, address: null, notes: null, selectedMemberIds: [], confidence: 1, selected: true, ...x })
+
+test('what went in, said plainly: title, day and time, event or reminder', () => {
+  assert.equal(addedLine(scanItem({ title: '2026 Strings Festival', date: '2026-10-24', start_time_local: '15:00' })), '2026 Strings Festival · Sat Oct 24 · 3:00 PM')
+  assert.equal(addedLine(scanItem({ title: 'Volunteer for Strings Festival', type: 'reminder', date: '2026-10-24', start_time_local: null, all_day: true })), 'Volunteer for Strings Festival · Sat Oct 24 · reminder')
+})
+
+test('already on the calendar: same day, mostly the same words (not just any event that day)', () => {
+  const onCal = [
+    { id: 'fest', title: '2026 Strings Festival', start_time: new Date(2026, 9, 24, 12, 0).toISOString() },
+    { id: 'soccer', title: 'Owen soccer game', start_time: new Date(2026, 9, 24, 9, 0).toISOString() },
+    { id: 'other-day', title: 'Strings Festival rehearsal', start_time: new Date(2026, 9, 23, 17, 0).toISOString() },
+  ]
+  assert.equal(similarEvent(scanItem({ title: 'Strings Festival 2026', date: '2026-10-24' }), onCal)?.id, 'fest')
+  assert.equal(similarEvent(scanItem({ title: 'Book fair', date: '2026-10-24' }), onCal), null)
+  assert.equal(similarEvent(scanItem({ title: 'Strings Festival', date: '2026-10-25' }), onCal), null)
+})

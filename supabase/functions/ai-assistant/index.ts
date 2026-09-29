@@ -169,7 +169,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1255,6 +1255,27 @@ Deno.serve(async (req) => {
           // Surprise-safe (P3.19 step 2): only on the asker's phone, never the ideas for them.
           const { data } = await sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at').limit(100)
           result = giftIdeasForViewer(data ?? [], { viewerMemberId: activeMemberId, page: context?.page ?? null, forName: call.args?.for ?? null, family })
+        } else if (call.name === 'find_events') {
+          // The whole calendar, past and future (Jake, 2026-09-28: "search my whole calendar").
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+          const range = findEventsRange(call.args, today)
+          if (!range) {
+            result = { error: 'Dates must be YYYY-MM-DD' }
+          } else {
+            const dayAfter = new Date(Date.parse(`${range.to}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10)
+            let q = sb.from('events').select('id').is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
+              .gte('start_time', `${range.from}T00:00:00${utcOffset}`).lt('start_time', `${dayAfter}T00:00:00${utcOffset}`)
+            // Every word must appear, in the title or the place.
+            for (const w of range.words) q = q.or(`title.ilike.%${w}%,location_name.ilike.%${w}%`)
+            const { data, error } = await q.order('start_time').limit(30)
+            if (error) {
+              result = { error: 'The calendar search failed' }
+            } else {
+              const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
+              const found = await loadReferents(sb, ids, family)
+              result = { from: range.from, to: range.to, events: describeFoundEvents(found, utcOffset), ...(ids.length === 30 ? { more: 'there are more — narrow the dates or words' } : {}) }
+            }
+          }
         } else if (call.name === 'search_family_notes') {
           // The same retrieval the old path loaded on every turn — here only when D asks.
           const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)

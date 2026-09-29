@@ -53,3 +53,43 @@ export function scanWhen(item: ScannedItem): string {
   }
   return `${day} · ${time(item.start_time_local)}${item.end_time_local ? ` – ${time(item.end_time_local)}` : ''}`
 }
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const dayLabel = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number)
+  const day = new Date(y, m - 1, d)
+  return `${DAYS[day.getDay()]} ${MONTHS[m - 1]} ${d}`
+}
+const clock12 = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+/** What went in, said plainly (after adding): "2026 Strings Festival · Sat Oct 24 · 3:00 PM". */
+export function addedLine(item: ScannedItem): string {
+  const when = item.type === 'reminder' && !item.start_time_local ? 'reminder' : item.all_day || !item.start_time_local ? 'all day' : clock12(item.start_time_local)
+  return `${item.title.trim()} · ${dayLabel(item.date)} · ${when}`
+}
+
+const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2))
+const localDate = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Something already on the calendar that this scanned item probably is: the same day, and most of
+ * the smaller title's words in the other (so a second scan of the same flyer is caught, but another
+ * event that day isn't).
+ */
+export function similarEvent<T extends { id: string; title: string; start_time: string }>(item: ScannedItem, candidates: T[]): T | null {
+  const mine = words(item.title)
+  if (mine.size === 0) return null
+  return candidates.find((c) => {
+    if (localDate(c.start_time) !== item.date) return false
+    const theirs = words(c.title)
+    const shared = [...mine].filter((w) => theirs.has(w)).length
+    return shared / Math.min(mine.size, theirs.size || 1) >= 0.6
+  }) ?? null
+}
