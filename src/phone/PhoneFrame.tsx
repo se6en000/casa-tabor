@@ -9,6 +9,7 @@ import { saveDraft } from '../wall/saveDraft'
 import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
 import { useComingUp } from '../wall/useComingUp'
+import { useTodoProject, useTodos } from '../wall/useTodos'
 import { toggleChecklistItem } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
@@ -48,7 +49,10 @@ export default function PhoneFrame() {
   )
   const { data: contacts = [] } = useSavedContacts()
   const { data: places = [] } = useSavedPlaces()
-  const comingUp = useComingUp()
+  const comingUp = useComingUp({ surface: 'phone' })
+  // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
+  const isJake = members.find((m) => m.id === profile?.memberId)?.name === 'Jake'
+  const todos = useTodos({ enabled: isJake, surface: 'phone' })
   return (
     <PhoneView
       now={now}
@@ -69,7 +73,8 @@ export default function PhoneFrame() {
       setKeptFrom={setKeptFrom}
       contacts={contacts}
       places={places}
-      comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act } : null}
+      comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act, start: comingUp.start } : null}
+      todos={isJake && todos.data ? { list: todos.data, act: todos.act, useProject: useTodoProject } : null}
     />
   )
 }

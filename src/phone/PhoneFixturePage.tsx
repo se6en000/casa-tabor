@@ -19,6 +19,7 @@ import type { PhoneLine } from './assistant'
 import { previewEvent, withDriver } from '../wall/editing'
 import { eventsFor, routinesFor, withKeptFrom, type KeepFrom } from '../wall/audience'
 import type { ComingUpItem } from '../wall/comingUp'
+import { useFixtureTodos } from '../wall/todoFixture'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -84,6 +85,8 @@ export default function PhoneFixturePage() {
   const params = new URLSearchParams(window.location.search)
   const now = new Date(params.get('at') ?? '2026-09-25T07:12:00')
   const viewerId = params.get('viewer') ?? 'jake-id'
+  // To do on Jake's phone (P3.22 step 7): the same list and projects as the wall's fixture.
+  const { todos } = useFixtureTodos({ stepEvent: params.get('stepEvent') === '1' })
   const ask = params.get('ask')
   const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})
@@ -118,6 +121,7 @@ export default function PhoneFixturePage() {
               keepFrom={keep}
               comingUp={{ items: comingUp, today: '2026-09-25', act: async (key) => setComingUp((list) => list.filter((i) => i.key !== key)) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
+              todos={viewerId === 'jake-id' ? todos : null}
               checklist={checklist}
               scan={async () => SCANNED}
               findSimilar={params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}

@@ -8,10 +8,11 @@ import type { TodoAction, TodoList, TodoProjectDetail } from './todos'
  * watch, a tick — so a quarter-hourly refresh is plenty; an answer here updates the list at once and
  * the refresh confirms it. Reading the list also starts Casa sorting anything new.
  */
-export function useTodos() {
+export function useTodos({ enabled = true, surface = 'wall' }: { enabled?: boolean; surface?: 'wall' | 'phone' } = {}) {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['todos'],
+    enabled,
     queryFn: async (): Promise<TodoList> => {
       const { data, error } = await supabase.functions.invoke('todos', { body: { action: 'list' } })
       if (error) throw error
@@ -34,11 +35,11 @@ export function useTodos() {
         suggestions: old.suggestions.filter((s) => s.id !== request.id),
       }
     })
-    const { error } = await supabase.functions.invoke('todos', { body: request })
+    const { error } = await supabase.functions.invoke('todos', { body: { ...request, surface } })
     await queryClient.invalidateQueries({ queryKey: ['todos'] })
     if (request.action === 'project_edit') await queryClient.invalidateQueries({ queryKey: ['todo-project', request.id] })
     if (error) throw error
-  }, [queryClient])
+  }, [queryClient, surface])
   return { data: query.data ?? null, act }
 }
 

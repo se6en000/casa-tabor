@@ -366,3 +366,63 @@ test('phone: Scan it — something already on the calendar that day starts untic
   await expect(sheet.getByRole('button', { name: 'Add Palm Beach Public PTO Fall Festival' })).toHaveAttribute('aria-pressed', 'false')
   await expect(sheet.getByRole('button', { name: 'Add 1' })).toBeVisible()
 })
+
+// To do on the phone (P3.22 step 7; the wall's canvas 10a–10d in one column): Week › To do, Jake's only.
+const openTodoPhone = async (page) => {
+  const phone = await open(page, '2026-09-25T13:10:00')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'To do', exact: true }).click()
+  await expect(phone.getByRole('heading', { name: 'To do' })).toBeVisible()
+  return phone
+}
+
+test('phone: Week › To do — the projects shelf, Next up with what it takes, the rest folded (Jake’s phone only)', async ({ page }) => {
+  const phone = await openTodoPhone(page)
+  await expect(phone.getByText('PROJECTS · 3 GOING')).toBeVisible()
+  await expect(phone.getByText('PROJECT · HIRED HELP')).toBeVisible()
+  await expect(phone.getByText('was due Aug 24', { exact: true })).toBeVisible()
+  await expect(page).toHaveScreenshot('phone-todo.png')
+  // Done takes it off.
+  await phone.getByRole('region', { name: 'Next up' }).getByRole('button', { name: 'Done' }).first().click()
+  await expect(phone.getByText('Replace the outside GFI outlet')).toHaveCount(0)
+  // A folded group opens in place.
+  await phone.getByRole('button', { name: /^Quick ones/ }).click()
+  await expect(phone.getByText('Look for a cable to fix the pool')).toBeVisible()
+  // Kelly's phone has no To do.
+  const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
+  await kellys.getByRole('button', { name: 'Week' }).click()
+  await expect(kellys.getByRole('button', { name: 'To do', exact: true })).toHaveCount(0)
+})
+
+test('phone: a project — Now, Then, the project inside; a step’s details with the phone’s own inputs; ↑ Earlier; add a step; settings', async ({ page }) => {
+  const phone = await openTodoPhone(page)
+  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
+  const project = phone.getByRole('region', { name: 'Paint the house — project' })
+  await expect(project.getByText('NOW · ON YOUR PHONE · SIDE BY SIDE')).toBeVisible()
+  await expect(project.getByText(/A project inside · 1 of 4/)).toBeVisible()
+  await expect(page).toHaveScreenshot('phone-project.png')
+  // A step's details: the cost typed; ↑ Earlier.
+  await project.getByRole('button', { name: 'Open Take down shutters and house numbers' }).click()
+  const step = phone.getByRole('region', { name: 'Take down shutters and house numbers — details' })
+  await step.getByRole('textbox', { name: 'Notes' }).fill('Numbers go back after the painter')
+  await step.getByLabel('Cost').fill('25')
+  await step.getByLabel('Cost').blur()
+  await step.getByRole('button', { name: '↑ Earlier' }).click()
+  await step.getByRole('button', { name: 'Close' }).click()
+  await expect(project.getByText(/1 hr · \$25 · Me/)).toBeVisible()
+  // Add a step at the end.
+  await project.getByRole('textbox', { name: 'A new step' }).fill('Buy tarps')
+  await project.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(project.getByText('Buy tarps')).toBeVisible()
+  // Done in Now.
+  await project.getByRole('button', { name: 'Mark Pick colours: 3 sample pots done' }).click()
+  await expect(project.getByText('4 of 10')).toBeVisible()
+  // Settings: the same screen as the wall's.
+  await project.getByRole('button', { name: 'Settings' }).click()
+  const settings = phone.getByRole('region', { name: 'Project settings' })
+  await settings.getByRole('button', { name: 'Everything in Now' }).click()
+  await expect(settings.getByRole('button', { name: 'Everything in Now' })).toHaveAttribute('aria-pressed', 'true')
+  await settings.getByRole('button', { name: 'Back to the plan' }).click()
+  await project.getByRole('button', { name: '‹ To do' }).click()
+  await expect(phone.getByRole('heading', { name: 'To do' })).toBeVisible()
+})

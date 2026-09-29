@@ -10,7 +10,7 @@ export interface ComingUpData { items: ComingUpItem[]; ideas: GiftIdea[]; today:
  * push and the plan-by pokes use. It changes slowly (a day at a time, or when someone answers an
  * item), so a quarter-hourly refresh is plenty; an answer here refreshes it at once.
  */
-export function useComingUp() {
+export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' } = {}) {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['coming-up'],
@@ -25,16 +25,16 @@ export function useComingUp() {
   const act = useCallback(async (key: string, action: ComingUpAction) => {
     // Gone from the list straight away; the refresh confirms it.
     queryClient.setQueryData<ComingUpData>(['coming-up'], (old) => (old ? { ...old, items: old.items.filter((i) => i.key !== key) } : old))
-    const { error } = await supabase.functions.invoke('coming-up', { body: { action, key } })
+    const { error } = await supabase.functions.invoke('coming-up', { body: { action, key, surface } })
     await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     if (error) throw error
-  }, [queryClient])
+  }, [queryClient, surface])
   // A season starts as this year's project (P3.23, canvas 11c); the new project's id, to open it.
   const start = useCallback(async (key: string): Promise<string | null> => {
-    const { data, error } = await supabase.functions.invoke('coming-up', { body: { action: 'start', key } })
+    const { data, error } = await supabase.functions.invoke('coming-up', { body: { action: 'start', key, surface } })
     await Promise.all([queryClient.invalidateQueries({ queryKey: ['coming-up'] }), queryClient.invalidateQueries({ queryKey: ['todos'] })])
     if (error) throw error
     return (data as { project_id?: string | null } | null)?.project_id ?? null
-  }, [queryClient])
+  }, [queryClient, surface])
   return { data: query.data ?? null, act, start }
 }

@@ -452,6 +452,18 @@
       {
         "path": "src/wall/WallProjectShelf.tsx",
         "reason": "Family Wall: the projects shelf on the To do list — a card per project, and \"N more\" (P3.23, canvas 10a, approved 2026-09-29) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 220px cards."
+      },
+      {
+        "path": "src/phone/PhoneTodo.tsx",
+        "reason": "The phone lens: To do (P3.22 step 7; the wall's canvas 10a in one column) — past-step answers, project cards, Next up Done / Not now, folded groups — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 40–52px targets."
+      },
+      {
+        "path": "src/phone/PhoneProject.tsx",
+        "reason": "The phone lens: a project (P3.23; canvas 10b–10d in one column) — done circles, a step's details with the phone's own inputs, ↑ / ↓, Project settings — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 40–52px targets."
+      },
+      {
+        "path": "src/phone/PhoneTodoSheet.tsx",
+        "reason": "The phone lens: editing a to-do (P3.22 step 7) — title, date, time, Save, Done, Delete — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 40–52px targets."
       }
     ]
   }

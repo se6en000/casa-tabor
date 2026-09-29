@@ -135,3 +135,8 @@ export function stepForEvent(list: Pick<TodoList, 'projects'>, eventId: string) 
   }
   return null
 }
+
+/** "3 ready · 2 projects" above the title. */
+export function todoSummary(list: Pick<TodoList, 'nextUp' | 'projects' | 'suggestions'>) {
+  return [`${list.nextUp.length} ready`, list.projects.length ? `${list.projects.length} project${list.projects.length === 1 ? '' : 's'}` : null, list.suggestions.length ? `${list.suggestions.length} for a yes` : null].filter(Boolean).join(' · ')
+}

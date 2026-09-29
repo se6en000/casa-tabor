@@ -16,6 +16,10 @@ import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
 import PhoneScanSheet from './PhoneScanSheet'
 import PhoneComingUp, { comingUpSummary } from './PhoneComingUp'
+import PhoneTodo from './PhoneTodo'
+import PhoneProject from './PhoneProject'
+import PhoneTodoSheet from './PhoneTodoSheet'
+import { todoSummary, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
 import { forViewer, type ComingUpAction, type ComingUpItem } from '../wall/comingUp'
 import type { ScannedItem } from '../utils/documentScanner'
 import type { SavedContact, SavedPlace } from '../types'
@@ -62,7 +66,16 @@ export interface PhoneViewProps {
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
-  comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
+  comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null> } | null
+  /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
+  todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject: (id: string | null) => { data?: TodoProjectDetail | null } } | null
+}
+
+/** A project on the phone, loaded (the hook lives here, so it only runs while one is open). */
+function ProjectOnPhone({ id, todos, today, onBack, onOpenProject }: { id: string; todos: NonNullable<PhoneViewProps['todos']>; today: string; onBack: () => void; onOpenProject: (id: string) => void }) {
+  const { data } = todos.useProject(id)
+  if (!data) return null
+  return <PhoneProject detail={data} today={today} onEdit={(op, args) => todos.act({ action: 'project_edit', id, op, args })} onBack={onBack} onOpenProject={onOpenProject} />
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -95,9 +108,12 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, findSimilar }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
-  const [weekView, setWeekView] = useState<'week' | 'coming'>('week')
+  const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
+  // A project open on the phone, and a to-do being edited (P3.22 step 7).
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [editingTodo, setEditingTodo] = useState<TodoItem | null>(null)
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [meIndex, setMeIndex] = useState<number | null>(null)
@@ -301,40 +317,56 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </div>
   )
 
+  const phoneToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const days = weekDays(week, members, [], now, checklist)
   const comingUpItems = comingUp ? forViewer(comingUp.items, viewerId) : []
-  const weekSwitch = comingUp ? (
-    <div role="group" aria-label="Week or Coming up" className="flex shrink-0 rounded-full border border-solid border-wall-stone p-[3px]">
-      {(['week', 'coming'] as const).map((v) => (
+  // This week · Coming up · To do — the wall's order (days, then Coming up, then To do), on its own row.
+  const views = (['week', 'coming', 'todo'] as const).filter((v) => v === 'week' || (v === 'coming' ? comingUp : todos))
+  const weekSwitch = views.length > 1 ? (
+    <div role="group" aria-label="Week, Coming up or To do" className="flex rounded-full border border-solid border-wall-stone p-[3px]">
+      {views.map((v) => (
         <button
           key={v}
           type="button"
           aria-pressed={weekView === v}
           onClick={() => setWeekView(v)}
-          className={`h-[44px] whitespace-nowrap rounded-full border-0 px-[10px] text-phone-detail ${weekView === v ? 'bg-wall-ink font-semibold text-wall-on-pigment' : 'bg-transparent text-wall-ink-2'}`}
+          className={`h-[44px] flex-1 whitespace-nowrap rounded-full border-0 px-[10px] text-phone-detail ${weekView === v ? 'bg-wall-ink font-semibold text-wall-on-pigment' : 'bg-transparent text-wall-ink-2'}`}
         >
-          {v === 'week' ? 'This week' : 'Coming up'}
+          {v === 'week' ? 'This week' : v === 'coming' ? 'Coming up' : 'To do'}
         </button>
       ))}
     </div>
   ) : null
-  const weekScreen = comingUp && weekView === 'coming' ? (
-    <div className="flex flex-col gap-[6px]">
-      <div className="flex items-end justify-between gap-[10px]">
-        <div className="flex min-w-0 flex-col">
-          <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{comingUpSummary(comingUpItems, comingUp.today)}</span>
-          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Coming up</h1>
-        </div>
-        {weekSwitch}
+  const weekScreen = todos && weekView === 'todo' ? (
+    <div className="flex flex-col gap-[10px]">
+      {weekSwitch}
+      <div className="flex flex-col">
+        <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{todoSummary(todos.list)}</span>
+        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">To do</h1>
+      </div>
+      <PhoneTodo
+        list={todos.list}
+        today={phoneToday}
+        onAct={todos.act}
+        onOpenProject={setProjectId}
+        onEdit={setEditingTodo}
+        upcoming={comingUp?.items ?? []}
+        onStart={comingUp?.start ? (key) => void comingUp.start!(key).then((id) => { if (id) setProjectId(id) }) : undefined}
+      />
+    </div>
+  ) : comingUp && weekView === 'coming' ? (
+    <div className="flex flex-col gap-[10px]">
+      {weekSwitch}
+      <div className="flex min-w-0 flex-col">
+        <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{comingUpSummary(comingUpItems, comingUp.today)}</span>
+        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Coming up</h1>
       </div>
       <PhoneComingUp items={comingUpItems} today={comingUp.today} onAct={comingUp.act} />
     </div>
   ) : (
     <div className="flex flex-col gap-[10px]">
-      <div className="flex items-end justify-between gap-[10px]">
-        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
-        {weekSwitch}
-      </div>
+      {weekSwitch}
+      <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
       {days.map((d, i) => (
         <button
           key={d.key}
@@ -423,7 +455,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       if (next != null) setDayIndex(next)
     }
   }
-  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || scanOpen || askOpen || adding)
+  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || scanOpen || askOpen || adding || projectId || editingTodo)
   useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
@@ -439,6 +471,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         {tab === 'week' && weekScreen}
         {tab === 'more' && moreScreen}
       </main>
+      {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} />}
+      {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
       <nav aria-label="Sections" className="flex shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px]">
         {tabButton(tabs[0])}
         {tabButton(tabs[1])}

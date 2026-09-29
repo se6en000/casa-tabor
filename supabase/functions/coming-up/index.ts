@@ -42,6 +42,13 @@ Deno.serve(async (req) => {
     const now = new Date()
     const today = todayLocal(now)
 
+    // What gets used, for the month check (P3.22 step 8).
+    if (action !== 'list' && action !== 'send_digest' && action !== 'send_pokes') {
+      const log = sb.from('ai_drawer_debug_events').insert({ event: 'coming_up_use', channel: 'server', page: String((body as { surface?: string }).surface ?? 'unknown').slice(0, 16), detail: `${action}:${String(body.key ?? '').split(':')[0]}` }).then(() => null, () => null)
+      // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(log)
+    }
+
     // A season starts as this year's project (P3.23, canvas 11c): from last year's, or Casa's starter plan.
     if (action === 'start') {
       const m = /^season:([a-z_]+):(\d{4})$/.exec(String(body.key ?? ''))

@@ -91,6 +91,14 @@ Deno.serve(async (req) => {
     const now = new Date()
     const today = todayLocal(now)
     const id = String(body.id ?? '').slice(0, 64)
+    // What gets used, for the month check (P3.22 step 8): each answer and change, from which screen.
+    if (action !== 'list' && action !== 'project' && action !== 'sort') {
+      const op = (body as { op?: string }).op
+      const surface = String((body as { surface?: string }).surface ?? 'unknown').slice(0, 16)
+      const log = sb.from('ai_drawer_debug_events').insert({ event: 'todo_use', channel: 'server', page: surface, detail: op ? `${action}:${op}` : action }).then(() => null, () => null)
+      // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(log)
+    }
 
     if (action === 'done') {
       if (!id) return json({ error: 'id required' }, 400)
