@@ -1725,6 +1725,35 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Plan it with Casa (P3.25 phase 3; canvas 12c/12d): one Agree saves the whole plan in one
+    // transaction (what he unticked is skipped); Google follows for every event it made. Undo takes
+    // the whole plan back until the end of the next day.
+    if (tool === 'apply_plan' || tool === 'undo_plan') {
+      const { data, error } = tool === 'apply_plan'
+        ? await sb.rpc('casa_plan_apply', {
+            p_title: normalizeOptionalText(args.title, 200) ?? 'The plan',
+            p_items: Array.isArray(args.items) ? args.items : [],
+            p_skip: Array.isArray(args.skip) ? args.skip : [],
+            p_surface: normalizeOptionalText(args.surface, 20),
+          })
+        : await sb.rpc('casa_plan_undo', { p_plan: normalizeOptionalText(args.plan_id, 64) })
+      if (error) throw new Error(error.message)
+      const changes = ((data as { calendar?: Array<{ op: string; event_id: string }> } | null)?.calendar ?? [])
+      const job = Promise.all(changes.map(async (c) => {
+        if (c.op === 'created') return sb.functions.invoke('create-google-event', { body: { event_id: c.event_id } }).catch(() => null)
+        if (c.op === 'deleted') return sb.functions.invoke('delete-google-event', { body: { event_id: c.event_id } }).catch(() => null)
+        const res = await sb.functions.invoke('push-to-google', { body: { event_id: c.event_id } }).catch((e: Error) => ({ data: null, error: e }))
+        const failed = res?.error?.message ?? (res?.data as { error?: string } | null)?.error
+        if (failed) await sb.rpc('enqueue_google_sync_job', { p_event_id: c.event_id, p_audit_history_id: null, p_error: String(failed) })
+      }))
+      // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(job)
+      else await job
+      return new Response(JSON.stringify({ success: true, ...(data as Record<string, unknown>), correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'add_gift_idea') {
       // Gift ideas (P3.19 step 2): saved on a yes; read back only on the asker's phone.
       const forName = normalizeOptionalText(args.for_name, 120)

@@ -16,6 +16,8 @@ export interface FamilyEvidence {
 
 export interface AIMessage {
   id: string
+  /** Answered by the planning model (P3.25): the conversation stays with it. */
+  planning?: boolean
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string
@@ -114,6 +116,8 @@ export interface AIMessage {
     syncStatus?: 'synced' | 'queued' | 'failed'
     undoStatus?: 'idle' | 'loading' | 'done' | 'error'
     undoErrorMsg?: string
+    /** A plan saved with one Agree (P3.25): its id, the undo deadline, where each thing landed. */
+    planResult?: { plan_id?: string; undo_until?: string; links?: Array<{ id: string; kind: string; project_id?: string; event_id?: string; start?: string }>; undone?: boolean }
   }
   // A multi-event create proposal (see the 2026-09-11 multi-event design
   // discussion): several candidate calendar.create actions reviewed and

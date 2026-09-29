@@ -1,0 +1,139 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { FULL_AI_TOOLS, buildFullAiSystem, fullAiCard, fullAiTools } from '../supabase/functions/_shared/assistant-full-ai.mjs'
+
+// Plan it with Casa (P3.25 phase 3; canvas 12b/12c, approved by Jake 2026-09-29): once a direction is
+// settled, the planning model sets the whole plan; the server checks it into a draft card (the same
+// card mechanism as every other change: revised in place, nothing saved until he agrees).
+
+const utcOffset = '-04:00'
+const now = new Date('2026-09-29T19:48:00-04:00')
+const costumes = {
+  id: 'p-costumes', title: 'Halloween costumes', aim_date: '2026-10-31', done: 0, total: 2,
+  steps: [{ id: 's-ask', title: 'Ask the kids what they want to be', grp: 1, done: false }, { id: 's-buy', title: 'Buy what they need', grp: 2, done: false }],
+}
+const events = [{ id: 'e-halloween', title: 'Halloween', start_time: '2026-10-31T04:00:00Z', end_time: '2026-11-01T03:59:00Z', all_day: true, event_type: 'event', people: [], drivers: [], place: null, address: null }]
+const ctx = { events, utcOffset, now, projects: [costumes] }
+const call = (args) => fullAiCard({ name: 'set_plan', args }, ctx)
+
+const jellyfish = {
+  title: 'Emme — light-up jellyfish',
+  items: [
+    { kind: 'project', title: 'Emme — light-up jellyfish', part_of_project_id: 'p-costumes', why: 'Inside the costumes you already have.',
+      steps: [{ title: 'Buy the parts', minutes: 30, cost: 45 }, { title: 'Build night', minutes: 120, who: 'Jake + Emme', date: '2026-10-17' }, { title: 'Try it on after dark', date: '2026-10-25' }] },
+    { kind: 'tick_step', project_id: 'p-costumes', step_id: 's-ask', why: 'Emme picked the jellyfish.' },
+    { kind: 'shopping', name: 'Clear dome umbrella' },
+    { kind: 'shopping', name: 'Battery fairy lights, 2 strands' },
+    { kind: 'event', title: 'Trick-or-treat', start: '2026-10-31T18:00', end: '2026-10-31T20:00' },
+    { kind: 'pack', label: 'Spare AA batteries', for_event: 'Trick-or-treat' },
+    { kind: 'pack', label: 'Water', for_event: 'e-halloween' },
+    { kind: 'todo', title: 'Charge the fairy lights', due: '2026-10-30' },
+  ],
+}
+
+test('only the planning model can set a plan', () => {
+  assert.ok(fullAiTools({ planning: true }).some((t) => t.name === 'set_plan'))
+  assert.equal(fullAiTools({ planning: false }).some((t) => t.name === 'set_plan'), false)
+  assert.equal(FULL_AI_TOOLS.some((t) => t.name === 'set_plan'), false)
+  const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
+  assert.match(tool.description, /whole plan/i)
+  assert.match(tool.description, /fewest/i)
+})
+
+test('a plan becomes one draft card: every item checked, with an id for its tick on the card', () => {
+  const card = call(jellyfish)
+  assert.equal(card.tool, 'apply_plan')
+  assert.equal(card.args.id, 'plan', 'one plan per conversation: a change revises the same card')
+  assert.equal(card.args.title, 'Emme — light-up jellyfish')
+  const items = card.args.items
+  assert.deepEqual(items.map((i) => i.id), ['i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8'])
+  const project = items[0]
+  assert.equal(project.part_of_project_id, 'p-costumes')
+  assert.equal(project.part_of, 'Halloween costumes')
+  assert.deepEqual(project.steps[0], { title: 'Buy the parts', minutes: 30, cost_cents: 4500 })
+  assert.deepEqual(project.steps[1], { title: 'Build night', minutes: 120, who: 'Jake + Emme', cal_start: '2026-10-17' })
+  assert.equal(items[1].title, 'Ask the kids what they want to be', 'a tick names the saved step')
+  assert.equal(items[1].why, 'Emme picked the jellyfish.')
+  assert.equal(items[4].start, '2026-10-31T18:00:00-04:00')
+  assert.equal(items[4].end, '2026-10-31T20:00:00-04:00')
+  assert.equal(items[5].event_ref, 'i5', 'packed for an event in the same plan')
+  assert.equal(items[6].event_id, 'e-halloween', 'or for one already on the calendar')
+  assert.equal(items[6].event_title, 'Halloween')
+  assert.deepEqual(items[7], { id: 'i8', kind: 'todo', title: 'Charge the fairy lights', due: '2026-10-30' })
+})
+
+test('what can’t be saved is left out, never guessed', () => {
+  const card = call({ title: 'Mixed', items: [
+    { kind: 'tick_step', project_id: 'p-costumes', step_id: 's-nope' },
+    { kind: 'project', title: 'Inside nothing', part_of_project_id: 'p-nope', steps: [{ title: 'One' }] },
+    { kind: 'pack', label: 'Lost', for_event: 'no such event' },
+    { kind: 'event', title: 'No time', start: 'soon' },
+    { kind: 'shopping', name: '  ' },
+    { kind: 'dance', title: '?' },
+  ] })
+  assert.deepEqual(card.args.items.map((i) => i.kind), ['project'])
+  assert.equal(card.args.items[0].part_of_project_id, undefined)
+  assert.equal(call({ title: 'Nothing', items: [{ kind: 'shopping', name: '' }] }).error, 'There’s nothing in that plan I can save yet.')
+})
+
+test('the draft on screen is described back, so "make it Friday" changes it', () => {
+  const card = call(jellyfish)
+  const system = buildFullAiSystem({ family: [], events, groceries: [], pending: card, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', planning: true })
+  const onScreen = system.split('\n\n').find((s) => s.startsWith('ON SCREEN'))
+  assert.match(onScreen, /THE PLAN, NOT SAVED YET: Emme — light-up jellyfish/)
+  assert.match(onScreen, /Build night · Jake \+ Emme · 2 h · Sat Oct 17/)
+  assert.match(onScreen, /tick off “Ask the kids what they want to be”/)
+  assert.match(onScreen, /pack “Spare AA batteries” for Trick-or-treat/)
+  assert.match(onScreen, /call set_plan again with the whole plan/)
+})
+
+test('the planning model sees the ids it needs: each project and each step', () => {
+  const system = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', planning: true, projects: [costumes] })
+  const section = system.split('\n\n').find((s) => s.startsWith('PROJECTS'))
+  assert.match(section, /- \[p-costumes\] Halloween costumes/)
+  assert.match(section, /NOW: \[s-ask\] Ask the kids what they want to be/)
+  const [intro] = system.split('\n\n')
+  assert.match(intro, /set_plan/)
+})
+
+test('the assistant hands the plan over with its words; the card executor saves and undoes it, and tells Google', async () => {
+  const fs = await import('node:fs')
+  const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  assert.match(ai, /\{ events, utcOffset, now, groceries, family, todos, projects \}\)/, 'the checker knows the projects and their steps')
+  assert.match(ai, /card\.tool === 'apply_plan' \? \(said \|\|/)
+  const exec = fs.readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
+  const part = exec.slice(exec.indexOf("if (tool === 'apply_plan' || tool === 'undo_plan')"), exec.indexOf("if (tool === 'add_gift_idea')"))
+  assert.match(part, /rpc\('casa_plan_apply'/)
+  assert.match(part, /p_skip: Array\.isArray\(args\.skip\)/)
+  assert.match(part, /rpc\('casa_plan_undo'/)
+  for (const f of ['create-google-event', 'delete-google-event', 'push-to-google', 'enqueue_google_sync_job']) assert.ok(part.includes(f), f)
+})
+
+// Live check, 2026-09-29: with the plan on screen, "Make the build night Friday the 16th instead." was
+// taken by the quick turn reader as an edit to an ordinary draft, and failed. While a plan is on screen,
+// every turn but a yes or a never-mind goes straight to the planning model.
+test('with a plan on screen, a follow-up goes straight to the planning model', async () => {
+  const fs = await import('node:fs')
+  const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  assert.match(ai, /handBack = false, startPlanning = false\): Promise</)
+  assert.match(ai, /let planning = startPlanning/)
+  assert.match(ai, /let system = systemFor\(startPlanning\)/)
+  const pipeline = ai.slice(ai.indexOf('const runPipeline = async'))
+  const early = pipeline.slice(0, pipeline.indexOf('if (turnContext?.card)'))
+  assert.match(early, /planningConversation && turnResolution\?\.act !== 'confirm_draft' && !turnContext\?\.cancelledDraft/)
+  assert.match(early, /runFullAi\(buildDisplayText, false, true\)/)
+})
+
+// Live check, 2026-09-29: after a planning answer, "What do I need, and when should we build it?" was
+// answered by the fast model (no plan), and "make the build night Friday" became a lone event. Once a
+// conversation has gone to the planning model, it stays there.
+test('a conversation that went to the planning model stays there', async () => {
+  const fs = await import('node:fs')
+  const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const run = ai.slice(ai.indexOf('const runFullAi = async'), ai.indexOf('const runPipeline = async'))
+  assert.match(run, /\.\.\.\(planning \? \{ planning: true \} : \{\}\)/, 'planning answers are marked')
+  assert.match(ai, /\(context as \{ planning\?: boolean \} \| undefined\)\?\.planning === true/)
+  const hook = fs.readFileSync(new URL('../src/hooks/useAIAssistant.ts', import.meta.url), 'utf8')
+  assert.match(hook, /data\?\.planning === true \? \{ planning: true \} : \{\}/, 'the app remembers it on the message')
+  assert.match(hook, /planning: messages\.some\(\(message\) => message\.role === 'assistant' && message\.planning\) \|\| undefined/, 'and sends it with the next turn')
+})

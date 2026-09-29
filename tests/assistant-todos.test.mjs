@@ -68,7 +68,7 @@ test('a project\'s steps come from Casa, not from questions to him', () => {
 test('the assistant sees saved projects and never claims a change it cannot make', () => {
   const projects = [{ id: 'p1', title: 'Paint the house', done: 0, total: 9, next: 'Fix cracks' }]
   const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: [], onScreenIds: [], utcOffset: '-04:00', now, projects })
-  assert.match(system, /PROJECTS[^\n]*\n- Paint the house · 0 of 9 steps done · next: Fix cracks/)
+  assert.match(system, /PROJECTS[^\n]*\n- (\[[^\]]+\] )?Paint the house · 0 of 9 steps done · next: Fix cracks/)
   assert.match(system, /To do screen/)
   assert.match(system, /never say .*(changed|deleted|done)/i)
 })

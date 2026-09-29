@@ -15,6 +15,8 @@ import { useAssistantTurn } from './useAssistantTurn'
 import { createAssistantTraceContext, emitAssistantTrace } from '../lib/assistantTelemetry'
 import { routeEta, useDriveMinutes, type DriveLookup } from './useDriveMinutes'
 import WallAssistantCard from './WallAssistantCard'
+import { WallPlanAgree, WallPlanDraft, WallPlanSaved } from './WallPlan'
+import { withDependents, type PlanArgs, type PlanOpen } from './plan'
 import { pigmentStyleFor } from './lanes'
 import { noteSaid, tipFor, tipsByTopic } from './tips'
 
@@ -61,10 +63,12 @@ export interface WallAssistantBandProps {
   onOutcome?: (kind: 'confirm' | 'cancel') => void
   /** The microphone; the screenshot fixture passes a stand-in its tests can speak through. */
   useSpeech?: typeof useSpeechInput
+  /** A saved plan's line, opened where it lives (board 12d): a project, an event, To do. */
+  onOpenPlace?: (open: PlanOpen) => void
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome }: WallAssistantBandProps) {
-  const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace }: WallAssistantBandProps) {
+  const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
   const action = pending?.toolAction ?? null
@@ -84,6 +88,33 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const which = pending ? null : whichOne(answer, events as never)
   const offer = pending || which ? null : nextStep(answer?.streaming ? null : answer)
   const thread = threadTurns(messages)
+  // Plan it with Casa (P3.25; boards 12b–12d): the plan on screen, its Agree card, and what it saved.
+  const planAction = pending?.toolAction?.tool === 'apply_plan' ? pending.toolAction : null
+  const plan = planAction ? (planAction.args as unknown as PlanArgs) : null
+  const previousPlan = planAction ? ((replacedAction(messages, pending)?.args as unknown as PlanArgs | undefined)?.items ?? null) : null
+  const [agreeOpen, setAgreeOpen] = useState(false)
+  const [agreeSkip, setAgreeSkip] = useState<string[]>([])
+  const [savedFor, setSavedFor] = useState<string | null>(null)
+  const savedMessage = savedFor ? messages.find((m) => m.id === savedFor) ?? null : null
+  const savedPlan = savedMessage?.toolAction?.planResult ? { plan: savedMessage.toolAction.args as unknown as PlanArgs, result: savedMessage.toolAction.planResult } : null
+  const agreeRef = useRef({ open: false, plan: false })
+  const agreeSkipRef = useRef<string[]>([])
+  agreeSkipRef.current = agreeSkip
+  agreeRef.current = { open: agreeOpen, plan: Boolean(plan) }
+  const openAgree = () => { setAgreeSkip([]); setAgreeOpen(true) }
+  const agree = (skip: string[]) => {
+    if (!pending) return
+    setSavedFor(pending.id)
+    setAgreeOpen(false)
+    void confirm({ skip: withDependents(plan?.items ?? [], skip) })
+  }
+  // "Set it up" said aloud (the server heard a yes): the Agree card, never a save without it.
+  const askedRef = useRef(agreeAsked)
+  useEffect(() => {
+    if (agreeAsked === askedRef.current) return
+    askedRef.current = agreeAsked
+    openAgree()
+  }, [agreeAsked])
   const [interim, setInterim] = useState('')
   const lastTouch = useRef(Date.now())
   const captured = useRef('')
@@ -151,9 +182,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     onDismiss: () => {
       if (!reportingRef.current) onClose()
     },
-    // A spoken yes or no to the card: done, and the conversation goes on.
+    // A spoken yes or no to the card: done, and the conversation goes on. A plan's yes opens its
+    // Agree card; a yes to the Agree card saves what's ticked.
     onConfirm: () => {
       stopRef.current()
+      if (agreeRef.current.plan && !agreeRef.current.open) { openAgree(); return }
+      if (agreeRef.current.open) { agree(agreeSkipRef.current); return }
       void confirm()
     },
     onCancel: () => {
@@ -434,7 +468,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       <button type="button" aria-label="Report a problem" onClick={openReport} className="absolute right-[40px] top-[36px] flex h-[48px] w-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2">
         <Bug size={22} />
       </button>
-      {(thread.length > 0 || card) && (
+      {(thread.length > 0 || card || plan) && (
         <div className="flex w-[520px] shrink-0 flex-col gap-[14px]">
           <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">THIS CONVERSATION</div>
           <div className="flex flex-col gap-[12px] text-wall-detail leading-[1.35]">
@@ -444,7 +478,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               </div>
             ))}
           </div>
-          {card && (
+          {(card || plan) && (
             <>
               <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>
               {shownQuestion && <div className="font-display text-wall-quote font-medium italic">“{shownQuestion}”</div>}
@@ -454,7 +488,14 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </div>
       )}
 
-      {card ? (
+      {plan ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-[14px] pr-[64px]">
+          <WallPlanDraft plan={plan} previous={previousPlan} working={working}
+            onSetUp={openAgree}
+            onKeepTalking={() => { setNote(null); captured.current = ''; void speech.start() }} />
+          {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
+        </div>
+      ) : card ? (
         <div className="flex min-w-0 flex-1 flex-col gap-[14px] pr-[64px]">
           <WallAssistantCard
             card={card}
@@ -565,6 +606,16 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </>
         )}
       </div>
+      )}
+      {agreeOpen && plan && (
+        <WallPlanAgree plan={plan} skip={agreeSkip} working={working}
+          onToggle={(id) => setAgreeSkip((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
+          onAgree={() => agree(agreeSkip)} onBack={() => setAgreeOpen(false)} />
+      )}
+      {savedPlan && (
+        <WallPlanSaved plan={savedPlan.plan} result={savedPlan.result} working={working}
+          onOpen={onOpenPlace && ((open) => { setSavedFor(null); onOpenPlace(open) })}
+          onUndo={() => void undoPlan?.(savedFor!)} onDone={() => setSavedFor(null)} />
       )}
     </section>
   )

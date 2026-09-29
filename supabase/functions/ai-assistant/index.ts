@@ -1171,11 +1171,12 @@ Deno.serve(async (req) => {
 
   // `handBack`: as the hybrid's layer 2, a time-out, an empty answer or a change that fails a hard
   // check returns null, and the turn carries on down the old path as before.
-  const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
+  // `startPlanning`: a plan is on screen (P3.25), so the planning model answers from the start.
+  const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false, startPlanning = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
     const config = await loadLlmConfig(sb)
     const apiKey = String(config?.api_key ?? '')
     // A dry run may try another production model on the same turn (P3.25: "which AI plans?").
-    let model = dryRun && modelOverride && /^gemini-[a-z0-9.-]+$/.test(modelOverride) ? modelOverride : String(config?.model ?? DEFAULT_GEMINI_MODEL)
+    let model = startPlanning ? PLANNING_GEMINI_MODEL : dryRun && modelOverride && /^gemini-[a-z0-9.-]+$/.test(modelOverride) ? modelOverride : String(config?.model ?? DEFAULT_GEMINI_MODEL)
     const utcOffset = typeof context?.utcOffset === 'string' ? context.utcOffset : '-04:00'
     const now = new Date(String(context?.currentDate ?? new Date().toISOString()))
     const { from, until } = fullAiWindow(now, utcOffset)
@@ -1210,12 +1211,12 @@ Deno.serve(async (req) => {
     // a second one and "what's left on the roof?" is answered from the steps.
     const [projRes, stepRes, comingUpRes] = await Promise.all([
       sb.from('todo_projects').select('id, title, aim_date').eq('status', 'active').limit(20),
-      sb.from('todo_steps').select('project_id, position, grp, title, who, minutes, cost_cents, cal_start, cal_end, child_project_id, done_at'),
+      sb.from('todo_steps').select('id, project_id, position, grp, title, who, minutes, cost_cents, cal_start, cal_end, child_project_id, done_at'),
       // The whole Coming up list (~0.3 s, alongside the rest), so a season's starter plan is known.
       sb.functions.invoke('coming-up', { body: { action: 'list' } }).catch(() => ({ data: null })),
     ])
     const comingUp = (((comingUpRes as { data?: { items?: unknown[] } | null }).data?.items ?? []) as Array<Record<string, unknown>>)
-    type StepRow = { project_id: string; position: number; grp: number | null; title: string; who: string | null; minutes: number | null; cost_cents: number | null; cal_start: string | null; cal_end: string | null; child_project_id: string | null; done_at: string | null }
+    type StepRow = { id: string; project_id: string; position: number; grp: number | null; title: string; who: string | null; minutes: number | null; cost_cents: number | null; cal_start: string | null; cal_end: string | null; child_project_id: string | null; done_at: string | null }
     const allSteps = (stepRes.data ?? []) as StepRow[]
     const stepsOf = (id: string) => allSteps.filter((st) => st.project_id === id).sort((a, b) => (a.grp ?? a.position) - (b.grp ?? b.position) || a.position - b.position)
     const childIds = new Set(allSteps.map((st) => st.child_project_id).filter(Boolean))
@@ -1224,7 +1225,7 @@ Deno.serve(async (req) => {
       const steps = own.map((st) => {
         const inside = st.child_project_id ? ((projRes.data ?? []) as Array<{ id: string; title: string }>).find((c) => c.id === st.child_project_id) : null
         const kids = st.child_project_id ? stepsOf(st.child_project_id) : []
-        return { title: st.title, grp: st.grp ?? st.position, done: Boolean(st.done_at), who: st.who, minutes: st.minutes, cost_cents: st.cost_cents, cal_start: st.cal_start, cal_end: st.cal_end, child: inside ? { title: inside.title, done: kids.filter((k) => k.done_at).length, total: kids.length } : null }
+        return { id: st.id, title: st.title, grp: st.grp ?? st.position, done: Boolean(st.done_at), who: st.who, minutes: st.minutes, cost_cents: st.cost_cents, cal_start: st.cal_start, cal_end: st.cal_end, child: inside ? { title: inside.title, done: kids.filter((k) => k.done_at).length, total: kids.length } : null }
       })
       return { id: p.id, title: p.title, aim_date: p.aim_date, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null, steps }
     })
@@ -1236,7 +1237,7 @@ Deno.serve(async (req) => {
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
     const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn })
-    let system = systemFor(false)
+    let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
     const lastUser = [...contents].reverse().find((c) => c.role === 'user')
@@ -1245,7 +1246,7 @@ Deno.serve(async (req) => {
     const lookupDeps = { cid, context: (context ?? {}) as Record<string, any>, apiKey, model, provider: 'gemini', braveKey, mapsKey, homeAddress: home, routeEtaCache, providerFetch: providerFetch as never, mapsFetch: mapsFetch as never, experienceMode, latestUserText: null, callIndex: 2 }
     let deadline = Date.now() + FULL_AI_TIMEOUT_MS
     // Talking something through (P3.25): the fast model hands the turn to the planning model.
-    let planning = false
+    let planning = startPlanning
     const asked = contents.length
     let parts: Array<Record<string, unknown>> = []
     let retriedEmpty = false
@@ -1346,7 +1347,7 @@ Deno.serve(async (req) => {
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
-      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family, todos }))
+      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family, todos, projects }))
     if (changes.length) {
       if (changes.some((c) => 'error' in c)) {
         autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
@@ -1361,13 +1362,16 @@ Deno.serve(async (req) => {
       }
       const card = cards[0]
       const about = events.find((e) => e.id === card.args.id) ?? null
-      return { status: 200, payload: { type: 'tool_action', tool: card.tool, args: card.args, display_text: buildDisplayText(card.tool, card.args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
+      // A plan (P3.25 phase 3) comes with what the planning model said about it, shown above the draft.
+      const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+      const shown = card.tool === 'apply_plan' ? (said || `Here’s the plan: ${String(card.args.title ?? '')}.`) : buildDisplayText(card.tool, card.args)
+      return { status: 200, payload: { ...(planning ? { planning: true } : {}), type: 'tool_action', tool: card.tool, args: card.args, display_text: shown, conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
     }
     const text = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { ...(planning ? { planning: true } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
@@ -1381,6 +1385,16 @@ Deno.serve(async (req) => {
       status: 200,
       payload: { type: 'text', text: '', aside: true, semantic_intent: 'conversation.aside', conversation_state: incomingConversationState ?? null, correlation_id: cid },
     }
+  }
+  // A plan on screen (P3.25): "make the build night Friday" is a change to the plan — the planning
+  // model's, not the quick turn reader's (it read it as an edit to an ordinary draft, and failed).
+  // A yes or a never-mind still goes the usual way (the band opens the Agree card on a yes).
+  const planOnScreen = (context?.pendingAction as { tool?: string } | undefined)?.tool === 'apply_plan'
+  // …and a conversation that already went to the planning model stays there (the app sends `planning`).
+  const planningConversation = planOnScreen || (context as { planning?: boolean } | undefined)?.planning === true
+  if (planningConversation && turnResolution?.act !== 'confirm_draft' && !turnContext?.cancelledDraft) {
+    const planned = await runFullAi(buildDisplayText, false, true)
+    if (planned) return { ...planned, payload: { ...planned.payload, layer: 'plan' } }
   }
   if (turnContext?.card) {
     const { tool, args, about } = turnContext.card

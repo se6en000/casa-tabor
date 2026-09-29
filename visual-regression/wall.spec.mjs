@@ -537,6 +537,56 @@ test('wall assistant: talk not meant for Casa gets no answer and leaves no trace
   await expect(section.getByText(/Say the wake word/)).toBeVisible()
 })
 
+// Plan it with Casa (P3.25 phase 3; boards 12b–12d, approved by Jake 2026-09-29).
+test('wall assistant: a plan — the draft beside the conversation, one card with ticks, Agree, then each line opens where it lives, and Undo', async ({ page }) => {
+  await band(page, 'plan')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  const draft = section.getByRole('region', { name: 'Emme — light-up jellyfish — the plan' })
+  await expect(draft.getByText('PLAN · NOT SAVED YET')).toBeVisible()
+  await expect(draft.getByText('Just changed: added “Try it on after dark”')).toBeVisible()
+  await expect(draft.getByText('A project inside Halloween costumes')).toBeVisible()
+  await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-draft.png')
+
+  await draft.getByRole('button', { name: 'Set it up…' }).click()
+  const agree = page.getByRole('region', { name: 'Set up Emme — light-up jellyfish' })
+  await expect(agree.getByText('PROJECT · INSIDE HALLOWEEN COSTUMES')).toBeVisible()
+  await expect(agree.getByRole('button', { name: 'Agree · set up 8 things' })).toBeVisible()
+  await agree.getByRole('button', { name: /^Iridescent ribbon/ }).click()
+  await expect(agree.getByRole('button', { name: 'Agree · set up 7 things' })).toBeVisible()
+  // An event left out takes its pack lines with it (there'd be nothing to pack for).
+  await agree.getByRole('button', { name: /^Trick-or-treat/ }).click()
+  await expect(agree.getByRole('button', { name: /^Spare AA batteries/ })).toHaveAttribute('aria-pressed', 'false')
+  await agree.getByRole('button', { name: /^Trick-or-treat/ }).click()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-agree.png')
+  await agree.getByRole('button', { name: 'Agree · set up 7 things' }).click()
+
+  const saved = page.getByRole('region', { name: 'Emme — light-up jellyfish — saved' })
+  await expect(saved.getByText('Emme — light-up jellyfish is set up')).toBeVisible()
+  await expect(saved.getByText('Left out: Iridescent ribbon.')).toBeVisible()
+  await expect(saved.getByText('3 lines on the shopping list')).toBeVisible()
+  await expect(saved.getByRole('button', { name: 'Open project' }).first()).toBeVisible()
+  await expect(saved.getByText('Undo works until Thu 11:59 PM.')).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-saved.png')
+  await saved.getByRole('button', { name: 'Undo this plan' }).click()
+  await expect(saved.getByText('Emme — light-up jellyfish is undone')).toBeVisible()
+})
+
+test('wall assistant: a plan by voice — "yes" opens the Agree card, a second "yes" saves what’s ticked', async ({ page }) => {
+  await band(page, 'plan')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await expect.poll(() => starts(page)).toBeGreaterThan(0)
+  await mic(page, () => window.__mic.yes())
+  const agree = page.getByRole('region', { name: 'Set up Emme — light-up jellyfish' })
+  await expect(agree).toBeVisible()
+  await expect(section.getByRole('region', { name: 'Emme — light-up jellyfish — saved' })).toHaveCount(0)
+  await mic(page, () => window.__mic.yes())
+  await expect(page.getByRole('region', { name: 'Emme — light-up jellyfish — saved' })).toBeVisible()
+})
+
 // The LED strip follows the band (P3.14), as the fixture records it (window.__led).
 const led = (page) => page.evaluate(() => window.__led)
 

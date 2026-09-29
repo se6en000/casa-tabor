@@ -47,7 +47,7 @@ test('every project is there in full: its steps in order, what is done and Now, 
 
 test('a project without its steps still reads as before', () => {
   const system = buildFullAiSystem({ ...base, projects: [{ id: 'p1', title: 'Roof', done: 0, total: 3, next: 'Call the roofer' }] })
-  assert.match(system, /- Roof · 0 of 3 steps done · next: Call the roofer/)
+  assert.match(system, /- (\[[^\]]+\] )?Roof · 0 of 3 steps done · next: Call the roofer/)
 })
 
 test('get_coming_up can reach the whole season: up to 120 days, and each season says it has a starter plan', () => {
@@ -163,7 +163,7 @@ test('ai-assistant rebuilds the instructions for the planning model when it hand
   const fs = await import('node:fs')
   const src = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
   const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
-  assert.match(run, /let system = systemFor\(false\)/)
+  assert.match(run, /let system = systemFor\(startPlanning\)/)
   assert.match(run, /model = PLANNING_GEMINI_MODEL\n\s+system = systemFor\(true\)/)
 })
 

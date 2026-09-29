@@ -13,6 +13,27 @@ const said = (content: string, extra: Partial<AIMessage> = {}): AIMessage => ({ 
 const draft = (tool: string, args: Record<string, unknown>, displayText: string, status: 'pending' | 'cancelled' = 'pending') => ({ toolAction: { tool, args, displayText, status } })
 const dentist = (start: string, end: string, extra: Record<string, unknown> = {}) => ({ title: 'Dentist', event_type: 'event', start, end, members: ['Liv'], ...extra })
 
+// Plan it with Casa (P3.25; boards 12b–12d): Emme's jellyfish, the second version (a try-on added).
+const jellyfish = (withTryOn: boolean) => ({
+  id: 'plan',
+  title: 'Emme — light-up jellyfish',
+  items: [
+    { id: 'i1', kind: 'project', title: 'Emme — light-up jellyfish', part_of: 'Halloween costumes', part_of_project_id: 'p-costumes', why: 'Two weekends before Halloween, in case a strand dies.',
+      steps: [
+        { title: 'Buy the parts', minutes: 30, cost_cents: 4500 },
+        { title: 'Build night', minutes: 120, who: 'Jake + Emme', cal_start: '2026-10-17' },
+        ...(withTryOn ? [{ title: 'Try it on after dark', minutes: 15, cal_start: '2026-10-25' }] : []),
+      ] },
+    { id: 'i2', kind: 'tick_step', project_id: 'p-costumes', step_id: 's-ask', title: 'Ask the kids what they want to be', project: 'Halloween costumes', why: 'Emme picked the jellyfish.' },
+    { id: 'i3', kind: 'shopping', name: 'Clear dome umbrella' },
+    { id: 'i4', kind: 'shopping', name: 'Battery fairy lights, 2 strands' },
+    { id: 'i5', kind: 'shopping', name: 'Bubble wrap' },
+    { id: 'i6', kind: 'shopping', name: 'Iridescent ribbon' },
+    { id: 'i7', kind: 'event', title: 'Trick-or-treat', start: '2026-10-31T18:00:00-04:00', end: '2026-10-31T20:00:00-04:00' },
+    { id: 'i8', kind: 'pack', label: 'Spare AA batteries', event_ref: 'i7', event_title: 'Trick-or-treat' },
+  ],
+})
+
 export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   // 06a: a draft that takes follow-ups, revised in place.
   add: () => [
@@ -57,6 +78,15 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   thinking: () => [user('When’s Carl’s birthday again?')],
   // P3.25 phase 1: a longer think, with the live line of what Casa is looking up.
   'looking-up': () => [user('Let’s talk about the Halloween decorations this year')],
+  // 12b: the plan beside the conversation, revised in place (the try-on just added).
+  plan: () => [
+    user('Let’s plan Emme’s Halloween costume.'),
+    said('Three builds that stay cool on a warm Halloween night. My pick is the light-up jellyfish.'),
+    user('She loved the jellyfish! What do I need, and when do we build it?'),
+    said('Here’s the plan. Build it on Saturday the 17th, so there’s a weekend spare if a light strand dies.', draft('apply_plan', jellyfish(false), 'Here’s the plan.', 'cancelled')),
+    user('Can we try it on after dark the weekend before?'),
+    said('Added a try-on on Sunday the 25th, after dark, to check the lights and the heat.', draft('apply_plan', jellyfish(true), 'Added a try-on on Sunday the 25th.')),
+  ],
 }
 
 /** A stand-in for `useAssistantTurn` that plays one scene; sending adds the words to the thread. */
@@ -89,13 +119,25 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
       answer,
       pending,
       pointAt: answerEventId(answer),
-      confirm: async () => {
+      confirm: async (extra?: Record<string, unknown>) => {
         if (!pending) return
         setWorking(true)
         await new Promise((resolve) => setTimeout(resolve, 150))
-        setStatus(pending.id, 'done')
+        // A plan comes back with where each thing landed and its undo deadline (fixed, for the screenshots).
+        const plan = pending.toolAction?.tool === 'apply_plan'
+          ? { args: { ...pending.toolAction.args, ...extra }, planResult: { plan_id: 'plan-1', undo_until: '2027-01-01T05:00:00Z', links: [
+              { id: 'i1', kind: 'project', project_id: 'p-jelly' }, { id: 'i2', kind: 'tick_step', project_id: 'p-costumes' },
+              { id: 'i7', kind: 'event', event_id: 'e-trick', start: '2026-10-31T18:00:00-04:00' }, { id: 'i8', kind: 'pack', event_id: 'e-trick' },
+            ] } }
+          : {}
+        setStatus(pending.id, 'done', plan as never)
         setWorking(false)
       },
+      undoPlan: async (id: string) => {
+        const m = allMessages.find((x) => x.id === id)
+        if (m?.toolAction?.planResult) setStatus(id, 'done', { planResult: { ...m.toolAction.planResult, undone: true } } as never)
+      },
+      agreeAsked: 0,
       cancel: () => { if (pending) setStatus(pending.id, 'cancelled') },
       working,
       note: null,

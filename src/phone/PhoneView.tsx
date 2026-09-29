@@ -1,3 +1,4 @@
+import type { PlanOpen } from '../wall/plan'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { stepWithin, type DayStep } from '../lib/daySwipe'
 import { useDaySwipe } from '../lib/useDaySwipe'
@@ -63,7 +64,7 @@ export interface PhoneViewProps {
   /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
-  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void }) => ReactNode
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void }) => ReactNode
   /** Keep from… (05g): who each event is kept from, and the change. */
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
@@ -509,7 +510,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
 
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
-      {askOpen && assistant?.({ onClose: () => setAskOpen(false), onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) } })}
+      {askOpen && assistant?.({
+        onClose: () => setAskOpen(false),
+        onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) },
+        // A saved plan's project or To do (P3.25; board 12d).
+        onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },
+      })}
       {scanOpen && scan && createEvent && (
         <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
       )}

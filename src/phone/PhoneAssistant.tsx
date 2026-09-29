@@ -1,3 +1,5 @@
+import { PhonePlanAgree, PhonePlanCard, PhonePlanSaved } from './PhonePlan'
+import type { PlanArgs, PlanOpen } from '../wall/plan'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -17,7 +19,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -25,13 +27,30 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   planDay: (date: Date, events: WallEvent[]) => DayPlan | null
   onClose: () => void
   onOpenEvent: (id: string) => void
+  /** A saved plan's line, opened where it lives (board 12d): a project, To do. */
+  onOpenPlace?: (open: PlanOpen) => void
   /** The conversation and the drive lookup; the screenshot fixture passes canned ones. */
   useTurn?: typeof useAssistantTurn
   lookupDrive?: DriveLookup
 }) {
   const { profile } = useProfileSession()
   const turn = useTurn({ surface: 'phone', events, family })
-  const { messages, loading, status, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = turn
+  const { messages, loading, status, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan } = turn
+  // Plan it with Casa (P3.25; board 12e): the plan on screen, its Agree sheet, and what it saved.
+  const planAction = pending?.toolAction?.tool === 'apply_plan' ? pending.toolAction : null
+  const plan = planAction ? (planAction.args as unknown as PlanArgs) : null
+  const previousPlan = planAction ? ((replacedAction(messages, pending)?.args as unknown as PlanArgs | undefined)?.items ?? null) : null
+  const [agreeOpen, setAgreeOpen] = useState(false)
+  const [savedFor, setSavedFor] = useState<string | null>(null)
+  const savedMessage = savedFor ? messages.find((m) => m.id === savedFor) ?? null : null
+  const planRef = useRef(false)
+  planRef.current = Boolean(plan)
+  const askedRef = useRef(turn.agreeAsked ?? 0)
+  useEffect(() => {
+    if ((turn.agreeAsked ?? 0) === askedRef.current) return
+    askedRef.current = turn.agreeAsked ?? 0
+    setAgreeOpen(true)
+  }, [turn.agreeAsked])
 
   // The same card as the wall's band (boards 06e/06f).
   const action = pending?.toolAction ?? null
@@ -64,7 +83,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       stopRef.current()
     },
     onDismiss: () => stopRef.current(),
-    onConfirm: () => void confirm(),
+    // A plan's spoken yes opens its Agree sheet first (board 12c).
+    onConfirm: () => { if (planRef.current) setAgreeOpen(true); else void confirm() },
     onCancel: cancel,
     hasPendingAction: Boolean(pending),
   })
@@ -76,7 +96,9 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const thinking = loading || Boolean(answer?.streaming)
 
   return (
+    <>
     <PhoneAssistantView
+      planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : null}
       lines={lines}
       thinking={thinking}
       status={status ?? null}
@@ -138,5 +160,15 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       pigmentOf={(id) => pigments.get(id) ?? null}
       onPickDriver={(name) => setPendingArgs({ driver_name: name })}
     />
+    {agreeOpen && plan && pending && (
+      <PhonePlanAgree plan={plan} working={working} onBack={() => setAgreeOpen(false)}
+        onAgree={(skip) => { setSavedFor(pending.id); setAgreeOpen(false); void confirm({ skip }) }} />
+    )}
+    {savedMessage?.toolAction?.planResult && (
+      <PhonePlanSaved plan={savedMessage.toolAction.args as unknown as PlanArgs} result={savedMessage.toolAction.planResult} working={working}
+        onOpen={(open) => { setSavedFor(null); if (open.kind === 'event') onOpenEvent(open.id); else onOpenPlace?.(open) }}
+        onUndo={() => void undoPlan?.(savedMessage.id)} onDone={() => setSavedFor(null)} />
+    )}
+    </>
   )
 }

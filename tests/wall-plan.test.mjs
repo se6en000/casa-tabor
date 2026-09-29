@@ -1,0 +1,81 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { planSections, planChange, planCount, savedRows, agreeGroups } from '../src/wall/plan.ts'
+
+// Plan it with Casa (P3.25 phase 3; canvas 12b–12d, approved by Jake 2026-09-29): the draft beside the
+// conversation, one card with ticks, and what was saved — each opening where it lives.
+
+const project = { id: 'i1', kind: 'project', title: 'Emme — light-up jellyfish', part_of: 'Halloween costumes', part_of_project_id: 'p1', why: 'Inside your costumes.',
+  steps: [{ title: 'Buy the parts', minutes: 30, cost_cents: 4500 }, { title: 'Build night', minutes: 120, who: 'Jake + Emme', cal_start: '2026-10-17' }] }
+const items = [
+  project,
+  { id: 'i2', kind: 'tick_step', project_id: 'p1', step_id: 's1', title: 'Ask the kids what they want to be', project: 'Halloween costumes', why: 'Emme picked the jellyfish.' },
+  { id: 'i3', kind: 'shopping', name: 'Clear dome umbrella' },
+  { id: 'i4', kind: 'shopping', name: 'Battery fairy lights, 2 strands' },
+  { id: 'i5', kind: 'event', title: 'Trick-or-treat', start: '2026-10-31T18:00:00-04:00', end: '2026-10-31T20:00:00-04:00' },
+  { id: 'i6', kind: 'pack', label: 'Spare AA batteries', event_ref: 'i5', event_title: 'Trick-or-treat' },
+  { id: 'i7', kind: 'todo', title: 'Charge the fairy lights', due: '2026-10-30' },
+]
+
+test('the draft reads in sections, in the order you’d do them (board 12b)', () => {
+  const s = planSections(items)
+  assert.deepEqual(s.map((x) => x.heading), ['STEPS', 'SHOPPING', 'ON THE CALENDAR', 'TO DO', 'PACK'])
+  const steps = s[0]
+  assert.equal(steps.intro, 'A project inside Halloween costumes')
+  assert.deepEqual(steps.lines.map((l) => [l.text, l.meta, l.done ?? false]), [
+    ['Ask the kids what they want to be', 'ticks off', true],
+    ['Buy the parts', '30 min · $45', false],
+    ['Build night', 'Sat, Oct 17 · Jake + Emme · 2 hr', false],
+  ])
+  assert.deepEqual(s[2].lines.map((l) => [l.text, l.meta]), [['Trick-or-treat', 'Sat, Oct 31 · 6–8 PM'], ['Build night', 'Sat, Oct 17 · a step']])
+  assert.deepEqual(s[4].lines.map((l) => [l.text, l.meta]), [['Spare AA batteries', 'for Trick-or-treat']])
+})
+
+test('what just changed is named and marked (board 12b)', () => {
+  const before = items.map((i) => (i.kind === 'project' ? { ...i, steps: [i.steps[0], { ...i.steps[1], cal_start: '2026-10-16' }] } : i)).filter((i) => i.id !== 'i7')
+  const change = planChange(before, items)
+  assert.equal(change.line, 'Just changed: Build night → Sat, Oct 17 · added “Charge the fairy lights”')
+  assert.ok(change.marked.has('step:Build night'))
+  assert.ok(change.marked.has('todo:Charge the fairy lights'))
+  assert.equal(planChange(null, items).line, null, 'the first draft marks nothing')
+})
+
+test('counting what saves: things, and the places they land', () => {
+  assert.equal(planCount(items, []).label, '7 things, in 5 places', 'each line on the card is a thing')
+  assert.equal(planCount(items, ['i3', 'i4']).things, 5)
+})
+
+test('the Agree card groups by where each thing lands, each with its own tick (board 12c)', () => {
+  const g = agreeGroups(items)
+  assert.deepEqual(g.map((x) => x.heading), ['PROJECT · INSIDE HALLOWEEN COSTUMES', 'CALENDAR · AND GOOGLE', 'SHOPPING LIST', 'TO DO', 'PACK'])
+  assert.deepEqual(g[0].rows.map((r) => [r.id, r.label, r.meta]), [
+    ['i1', 'Emme — light-up jellyfish', '2 steps'],
+    ['i2', 'Tick off “Ask the kids what they want to be”', 'done'],
+  ])
+  assert.deepEqual(g[1].rows.map((r) => [r.id, r.label, r.meta]), [['i5', 'Trick-or-treat', 'Sat, Oct 31 · 6–8 PM']])
+})
+
+test('saved: each line opens where it lives (board 12d)', () => {
+  const result = { links: [
+    { id: 'i1', kind: 'project', project_id: 'np1' },
+    { id: 'i2', kind: 'tick_step', project_id: 'p1' },
+    { id: 'i3', kind: 'shopping' }, { id: 'i4', kind: 'shopping' },
+    { id: 'i5', kind: 'event', event_id: 'ne1', start: '2026-10-31T18:00:00-04:00' },
+    { id: 'i6', kind: 'pack', event_id: 'ne1' },
+  ] }
+  const { rows, left } = savedRows(items, result, ['i7'])
+  assert.deepEqual(rows.map((r) => [r.label, r.open]), [
+    ['Emme — light-up jellyfish · 2 steps, inside Halloween costumes', { kind: 'project', id: 'np1', label: 'Open project' }],
+    ['“Ask the kids what they want to be” ticked off', { kind: 'project', id: 'p1', label: 'Open project' }],
+    ['Trick-or-treat · Sat, Oct 31 · 6–8 PM · on Google too', { kind: 'event', id: 'ne1', label: 'See Oct 31' }],
+    ['2 lines on the shopping list', { kind: 'shopping', label: 'Shopping list' }],
+    ['Pack for Trick-or-treat: Spare AA batteries', { kind: 'event', id: 'ne1', label: 'See Oct 31' }],
+  ])
+  assert.deepEqual(left, ['Charge the fairy lights'])
+})
+
+test('an event left out takes its pack lines with it', async () => {
+  const { withDependents } = await import('../src/wall/plan.ts')
+  assert.deepEqual(withDependents(items, ['i5']), ['i5', 'i6'])
+  assert.deepEqual(withDependents(items, ['i3']), ['i3'])
+})

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Bug, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
@@ -41,11 +41,13 @@ export interface PhoneAssistantViewProps {
   pigmentOf?: (memberId: string) => number | null
   /** A change can take a driver right on the card. */
   onPickDriver?: (name: string) => void
+  /** A plan on screen (P3.25; board 12e): shown in the card's place. */
+  planSlot?: ReactNode
 }
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -176,7 +178,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
                 {tip && !status && <div className="text-phone-label text-wall-ink-2/80">Tip: {tip}</div>}
               </div>
             )}
-            {card ? (
+            {planSlot ? planSlot : card ? (
               <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />
             ) : pending && (
               <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">

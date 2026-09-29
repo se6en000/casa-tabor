@@ -126,6 +126,7 @@ export default function WallFixturePage() {
         onClose={() => setBandOpen(false)}
         onPointAt={setPointAt}
         onOpenEvent={() => setBandOpen(false)}
+        onOpenPlace={() => setBandOpen(false)}
         members={members as WallMember[]}
         planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
         onDraft={setAssistantDraft}

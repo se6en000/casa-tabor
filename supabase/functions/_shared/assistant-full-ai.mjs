@@ -49,12 +49,27 @@ function describeDraft(pending, utcOffset) {
   return `${what}: ${a.title ?? '(untitled)'} · ${when}${a.location ? ` · at ${a.location}` : ''}${Array.isArray(a.members) && a.members.length ? ` · for ${a.members.join(', ')}` : ''}${a.driver_name ? ` · driver ${a.driver_name}` : ''}`
 }
 
+/** The plan on screen, one line per item, so a change can be made to it (P3.25 phase 3). */
+function describePlan(plan, utcOffset) {
+  const at = (iso) => { const s = local(iso, utcOffset); return `${s.weekday} ${s.month} ${s.day}, ${s.clock}` }
+  const line = (i) => {
+    if (i.kind === 'project') return `project “${i.title}”${i.part_of ? ` inside ${i.part_of}` : ''}${i.aim_date ? ` · aim ${shortDay(i.aim_date)}` : ''}: ${(i.steps ?? []).map((st, n) => `${n + 1}. ${[st.title, st.who, st.minutes ? effort(st.minutes) : null, st.cost_cents ? `$${Math.round(st.cost_cents / 100)}` : null, st.cal_start ? shortDay(st.cal_start) : null].filter(Boolean).join(' · ')}`).join('; ')}`
+    if (i.kind === 'tick_step') return `tick off “${i.title}”${i.project ? ` on ${i.project}` : ''}`
+    if (i.kind === 'event') return `event “${i.title}” · ${at(i.start)} to ${at(i.end)}`
+    if (i.kind === 'todo') return `to-do “${i.title}”${i.due ? ` by ${shortDay(i.due)}` : ''}`
+    if (i.kind === 'shopping') return `shopping “${i.name}”`
+    if (i.kind === 'pack') return `pack “${i.label}” for ${i.event_title ?? 'its event'}`
+    return i.kind
+  }
+  return `${plan?.title ?? '(untitled)'}\n${(plan?.items ?? []).map((i) => `- ${line(i)}${i.why ? ` (why: ${i.why})` : ''}`).join('\n')}`
+}
+
 /** One plain paragraph, then the data it answers from. */
 // Talking something through (P3.25): the fast model only hands it over (think_it_through); how to think
 // with him is the planning model's — in the fast model's instructions it wrote asked-for projects out in
 // words instead of the card (live check, 2026-09-29).
 const HAND_IT_OVER = 'When he wants to talk something through — ideas, a theme, a holiday, a project, whether something is a good idea — call think_it_through and nothing else. '
-const THINKING_WITH_HIM = (homeCity) => `When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: lead with substance — a few concrete ideas, options with your pick, or your honest take and why — drawn from what you know of this family (Coming up, the projects, the calendar, who's who, the Florida weather), and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Ask at most one question, after the ideas. Don't steer the conversation toward adding things: steps and a plan come once he's chosen a direction, and only then offer to set it up. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. `
+const THINKING_WITH_HIM = (homeCity) => `When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: lead with substance — a few concrete ideas, options with your pick, or your honest take and why — drawn from what you know of this family (Coming up, the projects, the calendar, who's who, the Florida weather), and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Ask at most one question, after the ideas. Don't steer the conversation toward adding things: steps and a plan come once he's chosen a direction, and only then offer to set it up. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. Once he's settled on a direction, call set_plan with the whole plan, alongside a sentence or two in words; it appears beside the conversation, and every change after that is set_plan again with everything. `
 
 const shortDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
 const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`)
@@ -62,13 +77,13 @@ const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? 
 // A project for the model (P3.25 phase 1): every step, so "what's left on the roof?" or "what should I
 // do Saturday?" is answered from the steps, not a one-line summary.
 function describeProject(p) {
-  const head = `- ${p.title}${p.aim_date ? ` · aim ${shortDay(p.aim_date)}` : ''} · ${p.done} of ${p.total} steps done`
+  const head = `- ${p.id ? `[${p.id}] ` : ''}${p.title}${p.aim_date ? ` · aim ${shortDay(p.aim_date)}` : ''} · ${p.done} of ${p.total} steps done`
   if (!Array.isArray(p.steps)) return `${head}${p.next ? ` · next: ${p.next}` : ''}`
   const nowGrp = p.steps.find((st) => !st.done)?.grp
   return [head, ...p.steps.map((st) => {
     const state = st.done ? 'done' : st.grp === nowGrp ? 'NOW' : 'then'
     const bits = [
-      st.child ? `${st.title} (a project inside: ${st.child.title}, ${st.child.done} of ${st.child.total} done)` : st.title,
+      `${st.id ? `[${st.id}] ` : ''}${st.child ? `${st.title} (a project inside: ${st.child.title}, ${st.child.done} of ${st.child.total} done)` : st.title}`,
       st.who, st.minutes ? effort(st.minutes) : null, st.cost_cents ? `$${Math.round(st.cost_cents / 100)}` : null,
       st.cal_start ? (st.cal_end && st.cal_end !== st.cal_start ? `${shortDay(st.cal_start)} to ${shortDay(st.cal_end)}` : shortDay(st.cal_start)) : null,
     ].filter(Boolean)
@@ -106,7 +121,8 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   if (places.length) sections.push(`SAVED PLACES:\n${places.map((p) => `- ${p.name}${p.address ? ` · ${p.address}` : ''}${p.phone ? ` · ${p.phone}` : ''}`).join('\n')}`)
   if (contacts.length) sections.push(`CONTACTS:\n${contacts.map((c) => `- ${[c.name, c.relationship, c.phone, c.email, c.place].filter(Boolean).join(' · ')}`).join('\n')}`)
   if (recipes.length) sections.push(`RECIPES (open one with get_recipe):\n${recipes.map((r) => `- [${r.id}] ${r.name}`).join('\n')}`)
-  if (pending) sections.push(`ON SCREEN, WAITING FOR A YES: ${describeDraft(pending, utcOffset)} — a follow-up about it changes this same card (call the same tool again with the whole corrected item).`)
+  if (pending?.tool === 'apply_plan') sections.push(`ON SCREEN, THE PLAN, NOT SAVED YET: ${describePlan(pending.args, utcOffset)}\nA change he asks for: call set_plan again with the whole plan, changed.`)
+  else if (pending) sections.push(`ON SCREEN, WAITING FOR A YES: ${describeDraft(pending, utcOffset)} — a follow-up about it changes this same card (call the same tool again with the whole corrected item).`)
   // "Casa, what can you do?" (P3.19 3c): the same list as the tips and "What can I say?".
   sections.push(`WHAT YOU CAN DO (asked what you can do or what to say: two or three short examples from different topics, then that "What can I say?" on the screen lists them all):\n${tipsByTopic().map((g) => `${g.topic}: ${g.tips.map((t) => t.text).join(' | ')}`).join('\n')}`)
   if (onScreenIds?.length) sections.push(`JUST DISCUSSED (in the order you named them): ${onScreenIds.map((id) => `[${id}]`).join(', ')}`)
@@ -179,8 +195,22 @@ export const FULL_AI_TOOLS = [
 // The fast model's way to hand a turn to the planning model (P3.25): not a lookup — it changes who answers.
 export const THINK_IT_THROUGH = 'think_it_through'
 const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
+// The planning model sets the whole plan (P3.25 phase 3; canvas 12b): each call replaces it, so a
+// change is just the plan again — the card is revised in place, and nothing saves until he agrees.
+const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). A dated project step goes on the calendar by itself — don\'t add it again as an event.', parameters: { type: 'OBJECT', properties: {
+  title: { type: 'STRING', description: 'what the plan is for, in a few words' },
+  items: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+    kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack'] },
+    title: { type: 'STRING' }, why: { type: 'STRING', description: 'one short reason' },
+    part_of_project_id: { type: 'STRING' }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' },
+    steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' }, who: { type: 'STRING' }, date: { type: 'STRING', description: 'YYYY-MM-DD' }, end_date: { type: 'STRING', description: 'YYYY-MM-DD' } }, required: ['title'] } },
+    project_id: { type: 'STRING' }, step_id: { type: 'STRING' },
+    start: { type: 'STRING' }, end: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD' },
+    name: { type: 'STRING' }, label: { type: 'STRING' }, for_event: { type: 'STRING' },
+  }, required: ['kind'] } },
+}, required: ['title', 'items'] } }
 export function fullAiTools({ planning }) {
-  return planning ? FULL_AI_TOOLS : [...FULL_AI_TOOLS, THINK_IT_THROUGH_TOOL]
+  return planning ? [...FULL_AI_TOOLS, SET_PLAN_TOOL] : [...FULL_AI_TOOLS, THINK_IT_THROUGH_TOOL]
 }
 
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
@@ -200,13 +230,87 @@ function localToIso(value, utcOffset, now) {
   if (at < now.getTime() - 2 * 86400e3 || at > now.getTime() + 400 * 86400e3) return null
   return iso
 }
+// set_plan → the draft card (P3.25 phase 3): every item checked against what's really there, with
+// an id for its tick on the card; anything that can't be saved is left out, never guessed.
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+function planCard(a, { events = [], utcOffset, now, projects = [] }) {
+  const title = text(a.title)
+  const raw = Array.isArray(a.items) ? a.items.slice(0, 20) : []
+  const day = (v) => (typeof v === 'string' && ISO_DAY_RE.test(v) ? v : null)
+  const whyOf = (i) => { const w = text(i?.why); return w ? w.slice(0, 160) : null }
+  const kept = []
+  for (const i of raw) {
+    const why = whyOf(i)
+    const withWhy = (item) => (why ? { ...item, why } : item)
+    if (i?.kind === 'project') {
+      const t = text(i.title)
+      const num = (v, max) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n) : null }
+      const steps = (Array.isArray(i.steps) ? i.steps : []).map((st) => {
+        const step = { title: text(st?.title) }
+        const minutes = num(st?.minutes, 60 * 24 * 7); if (minutes) step.minutes = minutes
+        const cost = num(st?.cost, 100000); if (cost) step.cost_cents = cost * 100
+        const who = text(st?.who); if (who) step.who = who
+        const start = day(st?.date); if (start) step.cal_start = start
+        const end = day(st?.end_date); if (start && end && end > start) step.cal_end = end
+        return step
+      }).filter((st) => st.title).slice(0, 12)
+      if (!t || steps.length === 0) continue
+      const parent = projects.find((p) => p.id === i.part_of_project_id)
+      const item = { kind: 'project', title: t, steps }
+      if (parent) { item.part_of_project_id = parent.id; item.part_of = parent.title }
+      const aim = day(i.aim_date); if (aim) item.aim_date = aim
+      kept.push(withWhy(item))
+    } else if (i?.kind === 'tick_step') {
+      const project = projects.find((p) => p.id === i.project_id)
+      const step = project?.steps?.find((st) => st.id === i.step_id && !st.done)
+      if (!step) continue
+      kept.push(withWhy({ kind: 'tick_step', project_id: project.id, step_id: step.id, title: step.title, project: project.title }))
+    } else if (i?.kind === 'event') {
+      const t = text(i.title)
+      const hasTime = /T\d{2}:\d{2}/.test(String(i.start ?? ''))
+      const start = hasTime ? localToIso(i.start, utcOffset, now) : null
+      if (!t || !start) continue
+      const end = /T\d{2}:\d{2}/.test(String(i.end ?? '')) ? localToIso(i.end, utcOffset, now) : null
+      const endIso = end && Date.parse(end) > Date.parse(start) ? end : `${new Date(Date.parse(start) + 60 * 60e3 + offsetMinutes(utcOffset) * 60e3).toISOString().slice(0, 16)}:00${utcOffset}`
+      kept.push(withWhy({ kind: 'event', title: t, start, end: endIso }))
+    } else if (i?.kind === 'todo') {
+      const t = text(i.title)
+      if (!t) continue
+      const item = { kind: 'todo', title: t }
+      const due = day(i.due); if (due) item.due = due
+      kept.push(withWhy(item))
+    } else if (i?.kind === 'shopping') {
+      const name = text(i.name) ?? text(i.title)
+      if (name) kept.push(withWhy({ kind: 'shopping', name }))
+    } else if (i?.kind === 'pack') {
+      const label = text(i.label) ?? text(i.title)
+      const target = text(i.for_event)
+      if (!label || !target) continue
+      kept.push(withWhy({ kind: 'pack', label, for_event: target }))
+    }
+  }
+  // Ids for the ticks, then each pack line pointed at its event (a saved one, or one of this plan).
+  const items = kept.map((item, n) => ({ id: `i${n + 1}`, ...item }))
+  const out = []
+  for (const item of items) {
+    if (item.kind !== 'pack') { out.push(item); continue }
+    const { for_event: target, ...rest } = item
+    const saved = events.find((e) => e.id === target)
+    const planned = items.find((o) => o.kind === 'event' && o.title.toLowerCase() === target.toLowerCase())
+    if (saved) out.push({ ...rest, event_id: saved.id, event_title: saved.title })
+    else if (planned) out.push({ ...rest, event_ref: planned.id, event_title: planned.title })
+  }
+  if (!out.length) return { error: 'There’s nothing in that plan I can save yet.' }
+  return { tool: 'apply_plan', args: { id: 'plan', title: title ?? out[0].title ?? out[0].name ?? 'The plan', items: out } }
+}
+
 const names = (v) => (Array.isArray(v) ? v.map((n) => String(n).trim()).filter(Boolean) : [])
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 /** Days of notice for Coming up: a whole number, one day to four months. */
 const noticeDays = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(120, Math.max(1, Math.round(Number(v)))) : null)
 
 /** The model's tool call as the usual card, or { error } when it fails a hard check. */
-export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [], todos = [] }) {
+export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [], todos = [], projects = [] }) {
   const a = call?.args ?? {}
   if (call?.name === 'add_to_coming_up' || call?.name === 'change_coming_up_item') {
     const target = events.find((e) => e.id === a.id)
@@ -248,6 +352,7 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     const from = typeof a.from_id === 'string' && ((events ?? []).some((e) => e.id === a.from_id && e.event_type === 'reminder') || (todos ?? []).some((t) => t.id === a.from_id)) ? a.from_id : null
     return { tool: 'plan_project', args: { title, aim_date: aim, from_event_id: from, steps } }
   }
+  if (call?.name === 'set_plan') return planCard(a, { events, utcOffset, now, projects })
   if (call?.name === 'add_gift_idea') {
     const who = text(a.for)
     const idea = text(a.idea)

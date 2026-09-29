@@ -55,7 +55,8 @@ export interface WallViewProps {
   /** The assistant's draft or change waiting for a yes: previewed on the Score, on its day. */
   assistantDraft?: WallEvent | null
   /** Open this item's sheet ("Open it" in the band); the nonce repeats a request. */
-  openRequest?: { id: string; nonce: number } | null
+  /** Open an event, a project or To do from outside (the band's Open, a saved plan's lines). */
+  openRequest?: { id?: string; project?: string; todo?: boolean; nonce: number } | null
   /** Decisions made on the wall for a day (hand-offs, "Leaving now"), applied to previews too. */
   tripStateFor?: (date: Date) => DayTripState
   /** "Leaving now", its undo, and "Hand off" from the Next Move. */
@@ -200,7 +201,9 @@ export default function WallView(props: WallViewProps) {
   }, [awakeUntil])
 
   useEffect(() => {
-    if (openRequest) setSelectedId(openRequest.id)
+    if (openRequest?.project) { openTodo(); setTodoProject(openRequest.project) }
+    else if (openRequest?.todo) openTodo()
+    else if (openRequest?.id) setSelectedId(openRequest.id)
   }, [openRequest])
 
   // An event deleted elsewhere closes its sheet.

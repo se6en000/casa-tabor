@@ -42,14 +42,15 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
   const pending = pendingAction(messages)
   const pointAt = answerEventId(answer)
 
-  const confirm = useCallback(async () => {
+  // `extra`: what the plan's Agree card chose (the unticked), sent with the yes.
+  const confirm = useCallback(async (extra?: Record<string, unknown>) => {
     const message = pending
     const action = message?.toolAction
     if (!message || !action || working) return
     setWorking(true)
     setNote(null)
     updateMessageToolStatus(message.id, 'loading')
-    const args = requestArgsFor(action.tool, action.args, events)
+    const args = action.tool === 'apply_plan' ? { ...action.args, ...extra, surface } : requestArgsFor(action.tool, action.args, events)
     const { data, error } = await supabase.functions.invoke('execute-ai-action', {
       body: {
         tool: action.tool,
@@ -75,20 +76,43 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
       setNote(result.message)
       return
     }
-    updateMessageToolStatus(message.id, 'done', { actionId: result.actionId, resultEventId: result.eventId })
+    updateMessageToolStatus(message.id, 'done', { actionId: result.actionId, resultEventId: result.eventId, ...(result.plan ? { planResult: result.plan, args } : {}) } as never)
     invalidateAllCalendarQueries(queryClient, String(args.event_id ?? args.id ?? result.eventId ?? ''))
     // The to-do list and Coming up live beside the calendar: a new to-do or project shows at once.
     void queryClient.invalidateQueries({ queryKey: ['todos'] })
     void queryClient.invalidateQueries({ queryKey: ['coming-up'] })
-    setNote('Done.')
+    if (action.tool === 'apply_plan') void queryClient.invalidateQueries({ queryKey: ['grocery'] })
+    // A plan says what it saved on its own card (board 12d), not in a note.
+    setNote(action.tool === 'apply_plan' ? null : 'Done.')
   }, [pending, working, events, session?.id, updateMessageToolStatus, queryClient, surface])
 
-  // A yes the server heard ("yes, change it"): save the card on screen, once.
+  // "Undo this plan" (board 12d): everything the plan made comes off, until the end of the next day.
+  const undoPlan = useCallback(async (messageId: string) => {
+    const message = allMessages.find((m) => m.id === messageId)
+    const planId = message?.toolAction?.planResult?.plan_id
+    if (!message?.toolAction || !planId || working) return
+    setWorking(true)
+    const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+      body: { tool: 'undo_plan', args: { plan_id: planId }, session_id: session?.id ?? null, lane: 'voice', device_id: getAssistantDeviceId(), client_trace_source: surface === 'wall' ? 'wall-band-confirmation' : 'phone-assistant-confirmation', confirmed_by_user: true },
+    })
+    const result = readActionResult(await responseBody(data, error), {})
+    setWorking(false)
+    if (result.kind !== 'done') { setNote(result.kind === 'error' ? result.message : 'That didn’t undo. Nothing changed.'); return }
+    updateMessageToolStatus(message.id, 'done', { planResult: { ...message.toolAction.planResult, undone: true } } as never)
+    invalidateAllCalendarQueries(queryClient, '')
+    for (const key of ['todos', 'coming-up', 'grocery']) void queryClient.invalidateQueries({ queryKey: [key] })
+    setNote('Undone. Nothing from that plan is left.')
+  }, [allMessages, working, session?.id, surface, updateMessageToolStatus, queryClient])
+
+  // A yes the server heard ("yes, change it"): save the card on screen, once. A plan's yes opens its
+  // Agree card first (board 12c), so the whole list is seen before anything saves.
   const confirmedFor = useRef<string | null>(null)
+  const [agreeAsked, setAgreeAsked] = useState(0)
   useEffect(() => {
     if (!answer?.confirmsDraft || !pending || confirmedFor.current === answer.id) return
     confirmedFor.current = answer.id
-    void confirm()
+    if (pending.toolAction?.tool === 'apply_plan') setAgreeAsked((n) => n + 1)
+    else void confirm()
   }, [answer?.confirmsDraft, answer?.id, pending, confirm])
 
   const cancel = useCallback(() => {
@@ -121,5 +145,5 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     updateMessageToolStatus(pending.id, 'pending', { args: { ...pending.toolAction.args, ...patch } } as never)
   }, [pending, updateMessageToolStatus])
 
-  return { messages, asidesInARow, loading, status, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
+  return { messages, asidesInARow, loading, status, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked }
 }

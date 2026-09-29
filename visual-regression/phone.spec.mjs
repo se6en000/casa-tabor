@@ -341,6 +341,24 @@ test('phone: Ask Casa — while Casa looks something up, it says what', async ({
   await expect(phone).toHaveScreenshot('phone-looking-up.png')
 })
 
+// Plan it with Casa on the phone (P3.25 phase 3; board 12e): the same draft, one sheet with ticks, Agree, Undo.
+test('phone: Ask Casa — a plan: the draft in the conversation, Set it up, untick, Agree, Undo', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'plan')
+  const card = ask.getByRole('region', { name: 'Emme — light-up jellyfish — the plan' })
+  await expect(card.getByText('Just changed: added “Try it on after dark”')).toBeVisible()
+  await expect(card.getByText('+ 4 shopping · 3 on the calendar · 1 pack')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-plan.png')
+  await card.getByRole('button', { name: 'Set it up…' }).click()
+  const agree = phone.getByRole('region', { name: 'Set up Emme — light-up jellyfish' })
+  await agree.getByRole('button', { name: /^Bubble wrap/ }).click()
+  await agree.getByRole('button', { name: 'Agree · set up 7' }).click()
+  const saved = phone.getByRole('region', { name: 'Emme — light-up jellyfish — saved' })
+  await expect(saved.getByText('SAVED · 7 THINGS')).toBeVisible()
+  await expect(saved.getByText('Left out: Bubble wrap.')).toBeVisible()
+  await saved.getByRole('button', { name: 'Undo this plan' }).click()
+  await expect(saved.getByText('Emme — light-up jellyfish is undone')).toBeVisible()
+})
+
 // Swipe between days on Me and Family (2026-09-28: "it feels natural there").
 const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
   const el = document.elementFromPoint(from[0], from[1])

@@ -3,7 +3,7 @@
 // old screen isn't touched while it's still in use; fold together when it retires (P5).
 
 export type ActionResult =
-  | { kind: 'done'; eventId?: string; actionId?: string }
+  | { kind: 'done'; eventId?: string; actionId?: string; plan?: { plan_id: string; undo_until?: string; links?: Array<{ id: string; kind: string; project_id?: string; event_id?: string; start?: string }> } }
   | { kind: 'conflict'; args: Record<string, unknown> }
   | { kind: 'error'; message: string }
 
@@ -30,6 +30,8 @@ export function readActionResult(data: unknown, requestArgs: Record<string, unkn
     kind: 'done',
     ...(typeof body.event_id === 'string' ? { eventId: body.event_id } : {}),
     ...(typeof body.action_id === 'string' ? { actionId: body.action_id } : {}),
+    // A plan saved with one Agree (P3.25): what the Saved card opens, and the undo deadline.
+    ...(typeof body.plan_id === 'string' ? { plan: { plan_id: body.plan_id, undo_until: typeof body.undo_until === 'string' ? body.undo_until : undefined, links: Array.isArray(body.links) ? body.links as Array<{ id: string; kind: string }> : [] } } : {}),
   }
 }
 

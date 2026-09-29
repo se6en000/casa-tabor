@@ -26,6 +26,8 @@ export type { AIMessage }
 // streaming `final` SSE event and the non-streaming JSON body.
 interface AssistantServerPayload {
   type?: string
+  /** Answered by the planning model (P3.25): the rest of the conversation stays with it. */
+  planning?: boolean
   closes_draft?: boolean
   /** The words weren't said to Casa (heard by the wall's open mic): no reply. */
   aside?: boolean
@@ -196,6 +198,8 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
     homeCity: ctx.homeCity,
     lastContextReference: deriveLastContextReference(messages),
     conversationState,
+    // Once the planning model has answered (P3.25), the conversation stays with it.
+    planning: messages.some((message) => message.role === 'assistant' && message.planning) || undefined,
     pendingAction: pendingAction ? {
       tool: pendingAction.tool,
       args: pendingAction.args,
@@ -545,6 +549,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             status: 'pending',
           },
           conversationState: data.conversation_state,
+          ...(data?.planning === true ? { planning: true } : {}),
           ...sourceMetadata,
         }
       }
@@ -557,6 +562,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         ...(data?.closes_draft === true ? { closesDraft: true } : {}),
         ...(data?.aside === true ? { aside: true } : {}),
         ...(data?.confirms_draft === true ? { confirmsDraft: true } : {}),
+        ...(data?.planning === true ? { planning: true } : {}),
         ...sourceMetadata,
       }
     }

@@ -25,7 +25,7 @@ export default function WallFrame() {
   const [bandOpen, setBandOpen] = useState(false)
   const [listenNonce, setListenNonce] = useState(0)
   const [pointAt, setPointAt] = useState<string | null>(null)
-  const [openRequest, setOpenRequest] = useState<{ id: string; nonce: number } | null>(null)
+  const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; nonce: number } | null>(null)
   const ask = useCallback(() => {
     setBandOpen(true)
     setListenNonce((n) => n + 1)
@@ -58,6 +58,12 @@ export default function WallFrame() {
       onOpenEvent={(id) => {
         setBandOpen(false)
         setOpenRequest({ id, nonce: Date.now() })
+      }}
+      onOpenPlace={(open) => {
+        setBandOpen(false)
+        if (open.kind === 'event') setOpenRequest({ id: open.id, nonce: Date.now() })
+        else if (open.kind === 'project') setOpenRequest({ project: open.id, nonce: Date.now() })
+        else if (open.kind === 'todo') setOpenRequest({ todo: true, nonce: Date.now() })
       }}
     />
   ) : null
