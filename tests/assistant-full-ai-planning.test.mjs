@@ -11,11 +11,11 @@ import { FULL_AI_TOOLS, buildFullAiSystem, comingUpForModel, fullAiStatus } from
 const now = new Date('2026-09-29T10:00:00-04:00')
 const base = { family: [{ name: 'Jake', role: 'parent', can_drive: true }], events: [], groceries: [], pending: null, onScreenIds: [], utcOffset: '-04:00', now, homeCity: 'West Palm Beach' }
 
-test('the instructions let Casa think with him: ideas, an honest opinion, push back, and no steering to an add', () => {
-  const [intro] = buildFullAiSystem(base).split('\n\n')
+test('the planning model is told to think with him: ideas, an honest opinion, push back, and no steering to an add', () => {
+  const [intro] = buildFullAiSystem({ ...base, planning: true }).split('\n\n')
   assert.match(intro, /talk (it|something) through/i)
-  assert.match(intro, /real ideas/i)
-  assert.match(intro, /honest opinion/i)
+  assert.match(intro, /concrete ideas/i)
+  assert.match(intro, /honest (opinion|take)/i)
   assert.match(intro, /push back/i)
   assert.match(intro, /don.t steer/i)
   assert.match(intro, /search_web/)
@@ -79,4 +79,88 @@ test('a live line says what Casa is doing while he waits', () => {
   assert.equal(fullAiStatus({ name: 'something_new', args: {} }), 'Looking that up…')
   const long = fullAiStatus({ name: 'search_web', args: { query: 'x'.repeat(200) } })
   assert.ok(long.length <= 80, 'one line on the band')
+})
+
+test('the whole Coming up list is in the context, so "the Halloween decorations" is known to have a starter plan', () => {
+  const comingUp = [
+    { key: 'season:halloween-decor:2026', title: 'Halloween decorations', date: '2026-10-31', daysAway: 32, nextStep: 'Start the plan', pokeOn: '2026-09-15', late: true, startable: true, plan: { steps: 5, minutes: 600, first: 'Bring the bins down from the attic' } },
+    { key: 'e9', title: 'Thanksgiving Day', date: '2026-11-26', daysAway: 58, nextStep: 'Who’s hosting', pokeOn: '2026-10-27' },
+  ]
+  const system = buildFullAiSystem({ ...base, comingUp })
+  const section = system.split('\n\n').find((s) => s.startsWith('COMING UP'))
+  assert.ok(section, 'a COMING UP section')
+  assert.match(section, /Halloween decorations · Sat Oct 31 · plan by Tue Sep 15 \(late\) · next: Start the plan · a starter plan: 5 steps, first "Bring the bins down from the attic"/)
+  assert.match(section, /Thanksgiving Day · Thu Nov 26 · plan by Tue Oct 27 · next: Who’s hosting/)
+})
+
+test('talking something through leads with substance — ideas or a take — and at most one question; a plan comes once he picks a direction', () => {
+  const [intro] = buildFullAiSystem({ ...base, planning: true }).split('\n\n')
+  assert.match(intro, /lead with/i)
+  assert.match(intro, /at most one question/i)
+  assert.match(intro, /once he.s (chosen|picked) a direction/i)
+  assert.match(intro, /When he asks you to add or set up a big multi-step/i, 'plan_project straight away only when he asks for one')
+})
+
+// Quick questions stay on the fast model (2.5 Flash: 2.5–4 s); talking something through goes to the
+// planning model (3.6 Flash: 10–20 s, with the live line) — the fast model decides, by a tool.
+test('the fast model can hand a turn to the planning model; the planning model has no such tool', async () => {
+  const { fullAiTools, THINK_IT_THROUGH, READ_TOOLS } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const fast = fullAiTools({ planning: false })
+  const tool = fast.find((t) => t.name === THINK_IT_THROUGH)
+  assert.ok(tool, 'offered to the fast model')
+  assert.match(tool.description, /talk something through/i)
+  assert.match(tool.description, /quick fact|single change/i)
+  assert.match(tool.description, /already/i, 'a follow-up in a conversation that is thinking something through goes too')
+  assert.equal(fullAiTools({ planning: true }).some((t) => t.name === THINK_IT_THROUGH), false)
+  assert.equal(READ_TOOLS.has(THINK_IT_THROUGH), false, 'not a lookup: it changes who answers')
+})
+
+test('ai-assistant switches to the planning model on think_it_through', async () => {
+  const fs = await import('node:fs')
+  const policy = fs.readFileSync(new URL('../supabase/functions/_shared/llm-model-policy.mjs', import.meta.url), 'utf8')
+  assert.match(policy, /export const PLANNING_GEMINI_MODEL = 'gemini-3\.6-flash'/)
+  const src = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
+  assert.match(run, /THINK_IT_THROUGH/)
+  assert.match(run, /PLANNING_GEMINI_MODEL/)
+  assert.match(run, /emitStatus\('Thinking it through…'\)/)
+  assert.match(run, /semantic_intent: planning \? 'full_ai\.plan_answer' : 'full_ai\.answer'/, 'a planning answer is told apart in the traces')
+})
+
+// Held-out run, 2026-09-29 (twice, traced the second time): "I'm thinking about redoing the backyard,
+// can you help me think it through?" — the first thing said, after the wake word — was dropped as an
+// aside and got no answer. An aside is the open mic overhearing the room between turns, so it needs
+// Casa to have spoken first.
+test('the first thing said in a conversation is never dropped as an aside', async () => {
+  const fs = await import('node:fs')
+  const src = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const line = src.split('\n').find((l) => l.includes('const asideOnWall ='))
+  assert.ok(line)
+  assert.match(line, /messages.*some\(\(m.*role === 'assistant'\)/, 'only once Casa has answered in this conversation')
+})
+
+// Live check, 2026-09-29: "Make a project for replacing the fence" came back twice as the steps written
+// out in words ("I'll set up a project …") — no card, so nothing could be saved.
+test('an asked-for project always goes through the card, never steps written out in words', () => {
+  const tool = FULL_AI_TOOLS.find((t) => t.name === 'plan_project')
+  assert.match(tool.description, /never write the steps out in words/i)
+})
+
+// Live check, 2026-09-29: with the brainstorming guidance in the fast model's instructions too, "Make a
+// project for replacing the fence" was answered with the steps in words half the time. The fast model
+// only hands talking-it-through over; the guidance is the planning model's.
+test('the fast model is told to hand talking-it-through over, not how to brainstorm', () => {
+  const [intro] = buildFullAiSystem(base).split('\n\n')
+  assert.match(intro, /think_it_through/)
+  assert.doesNotMatch(intro, /lead with substance/i)
+  assert.doesNotMatch(intro, /only then offer to set it up/i)
+  assert.match(intro, /When he asks you to add or set up a big multi-step project/, 'the project card rule stays')
+})
+
+test('ai-assistant rebuilds the instructions for the planning model when it hands a turn over', async () => {
+  const fs = await import('node:fs')
+  const src = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
+  assert.match(run, /let system = systemFor\(false\)/)
+  assert.match(run, /model = PLANNING_GEMINI_MODEL\n\s+system = systemFor\(true\)/)
 })

@@ -12,6 +12,7 @@ import {
 } from '../_shared/route-eta-cache.mjs'
 import {
   isProductionGeminiModel,
+  PLANNING_GEMINI_MODEL,
   PRIMARY_GEMINI_MODEL,
   resolveProductionGeminiModel,
 } from '../_shared/llm-model-policy.mjs'
@@ -169,7 +170,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -800,7 +801,9 @@ Deno.serve(async (req) => {
   const turnContext = image || turnRulesOff || fullAi ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
   const turnResolution = turnContext?.resolution ?? null
   // Words not said to Casa, heard by the wall's open mic (P3.13): no reply, nothing changes.
-  const asideOnWall = turnResolution?.act === 'aside' && context?.page === 'wall'
+  // (Only once Casa has answered: the first thing said follows the wake word or a tap, so it's for Casa —
+  // "I'm thinking about redoing the backyard, can you help me think it through?" was dropped, 2026-09-29.)
+  const asideOnWall = turnResolution?.act === 'aside' && context?.page === 'wall' && Array.isArray(messages) && (messages as Array<{ role?: string }>).some((m) => m?.role === 'assistant')
   if (turnResolution && !asideOnWall && !turnContext?.card && !turnContext?.cancelledDraft && !turnContext?.answer && !turnContext?.clarify && Array.isArray(messages) && messages.length > 0) {
     const last = messages[messages.length - 1]
     if (turnResolution.standalone && last?.role === 'user' && turnResolution.standalone !== String(last.content ?? '').trim()) {
@@ -1171,7 +1174,8 @@ Deno.serve(async (req) => {
   const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
     const config = await loadLlmConfig(sb)
     const apiKey = String(config?.api_key ?? '')
-    const model = String(config?.model ?? DEFAULT_GEMINI_MODEL)
+    // A dry run may try another production model on the same turn (P3.25: "which AI plans?").
+    let model = dryRun && modelOverride && /^gemini-[a-z0-9.-]+$/.test(modelOverride) ? modelOverride : String(config?.model ?? DEFAULT_GEMINI_MODEL)
     const utcOffset = typeof context?.utcOffset === 'string' ? context.utcOffset : '-04:00'
     const now = new Date(String(context?.currentDate ?? new Date().toISOString()))
     const { from, until } = fullAiWindow(now, utcOffset)
@@ -1204,10 +1208,13 @@ Deno.serve(async (req) => {
       .map((t) => ({ id: t.id, title: t.title, due: t.has_due_date ? nyDay(t.start_time) : null }))
     // His saved projects with every step (P3.25 phase 1), so "change that project" isn't answered with
     // a second one and "what's left on the roof?" is answered from the steps.
-    const [projRes, stepRes] = await Promise.all([
+    const [projRes, stepRes, comingUpRes] = await Promise.all([
       sb.from('todo_projects').select('id, title, aim_date').eq('status', 'active').limit(20),
       sb.from('todo_steps').select('project_id, position, grp, title, who, minutes, cost_cents, cal_start, cal_end, child_project_id, done_at'),
+      // The whole Coming up list (~0.3 s, alongside the rest), so a season's starter plan is known.
+      sb.functions.invoke('coming-up', { body: { action: 'list' } }).catch(() => ({ data: null })),
     ])
+    const comingUp = (((comingUpRes as { data?: { items?: unknown[] } | null }).data?.items ?? []) as Array<Record<string, unknown>>)
     type StepRow = { project_id: string; position: number; grp: number | null; title: string; who: string | null; minutes: number | null; cost_cents: number | null; cal_start: string | null; cal_end: string | null; child_project_id: string | null; done_at: string | null }
     const allSteps = (stepRes.data ?? []) as StepRow[]
     const stepsOf = (id: string) => allSteps.filter((st) => st.project_id === id).sort((a, b) => (a.grp ?? a.position) - (b.grp ?? b.position) || a.position - b.position)
@@ -1228,30 +1235,36 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn })
+    let system = systemFor(false)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
     const lastUser = [...contents].reverse().find((c) => c.role === 'user')
     if (lastUser && rawImagesList.length) lastUser.parts.push(...rawImagesList.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })))
 
     const lookupDeps = { cid, context: (context ?? {}) as Record<string, any>, apiKey, model, provider: 'gemini', braveKey, mapsKey, homeAddress: home, routeEtaCache, providerFetch: providerFetch as never, mapsFetch: mapsFetch as never, experienceMode, latestUserText: null, callIndex: 2 }
-    const deadline = Date.now() + FULL_AI_TIMEOUT_MS
+    let deadline = Date.now() + FULL_AI_TIMEOUT_MS
+    // Talking something through (P3.25): the fast model hands the turn to the planning model.
+    let planning = false
+    const asked = contents.length
     let parts: Array<Record<string, unknown>> = []
     let retriedEmpty = false
     let finishReason: string | null = null
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
     const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
-    // Up to three rounds: a lookup's answer goes back to the model, which then answers or proposes.
-    for (let round = 0; round < 3; round++) {
+    // Up to five rounds: a lookup's answer goes back to the model, which then answers or proposes; the
+    // last round is for words (the planning model once ran out of rounds mid-lookup).
+    const FULL_AI_ROUNDS = 5
+    for (let round = 0; round < FULL_AI_ROUNDS; round++) {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), Math.max(1000, deadline - Date.now()))
       try {
         const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify(fullAiRequest({ system, contents, tools: FULL_AI_TOOLS, retryAfterEmpty: retriedEmpty })),
+          body: JSON.stringify(fullAiRequest({ system, contents, tools: fullAiTools({ planning }), retryAfterEmpty: retriedEmpty, finalRound: round === FULL_AI_ROUNDS - 1 })),
           signal: controller.signal,
-        }, { callPurpose: 'full-ai', correlationId: cid, model, callIndex: round + 1 })
+        }, { callPurpose: planning ? 'full-ai-plan' : 'full-ai', correlationId: cid, model, callIndex: round + 1 })
         const body = await res.json() as Record<string, unknown>
         const candidate = (body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> }; finishReason?: string }> | undefined)?.[0]
         parts = candidate?.content?.parts ?? []
@@ -1268,6 +1281,18 @@ Deno.serve(async (req) => {
       if (!parts.length && !retriedEmpty) {
         retriedEmpty = true
         round -= 1
+        continue
+      }
+      if (!planning && parts.some((p) => (p.functionCall as { name?: string } | undefined)?.name === THINK_IT_THROUGH)) {
+        planning = true
+        model = PLANNING_GEMINI_MODEL
+        system = systemFor(true)
+        emitStatus('Thinking it through…')
+        contents.length = asked
+        parts = []
+        retriedEmpty = false
+        deadline = Date.now() + FULL_AI_TIMEOUT_MS
+        round = -1
         continue
       }
       const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
@@ -1344,13 +1369,16 @@ Deno.serve(async (req) => {
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
   // (buildDisplayText is declared further down this pipeline, so D's cards read exactly like A's.)
   if (fullAi) return (await runFullAi(buildDisplayText))!
   if (asideOnWall) {
+    // Traced, so a turn meant for Casa but dropped as an aside shows up (P3.25: a planning opener,
+    // "I'm thinking about redoing the backyard, can you help me think it through?", came back blank once).
+    appendServerTrace('server_ai_assistant_aside', String(latestUserText ?? '').slice(0, 200), { messages: Array.isArray(messages) ? messages.length : 0 })
     return {
       status: 200,
       payload: { type: 'text', text: '', aside: true, semantic_intent: 'conversation.aside', conversation_state: incomingConversationState ?? null, correlation_id: cid },

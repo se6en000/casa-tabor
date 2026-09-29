@@ -50,6 +50,12 @@ function describeDraft(pending, utcOffset) {
 }
 
 /** One plain paragraph, then the data it answers from. */
+// Talking something through (P3.25): the fast model only hands it over (think_it_through); how to think
+// with him is the planning model's — in the fast model's instructions it wrote asked-for projects out in
+// words instead of the card (live check, 2026-09-29).
+const HAND_IT_OVER = 'When he wants to talk something through — ideas, a theme, a holiday, a project, whether something is a good idea — call think_it_through and nothing else. '
+const THINKING_WITH_HIM = (homeCity) => `When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: lead with substance — a few concrete ideas, options with your pick, or your honest take and why — drawn from what you know of this family (Coming up, the projects, the calendar, who's who, the Florida weather), and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Ask at most one question, after the ideas. Don't steer the conversation toward adding things: steps and a plan come once he's chosen a direction, and only then offer to set it up. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. `
+
 const shortDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
 const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`)
 
@@ -70,9 +76,9 @@ function describeProject(p) {
   })].join('\n')
 }
 
-export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], projects = [] }) {
+export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], projects = [], comingUp = [], planning = false }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: give real ideas and your honest opinion, and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Don't steer the conversation toward adding things; offer to set things up only once a plan has taken shape. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when; a big multi-step home project is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. ${planning ? THINKING_WITH_HIM(homeCity) : HAND_IT_OVER}Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when. When he asks you to add or set up a big multi-step project ("make a project for painting the house", "add the roof as a project"), it is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first; wanting to do or make something, without asking for the project, is talking it through. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -88,6 +94,13 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   }
   if (projects.length) {
     sections.push(`PROJECTS (saved, each with its steps in order — done, NOW (side by side when there are several), then the rest; a saved project, its steps, or a saved to-do can't be changed or deleted by voice yet — say he can tap it on the To do screen to change it; a new plan_project card would make a second project):\n${projects.map(describeProject).join('\n')}`)
+  }
+  // The whole Coming up list (P3.25 phase 1): "the Halloween decorations" already has a starter plan.
+  if (comingUp.length) {
+    sections.push(`COMING UP (the whole list of what needs getting ready, soonest plan-by first; a season with a starter plan can start as a project; get_coming_up has the every-time rules and gift ideas):\n${comingUp.map((i) => `- ${[
+      i.title, shortDay(i.date), `plan by ${shortDay(i.pokeOn)}${i.late ? ' (late)' : ''}`, i.nextStep ? `next: ${i.nextStep}` : null,
+      i.startable && i.plan ? `a starter plan: ${i.plan.steps} steps, first "${i.plan.first}"` : null,
+    ].filter(Boolean).join(' · ')}`).join('\n')}`)
   }
   if (home) sections.push(`HOME: ${home}`)
   if (places.length) sections.push(`SAVED PLACES:\n${places.map((p) => `- ${p.name}${p.address ? ` · ${p.address}` : ''}${p.phone ? ` · ${p.phone}` : ''}`).join('\n')}`)
@@ -144,7 +157,7 @@ export const FULL_AI_TOOLS = [
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
   // His to-do list (P3.22; Jake 2026-09-28): the "To Do" list on his phone and Casa's To do screen.
   { name: 'add_todo', description: 'Propose adding something to his to-do list — anything he wants to get done, with or without a date ("add fix the gate to my to-dos", "remind me to paint the house"). Only a title is needed; a due date only if he gave one (YYYY-MM-DD; "in November" → the 1st of November).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD, only if he gave a date' } }, required: ['title'] } },
-  { name: 'plan_project', description: 'Propose a big, multi-step home project as a plan: its steps in order (4–9, each a concrete action; the first small enough to do this week), with rough minutes and dollars per step, and an aim date if he gave one. If it is already on his list as a reminder, pass that [id] as from_id so it grows from it instead of a duplicate. Never ask him for the steps — propose them from how such jobs go; he changes them by talking, and nothing is saved until he says yes.', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' } }, required: ['title'] } }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' }, from_id: { type: 'STRING' } }, required: ['title', 'steps'] } },
+  { name: 'plan_project', description: 'Propose a big, multi-step home project as a plan: its steps in order (4–9, each a concrete action; the first small enough to do this week), with rough minutes and dollars per step, and an aim date if he gave one. If it is already on his list as a reminder, pass that [id] as from_id so it grows from it instead of a duplicate. Never ask him for the steps — propose them from how such jobs go; he changes them by talking, and nothing is saved until he says yes. When he asks for a project, always call this — never write the steps out in words instead (only this card can save them).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' } }, required: ['title'] } }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' }, from_id: { type: 'STRING' } }, required: ['title', 'steps'] } },
   // The whole calendar, past and future, reminders included (Jake, 2026-09-28: "search my whole calendar").
   { name: 'find_events', description: 'Look up the calendar beyond the three weeks shown above, past or future: a day (from), a span (from and to), and/or words from the title or place. Reminders are included. Use it for any date not listed, or to check whether something is on the calendar.', parameters: { type: 'OBJECT', properties: { from: { type: 'STRING', description: 'YYYY-MM-DD' }, to: { type: 'STRING', description: 'YYYY-MM-DD' }, query: { type: 'STRING', description: 'words to look for' } } } },
   { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone).', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
@@ -163,6 +176,13 @@ export const FULL_AI_TOOLS = [
 ]
 
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
+// The fast model's way to hand a turn to the planning model (P3.25): not a lookup — it changes who answers.
+export const THINK_IT_THROUGH = 'think_it_through'
+const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
+export function fullAiTools({ planning }) {
+  return planning ? FULL_AI_TOOLS : [...FULL_AI_TOOLS, THINK_IT_THROUGH_TOOL]
+}
+
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
 export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events'])
@@ -404,13 +424,15 @@ export function mayHandBack(remainingMs) {
 
 // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all; the one retry
 // asks for words (tools off) instead of the same call again — the 9:12 turn came back empty twice.
+const FINAL_ROUND_NOTE = 'Answer now, in words, with what you have found (no more lookups this time).'
 const EMPTY_RETRY_NOTE = 'This time, answer in words (your tools are off for this reply). If they asked for a change, don’t say you added, changed or saved anything — say what you would set up and that you’ll do it when they say so.'
-export function fullAiRequest({ system, contents, tools, retryAfterEmpty = false }) {
+export function fullAiRequest({ system, contents, tools, retryAfterEmpty = false, finalRound = false }) {
+  const note = retryAfterEmpty ? EMPTY_RETRY_NOTE : finalRound ? FINAL_ROUND_NOTE : null
   return {
-    system_instruction: { parts: [{ text: retryAfterEmpty ? `${system}\n\n${EMPTY_RETRY_NOTE}` : system }] },
+    system_instruction: { parts: [{ text: note ? `${system}\n\n${note}` : system }] },
     contents,
     tools: [{ function_declarations: tools }],
-    tool_config: { function_calling_config: { mode: retryAfterEmpty ? 'NONE' : 'AUTO' } },
+    tool_config: { function_calling_config: { mode: note ? 'NONE' : 'AUTO' } },
     // Gemini's own dynamic thinking: it decides how much to think.
     generation_config: { thinking_config: { thinking_budget: -1 }, max_output_tokens: 8192 },
   }

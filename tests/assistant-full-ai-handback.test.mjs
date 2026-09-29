@@ -41,6 +41,22 @@ test('ai-assistant uses both: every hand-back is checked against the time left, 
   assert.doesNotMatch(run, /if \(handBack\) return null/, 'no hand-back without checking the time left')
   assert.doesNotMatch(run, /if \(!text && handBack\) return null/)
   assert.match(run, /mayHandBack\(remainingRequestBudgetMs\(\)\)/)
-  assert.match(run, /fullAiRequest\(\{[^}]*retryAfterEmpty/)
+  assert.match(run, /fullAiRequest\(\{ system, contents, tools: fullAiTools\(\{ planning \}\), retryAfterEmpty: retriedEmpty/)
   assert.match(run, /finishReason/, 'the empty report says why Gemini stopped')
+})
+
+// Held-out run, 2026-09-29: "Help me figure out Liv's birthday party" — the planning model looked up
+// the notes, the calendar, the gift ideas and the web, ran out of rounds with a lookup still asked for,
+// and said "Sorry, I lost my train of thought there." The last round always answers in words.
+test('the last round asks for an answer with what has been found: tools off', () => {
+  const body = fullAiRequest({ system, contents, tools: [{ name: 'search_web' }], finalRound: true })
+  assert.equal(body.tool_config.function_calling_config.mode, 'NONE')
+  assert.match(body.system_instruction.parts[0].text, /answer now/i)
+})
+
+test('ai-assistant gives the model up to five rounds, the last one for words', () => {
+  const src = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
+  assert.match(run, /const FULL_AI_ROUNDS = 5/)
+  assert.match(run, /finalRound: round === FULL_AI_ROUNDS - 1/)
 })

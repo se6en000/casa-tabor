@@ -20,3 +20,9 @@ export function resolveProductionGeminiModel(model, fallback = PRIMARY_GEMINI_MO
   const normalized = String(model ?? '').trim().toLowerCase()
   return PRODUCTION_GEMINI_MODELS.has(normalized) ? normalized : fallback
 }
+
+// Talking something through (P3.25 "Plan it with Casa"): the fast model hands the turn over with its
+// think_it_through tool. Chosen 2026-09-29 on the same planning openers: concrete ideas with a pick,
+// the family and the Florida weather, push back — where 2.5 Flash mostly asked questions back.
+// (2.5 Pro is no longer available to new users.)
+export const PLANNING_GEMINI_MODEL = 'gemini-3.6-flash'
