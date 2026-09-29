@@ -48,6 +48,8 @@ export interface PhoneViewProps {
   checklist: WallChecklistItem[]
   tripActions?: PhoneTripActions
   onToggleItem?: (item: WallChecklistItem) => void
+  onAddItem?: (eventId: string, label: string) => Promise<void>
+  useEventItems?: (eventId: string) => WallChecklistItem[]
   /** People (More → People): saved contacts and places, for call / text / directions. */
   contacts?: SavedContact[]
   places?: SavedPlace[]
@@ -108,7 +110,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -496,6 +498,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           onHandOff={tripActions ? askHandOff : undefined}
           onLeaving={tripActions ? (trip) => tripActions.leaving([trip.id]) : undefined}
           onToggleItem={onToggleItem}
+          onAddItem={onAddItem}
+          useItems={useEventItems}
           saveEvent={saveEvent}
           deleteEvent={deleteEvent}
           keptFrom={keptFromOf(keepFrom, openId!)}

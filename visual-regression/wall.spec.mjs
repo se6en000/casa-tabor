@@ -325,6 +325,34 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await expect(wall.getByRole('region', { name: /^Baseball: Huskies @ RPB Cascade details/ })).toBeVisible()
 })
 
+// Jake, 2026-09-29: "for pack and get lists, can you make it so I can manually add items to it … I should
+// be able to add to any item on the cal or reminder." + Add on the details, for an event or a reminder.
+test('wall: get & pack — add a line to any event or reminder from its details', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  const sheet = wall.getByRole('region', { name: 'Softball: Huskies @ RPB Cascade details' })
+  const header = sheet.getByText(/^GET & PACK · \d+ OF \d+$/)
+  await expect(header).toBeVisible()
+  const before = Number((await header.textContent()).match(/OF (\d+)$/)[1])
+  await sheet.getByRole('button', { name: 'Add to get & pack' }).click()
+  await typeOnWall(page, 'bug spray')
+  await expect(sheet.getByRole('button', { name: 'Bug spray' })).toBeVisible()
+  await expect(sheet.getByText(new RegExp(`OF ${before + 1}$`))).toBeVisible()
+  await expect(wall).toHaveScreenshot('event-add-pack-item.png')
+  await sheet.getByRole('button', { name: 'Close' }).click()
+
+  // A reminder has no list yet: the section is there, empty, with its + Add.
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await wall.getByRole('button', { name: 'Open Pick up Photobook for Liv' }).first().click()
+  const reminder = wall.getByRole('region', { name: 'Pick up Photobook for Liv details' })
+  await expect(reminder.getByText('GET & PACK', { exact: true })).toBeVisible()
+  await reminder.getByRole('button', { name: 'Add to get & pack' }).click()
+  await typeOnWall(page, 'receipt')
+  await expect(reminder.getByRole('button', { name: 'Receipt' })).toBeVisible()
+  await expect(reminder.getByText('GET & PACK · 0 OF 1')).toBeVisible()
+})
+
 test('wall: + adds an event by touch — blank on the day on show, the Score previews it, "Add it" puts it on the wall', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   const wall = page.getByTestId('wall-fixture')

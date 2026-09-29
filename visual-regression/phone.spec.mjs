@@ -93,6 +93,12 @@ test('phone: an event — details, the trip, get & pack; Edit a time and save; D
   await sheet.getByRole('button', { name: 'Water bottle' }).click()
   await expect(sheet.getByText('GET & PACK · 2 OF 2')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-event.png')
+  // Jake, 2026-09-29: add to any event's or reminder's get & pack by hand.
+  await sheet.getByRole('textbox', { name: 'Add to get & pack' }).fill('bug spray')
+  await sheet.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(sheet.getByRole('button', { name: 'Bug spray' })).toBeVisible()
+  await expect(sheet.getByText('GET & PACK · 2 OF 3')).toBeVisible()
+  await expect(sheet.getByRole('textbox', { name: 'Add to get & pack' })).toHaveValue('')
 
   await sheet.getByRole('button', { name: 'Edit' }).click()
   await expect(sheet.getByRole('button', { name: 'Done' })).toBeVisible() // nothing changed yet

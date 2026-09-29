@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft, Bookmark, Search, X } from 'lucide-react'
+import { Check, ChevronLeft, Bookmark, Plus, Search, X } from 'lucide-react'
 import { useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
 import { supabase } from '../lib/supabase'
 import type { SavedPlaceCategory } from '../types'
@@ -28,7 +28,7 @@ const EDIT_IDLE_MS = 5 * 60_000
 const HOUR_CHIPS = Array.from({ length: 17 }, (_, i) => i + 6) // 6 AM – 10 PM
 
 type Mode = 'details' | 'edit' | 'place'
-type KeyboardTarget = 'title' | 'search' | 'saveName' | null
+type KeyboardTarget = 'title' | 'search' | 'saveName' | 'item' | null
 
 export interface WallEventSheetProps {
   event: EditableEvent
@@ -53,7 +53,13 @@ export interface WallEventSheetProps {
   projectStep?: { project: string; title: string; number: number; total: number; done: boolean } | null
   onStepDone?: () => Promise<void>
   onOpenProject?: () => void
+  /** Add a line to this event's get & pack list; absent = no + Add. */
+  onAddItem?: (eventId: string, label: string) => Promise<void>
+  /** This event's own list, loaded for it (a reminder's isn't in the wall's week list). */
+  useItems?: (eventId: string) => WallChecklistItem[]
 }
+
+const noItems = (): WallChecklistItem[] => []
 
 const midnight = (d: Date) => {
   const day = new Date(d)
@@ -88,7 +94,7 @@ function whenLabel(event: EditableEvent, now: Date): string {
 }
 
 export default function WallEventSheet(props: WallEventSheetProps) {
-  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview, projectStep = null, onStepDone, onOpenProject } = props
+  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview, projectStep = null, onStepDone, onOpenProject, onAddItem, useItems = noItems } = props
   const queryClient = useQueryClient()
   // Adding by touch: the same sheet, opening straight into editing with the keyboard on the title.
   const isNew = event.id === NEW_EVENT_ID
@@ -97,6 +103,9 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const [tab, setTab] = useState<'when' | 'who'>(props.startOn === 'who' ? 'who' : 'when')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [keyboard, setKeyboard] = useState<KeyboardTarget>(isNew ? 'title' : null)
+  // A line being typed for the get & pack list.
+  const [itemText, setItemText] = useState('')
+  const [itemError, setItemError] = useState<string | null>(null)
   const [hourPicker, setHourPicker] = useState(false)
   const [otherDates, setOtherDates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -192,12 +201,13 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     }
   }
 
-  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'saveName' ? saveName : ''
+  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'saveName' ? saveName : keyboard === 'item' ? itemText : ''
   const onKeyboardChange = (value: string) => {
     touch()
     if (keyboard === 'title') setDraft((d) => setTitle(d, value))
     if (keyboard === 'search') setPlaceQuery(value)
     if (keyboard === 'saveName') setSaveName(value)
+    if (keyboard === 'item') setItemText(value)
   }
 
 
@@ -274,7 +284,20 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     return w ? <span className="text-wall-label font-semibold text-wall-brass-ink">was {w}</span> : null
   }
   const [head, ...rest] = event.title.split(':')
-  const own = checklist.filter((item) => item.event_id === event.id).sort((a, b) => a.sort_order - b.sort_order)
+  const loadedItems = useItems(isNew ? '' : event.id)
+  const own = [...new Map([...checklist, ...loadedItems].filter((item) => item.event_id === event.id).map((item) => [item.id, item])).values()].sort((a, b) => a.sort_order - b.sort_order)
+  const addItem = async () => {
+    const label = itemText.trim()
+    setKeyboard(null)
+    setItemText('')
+    if (!label || !onAddItem) return
+    try {
+      setItemError(null)
+      await onAddItem(event.id, label.charAt(0).toUpperCase() + label.slice(1))
+    } catch {
+      setItemError('That didn’t save. Try again.')
+    }
+  }
   const reminder = isNew ? kind === 'reminder' : isReminder(event)
 
   return (
@@ -353,12 +376,12 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               )
             )}
 
-            {own.length > 0 && (
+            {(own.length > 0 || onAddItem) && (
               <div className="flex flex-col">
                 <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>
-                  PACK · {own.filter((i) => i.checked).length} OF {own.length}
+                  {own.length ? `GET & PACK · ${own.filter((i) => i.checked).length} OF ${own.length}` : 'GET & PACK'}
                 </div>
-                {own.slice(0, 5).map((item) => (
+                {own.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -371,6 +394,20 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                     <span className={`text-wall-body ${item.checked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.label}</span>
                   </button>
                 ))}
+                {/* Jake, 2026-09-29: "make it so I can manually add items … to any item on the cal or reminder". */}
+                {onAddItem && (keyboard === 'item' ? (
+                  <div className="flex h-[56px] items-center gap-[16px] border-0 border-t border-solid border-wall-rule text-wall-body text-wall-ink">
+                    <Plus size={22} className="text-wall-brass-ink" aria-hidden="true" />
+                    <span className="min-w-0 truncate">{itemText}</span>
+                    <span aria-hidden="true" className="-ml-[12px] inline-block h-[28px] w-[3px] bg-wall-ink" />
+                  </div>
+                ) : (
+                  <button type="button" aria-label="Add to get & pack" onClick={() => { touch(); setItemText(''); setKeyboard('item') }}
+                    className="flex h-[56px] items-center gap-[16px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left text-wall-body font-semibold text-wall-brass-ink">
+                    <Plus size={22} aria-hidden="true" /> Add something to get or pack
+                  </button>
+                ))}
+                {itemError && <div className="text-wall-detail font-semibold text-wall-rust">{itemError}</div>}
               </div>
             )}
 
@@ -763,7 +800,8 @@ export default function WallEventSheet(props: WallEventSheetProps) {
         <WallKeyboard
           value={keyboardValue}
           onChange={onKeyboardChange}
-          onDone={() => setKeyboard(null)}
+          onDone={keyboard === 'item' ? () => void addItem() : () => setKeyboard(null)}
+          showsValue={keyboard === 'item'}
         />
       )}
     </div>

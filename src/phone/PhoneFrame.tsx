@@ -10,7 +10,7 @@ import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
 import { useComingUp } from '../wall/useComingUp'
 import { useTodoProject, useTodos } from '../wall/useTodos'
-import { toggleChecklistItem } from '../wall/useWallChecklist'
+import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
 import type { FamilyMember } from '../types'
@@ -63,6 +63,8 @@ export default function PhoneFrame() {
       checklist={checklist}
       tripActions={tripActions}
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
+      onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
+      useEventItems={useEventChecklist}
       saveEvent={(event, draft) => saveDraft({ event, draft, members, queryClient })}
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}

@@ -73,6 +73,10 @@ export interface WallViewProps {
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Ticks or unticks a packing item. */
   toggleChecklist?: (item: WallChecklistItem) => void
+  /** Add a line to an event's get & pack list (from its details). */
+  addChecklist?: (eventId: string, label: string) => Promise<void>
+  /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
+  useEventItems?: (eventId: string) => WallChecklistItem[]
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
@@ -93,7 +97,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent, comingUp = null, todos = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -464,6 +468,8 @@ export default function WallView(props: WallViewProps) {
           }}
           onPreview={setDraftPreview}
           onDelete={deleteEvent}
+          onAddItem={addChecklist}
+          useItems={useEventItems}
           startOn={selectedForWho ? 'who' : undefined}
           projectStep={selectedStep}
           onStepDone={selectedStep && todos ? async () => { await todos.act({ action: 'project_edit', id: selectedStep.projectId, op: 'done_step', args: { step_id: selectedStep.stepId } }) } : undefined}

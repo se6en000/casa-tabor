@@ -9,7 +9,7 @@ import { useWakeWord } from '../hooks/useWakeWord'
 import type { FamilyMember } from '../types'
 import WallAssistantBand from './WallAssistantBand'
 import { useWallLed } from './useWallLed'
-import { toggleChecklistItem } from './useWallChecklist'
+import { addChecklistItem, toggleChecklistItem, useEventChecklist } from './useWallChecklist'
 import { useFamilyDay } from './useFamilyDay'
 import { createEventByTouch } from './createEvent'
 import WallView from './WallView'
@@ -65,5 +65,5 @@ export default function WallFrame() {
 
   const comingUp = useComingUp()
   const todos = useTodos()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
 }

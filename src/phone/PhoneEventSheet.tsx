@@ -39,9 +39,15 @@ export interface PhoneEventSheetProps {
   keptFrom?: string[]
   suggestKeepFrom?: string[]
   onKeepFrom?: (memberIds: string[]) => Promise<void>
+  /** Add a line to its get & pack list (Jake, 2026-09-29); absent = no Add. */
+  onAddItem?: (eventId: string, label: string) => Promise<void>
+  /** This event's own list, loaded for it (a reminder's isn't in the week's list). */
+  useItems?: (eventId: string) => WallChecklistItem[]
 }
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom }: PhoneEventSheetProps) {
+const noItems = (): WallChecklistItem[] => []
+
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -49,6 +55,22 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const [mode, setMode] = useState<'details' | 'edit' | 'delete'>(isNew || (initialMode === 'edit' && !view.repeating) ? 'edit' : 'details')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [busy, setBusy] = useState(false)
+  const loadedItems = useItems(isNew ? '' : event.id)
+  const prep = [...new Map([...view.prep, ...loadedItems.filter((item) => item.event_id === event.id)].map((item) => [item.id, item])).values()].sort((a, b) => a.sort_order - b.sort_order)
+  const [itemText, setItemText] = useState('')
+  const [itemError, setItemError] = useState<string | null>(null)
+  const addItem = async () => {
+    const text = itemText.trim()
+    if (!text || !onAddItem) return
+    setItemText('')
+    try {
+      setItemError(null)
+      await onAddItem(event.id, text.charAt(0).toUpperCase() + text.slice(1))
+    } catch {
+      setItemText(text)
+      setItemError('That didn’t save. Try again.')
+    }
+  }
   // Keep from… stays one quiet button until it's wanted (or already in use).
   const [keepOpen, setKeepOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -139,15 +161,23 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               </div>
             </div>
           )}
-          {view.prep.length > 0 && (
+          {(prep.length > 0 || (onAddItem && !isNew)) && (
             <div>
-              <div className={label}>GET &amp; PACK · {view.prep.filter((i) => i.checked).length} OF {view.prep.length}</div>
-              {view.prep.map((item) => (
+              <div className={label}>{prep.length ? `GET & PACK · ${prep.filter((i) => i.checked).length} OF ${prep.length}` : 'GET & PACK'}</div>
+              {prep.map((item) => (
                 <button key={item.id} type="button" aria-pressed={item.checked} disabled={!onToggleItem} onClick={() => onToggleItem?.(item)} className="flex min-h-[44px] w-full items-center gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-phone-body text-wall-ink">
                   <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>{item.checked && <Check size={14} strokeWidth={3} />}</span>
                   <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
                 </button>
               ))}
+              {onAddItem && !isNew && (
+                <form className="flex items-center gap-[8px] border-0 border-t border-solid border-wall-stone pt-[8px]" onSubmit={(e) => { e.preventDefault(); void addItem() }}>
+                  <input aria-label="Add to get & pack" value={itemText} onChange={(e) => setItemText(e.target.value)} placeholder="Add something to get or pack"
+                    className="h-[44px] min-w-0 flex-1 rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-phone-body text-wall-ink" />
+                  <button type="submit" disabled={!itemText.trim()} className={`${pill} disabled:opacity-40`}>Add</button>
+                </form>
+              )}
+              {itemError && <div className="text-phone-detail font-semibold text-wall-rust">{itemError}</div>}
             </div>
           )}
 
