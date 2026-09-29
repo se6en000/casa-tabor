@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FULL_AI_TOOLS, buildFullAiSystem, comingUpForModel, fullAiStatus } from '../supabase/functions/_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, buildFullAiSystem, comingUpForModel, fullAiStatus, fullAiTools } from '../supabase/functions/_shared/assistant-full-ai.mjs'
 
 // P3.25 phase 1 (Plan it with Casa): the assistant can talk. Jake, 2026-09-29 9:14 AM: "Right now
 // she feels very strict and just like do you wanna add something to the calendar or add something to
@@ -9,6 +9,7 @@ import { FULL_AI_TOOLS, buildFullAiSystem, comingUpForModel, fullAiStatus } from
 // time is fine when planning "as long as it does a good job".
 
 const now = new Date('2026-09-29T10:00:00-04:00')
+const fullAiToolsForTest = () => fullAiTools({ planning: false })
 const base = { family: [{ name: 'Jake', role: 'parent', can_drive: true }], events: [], groceries: [], pending: null, onScreenIds: [], utcOffset: '-04:00', now, homeCity: 'West Palm Beach' }
 
 test('the planning model is told to think with him: ideas, an honest opinion, push back, and no steering to an add', () => {
@@ -163,4 +164,17 @@ test('ai-assistant rebuilds the instructions for the planning model when it hand
   const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
   assert.match(run, /let system = systemFor\(false\)/)
   assert.match(run, /model = PLANNING_GEMINI_MODEL\n\s+system = systemFor\(true\)/)
+})
+
+// Jake on the wall, 2026-09-29 4:56 PM: "Let's plan Emme's Halloween costume." → the fast model made a
+// project card straight away. "I actually wanted to discuss some ideas based on the weather and such,
+// not get right to create a plan." Planning something together is talking it through; the card is for
+// when he asks for the project itself, or once a talk-through has settled on a direction.
+test('planning something together goes to the planning model; the project card waits for the project itself', () => {
+  const think = fullAiToolsForTest().find((t) => t.name === 'think_it_through')
+  assert.match(think.description, /plan(ning)? something (with him|together)/i)
+  const plan = FULL_AI_TOOLS.find((t) => t.name === 'plan_project')
+  assert.match(plan.description, /only when he asks for the project itself/i)
+  const [intro] = buildFullAiSystem(base).split('\n\n')
+  assert.match(intro, /planning something together .* is talking it through/i)
 })
