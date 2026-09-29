@@ -332,16 +332,21 @@ export function shelfCard(detail: Pick<ProjectDetail, 'project' | 'steps'>, toda
   const now = new Set((groups[0] ?? []).map((s) => s.id))
   const segments = [...doneSteps(detail).map(() => 'done' as const), ...groups.flat().map((s) => (s.child_project_id ? 'inside' as const : now.has(s.id) ? 'now' as const : 'later' as const))]
   const size = [`${stats.done} of ${stats.total} steps`, stats.yourMinutes ? `~${hoursText(stats.yourMinutes)} yours` : null, stats.moneyLeft ? `${moneyText(stats.moneyLeft)} left` : null].filter(Boolean).join(' · ')
+  const hired = project.people.some((p) => p.role)
   const kind = project.status === 'paused'
     ? `PAUSED${project.paused_until ? ` UNTIL ${shortDate(project.paused_until).toUpperCase()}` : ''}`
-    : project.yearly ? 'EVERY YEAR' : 'PROJECT'
+    : project.yearly ? 'SEASONAL · EVERY YEAR' : hired ? 'PROJECT · HIRED HELP' : 'PROJECT'
+  const nowSteps = (groups[0] ?? []).filter((s) => !s.child_project_id)
+  const insideStep = detail.steps.find((s) => s.child && !s.done_at) ?? detail.steps.find((s) => s.child)
   return {
     kind,
     segments,
     stats: size,
     target: project.aim_date ? `Target ${longDate(project.aim_date)} · ${stats.daysLeft} days` : null,
+    targetLine: project.aim_date ? `Target ${longDate(project.aim_date)} · ${stats.daysLeft} days` : 'No target yet',
     pace: stats.finish ? (stats.lateBy ? { text: `At your pace: ${shortDate(stats.finish)}, ${stats.lateBy} days late`, late: true } : { text: `On pace: ${shortDate(stats.finish)}`, late: false }) : null,
-    now: (groups[0] ?? []).filter((s) => !s.child_project_id).map((s) => s.title),
-    inside: stats.inside[0] ?? null,
+    now: nowSteps.map((s) => s.title),
+    nowLabel: nowSteps.length > 1 || (groups[0]?.length ?? 0) > 1 ? 'NOW · SIDE BY SIDE' : 'NOW',
+    inside: insideStep?.child ? { title: insideStep.child.title, done: insideStep.child.done, total: insideStep.child.total, next: insideStep.child.next } : null,
   }
 }

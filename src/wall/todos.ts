@@ -52,14 +52,22 @@ const SHAPE_LABEL: Record<TodoShape, string> = { nudge: 'Nudge', quick: 'Quick o
 const short = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const duration = (m: number) => (m < 60 ? `${m} min` : m % 60 === 0 ? `${m / 60} hr` : `${Math.floor(m / 60)} hr ${m % 60}`)
 
+/**
+ * What it is and what it takes, as the pills on a Next up row (board 10a): kind, when (late in rust),
+ * time, cost, needs. A project's step leaves its kind to the row's project tag.
+ */
+export function sizeChips(item: TodoItem): Array<{ text: string; late?: boolean }> {
+  const chips: Array<{ text: string; late?: boolean }> = item.projectId ? [] : [{ text: SHAPE_LABEL[item.shape] }]
+  if (item.overdue && item.due) chips.push({ text: `was due ${short(item.due)}`, late: true })
+  else if (item.due) chips.push({ text: short(item.due) })
+  if (item.minutes) chips.push({ text: duration(item.minutes) })
+  if (item.costCents) chips.push({ text: `$${Math.round(item.costCents / 100)}` })
+  return [...chips, ...item.needs.map((text) => ({ text }))]
+}
+
 /** "Fix · 30 min · $20 · Safety · Buy" — what it is and what it takes, in one line. */
 export function sizeLine(item: TodoItem): string {
-  const parts = [SHAPE_LABEL[item.shape]]
-  if (item.overdue && item.due) parts.push(`was due ${short(item.due)}`)
-  else if (item.due) parts.push(short(item.due))
-  if (item.minutes) parts.push(duration(item.minutes))
-  if (item.costCents) parts.push(`$${Math.round(item.costCents / 100)}`)
-  return [...parts, ...item.needs].join(' · ')
+  return [...(item.projectId ? [{ text: SHAPE_LABEL[item.shape] }] : []), ...sizeChips(item)].map((c) => c.text).join(' · ')
 }
 
 /** How many of Next up fit on the screen: three beside the projects shelf (canvas 10a), four without. */

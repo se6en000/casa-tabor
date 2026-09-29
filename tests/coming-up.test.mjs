@@ -299,6 +299,7 @@ test('a season that’s a real job can start as a project, due the day it’s fo
   const lights = items['season:christmas_lights:2026']
   assert.equal(lights.date, '2026-11-25')
   assert.equal(lights.startable, true)
+  assert.deepEqual(lights.plan, { steps: 7, minutes: 685, first: 'Storage unit run: the lights and wreaths' })
   assert.equal(items['season:christmas_gifts:2026'].startable, undefined, 'a list, not a project')
   const plan = SEASONS.find((s) => s.id === 'christmas_lights').template
   assert.deepEqual(plan.map((s) => s.title).slice(0, 3), ['Storage unit run: the lights and wreaths', 'Plug everything in, list what’s dead', 'Buy new lights'])

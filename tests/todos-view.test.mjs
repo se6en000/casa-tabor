@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { todoTile, sizeLine, GROUPS, nextUpRoom } from '../src/wall/todos.ts'
+import { todoTile, sizeLine, sizeChips, GROUPS, nextUpRoom } from '../src/wall/todos.ts'
 
 // Board 09b on the wall: the To do tile, and each row's size line.
 const item = (id, extra = {}) => ({ id, title: id, shape: 'quick', minutes: null, costCents: null, nextStep: null, needs: [], due: null, overdue: false, snoozedUntil: null, snoozeCount: 0, projectId: null, suggestion: null, ...extra })
@@ -89,4 +89,11 @@ test('beside the projects shelf, Next up keeps three; the tile says the same', (
   assert.equal(nextUpRoom({ projects: [{ id: 'p', detail: {} }] }), 3)
   assert.equal(todoTile({ nextUp, groups, projects: [{ id: 'p', detail: {} }], suggestions: [] }).ready, 3)
   assert.equal(todoTile({ nextUp, groups, projects: [], suggestions: [] }).ready, 4)
+})
+
+// Board 10a's Next up: what it is and what it takes as pills; a project's step says its project instead.
+test('size as pills: kind, when, time, cost, needs — late in rust; a project step leaves the kind to its tag', () => {
+  assert.deepEqual(sizeChips(item('x', { shape: 'fix', minutes: 20, costCents: 0, needs: ['Hot water'] })), [{ text: 'Fix' }, { text: '20 min' }, { text: 'Hot water' }])
+  assert.deepEqual(sizeChips(item('v', { minutes: 15, due: '2026-08-24', overdue: true, needs: ['Call'] })), [{ text: 'Quick one' }, { text: 'was due Aug 24', late: true }, { text: '15 min' }, { text: 'Call' }])
+  assert.deepEqual(sizeChips(item('p', { shape: 'project', minutes: 60, costCents: 4000, projectId: 'paint' })), [{ text: '1 hr' }, { text: '$40' }])
 })

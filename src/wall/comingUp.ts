@@ -20,6 +20,8 @@ export interface ComingUpItem {
   projectId?: string
   /** A season that's a real job, not started yet: it can start as this year's project. */
   startable?: boolean
+  /** Its plan at a glance, for its dashed card on the To do shelf. */
+  plan?: { steps: number; minutes: number; first: string }
 }
 export interface GiftIdea { for_name: string; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'

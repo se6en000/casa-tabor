@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { GROUPS, nextUpRoom, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
+import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
 import { useTodoProject } from './useTodos'
 import WallProject from './WallProject'
 import WallProjectShelf from './WallProjectShelf'
+import type { ComingUpItem } from './comingUp'
 import WallTodoSheet from './WallTodoSheet'
 
 // To do (P3.22, board 09b, approved by Jake 2026-09-28): what needs doing, from his Reminders list,
@@ -20,7 +21,11 @@ export interface WallTodosProps {
   onBack: () => void
   /** Any touch on the screen: keeps it up. */
   onActivity?: () => void
-  week: ReactNode
+  /** Not shown here any more (canvas 10a has no week strip; Back and a swipe still leave). */
+  week?: ReactNode
+  /** Seasons coming up that can start, for the shelf's dashed cards; and starting one (canvas 10a / 11c). */
+  upcoming?: ComingUpItem[]
+  onStart?: (key: string) => Promise<string | null>
   /** A project to open straight away (from Coming up). */
   initialProject?: string | null
   /** Loads a project with its steps (the fixture passes its own). */
@@ -45,24 +50,35 @@ function Pill({ label, primary = false, onClick, small = false }: { label: strin
   )
 }
 
-function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen, onEdit }: { item: TodoItem; snoozing: boolean; onSnoozeToggle: () => void; onAct: WallTodosProps['onAct']; onOpen?: () => void; onEdit: () => void }) {
+// A Next up row (board 10a): its project, the title, the next step, what it takes as pills; Open and Done.
+function NextRow({ item, project, snoozing, onSnoozeToggle, onAct, onOpen, onEdit }: { item: TodoItem; project: string | null; snoozing: boolean; onSnoozeToggle: () => void; onAct: WallTodosProps['onAct']; onOpen: () => void; onEdit: () => void }) {
   return (
-    <div className="flex items-center gap-[24px] border-0 border-t border-solid border-wall-rule py-[14px]">
-      <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+    <div className="flex items-center gap-[24px] border-0 border-t border-solid border-wall-rule py-[12px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+        {project && (
+          <span className="flex items-center gap-[6px] text-wall-label font-bold text-wall-brass-ink">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 3v9a4 4 0 0 0 4 4h10" /><path d="M15 12l4 4-4 4" /></svg>
+            {project} · now
+          </span>
+        )}
         <button type="button" aria-label={`Edit ${item.title}`} onClick={(e) => { e.stopPropagation(); onEdit() }} className="min-w-0 truncate border-0 bg-transparent p-0 text-left font-display text-wall-date font-semibold leading-tight text-wall-ink">{item.title}</button>
-        {item.nextStep && <span className="truncate text-wall-body font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
+        {item.nextStep && <span className="truncate text-wall-detail font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
         {snoozing ? (
           <span className="flex items-center gap-[8px] pt-[2px]">
             <span className="text-wall-label text-wall-ink-2">Not now — back in</span>
             {SNOOZES.map((s) => <Pill key={s.days} small label={s.label} onClick={() => void onAct({ action: 'snooze', id: item.id, days: s.days })} />)}
           </span>
         ) : (
-          <span className={`truncate text-wall-detail ${item.overdue ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{sizeLine(item)}</span>
+          <span className="flex min-w-0 items-center gap-[8px] overflow-hidden">
+            {sizeChips(item).map((c, i) => (
+              <span key={i} className={`flex h-[30px] shrink-0 items-center whitespace-nowrap rounded-full border border-solid px-[12px] text-wall-label font-semibold ${c.late ? 'border-wall-rust text-wall-rust' : 'border-wall-stone text-wall-ink-2'}`}>{c.text}</span>
+            ))}
+          </span>
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-[6px]">
         <div className="flex gap-[8px]">
-          {onOpen && <Pill label="Open" onClick={onOpen} />}
+          <Pill label="Open" onClick={onOpen} />
           <Pill label="Done" primary onClick={() => void onAct({ action: 'done', id: item.id })} />
         </div>
         <button
@@ -83,7 +99,7 @@ function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen, onEdit }: { it
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, week, initialProject = null, useProject = useTodoProject }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, upcoming = [], onStart, initialProject = null, useProject = useTodoProject }: WallTodosProps) {
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -95,7 +111,8 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   const clock = formatWallClock(now)
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   // The shelf steps aside while a folded group is open, so the group has the room.
-  const showShelf = list.projects.some((p) => p.detail) && openGroup === null
+  const seasons = onStart ? upcoming.filter((i) => i.startable && i.plan) : []
+  const showShelf = (list.projects.some((p) => p.detail) || seasons.length > 0) && openGroup === null
   const act = async (request: TodoAction) => {
     setSnoozingId(null)
     await onAct(request)
@@ -167,14 +184,15 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
             <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">TO DO · WHAT NEEDS DOING</div>
             <div className="font-display text-wall-move font-semibold">{list.nextUp.length ? `${Math.min(list.nextUp.length, nextUpRoom(list))} ready now` : 'All clear for now'}</div>
             <div className="truncate text-wall-body text-wall-ink-2">
-              {list.sorting ? 'Casa is sorting what’s new from your Reminders. ' : ''}The rest stays folded — open a group to see it.
+              {list.sorting ? 'Casa is sorting what’s new from your Reminders. ' : ''}
+              {showShelf ? `${list.projects.length === 1 ? 'One project' : `${list.projects.length} projects`} going. One step from each is all you need to look at.` : 'The rest stays folded — open a group to see it.'}
             </div>
           </div>
           <Pill label="Back to today" onClick={onBack} />
         </div>
       </header>
 
-      {showShelf && <WallProjectShelf projects={list.projects} today={today} onOpen={setProjectId} />}
+      {showShelf && <WallProjectShelf projects={list.projects} today={today} onOpen={setProjectId} upcoming={seasons} onStart={(key) => void onStart?.(key).then((id) => { if (id) setProjectId(id) })} />}
 
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         <div className="flex min-w-0 flex-[1.35] flex-col overflow-hidden">
@@ -186,10 +204,12 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
             <NextRow
               key={item.id}
               item={item}
+              project={item.projectId ? list.projects.find((p) => p.id === item.projectId)?.title ?? null : null}
               snoozing={snoozingId === item.id}
               onSnoozeToggle={() => setSnoozingId((id) => (id === item.id ? null : item.id))}
               onAct={act}
-              onOpen={onOpen && canOpen(item.id) ? () => onOpen(item.id) : undefined}
+              // Open: a project's step opens the project; one on the calendar, its event; otherwise its sheet.
+              onOpen={() => (item.projectId ? setProjectId(item.projectId) : onOpen && canOpen(item.id) ? onOpen(item.id) : setEditing(item))}
               onEdit={() => openItem(item)}
             />
           ))}
@@ -231,7 +251,6 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </div>
 
-      {week}
       {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onClose={() => setEditing(null)} />}
       {/* A project opens full screen (canvas 10b), over the list. */}
       {projectId && project.data && (

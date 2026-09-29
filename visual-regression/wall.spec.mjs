@@ -673,11 +673,12 @@ test('wall: To do — the tile opens Next up; Done and "Not now" answer an item;
   await page.getByRole('button', { name: /^To do: 3 ready now/ }).click()
   await expect(page.getByText('3 ready now')).toBeVisible()
   await expect(page.getByText('Replace the outside GFI outlet')).toBeVisible()
-  await expect(page.getByText('Quick one · was due Aug 24 · 15 min · Call')).toBeVisible()
+  // What it takes as pills (board 10a); late in rust.
+  await expect(page.getByText('was due Aug 24', { exact: true })).toBeVisible()
   // Projects on their own shelf (P3.23, canvas 10a), not a folded group.
   const shelf = page.getByRole('region', { name: 'Projects' })
   await expect(shelf.getByText('PROJECTS · 3 GOING')).toBeVisible()
-  await expect(shelf.getByText('Inside: Stucco cracks: seal and patch · 1 of 4')).toBeVisible()
+  await expect(shelf.getByText('next: Mario’s quote')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Projects/ })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-todo.png')
@@ -800,7 +801,7 @@ test('wall: a project page — Now, Then lines, a project inside; drag a step be
   await expect(page.getByText('4 of 10 done')).toBeVisible()
 
   // The project inside opens on its own page, and comes back.
-  await page.getByRole('button', { name: 'Open', exact: true }).click()
+  await page.getByRole('region', { name: /— project$/ }).getByRole('button', { name: 'Open', exact: true }).click()
   await expect(page.getByText('TO DO › PROJECTS › INSIDE PAINT THE HOUSE')).toBeVisible()
   await page.getByRole('button', { name: 'Back to Paint the house' }).click()
   await expect(page.getByText('4 of 10 done')).toBeVisible()
@@ -872,6 +873,21 @@ test('wall: Coming up — a season starts as this year’s project, in Jake’s 
   await expect(page.getByRole('switch', { name: 'The same job, many times' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('button', { name: 'Back to the list' }).click()
   await expect(page.getByRole('region', { name: 'Projects' }).getByText('Christmas lights')).toBeVisible()
+})
+
+// Board 10a (Jake: "gold for done, brown/black for the current step … the diagonal line for in progress"
+// and "the seasonal prep with that dotted line"): the full shelf, and a season starting from its card.
+test('wall: the projects shelf — progress by colour, a project inside hatched, a season coming up dashed and started from its card (canvas 10a)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  const shelf = page.getByRole('region', { name: 'Projects' })
+  await expect(shelf.getByText('SEASONAL · STARTS NOV 5')).toBeVisible()
+  await expect(shelf.getByText('7 steps · ~11 hr · a plan ready')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-todo-shelf.png')
+  await shelf.getByRole('button', { name: 'Christmas lights: coming up' }).click()
+  await page.getByRole('button', { name: 'Start it now' }).click()
+  await expect(page.getByRole('region', { name: 'Christmas lights — project' })).toBeVisible()
 })
 
 test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {

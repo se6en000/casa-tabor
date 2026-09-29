@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import WallChooser from './WallChooser'
+import { SEGMENT, type SegmentKind } from './projectStyle'
 import WallKeyboard from './WallKeyboard'
 import WallNumberPad from './WallNumberPad'
 import WallProjectSettings from './WallProjectSettings'
@@ -188,7 +189,12 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
           <div className={`my-[6px] flex min-w-0 flex-1 items-center gap-[14px] rounded-[14px] border-[1.5px] border-solid px-[14px] py-[8px] ${dark ? 'border-wall-night-brass text-wall-night-ink' : 'border-wall-brass text-wall-ink'}`}>
             <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
               <span className="flex items-baseline gap-[10px]"><span className="truncate text-wall-body font-bold">{s.child.title}</span><span className={`shrink-0 text-wall-label font-bold tracking-[0.15em] ${dark ? 'text-wall-night-brass' : 'text-wall-brass-ink'}`}>A PROJECT INSIDE</span></span>
-              <span className={`truncate text-wall-label ${dark ? 'text-wall-night-ink-2' : 'text-wall-ink-2'}`}>{s.child.done} of {s.child.total}{s.child.next ? ` · next: ${s.child.next}` : ''}</span>
+              <span className="flex items-center gap-[12px]">
+                <span aria-hidden="true" className="flex h-[8px] w-[160px] shrink-0 gap-[3px]">
+                  {Array.from({ length: Math.max(1, s.child.total) }, (_, i) => <span key={i} className={`h-[8px] flex-1 rounded-full ${i < s.child!.done ? SEGMENT.done : i === s.child!.done ? (dark ? 'bg-wall-night-brass' : SEGMENT.now) : SEGMENT.later}`} />)}
+                </span>
+                <span className={`truncate text-wall-label ${dark ? 'text-wall-night-ink-2' : 'text-wall-ink-2'}`}>{s.child.done} of {s.child.total}{s.child.next ? ` · next: ${s.child.next}` : ''}</span>
+              </span>
             </div>
             <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-transparent px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Open</button>
             <button type="button" onClick={(e) => { e.stopPropagation(); edit('take_out', { step_id: s.id }) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-transparent px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Take it out</button>
@@ -235,7 +241,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
   const own = [...done, ...flat].filter((s) => !s.child_project_id)
   const number = (id: string) => own.findIndex((s) => s.id === id) + 1
 
-  const bar = [...done.map(() => 'done'), ...flat.map((s) => (s.child ? 'inside' : groups[0]?.some((x) => x.id === s.id) ? 'now' : 'later'))]
+  const bar: SegmentKind[] = [...done.map(() => 'done' as const), ...flat.map((s) => (s.child ? 'inside' as const : groups[0]?.some((x) => x.id === s.id) ? 'now' as const : 'later' as const))]
   const theirs = stats.theirs.map((t) => `${effortText(t.minutes)} of the ${t.who.toLowerCase()}’s`).join(', ')
 
   return (
@@ -253,7 +259,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
       </div>
 
       <div aria-hidden="true" className="flex h-[12px] shrink-0 gap-[4px]">
-        {bar.map((k, i) => <span key={i} className={`h-[12px] flex-1 rounded-full ${k === 'done' ? 'bg-wall-brass' : k === 'now' ? 'bg-wall-ink' : k === 'inside' ? 'bg-wall-brass/50' : 'bg-wall-stone'}`} />)}
+        {bar.map((k, i) => <span key={i} className={`h-[12px] flex-1 rounded-full ${SEGMENT[k]}`} />)}
       </div>
 
       <div className="flex shrink-0 gap-[14px]">

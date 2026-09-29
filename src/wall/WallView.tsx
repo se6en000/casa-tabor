@@ -341,6 +341,8 @@ export default function WallView(props: WallViewProps) {
         onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
         week={weekStrip}
         initialProject={todoProject}
+        upcoming={comingUp?.items ?? []}
+        onStart={comingUp?.start}
         {...(todos.useProject ? { useProject: todos.useProject } : {})}
       />
     )

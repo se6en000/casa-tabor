@@ -230,7 +230,11 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
         : s.custom_step ?? season.step
       items.push({
         key, kind: 'season', title: season.title, date, daysAway: daysBetween(today, date), nextStep, pokeOn, late: pokeOn < today,
-        ...(project ? { projectId: project.id } : season.template ? { startable: true } : {}),
+        ...(project ? { projectId: project.id } : season.template ? {
+          startable: true,
+          // For its dashed card on the To do shelf (canvas 10a): the plan at a glance.
+          plan: { steps: season.template.length, minutes: season.template.reduce((t, st) => t + (st.minutes ?? 0), 0), first: season.template[0].title },
+        } : {}),
       })
       break
     }

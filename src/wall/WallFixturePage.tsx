@@ -48,7 +48,7 @@ const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { in
 // `?comingUp=projects` (P3.23, canvas 10e): a project's dated step on the list, with Open project.
 const COMING_UP_PROJECTS: typeof COMING_UP = [
   { key: 'step:st-choose', kind: 'project_step', title: 'Choose the painter and book dates', nextStep: 'Paint the house', inDays: 15, pokeIn: 8, late: false, projectId: 'pr-paint' },
-  { key: 'season:christmas_lights:2026', kind: 'season', title: 'Christmas lights', nextStep: 'Lights up before Thanksgiving', inDays: 61, pokeIn: 41, late: false, startable: true },
+  { key: 'season:christmas_lights:2026', kind: 'season', title: 'Christmas lights', nextStep: 'Lights up before Thanksgiving', inDays: 61, pokeIn: 41, late: false, startable: true, plan: { steps: 7, minutes: 685, first: 'Storage unit run: the lights and wreaths' } },
   ...COMING_UP,
 ]
 // The live list on the kiosk the night of 2026-09-27 (nine items; the fifth once ran under the week strip).
