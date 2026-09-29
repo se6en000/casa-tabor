@@ -12,6 +12,10 @@
 //   'accept' with { id }           → apply Casa's suggestion: merge (close this repeat), done (close
 //                                    it), shopping (add to the grocery list, close the to-do)
 //   'dismiss' with { id }          → keep it as it is; the suggestion goes away
+//   'project' with { id }          → a project with all its steps (the project screen)
+//   'project_edit' with { id, op, args } → todo_project_edit (rename, target date, steps: add / edit /
+//                                    move / delete / done / undo, delete the project)
+//   'update' with { id, patch }    → a to-do's title and date/time (todo_update); 'delete' → todo_delete
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { buildTodoList } from '../_shared/todos.mjs'
 import { buildSortPrompt, parseSortResult } from '../_shared/todo-sort.mjs'
@@ -121,6 +125,37 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'sort') return json(await sortUnsorted(sb, today, (body as { redo?: boolean }).redo === true))
+
+    // Editing by touch (step 5; Jake 2026-09-28: "tap into the projects and the reminders … to edit").
+    const b = body as { op?: string; args?: Record<string, unknown>; patch?: Record<string, unknown> }
+    if (action === 'project') {
+      if (!id) return json({ error: 'id required' }, 400)
+      const [projRes, stepsRes] = await Promise.all([
+        sb.from('todo_projects').select('id, title, aim_date, status, created_at').eq('id', id).maybeSingle(),
+        sb.from('todo_steps').select('id, position, title, minutes, cost_cents, done_at, reminder_event_id').eq('project_id', id).order('position'),
+      ])
+      if (projRes.error || stepsRes.error) throw new Error((projRes.error ?? stepsRes.error)!.message)
+      if (!projRes.data) return json({ error: 'That project is gone' }, 404)
+      return json({ project: projRes.data, steps: stepsRes.data ?? [] })
+    }
+    if (action === 'project_edit') {
+      if (!id || !b.op) return json({ error: 'id and op required' }, 400)
+      const { error } = await sb.rpc('todo_project_edit', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
+      if (error) throw new Error(error.message)
+      return json({ ok: true })
+    }
+    if (action === 'update') {
+      if (!id) return json({ error: 'id required' }, 400)
+      const { error } = await sb.rpc('todo_update', { p_id: id, p_patch: b.patch ?? {} })
+      if (error) throw new Error(error.message)
+      return json({ ok: true })
+    }
+    if (action === 'delete') {
+      if (!id) return json({ error: 'id required' }, 400)
+      const { error } = await sb.rpc('todo_delete', { p_id: id })
+      if (error) throw new Error(error.message)
+      return json({ ok: true })
+    }
 
     if (action === 'accept' || action === 'dismiss') {
       if (!id) return json({ error: 'id required' }, 400)

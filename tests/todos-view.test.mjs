@@ -49,3 +49,36 @@ test('a quiet stretch offers one small job that fits, with room to spare', () =>
   assert.equal(quietStep(list, at(13), at(13, 15)), null, 'no room')
   assert.equal(quietStep(list, at(13), null).id, 'anthony', 'nothing coming up: still a small one')
 })
+
+// Step 5: a project's edits, as the database makes them (todo_project_edit) — used by the fixture.
+import { applyProjectEdit } from '../src/wall/todos.ts'
+import { timeOf } from '../src/wall/todos.ts'
+const detail = () => ({
+  project: { id: 'p', title: 'Paint the house', aim_date: null, status: 'active' },
+  steps: ['Fix cracks', 'Get 3 quotes', 'Pick colours'].map((title, i) => ({ id: `s${i + 1}`, position: i + 1, title, minutes: null, cost_cents: null, done_at: null, reminder_event_id: null })),
+})
+const titles = (d) => d.steps.map((s) => `${s.title}${s.done_at ? '✓' : ''}`)
+
+test('project edits: move, rename, add after, delete, done and undo, target date, delete project', () => {
+  let d = applyProjectEdit(detail(), 'move_step', { step_id: 's3', dir: 'up' })
+  assert.deepEqual(titles(d), ['Fix cracks', 'Pick colours', 'Get 3 quotes'])
+  d = applyProjectEdit(d, 'edit_step', { step_id: 's1', title: 'Fix the wall cracks' })
+  d = applyProjectEdit(d, 'add_step', { step_id: 's1', title: 'Pick a crack guy' })
+  assert.deepEqual(titles(d), ['Fix the wall cracks', 'Pick a crack guy', 'Pick colours', 'Get 3 quotes'])
+  d = applyProjectEdit(d, 'delete_step', { step_id: 's3' })
+  d = applyProjectEdit(d, 'done_step', { step_id: 's1' })
+  assert.deepEqual(titles(d), ['Fix the wall cracks✓', 'Pick a crack guy', 'Get 3 quotes'])
+  d = applyProjectEdit(d, 'undo_step', { step_id: 's1' })
+  assert.deepEqual(titles(d), ['Fix the wall cracks', 'Pick a crack guy', 'Get 3 quotes'])
+  d = applyProjectEdit(d, 'target', { date: '2026-11-26' })
+  d = applyProjectEdit(d, 'rename', { title: 'Paint the outside' })
+  assert.equal(d.project.aim_date, '2026-11-26')
+  assert.equal(d.project.title, 'Paint the outside')
+  assert.equal(applyProjectEdit(d, 'delete_project', {}).project.status, 'dropped')
+})
+
+test('a to-do\'s time: a date stored at 5 PM means no time (the iOS sync\'s way)', () => {
+  assert.equal(timeOf({ due: '2026-10-02', dueAt: new Date(2026, 9, 2, 18, 30).toISOString() }), '18:30')
+  assert.equal(timeOf({ due: '2026-10-02', dueAt: new Date(2026, 9, 2, 17, 0).toISOString() }), null)
+  assert.equal(timeOf({ due: null, dueAt: null }), null)
+})

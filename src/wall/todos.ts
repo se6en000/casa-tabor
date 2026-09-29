@@ -31,7 +31,19 @@ export interface TodoList {
   today?: string
   sorting?: boolean
 }
-export type TodoAction = { action: 'done' | 'accept' | 'dismiss'; id: string } | { action: 'snooze'; id: string; days: number }
+export type TodoAction =
+  | { action: 'done' | 'accept' | 'dismiss' | 'delete'; id: string }
+  | { action: 'snooze'; id: string; days: number }
+  /** A to-do's title and date/time: due "YYYY-MM-DD" or null (no date); time "HH:MM" or null (no time). */
+  | { action: 'update'; id: string; patch: { title?: string; due?: string | null; time?: string | null } }
+  /** A project change (step 5): rename, target, add_step, edit_step, move_step, delete_step, done_step, undo_step, delete_project. */
+  | { action: 'project_edit'; id: string; op: string; args?: Record<string, unknown> }
+
+/** A project with all its steps, for the project screen (board 09c). */
+export interface TodoProjectDetail {
+  project: { id: string; title: string; aim_date: string | null; status: string }
+  steps: Array<{ id: string; position: number; title: string; minutes: number | null; cost_cents: number | null; done_at: string | null; reminder_event_id: string | null }>
+}
 
 const SHAPE_LABEL: Record<TodoShape, string> = { nudge: 'Nudge', quick: 'Quick one', fix: 'Fix', project: 'Project step', dated: 'Dated', unsorted: 'Not sure' }
 const short = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -87,4 +99,48 @@ export function quietStep(list: Pick<TodoList, 'nextUp'>, now: Date, until: Date
   const room = until ? (until.getTime() - now.getTime()) / 60_000 - 10 : Infinity
   // Quick ones only: Done here finishes the whole thing (a fix's next step isn't the fix).
   return list.nextUp.find((i) => i.shape === 'quick' && i.minutes != null && i.minutes <= Math.min(room, 30)) ?? null
+}
+
+/**
+ * A project change applied the way todo_project_edit applies it — for the fixture and as its
+ * specification: steps stay in order by position; "add" goes after a step (or at the end).
+ */
+export function applyProjectEdit(detail: TodoProjectDetail, op: string, args: Record<string, unknown> = {}): TodoProjectDetail {
+  const stepId = String(args.step_id ?? '')
+  const title = typeof args.title === 'string' ? args.title.trim() : ''
+  const ordered = [...detail.steps].sort((a, b) => a.position - b.position)
+  const renumber = (list: typeof ordered) => list.map((s, i) => ({ ...s, position: i + 1 }))
+  const now = new Date().toISOString()
+  switch (op) {
+    case 'rename': return title ? { ...detail, project: { ...detail.project, title } } : detail
+    case 'target': return { ...detail, project: { ...detail.project, aim_date: (args.date as string | null) ?? null } }
+    case 'delete_project': return { ...detail, project: { ...detail.project, status: 'dropped' } }
+    case 'edit_step': return { ...detail, steps: ordered.map((s) => (s.id === stepId && title ? { ...s, title } : s)) }
+    case 'delete_step': return { ...detail, steps: renumber(ordered.filter((s) => s.id !== stepId)) }
+    case 'done_step': return { ...detail, steps: ordered.map((s) => (s.id === stepId ? { ...s, done_at: s.done_at ?? now } : s)) }
+    case 'undo_step': return { ...detail, steps: ordered.map((s) => (s.id === stepId ? { ...s, done_at: null } : s)) }
+    case 'add_step': {
+      if (!title) return detail
+      const at = stepId ? ordered.findIndex((s) => s.id === stepId) + 1 : ordered.length
+      const added = { id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, position: 0, title, minutes: null, cost_cents: null, done_at: null, reminder_event_id: null }
+      return { ...detail, steps: renumber([...ordered.slice(0, at), added, ...ordered.slice(at)]) }
+    }
+    case 'move_step': {
+      const i = ordered.findIndex((s) => s.id === stepId)
+      const j = args.dir === 'up' ? i - 1 : i + 1
+      if (i < 0 || j < 0 || j >= ordered.length) return detail
+      const next = [...ordered]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return { ...detail, steps: renumber(next) }
+    }
+    default: return detail
+  }
+}
+
+/** The time part of a to-do, or null: a date with no time is stored at 5 PM (as the iOS sync does). */
+export function timeOf(item: Pick<TodoItem, 'dueAt' | 'due'>): string | null {
+  if (!item.due || !item.dueAt) return null
+  const d = new Date(item.dueAt)
+  const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return hhmm === '17:00' ? null : hhmm
 }

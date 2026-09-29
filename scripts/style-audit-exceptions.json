@@ -288,6 +288,10 @@
         "reason": "Family Wall Score: lane blocks, driver initials and markers are positioned on the timeline from event times at runtime."
       },
       {
+        "path": "src/wall/WallProject.tsx",
+        "reason": "Family Wall project screen (board 09c): the progress bar's width is the share of steps done, known only at runtime."
+      },
+      {
         "path": "src/wall/WallAssistantCard.tsx",
         "reason": "Family Wall: the assistant card's lane preview (board 06a) positions the person's day and the draft on a timeline from event times at runtime."
       },
@@ -416,6 +420,18 @@
       {
         "path": "src/wall/WallNudge.tsx",
         "reason": "Family Wall: tonight's nudge and the quiet-stretch step (board 09a, approved 2026-09-28) — Done and Later tonight are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52–64px targets."
+      },
+      {
+        "path": "src/wall/WallTodoSheet.tsx",
+        "reason": "Family Wall: editing a to-do by touch — title, date, time, Done, Delete (P3.22 step 5, approved 2026-09-28) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
+      },
+      {
+        "path": "src/wall/WallProject.tsx",
+        "reason": "Family Wall: a project in full (board 09c) — step Done / Edit / ↑ ↓ / Delete, Add a step, target date, Delete project (P3.22 step 5, approved 2026-09-28) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
+      },
+      {
+        "path": "src/wall/WallDatePicker.tsx",
+        "reason": "Family Wall: the month-by-month date picker for to-dos and project target dates (P3.22 step 5, approved 2026-09-28) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
       }
     ]
   }

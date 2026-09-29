@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { GROUPS, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoSuggestion } from './todos'
+import { GROUPS, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
+import { useTodoProject } from './useTodos'
+import WallProject from './WallProject'
+import WallTodoSheet from './WallTodoSheet'
 
 // To do (P3.22, board 09b, approved by Jake 2026-09-28): what needs doing, from his Reminders list,
 // sorted by Casa. Next up is a handful worth doing now; everything else stays folded by kind, one
@@ -17,6 +20,8 @@ export interface WallTodosProps {
   /** Any touch on the screen: keeps it up. */
   onActivity?: () => void
   week: ReactNode
+  /** Loads a project with its steps (the fixture passes its own). */
+  useProject?: (id: string | null) => { data?: TodoProjectDetail | null }
 }
 
 const SNOOZES = [{ label: 'Tomorrow', days: 1 }, { label: '3 days', days: 3 }, { label: 'A week', days: 7 }, { label: '2 weeks', days: 14 }]
@@ -37,11 +42,11 @@ function Pill({ label, primary = false, onClick, small = false }: { label: strin
   )
 }
 
-function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen }: { item: TodoItem; snoozing: boolean; onSnoozeToggle: () => void; onAct: WallTodosProps['onAct']; onOpen?: () => void }) {
+function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen, onEdit }: { item: TodoItem; snoozing: boolean; onSnoozeToggle: () => void; onAct: WallTodosProps['onAct']; onOpen?: () => void; onEdit: () => void }) {
   return (
     <div className="flex items-center gap-[24px] border-0 border-t border-solid border-wall-rule py-[14px]">
       <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-        <span className="truncate font-display text-wall-date font-semibold leading-tight">{item.title}</span>
+        <button type="button" aria-label={`Edit ${item.title}`} onClick={(e) => { e.stopPropagation(); onEdit() }} className="min-w-0 truncate border-0 bg-transparent p-0 text-left font-display text-wall-date font-semibold leading-tight text-wall-ink">{item.title}</button>
         {item.nextStep && <span className="truncate text-wall-body font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
         {snoozing ? (
           <span className="flex items-center gap-[8px] pt-[2px]">
@@ -75,10 +80,15 @@ function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen }: { item: Todo
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, week }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, week, useProject = useTodoProject }: WallTodosProps) {
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
+  // Tapping in (step 5): a to-do opens its sheet; a project (or one of its steps) opens the project.
+  const [editing, setEditing] = useState<TodoItem | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const project = useProject(projectId)
+  const openItem = (item: TodoItem) => (item.projectId ? setProjectId(item.projectId) : setEditing(item))
   const clock = formatWallClock(now)
   const act = async (request: TodoAction) => {
     setSnoozingId(null)
@@ -115,19 +125,20 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
     if (key === 'projects') {
       return list.projects.map((p) => (
         <div key={p.id} className="flex items-center gap-[12px] border-0 border-t border-solid border-wall-stone py-[8px]">
-          <span className="flex min-w-0 flex-1 flex-col">
+          <button type="button" aria-label={`Open ${p.title}`} onClick={(e) => { e.stopPropagation(); setProjectId(p.id) }} className="flex min-w-0 flex-1 flex-col border-0 bg-transparent p-0 text-left text-wall-ink">
             <span className="truncate text-wall-detail font-semibold">{p.title}</span>
-            <span className="truncate text-wall-label text-wall-ink-2">{p.done} of {p.total}{p.next ? ` · next: ${p.next}` : ''}</span>
-          </span>
+            <span className="truncate text-wall-label text-wall-ink-2">{p.done} of {p.total}{p.next ? ` · next: ${p.next}` : ''}{p.aimDate ? ` · target ${new Date(`${p.aimDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
+          </button>
+          <span aria-hidden="true" className="text-wall-heading text-wall-ink-2">›</span>
         </div>
       ))
     }
     return list.groups[key as keyof TodoList['groups']].map((i) => (
       <div key={i.id} className="flex items-center gap-[12px] border-0 border-t border-solid border-wall-stone py-[8px]">
-        <span className="flex min-w-0 flex-1 flex-col">
+        <button type="button" aria-label={`Edit ${i.title}`} onClick={(e) => { e.stopPropagation(); openItem(i) }} className="flex min-w-0 flex-1 flex-col border-0 bg-transparent p-0 text-left text-wall-ink">
           <span className="truncate text-wall-detail font-semibold">{i.title}</span>
           <span className="truncate text-wall-label text-wall-ink-2">{sizeLine(i)}{i.snoozedUntil ? ' · snoozed' : ''}</span>
-        </span>
+        </button>
         <Pill small primary label="Done" onClick={() => void act({ action: 'done', id: i.id })} />
       </div>
     ))
@@ -156,6 +167,14 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </header>
 
+      {projectId && project.data ? (
+        <WallProject
+          detail={project.data}
+          now={now}
+          onEdit={(op, args) => onAct({ action: 'project_edit', id: projectId, op, args })}
+          onBack={() => setProjectId(null)}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         <div className="flex min-w-0 flex-[1.35] flex-col overflow-hidden">
           <div className="pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NEXT UP</div>
@@ -170,6 +189,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
               onSnoozeToggle={() => setSnoozingId((id) => (id === item.id ? null : item.id))}
               onAct={act}
               onOpen={onOpen && canOpen(item.id) ? () => onOpen(item.id) : undefined}
+              onEdit={() => openItem(item)}
             />
           ))}
         </div>
@@ -210,7 +230,10 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </div>
 
+      )}
+
       {week}
+      {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onClose={() => setEditing(null)} />}
     </div>
   )
 }

@@ -61,3 +61,14 @@ test('a project\'s steps come from Casa, not from questions to him', () => {
   const tool = FULL_AI_TOOLS.find((t) => t.name === 'plan_project')
   assert.match(tool.description, /never ask him for the steps/i)
 })
+
+// Live 2026-09-28: "modify that project" made a second project; "I wanna delete this one" → "Okay,
+// I'll discard that project plan" — nothing was deleted. It sees his saved projects, and it's told
+// plainly that saved ones change on the To do screen (for now), never "done" without a saved card.
+test('the assistant sees saved projects and never claims a change it cannot make', () => {
+  const projects = [{ id: 'p1', title: 'Paint the house', done: 0, total: 9, next: 'Fix cracks' }]
+  const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: [], onScreenIds: [], utcOffset: '-04:00', now, projects })
+  assert.match(system, /PROJECTS[^\n]*\n- Paint the house · 0 of 9 steps done · next: Fix cracks/)
+  assert.match(system, /To do screen/)
+  assert.match(system, /never say .*(changed|deleted|done)/i)
+})

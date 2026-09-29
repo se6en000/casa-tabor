@@ -1198,6 +1198,15 @@ Deno.serve(async (req) => {
     const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
     const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string }>)
       .map((t) => ({ id: t.id, title: t.title, due: t.has_due_date ? nyDay(t.start_time) : null }))
+    // His saved projects, so "change that project" isn't answered with a second one.
+    const [projRes, stepRes] = await Promise.all([
+      sb.from('todo_projects').select('id, title').eq('status', 'active').limit(20),
+      sb.from('todo_steps').select('project_id, position, title, done_at'),
+    ])
+    const projects = ((projRes.data ?? []) as Array<{ id: string; title: string }>).map((p) => {
+      const own = ((stepRes.data ?? []) as Array<{ project_id: string; position: number; title: string; done_at: string | null }>).filter((st) => st.project_id === p.id).sort((a, b) => a.position - b.position)
+      return { id: p.id, title: p.title, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null }
+    })
     const state = incomingConversationState as Record<string, unknown> | null
     const onScreenIds = [
       ...(typeof state?.activeEventId === 'string' ? [state.activeEventId] : []),
@@ -1205,7 +1214,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos })
+    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects })
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
     const lastUser = [...contents].reverse().find((c) => c.role === 'user')

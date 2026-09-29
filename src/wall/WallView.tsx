@@ -22,7 +22,7 @@ import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
-import { quietStep, todoTile, tonightNudge, type TodoAction, type TodoList } from './todos'
+import { quietStep, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { WallNudge, WallQuietStep } from './WallNudge'
 import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 import WallEvening from './WallEvening'
@@ -78,7 +78,7 @@ export interface WallViewProps {
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
   comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
   /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
-  todos?: { list: TodoList; act: (request: TodoAction) => Promise<void> } | null
+  todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -338,6 +338,7 @@ export default function WallView(props: WallViewProps) {
         onBack={() => setTodoUntil(0)}
         onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
         week={weekStrip}
+        {...(todos.useProject ? { useProject: todos.useProject } : {})}
       />
     )
   } else if (comingUpOpen && comingUp) {

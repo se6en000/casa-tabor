@@ -743,3 +743,62 @@ test('wall: in a quiet stretch, one small job with Done', async ({ page }) => {
   await meanwhile.getByRole('button', { name: 'Done' }).click()
   await expect(meanwhile.getByText(/MEANWHILE/)).toBeVisible() // the next one that fits takes its place
 })
+
+// Step 5 (Jake 2026-09-28): tap into a project to change its steps and target date; tap a to-do to edit it.
+const openTodo = async (page) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+}
+
+test('wall: a project in full — the next step, done, reorder, delete a step, target date (board 09c)', async ({ page }) => {
+  await openTodo(page)
+  await page.getByRole('button', { name: /^Projects/ }).click()
+  await page.getByRole('button', { name: 'Open Paint the house' }).click()
+  await expect(page.getByText('1 of 5 steps done')).toBeVisible()
+  await expect(page.getByText('NEXT STEP · ON YOUR PHONE')).toBeVisible()
+  await expect(page.getByText('in 62 days')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-project.png')
+
+  // Reorder: "Move patio furniture" up one.
+  await page.getByRole('button', { name: 'Move Move patio furniture, cover plants up' }).click()
+  const later = await page.locator('span.truncate.text-wall-body').allInnerTexts()
+  expect(later).toEqual(['Pick colours — buy 3 sample pots', 'Move patio furniture, cover plants', 'Choose the painter and book dates'])
+  // Delete one.
+  await page.getByRole('button', { name: 'Delete Choose the painter and book dates' }).click()
+  await expect(page.getByText('1 of 4 steps done')).toBeVisible()
+  // Done on the next step: the one after takes its place.
+  await page.getByRole('button', { name: 'Done', exact: true }).first().click()
+  await expect(page.getByText('2 of 4 steps done')).toBeVisible()
+  await expect(page.locator('div.bg-wall-ink').getByText('Pick colours — buy 3 sample pots')).toBeVisible()
+  // Target date: a month ahead.
+  await page.getByRole('button', { name: 'Change', exact: true }).click()
+  await page.getByRole('button', { name: 'Month after' }).click()
+  await page.getByRole('button', { name: 'Tuesday, December 15' }).click()
+  await expect(page.getByText(/Tue, December 15/)).toBeVisible()
+  await page.getByRole('button', { name: 'Back to the list' }).click()
+  await expect(page.getByText('NEXT UP')).toBeVisible()
+})
+
+test('wall: a to-do — tap it to add a date and time, then delete it', async ({ page }) => {
+  await openTodo(page)
+  await page.getByRole('button', { name: 'Edit Call Anthony about house insurance alternatives' }).click()
+  const sheet = page.getByRole('region', { name: /Call Anthony about house insurance alternatives — edit/ })
+  await expect(sheet.getByText('No date', { exact: true }).first()).toBeVisible()
+  await sheet.getByRole('button', { name: 'Add a date' }).click()
+  await sheet.getByRole('button', { name: 'Wednesday, September 30' }).click()
+  await sheet.getByRole('button', { name: '8p' }).click()
+  await sheet.getByRole('button', { name: ':30' }).click()
+  await expect(sheet.getByText('Wednesday, September 30 · 8:30 PM')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-todo-sheet.png')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByText(/Quick one · Sep 30/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Edit Call Anthony about house insurance alternatives' }).click()
+  await page.getByRole('button', { name: 'Delete…' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('Call Anthony about house insurance alternatives')).toHaveCount(0)
+})

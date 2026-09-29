@@ -15,7 +15,7 @@ import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
-import type { TodoAction, TodoItem, TodoList } from './todos'
+import { applyProjectEdit, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from './todos'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -81,11 +81,22 @@ const TODOS: TodoList = {
     dated: [],
     unsorted: [],
   },
-  projects: [],
+  projects: [{ id: 'pr-paint', title: 'Paint the house', done: 1, total: 5, next: 'Get 3 painter quotes', nextEventId: 'td-paint', aimDate: '2026-11-26' }],
   suggestions: [
     { id: 'td-cupcakes', title: 'Pick up Owen’s birthday cupcakes', kind: 'done', reason: 'Owen’s birthday was in July', with: null, withTitle: null },
     { id: 'td-heater2', title: 'Troubleshoot the water heater E05 error', kind: 'merge', reason: 'Same thing', with: 'td-heater', withTitle: 'Troubleshoot the water heater E05 error' },
     { id: 'td-towels', title: 'Paper towels', kind: 'shopping', reason: 'A grocery', with: null, withTitle: null },
+  ],
+}
+
+const PAINT: TodoProjectDetail = {
+  project: { id: 'pr-paint', title: 'Paint the house', aim_date: '2026-11-26', status: 'active' },
+  steps: [
+    { id: 'st1', position: 1, title: 'Fix the wall cracks', minutes: 240, cost_cents: 5000, done_at: '2026-09-24T12:00:00Z', reminder_event_id: null },
+    { id: 'st2', position: 2, title: 'Get 3 painter quotes', minutes: 60, cost_cents: null, done_at: null, reminder_event_id: 'td-paint' },
+    { id: 'st3', position: 3, title: 'Pick colours — buy 3 sample pots', minutes: 60, cost_cents: 4000, done_at: null, reminder_event_id: null },
+    { id: 'st4', position: 4, title: 'Choose the painter and book dates', minutes: 30, cost_cents: null, done_at: null, reminder_event_id: null },
+    { id: 'st5', position: 5, title: 'Move patio furniture, cover plants', minutes: 60, cost_cents: null, done_at: null, reminder_event_id: null },
   ],
 }
 
@@ -157,14 +168,23 @@ export default function WallFixturePage() {
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const [todoList, setTodoList] = useState<TodoList>(TODOS)
+  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT })
   const todos = {
     list: todoList,
-    act: async (r: TodoAction) => setTodoList((l) => ({
+    useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),
+    act: async (r: TodoAction) => {
+      if (r.action === 'project_edit') return setProjects((all) => ({ ...all, [r.id]: applyProjectEdit(all[r.id], r.op, r.args) }))
+      if (r.action === 'update') {
+        const change = (i: TodoItem) => (i.id === r.id ? { ...i, ...(r.patch.title ? { title: r.patch.title } : {}), ...('due' in r.patch ? { due: r.patch.due ?? null } : {}) } : i)
+        return setTodoList((l) => ({ ...l, nextUp: l.nextUp.map(change), groups: Object.fromEntries(Object.entries(l.groups).map(([k, v]) => [k, v.map(change)])) as TodoList['groups'] }))
+      }
+      return setTodoList((l) => ({
       ...l,
       nextUp: l.nextUp.filter((i) => i.id !== r.id),
       groups: r.action === 'snooze' ? l.groups : (Object.fromEntries(Object.entries(l.groups).map(([k, v]) => [k, v.filter((i) => i.id !== r.id)])) as TodoList['groups']),
       suggestions: l.suggestions.filter((sg) => sg.id !== r.id),
-    })),
+      }))
+    },
   }
   const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
