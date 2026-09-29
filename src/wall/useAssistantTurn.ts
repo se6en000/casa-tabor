@@ -77,6 +77,9 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     }
     updateMessageToolStatus(message.id, 'done', { actionId: result.actionId, resultEventId: result.eventId })
     invalidateAllCalendarQueries(queryClient, String(args.event_id ?? args.id ?? result.eventId ?? ''))
+    // The to-do list and Coming up live beside the calendar: a new to-do or project shows at once.
+    void queryClient.invalidateQueries({ queryKey: ['todos'] })
+    void queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     setNote('Done.')
   }, [pending, working, events, session?.id, updateMessageToolStatus, queryClient, surface])
 

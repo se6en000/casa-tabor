@@ -50,9 +50,9 @@ function describeDraft(pending, utcOffset) {
 }
 
 /** One plain paragraph, then the data it answers from. */
-export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [] }) {
+export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [] }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. Read gift ideas back only from get_gift_ideas, and only what it returns. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when; a big multi-step home project is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -60,6 +60,12 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
     `CALENDAR (today through three weeks out; [id] first — for any other date, the past, or to check whether something is on the calendar at all, call find_events):\n${events.map((e) => `- ${describeEvent(e, utcOffset)}`).join('\n') || '- nothing'}`,
     `GROCERY LIST ([id] first):\n${groceries.map((g) => `- ${g.id ? `[${g.id}] ` : ''}${g.name}${g.quantity ? ` (${g.quantity})` : ''}${g.checked ? ' · checked off' : ''}`).join('\n') || '- empty'}`,
   ]
+  // His open to-do list (the "To Do" list on his phone), so a repeat is noticed and a project can
+  // grow from what he already captured (live check 2026-09-28: "Paint the house" was added twice).
+  if (todos.length) {
+    const day = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+    sections.push(`TO-DO LIST (his open to-dos; [id] first — if what he asks to add is already on it, say so instead of adding it again, and a project grows from it with from_id):\n${todos.map((t) => `- [${t.id}] ${t.title}${t.due ? ` · by ${day(t.due)}` : ''}`).join('\n')}`)
+  }
   if (home) sections.push(`HOME: ${home}`)
   if (places.length) sections.push(`SAVED PLACES:\n${places.map((p) => `- ${p.name}${p.address ? ` · ${p.address}` : ''}${p.phone ? ` · ${p.phone}` : ''}`).join('\n')}`)
   if (contacts.length) sections.push(`CONTACTS:\n${contacts.map((c) => `- ${[c.name, c.relationship, c.phone, c.email, c.place].filter(Boolean).join(' · ')}`).join('\n')}`)
@@ -113,6 +119,9 @@ export const FULL_AI_TOOLS = [
   },
   // Gift ideas (P3.19 step 2): kept for the planner, never shown to the person they're for.
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
+  // His to-do list (P3.22; Jake 2026-09-28): the "To Do" list on his phone and Casa's To do screen.
+  { name: 'add_todo', description: 'Propose adding something to his to-do list — anything he wants to get done, with or without a date ("add fix the gate to my to-dos", "remind me to paint the house"). Only a title is needed; a due date only if he gave one (YYYY-MM-DD; "in November" → the 1st of November).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD, only if he gave a date' } }, required: ['title'] } },
+  { name: 'plan_project', description: 'Propose a big, multi-step home project as a plan: its steps in order (4–9, each a concrete action; the first small enough to do this week), with rough minutes and dollars per step, and an aim date if he gave one. If it is already on his list as a reminder, pass that [id] as from_id so it grows from it instead of a duplicate. Never ask him for the steps — propose them from how such jobs go; he changes them by talking, and nothing is saved until he says yes.', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' } }, required: ['title'] } }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' }, from_id: { type: 'STRING' } }, required: ['title', 'steps'] } },
   // The whole calendar, past and future, reminders included (Jake, 2026-09-28: "search my whole calendar").
   { name: 'find_events', description: 'Look up the calendar beyond the three weeks shown above, past or future: a day (from), a span (from and to), and/or words from the title or place. Reminders are included. Use it for any date not listed, or to check whether something is on the calendar.', parameters: { type: 'OBJECT', properties: { from: { type: 'STRING', description: 'YYYY-MM-DD' }, to: { type: 'STRING', description: 'YYYY-MM-DD' }, query: { type: 'STRING', description: 'words to look for' } } } },
   { name: 'get_gift_ideas', description: 'The gift ideas saved so far (for one person, or everyone).', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING' } } } },
@@ -154,7 +163,7 @@ const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const noticeDays = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(120, Math.max(1, Math.round(Number(v)))) : null)
 
 /** The model's tool call as the usual card, or { error } when it fails a hard check. */
-export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [] }) {
+export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [], todos = [] }) {
   const a = call?.args ?? {}
   if (call?.name === 'add_to_coming_up' || call?.name === 'change_coming_up_item') {
     const target = events.find((e) => e.id === a.id)
@@ -175,6 +184,26 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     const notice = off ? null : noticeDays(a.notice_days)
     if (!off && !step && notice == null) return { error: 'A rule needs a step, a notice, or off.' }
     return { tool: 'add_coming_up_rule', args: { match, step, notice_days: notice, off } }
+  }
+  if (call?.name === 'add_todo') {
+    const title = text(a.title)
+    if (!title) return { error: 'I need to know what to add to the to-do list.' }
+    const due = typeof a.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(a.due) ? a.due : null
+    return { tool: 'add_todo', args: { title, due } }
+  }
+  if (call?.name === 'plan_project') {
+    const title = text(a.title)
+    if (!title) return { error: 'I need a name for the project.' }
+    const num = (v, max) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n) : null }
+    const steps = (Array.isArray(a.steps) ? a.steps : [])
+      .map((st) => { const cost = num(st?.cost, 100000); return { title: text(st?.title), minutes: num(st?.minutes, 60 * 24 * 7), cost_cents: cost == null ? null : cost * 100 } })
+      .filter((st) => st.title)
+      .slice(0, 12)
+    if (steps.length < 2) return { error: 'A project needs at least two steps.' }
+    const aim = typeof a.aim_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(a.aim_date) ? a.aim_date : null
+    // Grown from the reminder already on his list — only a real reminder.
+    const from = typeof a.from_id === 'string' && ((events ?? []).some((e) => e.id === a.from_id && e.event_type === 'reminder') || (todos ?? []).some((t) => t.id === a.from_id)) ? a.from_id : null
+    return { tool: 'plan_project', args: { title, aim_date: aim, from_event_id: from, steps } }
   }
   if (call?.name === 'add_gift_idea') {
     const who = text(a.for)

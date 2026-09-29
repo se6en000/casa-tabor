@@ -1694,6 +1694,37 @@ Deno.serve(async (req) => {
       })
     }
 
+    // His to-do list (P3.22, Jake's bug report 2026-09-28): a to-do, or a project with its steps.
+    if (tool === 'add_todo') {
+      const title = normalizeOptionalText(args.title, 200)
+      if (!title) throw new Error('A to-do needs a title')
+      const due = typeof args.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.due) ? args.due : null
+      const { data, error } = await sb.rpc('todo_add', { p_title: title, p_due: due })
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, todo_id: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'plan_project') {
+      const title = normalizeOptionalText(args.title, 200)
+      const steps = Array.isArray(args.steps)
+        ? (args.steps as Array<Record<string, unknown>>).map((st) => ({
+            title: normalizeOptionalText(st.title, 200),
+            minutes: Number.isFinite(Number(st.minutes)) && Number(st.minutes) > 0 ? Math.round(Number(st.minutes)) : null,
+            cost_cents: Number.isFinite(Number(st.cost_cents)) && Number(st.cost_cents) >= 0 ? Math.round(Number(st.cost_cents)) : null,
+          })).filter((st) => st.title).slice(0, 12)
+        : []
+      if (!title || steps.length === 0) throw new Error('A project needs a name and its steps')
+      const aim = typeof args.aim_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.aim_date) ? args.aim_date : null
+      const from = normalizeOptionalText(args.from_event_id, 64)
+      const { data, error } = await sb.rpc('todo_create_project', { p_title: title, p_steps: steps, p_aim_date: aim, p_from_event_id: from })
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, project: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'add_gift_idea') {
       // Gift ideas (P3.19 step 2): saved on a yes; read back only on the asker's phone.
       const forName = normalizeOptionalText(args.for_name, 120)

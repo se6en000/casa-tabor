@@ -132,9 +132,11 @@ export function reminderCreateClarification(text) {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()
   const hasTiming = reminderHasTiming(value)
   const hasSubject = reminderHasSubject(value)
-  if (hasTiming && hasSubject) return null
-  if (!hasTiming && !hasSubject) return 'Sure — what should I remind you about, and when?'
-  return hasSubject ? 'When should I remind you?' : 'What should I remind you about?'
+  // Only "what?" — never "when?": a reminder with no time is a to-do (Jake, 2026-09-28: five
+  // "When should I remind you?" in a row for "remind me to paint the house … in November"). With a
+  // subject it goes on to the assistant, which adds it to the to-do list (with a rough date if given).
+  if (hasSubject) return null
+  return hasTiming ? 'What should I remind you about?' : 'Sure — what should I remind you about?'
 }
 
 export function explicitReminderSubject(text) {

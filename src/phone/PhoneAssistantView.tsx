@@ -179,7 +179,7 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
             ) : pending && (
               <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
                 <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
-                <div className="font-display text-phone-heading font-bold">{pending}</div>
+                <div className="whitespace-pre-line font-display text-phone-heading font-bold">{pending}</div>
                 <div className="flex gap-[10px]">
                   <button type="button" disabled={working} onClick={onConfirm} className={`${dark} flex-1`}>{working ? 'Saving…' : 'Yes, do it'}</button>
                   <button type="button" disabled={working} onClick={onCancel} className={pill}>No</button>

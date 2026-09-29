@@ -90,7 +90,7 @@ test('ordinary calendar edits and memory questions are not reminder creates', ()
 test('underspecified reminder creates ask for missing details instead of inventing them', () => {
   assert.equal(
     reminderCreateClarification('Can you create a reminder?'),
-    'Sure — what should I remind you about, and when?',
+    'Sure — what should I remind you about?',
   )
   assert.equal(
     reminderCreateClarification('Create a reminder for tomorrow morning for me'),
@@ -98,7 +98,9 @@ test('underspecified reminder creates ask for missing details instead of inventi
   )
   assert.equal(
     reminderCreateClarification('Remind me to call the dentist'),
-    'When should I remind you?',
+    // Jake, 2026-09-28: "wouldn't allow me to actually create a reminder without a specific day and
+    // time … sometimes they don't" — five "When should I remind you?" in a row. No time = a to-do.
+    null,
   )
   assert.equal(
     reminderCreateClarification('Create a reminder for tomorrow at 10 AM to order Walmart groceries'),
@@ -184,7 +186,7 @@ test('reminder subjects exclude trailing vague timing language', () => {
   )
   assert.equal(
     reminderCreateClarification('Remind me to turn on the night light'),
-    'When should I remind you?',
+    null,
   )
   assert.equal(
     resolveExplicitReminderDaypartRange(

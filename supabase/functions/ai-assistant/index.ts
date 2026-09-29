@@ -237,7 +237,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -332,6 +332,8 @@ const TURN_UPCOMING_CAP = 60
 const TURN_BUDGET_MS = 7000
 /** Version D's one call gets room to think, so time limits don't decide the comparison. */
 const FULL_AI_TIMEOUT_MS = 20_000
+// A project plan is a long answer, like a recipe (a live one hit the 9 s limit, 2026-09-28).
+const PROJECT_PLAN_REQUEST = /\b(?:project|break (?:it|this|that) down|steps? (?:to|for)|plan (?:out|for))\b/i
 /** The hybrid for real turns (P3.17). */
 const HYBRID_LAYER2_LIVE = true
 
@@ -1035,7 +1037,7 @@ Deno.serve(async (req) => {
   const intentRouting = intentRoutingDecision.route
   requestHardTimeoutMs = image
     ? Math.max(IMAGE_REQUEST_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_REQUEST_HARD_TIMEOUT_MS : NORMAL_REQUEST_HARD_TIMEOUT_MS)
-    : intentRouting.profile === 'recipe'
+    : intentRouting.profile === 'recipe' || PROJECT_PLAN_REQUEST.test(latestUserText ?? '')
       ? RECIPE_REQUEST_HARD_TIMEOUT_MS
       : experienceMode === 'talk_plan'
         ? TALK_PLAN_REQUEST_HARD_TIMEOUT_MS
@@ -1190,6 +1192,12 @@ Deno.serve(async (req) => {
     const contacts = ((contactRows.data ?? []) as Array<{ name: string; relationship: string | null; phone: string | null; email: string | null; primary_place: { name?: string } | null }>)
       .map((c) => ({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email, place: c.primary_place?.name ?? null }))
     const recipes = (recipeRows.data ?? []) as Array<{ id: string; name: string }>
+    // His open to-dos (the "To Do" list on his phone): so a repeat is noticed and a project grows from it.
+    const todoRes = await sb.from('events').select('id, title, has_due_date, start_time').eq('event_type', 'reminder').eq('record_kind', 'single')
+      .is('deleted_at', null).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(60)
+    const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
+    const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string }>)
+      .map((t) => ({ id: t.id, title: t.title, due: t.has_due_date ? nyDay(t.start_time) : null }))
     const state = incomingConversationState as Record<string, unknown> | null
     const onScreenIds = [
       ...(typeof state?.activeEventId === 'string' ? [state.activeEventId] : []),
@@ -1197,7 +1205,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes })
+    const system = buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos })
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
     const lastUser = [...contents].reverse().find((c) => c.role === 'user')
@@ -1291,7 +1299,7 @@ Deno.serve(async (req) => {
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
-      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family }))
+      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family, todos }))
     if (changes.length) {
       if (changes.some((c) => 'error' in c)) {
         autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
@@ -6122,6 +6130,19 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       ? `Coming up rule: **never flag "${String(args.match ?? '')}"**`
       : `Coming up rule: **every "${String(args.match ?? '')}"**${args.step ? ` · ${String(args.step)}` : ''}${args.notice_days != null ? ` · ${Number(args.notice_days)} days ahead` : ''}`
     if (name === 'change_coming_up_item') return `Coming up: **${String(args.title ?? '')}** · ${args.action === 'done' ? 'done' : args.action === 'not_needed' ? 'not needed' : 'snooze a week'}`
+    if (name === 'add_todo' || name === 'plan_project') {
+      const day = (d: unknown) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)
+        ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+        : null
+      if (name === 'add_todo') return `Add to your to-dos: **${String(args.title ?? '')}**${day(args.due) ? ` · by ${day(args.due)}` : ''}`
+      const steps = Array.isArray(args.steps) ? args.steps as Array<{ title?: string; minutes?: number | null; cost_cents?: number | null }> : []
+      const size = (st: { minutes?: number | null; cost_cents?: number | null }) => [st.minutes ? (st.minutes < 60 ? `${st.minutes} min` : `${Math.round(st.minutes / 60)} hr`) : null, st.cost_cents ? `$${Math.round(st.cost_cents / 100)}` : null].filter(Boolean).join(', ')
+      return [
+        `New project: **${String(args.title ?? '')}**${day(args.aim_date) ? ` · aim ${day(args.aim_date)}` : ''} · ${steps.length} steps`,
+        ...steps.map((st, i) => `${i + 1}. ${String(st.title ?? '')}${size(st) ? ` (${size(st)})` : ''}`),
+        ...(args.from_event_id ? ['Grows from the one already on your list.'] : []),
+      ].join('\n')
+    }
     if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
