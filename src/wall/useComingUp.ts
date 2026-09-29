@@ -29,5 +29,12 @@ export function useComingUp() {
     await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     if (error) throw error
   }, [queryClient])
-  return { data: query.data ?? null, act }
+  // A season starts as this year's project (P3.23, canvas 11c); the new project's id, to open it.
+  const start = useCallback(async (key: string): Promise<string | null> => {
+    const { data, error } = await supabase.functions.invoke('coming-up', { body: { action: 'start', key } })
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ['coming-up'] }), queryClient.invalidateQueries({ queryKey: ['todos'] })])
+    if (error) throw error
+    return (data as { project_id?: string | null } | null)?.project_id ?? null
+  }, [queryClient])
+  return { data: query.data ?? null, act, start }
 }

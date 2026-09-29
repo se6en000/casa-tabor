@@ -290,3 +290,29 @@ test('a project step with dates and a project’s target come up, named for the 
   assert.equal(items['target:old'], undefined)
   assert.ok(items['tryouts'])
 })
+
+// The seasons arrive as projects (P3.23, canvas 11c). Jake: "first I have to go to the storage unit and
+// grab the lights, then do the indoor window trim lights, then the outdoor wreaths and bush lights, I
+// gotta buy new lights each year, put the lights on the palm trees … get it done in small jobs".
+test('a season that’s a real job can start as a project, due the day it’s for (lights: the day before Thanksgiving)', () => {
+  const items = Object.fromEntries(buildComingUp({ now: new Date('2026-10-20T09:00:00-04:00'), events: [], seasons: SEASONS }).map((i) => [i.key, i]))
+  const lights = items['season:christmas_lights:2026']
+  assert.equal(lights.date, '2026-11-25')
+  assert.equal(lights.startable, true)
+  assert.equal(items['season:christmas_gifts:2026'].startable, undefined, 'a list, not a project')
+  const plan = SEASONS.find((s) => s.id === 'christmas_lights').template
+  assert.deepEqual(plan.map((s) => s.title).slice(0, 3), ['Storage unit run: the lights and wreaths', 'Plug everything in, list what’s dead', 'Buy new lights'])
+  assert.deepEqual(plan.filter((s) => s.grp === 4).map((s) => s.title), ['Indoor window trim lights', 'Outdoor wreaths and bush lights', 'Palm tree lights'])
+})
+
+test('once started, the season shows its project: progress, what’s Now, and Open project', () => {
+  const items = Object.fromEntries(buildComingUp({
+    now: new Date('2026-10-20T09:00:00-04:00'), events: [], seasons: SEASONS,
+    projects: { projects: [{ id: 'hw', title: 'Halloween decorations', status: 'active', season_id: 'halloween_decor:2026' }], steps: [], progress: { hw: { done: 2, total: 5, now: 'The yard: tombstones and the fog machine' } } },
+  }).map((i) => [i.key, i]))
+  const hw = items['season:halloween_decor:2026']
+  assert.equal(hw.projectId, 'hw')
+  assert.equal(hw.nextStep, 'A project · 2 of 5 · now: The yard: tombstones and the fog machine')
+  // Its own target isn't listed a second time.
+  assert.equal(items['target:hw'], undefined)
+})

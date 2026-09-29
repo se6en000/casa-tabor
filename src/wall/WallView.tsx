@@ -76,7 +76,7 @@ export interface WallViewProps {
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
-  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void> } | null
+  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null> } | null
   /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
 }
@@ -358,6 +358,7 @@ export default function WallView(props: WallViewProps) {
         onBack={() => setComingUpUntil(0)}
         week={weekStrip}
         onOpenProject={todos ? (id) => { openTodo(); setTodoProject(id) } : undefined}
+        onStart={todos && comingUp.start ? (key) => void comingUp.start!(key).then((id) => { if (id) { openTodo(); setTodoProject(id) } }) : undefined}
       />
     )
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {

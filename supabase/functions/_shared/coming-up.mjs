@@ -48,12 +48,65 @@ const thanksgiving = (y) => {
   const first = new Date(Date.UTC(y, 10, 1)).getUTCDay()
   return `${y}-11-${String(1 + ((4 - first + 7) % 7) + 21).padStart(2, '0')}`
 }
+// The ones that are real jobs carry a starter plan (`template`): on Coming up they can start as a
+// project (P3.23, canvas 11c) — the first year from this plan when Jake taps Start it, later years by
+// themselves from last year's project, his own steps and times. `grp` is the order: steps sharing a
+// number happen side by side.
+const eve = (y) => addDays(thanksgiving(y), -1)
 export const SEASONS = [
-  { id: 'halloween_decor', title: 'Halloween decorations', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Decorate now, before the rush' },
-  { id: 'halloween_costumes', title: 'Halloween costumes', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Pick and order costumes' },
-  { id: 'thanksgiving_prep', title: 'Thanksgiving prep', date: thanksgiving, poke: (y) => addDays(thanksgiving(y), -14), step: 'Plans, the menu and groceries' },
-  { id: 'christmas_decor', title: 'Christmas decorating', date: (y) => `${y}-12-25`, poke: (y) => addDays(thanksgiving(y), -21), step: 'Decorate before Thanksgiving' },
-  { id: 'christmas_lights', title: 'Christmas lights', date: (y) => `${y}-12-25`, poke: (y) => addDays(thanksgiving(y), -21), step: 'Lights up before Thanksgiving' },
+  {
+    id: 'halloween_decor', title: 'Halloween decorations', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Decorate now, before the rush',
+    template: [
+      { title: 'Get the bins down from the garage', grp: 1, minutes: 30 },
+      { title: 'Inside: the mantel and the stairs', grp: 2, minutes: 90 },
+      { title: 'The yard: tombstones and the fog machine', grp: 2, minutes: 120 },
+      { title: 'The porch: lights and the spider web', grp: 2, minutes: 60 },
+      { title: 'Test the timers after dark', grp: 3, minutes: 20 },
+    ],
+  },
+  {
+    id: 'halloween_costumes', title: 'Halloween costumes', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Pick and order costumes',
+    template: [
+      { title: 'Ask the kids what they want to be', grp: 1, minutes: 15 },
+      { title: 'Order the costumes', grp: 2, minutes: 30 },
+      { title: 'Accessories and makeup', grp: 3, minutes: 30 },
+      { title: 'Try them on', grp: 4, minutes: 20 },
+    ],
+  },
+  {
+    id: 'thanksgiving_prep', title: 'Thanksgiving prep', date: thanksgiving, poke: (y) => addDays(thanksgiving(y), -14), step: 'Plans, the menu and groceries',
+    template: [
+      { title: 'Hosting or going? Who’s coming', grp: 1, minutes: 15 },
+      { title: 'The menu', grp: 2, minutes: 30 },
+      { title: 'Order the turkey', grp: 2, minutes: 10 },
+      { title: 'The grocery run', grp: 3, minutes: 90 },
+      { title: 'Clean up and set the table', grp: 4, minutes: 120 },
+    ],
+  },
+  {
+    // Before Thanksgiving, as the family always does it.
+    id: 'christmas_decor', title: 'Christmas decorating', date: eve, poke: (y) => addDays(thanksgiving(y), -21), step: 'Decorate before Thanksgiving',
+    template: [
+      { title: 'Bring the decorations in from storage', grp: 1, minutes: 60 },
+      { title: 'The tree: up and lit', grp: 2, minutes: 120 },
+      { title: 'The mantel and the stairs', grp: 3, minutes: 90 },
+      { title: 'Ornaments with the kids', grp: 3, minutes: 60 },
+      { title: 'Empty bins back to storage', grp: 4, minutes: 20 },
+    ],
+  },
+  {
+    // Jake's own order (2026-09-29): the storage run, then new lights, then the rest in small jobs.
+    id: 'christmas_lights', title: 'Christmas lights', date: eve, poke: (y) => addDays(thanksgiving(y), -21), step: 'Lights up before Thanksgiving',
+    template: [
+      { title: 'Storage unit run: the lights and wreaths', grp: 1, minutes: 60 },
+      { title: 'Plug everything in, list what’s dead', grp: 2, minutes: 45 },
+      { title: 'Buy new lights', grp: 3, minutes: 60 },
+      { title: 'Indoor window trim lights', grp: 4, minutes: 200, repeat_minutes: 20, repeat_count: 10, repeat_unit: 'windows' },
+      { title: 'Outdoor wreaths and bush lights', grp: 4, minutes: 120 },
+      { title: 'Palm tree lights', grp: 4, minutes: 180 },
+      { title: 'Set the timers, a night walk-round', grp: 5, minutes: 20 },
+    ],
+  },
   { id: 'christmas_gifts', title: 'Christmas gifts', date: (y) => `${y}-12-25`, poke: (y) => `${y}-11-01`, step: 'Start the gift list' },
   { id: 'christmas_cards', title: 'Christmas cards', date: (y) => `${y}-12-25`, poke: (y) => `${y}-11-15`, step: 'The photo and the card list' },
   { id: 'hurricane', title: 'Hurricane season', date: (y) => `${y}-06-01`, poke: (y) => `${y}-05-15`, step: 'Check the storm supplies' },
@@ -154,7 +207,8 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     add(`step:${st.id}`, { kind: 'project_step', title: st.title, date: st.cal_start, nextStep: p.title, pokeOn: addDays(st.cal_start, -7), projectId: p.id })
   }
   for (const p of live.values()) {
-    if (!p.aim_date) continue
+    // A season's project comes up as the season.
+    if (!p.aim_date || p.season_id) continue
     add(`target:${p.id}`, { kind: 'project_target', title: `${p.title}: the target`, date: p.aim_date, nextStep: 'Is it on track?', pokeOn: addDays(p.aim_date, -14), projectId: p.id })
   }
   // This year's season, or next year's once this one has passed; keyed by year so "done" lasts a year.
@@ -167,7 +221,17 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
       const key = `season:${season.id}:${y}`
       const s = state[key] ?? {}
       if (s.done_at || s.dismissed_at || (s.snoozed_until && s.snoozed_until > today)) break
-      items.push({ key, kind: 'season', title: season.title, date, daysAway: daysBetween(today, date), nextStep: s.custom_step ?? season.step, pokeOn, late: pokeOn < today })
+      // Started: its project (done — off the list); otherwise it can start, if it's a real job.
+      const project = (projects.projects ?? []).find((p) => p.season_id === `${season.id}:${y}` && p.status !== 'dropped')
+      if (project?.status === 'done') break
+      const progress = project ? projects.progress?.[project.id] : null
+      const nextStep = project
+        ? ['A project', progress ? `${progress.done} of ${progress.total}` : null, progress?.now ? `now: ${progress.now}` : null].filter(Boolean).join(' · ')
+        : s.custom_step ?? season.step
+      items.push({
+        key, kind: 'season', title: season.title, date, daysAway: daysBetween(today, date), nextStep, pokeOn, late: pokeOn < today,
+        ...(project ? { projectId: project.id } : season.template ? { startable: true } : {}),
+      })
       break
     }
   }

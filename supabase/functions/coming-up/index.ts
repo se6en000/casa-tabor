@@ -18,9 +18,20 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const TZ = 'America/New_York'
 const todayLocal = (now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 const plusDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
+// A season's project on Coming up: how far along, and what's Now (P3.23).
+const progressOf = (steps: Array<{ project_id: string; title: string; grp: number; position: number; done_at: string | null; child_project_id: string | null }>) => {
+  const out: Record<string, { done: number; total: number; now: string | null }> = {}
+  for (const st of [...steps].sort((a, b) => a.grp - b.grp || a.position - b.position)) {
+    const p = (out[st.project_id] ??= { done: 0, total: 0, now: null })
+    p.total += 1
+    if (st.done_at) p.done += 1
+    else if (!p.now && !st.child_project_id) p.now = st.title
+  }
+  return out
+}
 const niceDate = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 
-type Item = { key: string; kind: string; title: string; date: string; daysAway: number; nextStep: string; pokeOn: string; late: boolean; ideas?: string[]; projectId?: string }
+type Item = { key: string; kind: string; title: string; date: string; daysAway: number; nextStep: string; pokeOn: string; late: boolean; ideas?: string[]; projectId?: string; startable?: boolean }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -30,6 +41,17 @@ Deno.serve(async (req) => {
     const action = body.action ?? 'list'
     const now = new Date()
     const today = todayLocal(now)
+
+    // A season starts as this year's project (P3.23, canvas 11c): from last year's, or Casa's starter plan.
+    if (action === 'start') {
+      const m = /^season:([a-z_]+):(\d{4})$/.exec(String(body.key ?? ''))
+      const season = m && SEASONS.find((x) => x.id === m[1])
+      if (!m || !season?.template) return json({ error: 'not a season that starts' }, 400)
+      const year = Number(m[2])
+      const { data, error } = await sb.rpc('todo_start_season', { p_season: season.id, p_year: year, p_title: season.title, p_target: season.date(year), p_template: season.template })
+      if (error) throw new Error(error.message)
+      return json({ ok: true, project_id: data })
+    }
 
     if (action === 'done' || action === 'dismiss' || action === 'snooze') {
       const key = String(body.key ?? '').slice(0, 80)
@@ -65,13 +87,13 @@ Deno.serve(async (req) => {
       // Ideas saved under a full name ("Olivia") still belong on that person's birthday.
       sb.from('family_members').select('id, name, full_name'),
       // Projects' dated steps and targets (P3.23).
-      sb.from('todo_projects').select('id, title, status, aim_date').eq('status', 'active'),
-      sb.from('todo_steps').select('id, project_id, title, cal_start, cal_end, cal_event_id, done_at').not('cal_start', 'is', null),
+      sb.from('todo_projects').select('id, title, status, aim_date, season_id').in('status', ['active', 'paused', 'done']).gte('updated_at', new Date(now.getTime() - 400 * 86400e3).toISOString()),
+      sb.from('todo_steps').select('id, project_id, title, grp, position, cal_start, cal_end, cal_event_id, done_at, child_project_id'),
     ])
     for (const r of [eventsRes, giftsRes, stateRes, rulesRes, projectsRes, stepsRes]) if (r.error) throw new Error(r.error.message)
     const state = Object.fromEntries((stateRes.data ?? []).map((s: Record<string, unknown>) => [s.item_key as string, s]))
     const rules = rulesRes.data ?? []
-    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [], seasons: SEASONS, projects: { projects: projectsRes.data ?? [], steps: stepsRes.data ?? [] } }) as Item[]
+    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [], seasons: SEASONS, projects: { projects: (projectsRes.data ?? []).filter((p) => p.status !== 'done' || p.season_id), steps: (stepsRes.data ?? []).filter((st) => st.cal_start), progress: progressOf(stepsRes.data ?? []) } }) as Item[]
 
     // The screens show every gift idea (on the wall too, for now — Jake, 2026-09-27).
     // Each under the family member's own name, so "Olivia" and "Liv" are one person on screen.
@@ -97,6 +119,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'send_pokes') {
+      // A season done before starts by itself on its start date, from last year's project.
+      for (const i of items.filter((x) => x.kind === 'season' && x.startable && !x.projectId && x.pokeOn <= today)) {
+        const [, id, y] = i.key.split(':')
+        const season = SEASONS.find((x) => x.id === id)
+        if (season?.template) await sb.rpc('todo_start_season', { p_season: id, p_year: Number(y), p_title: season.title, p_target: season.date(Number(y)), p_template: season.template, p_auto: true })
+      }
       // Today's pokes, plus any late one never poked; at most two a day.
       const due = items.filter((i) => (i.pokeOn === today || i.late) && state[i.key]?.poked_on == null).slice(0, 2)
       for (const i of due) {

@@ -858,6 +858,22 @@ test('wall: Coming up — a project’s dated step, named for its project, opens
   await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
 })
 
+// The seasons arrive as projects (P3.23, canvas 11c): Start it opens this year's, from the plan.
+test('wall: Coming up — a season starts as this year’s project, in Jake’s order, and opens', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
+  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await page.getByRole('button', { name: 'Start it' }).click()
+  const lights = page.getByRole('region', { name: 'Christmas lights — project' })
+  await expect(lights).toBeVisible()
+  await expect(lights.getByText('NOW · ON YOUR PHONE')).toBeVisible()
+  expect(await plan(page)).toEqual(['Storage unit run: the lights and wreaths', 'Plug everything in, list what’s dead', 'Buy new lights', 'Indoor window trim lights', 'Outdoor wreaths and bush lights', 'Palm tree lights', 'Set the timers, a night walk-round'])
+  await expect(lights.getByText('SIDE BY SIDE · ANY ORDER')).toBeVisible()
+  await lights.getByRole('button', { name: 'Open Indoor window trim lights' }).click()
+  await expect(page.getByRole('switch', { name: 'The same job, many times' })).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('button', { name: 'Back to the list' }).click()
+  await expect(page.getByRole('region', { name: 'Projects' }).getByText('Christmas lights')).toBeVisible()
+})
+
 test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {
   await openPaint(page)
   await page.getByRole('button', { name: 'Open The painter: 5 days, a dry week' }).click()

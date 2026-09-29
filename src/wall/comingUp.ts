@@ -18,6 +18,8 @@ export interface ComingUpItem {
   ideasFor?: string[]
   /** A project's step or target (P3.23): its project, to open. */
   projectId?: string
+  /** A season that's a real job, not started yet: it can start as this year's project. */
+  startable?: boolean
 }
 export interface GiftIdea { for_name: string; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'

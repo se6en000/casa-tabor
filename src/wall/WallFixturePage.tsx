@@ -18,6 +18,7 @@ import type { ComingUpItem, GiftIdea } from './comingUp'
 import { applyProjectEdit, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from './todos'
 import type { ProjectStep } from './projectModel'
 import { WallSpeechContext } from './speechContext'
+import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -47,6 +48,7 @@ const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { in
 // `?comingUp=projects` (P3.23, canvas 10e): a project's dated step on the list, with Open project.
 const COMING_UP_PROJECTS: typeof COMING_UP = [
   { key: 'step:st-choose', kind: 'project_step', title: 'Choose the painter and book dates', nextStep: 'Paint the house', inDays: 15, pokeIn: 8, late: false, projectId: 'pr-paint' },
+  { key: 'season:christmas_lights:2026', kind: 'season', title: 'Christmas lights', nextStep: 'Lights up before Thanksgiving', inDays: 61, pokeIn: 41, late: false, startable: true },
   ...COMING_UP,
 ]
 // The live list on the kiosk the night of 2026-09-27 (nine items; the fifth once ran under the week strip).
@@ -243,7 +245,24 @@ export default function WallFixturePage() {
       }))
     },
   }
-  const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)) }
+  // A season started (canvas 11c): this year's project from the same starter plan the server uses.
+  const start = async (key: string) => {
+    const [, id, year] = key.split(':')
+    const season = SEASONS.find((x) => x.id === id)
+    if (!season?.template) return null
+    const pid = `pr-${id}-${year}`
+    const detail: TodoProjectDetail = {
+      project: { ...PAINT.project, id: pid, title: season.title, aim_date: season.date(Number(year)), aim_firm: true, budget_cents: null, yearly: true, season_id: `${id}:${year}`, notes: null, created_at: now.toISOString(), people: [{ name: 'Me' }, { name: 'Kelly' }] },
+      steps: numbered(season.template.map((t, i) => pstep(`${pid}-${i}`, t.grp, t.title, { minutes: t.minutes ?? null, repeat_minutes: t.repeat_minutes ?? null, repeat_count: t.repeat_count ?? null, repeat_unit: t.repeat_unit ?? null }))),
+      parent: null,
+      others: [],
+    }
+    setProjects((all) => ({ ...all, [pid]: detail }))
+    setTodoList((l) => ({ ...l, projects: [...l.projects, summary(detail)] }))
+    setComingUpItems((list) => list.map((i) => (i.key === key ? { ...i, startable: false, projectId: pid, nextStep: `A project · 0 of ${detail.steps.length}` } : i)))
+    return pid
+  }
+  const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)), start }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null
