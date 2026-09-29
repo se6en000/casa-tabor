@@ -890,6 +890,34 @@ test('wall: the projects shelf — progress by colour, a project inside hatched,
   await expect(page.getByRole('region', { name: 'Christmas lights — project' })).toBeVisible()
 })
 
+// A project step on the calendar (P3.23; Jake: "I should be able to click on it and have some UX that
+// says done … or just let the day pass?"): the event knows its step; a passed day is asked about.
+test('wall: a project step’s calendar event — Done ticks the step, Open project opens it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&stepEvent=1')
+  await page.getByText('Paint the house: Pick colours: 3 sample pots').click()
+  const sheet = page.getByRole('region', { name: /Pick colours: 3 sample pots details/ })
+  await expect(sheet.getByText('A PROJECT STEP')).toBeVisible()
+  // An all-day event's day is its UTC date (it once said Thu for a Fri event).
+  await expect(sheet.getByText('TODAY · ALL DAY')).toBeVisible()
+  await expect(sheet.getByText(/Step 4 of 9 in/)).toBeVisible()
+  await expect(sheet.getByText(/change them on the project page/)).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-step-event.png')
+  await sheet.getByRole('button', { name: 'Done — tick the step' }).click()
+  await expect(sheet.getByText('Done', { exact: true })).toBeVisible()
+  await sheet.getByRole('button', { name: 'Open project' }).click()
+  await expect(page.getByRole('region', { name: 'Paint the house — project' })).toBeVisible()
+})
+
+test('wall: a dated step whose day has passed is asked about — Not yet moves it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&stepEvent=1')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  await expect(page.getByText('It was yesterday. Done?')).toBeVisible()
+  await page.getByRole('button', { name: 'Not yet' }).click()
+  await page.getByRole('button', { name: 'Tomorrow', exact: true }).click()
+  await expect(page.getByText('It was yesterday. Done?')).toHaveCount(0)
+})
+
 test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {
   await openPaint(page)
   await page.getByRole('button', { name: 'Open The painter: 5 days, a dry week' }).click()

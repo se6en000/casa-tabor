@@ -26,6 +26,8 @@ export interface ProjectStep {
   shop_item: string | null
   child_project_id: string | null
   child: ProjectChild | null
+  /** Its all-day event on the family calendar, when it has dates. */
+  cal_event_id?: string | null
 }
 export interface ProjectPerson { name: string; role?: string | null; contact?: string | null }
 export interface ProjectInfo {

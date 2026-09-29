@@ -125,3 +125,20 @@ test('a dated thing long past its day does not lead Next up', () => {
   assert.deepEqual(list2.nextUp.map((i) => i.id), ['call'])
   assert.deepEqual(list2.groups.dated.map((i) => i.id), ['vet'])
 })
+
+// A dated step whose day has passed (P3.23; Jake: "should I be able to click on it … done? or just let
+// the day pass and it's marked as done?"): never done by itself — asked once, the morning after.
+test('a dated step whose last day has passed is asked about, not marked done', () => {
+  const l = buildTodoList({
+    reminders: [], details: {}, today: '2026-09-30',
+    projects: [{ id: 'hc', title: 'Halloween costumes', status: 'active' }, { id: 'old', title: 'Old', status: 'dropped' }],
+    steps: [
+      { id: 'ask', project_id: 'hc', grp: 1, position: 1, title: 'Ask the kids what they want to be', cal_start: '2026-09-29', cal_end: null, done_at: null },
+      { id: 'order', project_id: 'hc', grp: 2, position: 2, title: 'Order the costumes', cal_start: '2026-09-30', cal_end: null, done_at: null },
+      { id: 'paint', project_id: 'hc', grp: 3, position: 3, title: 'Painter', cal_start: '2026-09-25', cal_end: '2026-10-02', done_at: null },
+      { id: 'done', project_id: 'hc', grp: 4, position: 4, title: 'Done one', cal_start: '2026-09-20', cal_end: null, done_at: '2026-09-20T12:00:00Z' },
+      { id: 'x', project_id: 'old', grp: 1, position: 1, title: 'Dropped', cal_start: '2026-09-20', cal_end: null, done_at: null },
+    ],
+  })
+  assert.deepEqual(l.pastSteps, [{ id: 'ask', projectId: 'hc', project: 'Halloween costumes', title: 'Ask the kids what they want to be', date: '2026-09-29', start: '2026-09-29' }])
+})

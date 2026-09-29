@@ -111,10 +111,18 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
       }
     })
 
+  // A dated step whose last day has passed and isn't ticked: asked about ("…was yesterday. Done?"),
+  // never marked done by itself — a planned day isn't proof it happened (P3.23).
+  const activeIds = new Set((projects ?? []).filter((p) => p.status === 'active').map((p) => p.id))
+  const pastSteps = (steps ?? [])
+    .filter((st) => st.cal_start && !st.done_at && !st.child_project_id && activeIds.has(st.project_id) && (st.cal_end ?? st.cal_start) < today)
+    .map((st) => ({ id: st.id, projectId: st.project_id, project: byId.get(st.project_id)?.title ?? '', title: st.title, date: st.cal_end ?? st.cal_start, start: st.cal_start }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
   const titleOf = new Map(items.map((i) => [i.id, i.title]))
   const suggestions = items
     .filter((i) => i.suggestion)
     .map((i) => ({ id: i.id, title: i.title, kind: i.suggestion.kind, reason: i.suggestion.reason ?? '', with: i.suggestion.with ?? null, withTitle: i.suggestion.with ? titleOf.get(i.suggestion.with) ?? null : null }))
 
-  return { nextUp, groups, projects: projectList, suggestions, today }
+  return { nextUp, groups, projects: projectList, suggestions, pastSteps, today }
 }

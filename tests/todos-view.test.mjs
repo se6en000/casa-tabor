@@ -97,3 +97,14 @@ test('size as pills: kind, when, time, cost, needs — late in rust; a project s
   assert.deepEqual(sizeChips(item('v', { minutes: 15, due: '2026-08-24', overdue: true, needs: ['Call'] })), [{ text: 'Quick one' }, { text: 'was due Aug 24', late: true }, { text: '15 min' }, { text: 'Call' }])
   assert.deepEqual(sizeChips(item('p', { shape: 'project', minutes: 60, costCents: 4000, projectId: 'paint' })), [{ text: '1 hr' }, { text: '$40' }])
 })
+
+// A project step's calendar event, tapped: which step of which project it is.
+import { stepForEvent } from '../src/wall/todos.ts'
+test('a calendar event that is a project step knows its step', () => {
+  const list = { projects: [{ id: 'hc', title: 'Halloween costumes', detail: { project: { id: 'hc', title: 'Halloween costumes' }, steps: [
+    { id: 'ask', grp: 1, position: 1, title: 'Ask the kids', done_at: null, child_project_id: null, cal_event_id: 'ev-ask' },
+    { id: 'order', grp: 2, position: 2, title: 'Order them', done_at: null, child_project_id: null, cal_event_id: null },
+  ] } }] }
+  assert.deepEqual(stepForEvent(list, 'ev-ask'), { projectId: 'hc', stepId: 'ask', project: 'Halloween costumes', title: 'Ask the kids', number: 1, total: 2, done: false })
+  assert.equal(stepForEvent(list, 'other'), null)
+})

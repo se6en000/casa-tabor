@@ -28,7 +28,10 @@ export interface TodoProject {
   detail?: Pick<ProjectDetail, 'project' | 'steps'>
 }
 export interface TodoSuggestion { id: string; title: string; kind: 'merge' | 'done' | 'shopping'; reason: string; with: string | null; withTitle: string | null }
+/** A dated project step whose day has passed, not ticked: "…was yesterday. Done?" */
+export interface PastStep { id: string; projectId: string; project: string; title: string; date: string; start: string }
 export interface TodoList {
+  pastSteps?: PastStep[]
   nextUp: TodoItem[]
   groups: Record<'quick' | 'fix' | 'nudge' | 'dated' | 'unsorted', TodoItem[]>
   projects: TodoProject[]
@@ -121,4 +124,14 @@ export function timeOf(item: Pick<TodoItem, 'dueAt' | 'due'>): string | null {
   const d = new Date(item.dueAt)
   const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   return hhmm === '17:00' ? null : hhmm
+}
+
+/** A calendar event that is a project step's (P3.23): which step of which project, for its sheet. */
+export function stepForEvent(list: Pick<TodoList, 'projects'>, eventId: string) {
+  for (const p of list.projects) {
+    const steps = (p.detail?.steps ?? []).filter((s) => !s.child_project_id).sort((a, b) => a.grp - b.grp || a.position - b.position)
+    const i = steps.findIndex((s) => s.cal_event_id === eventId)
+    if (i >= 0) return { projectId: p.id, stepId: steps[i].id, project: p.title, title: steps[i].title, number: i + 1, total: steps.length, done: Boolean(steps[i].done_at) }
+  }
+  return null
 }

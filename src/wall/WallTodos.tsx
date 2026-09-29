@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
+import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion, type PastStep } from './todos'
 import { useTodoProject } from './useTodos'
 import WallProject from './WallProject'
 import WallProjectShelf from './WallProjectShelf'
 import type { ComingUpItem } from './comingUp'
 import WallTodoSheet from './WallTodoSheet'
+import WallDatePicker from './WallDatePicker'
 
 // To do (P3.22, board 09b, approved by Jake 2026-09-28): what needs doing, from his Reminders list,
 // sorted by Casa. Next up is a handful worth doing now; everything else stays folded by kind, one
@@ -96,6 +97,42 @@ function NextRow({ item, project, snoozing, onSnoozeToggle, onAct, onOpen, onEdi
   )
 }
 
+// A dated step whose day has passed (P3.23): asked once, never marked done by itself. Done ticks the
+// step; Not yet moves it (keeping its length) — the calendar and Google follow.
+function PastStepRow({ step, today, onAct }: { step: PastStep; today: string; onAct: WallTodosProps['onAct'] }) {
+  const [moving, setMoving] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const plus = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10)
+  const when = step.date === plus(today, -1) ? 'yesterday' : `on ${new Date(`${step.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+  const saturday = (() => { let d = plus(today, 1); while (new Date(`${d}T12:00:00Z`).getUTCDay() !== 6) d = plus(d, 1); return d })()
+  const edit = (op: string, args: Record<string, unknown>) => onAct({ action: 'project_edit', id: step.projectId, op, args: { step_id: step.id, ...args } })
+  return (
+    <div className="flex flex-col gap-[8px] border-0 border-t border-solid border-wall-rule py-[12px]">
+      <div className="flex items-center gap-[24px]">
+        <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+          <span className="truncate text-wall-label font-bold text-wall-brass-ink">{step.project}</span>
+          <span className="truncate font-display text-wall-date font-semibold leading-tight">{step.title}</span>
+          <span className="text-wall-detail font-semibold text-wall-rust">It was {when}. Done?</span>
+        </div>
+        <div className="flex shrink-0 gap-[8px]">
+          <Pill label="Done" primary onClick={() => void edit('done_step', {})} />
+          <Pill label={moving ? 'Keep it' : 'Not yet'} onClick={() => { setMoving((m) => !m); setPicking(false) }} />
+        </div>
+      </div>
+      {moving && !picking && (
+        <span className="flex items-center gap-[8px]">
+          <span className="text-wall-label text-wall-ink-2">Move it to</span>
+          <Pill small label="Tomorrow" onClick={() => void edit('set_step', { cal_start: plus(today, 1) })} />
+          <Pill small label="Saturday" onClick={() => void edit('set_step', { cal_start: saturday })} />
+          <Pill small label="Pick a date" onClick={() => setPicking(true)} />
+          <Pill small label="No date" onClick={() => void edit('set_step', { cal_start: '' })} />
+        </span>
+      )}
+      {picking && <WallDatePicker value={null} now={new Date(`${today}T12:00:00`)} clearLabel="No date" onPick={(d) => void edit('set_step', { cal_start: d ?? '' })} />}
+    </div>
+  )
+}
+
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
@@ -111,6 +148,8 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   const clock = formatWallClock(now)
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   // The shelf steps aside while a folded group is open, so the group has the room.
+  // Dated steps whose day has passed come first in Next up, two at most.
+  const past = (list.pastSteps ?? []).slice(0, 2)
   const seasons = onStart ? upcoming.filter((i) => i.startable && i.plan) : []
   const showShelf = (list.projects.some((p) => p.detail) || seasons.length > 0) && openGroup === null
   const act = async (request: TodoAction) => {
@@ -200,7 +239,8 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
           {list.nextUp.length === 0 && (
             <div className="font-display text-wall-date italic text-wall-ink-2">Nothing waiting right now. Anything you add to Reminders shows up here, sorted.</div>
           )}
-          {list.nextUp.slice(0, showShelf ? nextUpRoom(list) : 4).map((item) => (
+          {past.map((st) => <PastStepRow key={st.id} step={st} today={today} onAct={act} />)}
+          {list.nextUp.slice(0, Math.max(0, (showShelf ? nextUpRoom(list) : 4) - past.length)).map((item) => (
             <NextRow
               key={item.id}
               item={item}

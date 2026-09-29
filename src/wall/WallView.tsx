@@ -22,7 +22,7 @@ import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
-import { quietStep, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
+import { quietStep, stepForEvent, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { WallNudge, WallQuietStep } from './WallNudge'
 import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 import WallEvening from './WallEvening'
@@ -128,6 +128,8 @@ export default function WallView(props: WallViewProps) {
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const selected = selectedId ? eventsById.get(selectedId) ?? null : null
+  // A project step's calendar event opens with its step (P3.23).
+  const selectedStep = selected && todos ? stepForEvent(todos.list, selected.id) : null
 
   // While editing, the wall behind the sheet shows the day as it would be saved.
   // The same goes for the assistant's card while it waits for a yes.
@@ -463,6 +465,9 @@ export default function WallView(props: WallViewProps) {
           onPreview={setDraftPreview}
           onDelete={deleteEvent}
           startOn={selectedForWho ? 'who' : undefined}
+          projectStep={selectedStep}
+          onStepDone={selectedStep && todos ? async () => { await todos.act({ action: 'project_edit', id: selectedStep.projectId, op: 'done_step', args: { step_id: selectedStep.stepId } }) } : undefined}
+          onOpenProject={selectedStep && todos ? () => { setSelectedId(null); openTodo(); setTodoProject(selectedStep.projectId) } : undefined}
         />
       )}
       {adding && !selected && (

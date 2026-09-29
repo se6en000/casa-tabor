@@ -49,6 +49,10 @@ export interface WallEventSheetProps {
   onPreview: (event: EditableEvent | null) => void
   /** Open straight into editing on the Who tab — from the "No one yet" row (board 08a). */
   startOn?: 'who'
+  /** A project step's calendar event (P3.23): which step it is, ticking it, and its project. */
+  projectStep?: { project: string; title: string; number: number; total: number; done: boolean } | null
+  onStepDone?: () => Promise<void>
+  onOpenProject?: () => void
 }
 
 const midnight = (d: Date) => {
@@ -71,7 +75,10 @@ function placeAddressLine(place: DraftPlace): string | null {
 
 function whenLabel(event: EditableEvent, now: Date): string {
   if (isReminder(event) && event.has_due_date === false) return 'ANYTIME'
-  const start = new Date(event.start_time)
+  // All-day events are stored from midnight UTC (Google's way): their day is the UTC date, not the
+  // local one (which in New York is the evening before).
+  const utc = new Date(event.start_time)
+  const start = event.all_day ? new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate()) : utc
   const end = new Date(event.end_time)
   const days = Math.round((midnight(start).getTime() - midnight(now).getTime()) / 86_400_000)
   const day = days === 0 ? 'TODAY' : days === 1 ? 'TOMORROW' : start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()
@@ -81,7 +88,7 @@ function whenLabel(event: EditableEvent, now: Date): string {
 }
 
 export default function WallEventSheet(props: WallEventSheetProps) {
-  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview } = props
+  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview, projectStep = null, onStepDone, onOpenProject } = props
   const queryClient = useQueryClient()
   // Adding by touch: the same sheet, opening straight into editing with the keyboard on the title.
   const isNew = event.id === NEW_EVENT_ID
@@ -302,6 +309,19 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
             <People event={event} trip={trip} nameOf={nameOf} pigmentOf={pigmentOf} />
 
+            {projectStep && (
+              <div className="flex flex-col gap-[12px] rounded-[22px] border-[1.5px] border-solid border-wall-brass px-[24px] py-[18px]">
+                <div className={`${eyebrow} text-wall-brass-ink`}>A PROJECT STEP</div>
+                <div className="text-wall-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
+                <div className="flex gap-[12px]">
+                  {projectStep.done
+                    ? <span className="flex h-[60px] items-center text-wall-body font-semibold text-wall-brass-ink">Done</span>
+                    : <button type="button" className={darkPill} onClick={() => void onStepDone?.()}>Done — tick the step</button>}
+                  {onOpenProject && <button type="button" className={pill} onClick={onOpenProject}>Open project</button>}
+                </div>
+              </div>
+            )}
+
             {trip ? (
               <div className="flex flex-col gap-[12px]">
                 <div className={`${eyebrow} text-wall-ink-2`}>THE TRIP</div>
@@ -372,7 +392,9 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               </div>
             ) : (
               <div className="mt-auto flex items-center gap-[14px]">
-                {isRepeating(event) ? (
+                {projectStep ? (
+                  <span className="text-wall-detail text-wall-ink-2">Its dates and name come from the project: change them on the project page.</span>
+                ) : isRepeating(event) ? (
                   <span className="text-wall-detail text-wall-ink-2">This repeats. Change or delete it from Calendar in the menu for now.</span>
                 ) : (
                   <>

@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
       sb.from('todo_details').select('event_id, shape, minutes, cost_cents, next_step, needs, snoozed_until, snooze_count, project_id, sorted_by, suggestion'),
       // The shelf (P3.23) draws each project's card from all of this.
       sb.from('todo_projects').select('id, title, status, aim_date, aim_firm, budget_cents, people, phone, yearly, season_id, paused_until, notes, created_at').in('status', ['active', 'paused']),
-      sb.from('todo_steps').select('id, project_id, grp, position, title, minutes, cost_cents, who, done_at, reminder_event_id, child_project_id, cal_start, cal_end'),
+      sb.from('todo_steps').select('id, project_id, grp, position, title, minutes, cost_cents, who, done_at, reminder_event_id, child_project_id, cal_start, cal_end, cal_event_id'),
       // Morning-prep reminders are the old prep system's, not his list.
       sb.from('event_enrichments').select('event_id').eq('category', 'morning_prep'),
     ])

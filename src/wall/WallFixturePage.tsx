@@ -158,6 +158,7 @@ const summary = (d: TodoProjectDetail) => {
   return { id: d.project.id, title: d.project.title, done: d.steps.filter((x) => x.done_at).length, total: d.steps.length, next: open[0]?.title ?? null, nextEventId: null, aimDate: d.project.aim_date, detail: d }
 }
 const SHELF = [PAINT, HALLOWEEN, FLOOR].map(summary)
+const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') === '1'
 
 export default function WallFixturePage() {
   const fontsReady = useFixtureFonts()
@@ -174,6 +175,11 @@ export default function WallFixturePage() {
     ...(new URLSearchParams(window.location.search).get('nobody') ? [{
       id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
       all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
+    } as unknown as WallEvent] : []),
+    // `?stepEvent=1` (P3.23): a project step's all-day calendar event today.
+    ...(STEP_EVENT ? [{
+      id: 'ev-colours', title: 'Paint the house: Pick colours: 3 sample pots', start_time: '2026-09-25T00:00:00Z', end_time: '2026-09-25T23:59:59Z',
+      all_day: true, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
     } as unknown as WallEvent] : []),
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
@@ -226,13 +232,27 @@ export default function WallFixturePage() {
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => ({ live: COMING_UP_LIVE, projects: COMING_UP_PROJECTS }[new URLSearchParams(window.location.search).get('comingUp') ?? ''] ?? COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
-  const [todoList, setTodoList] = useState<TodoList>(() => ({ ...TODOS, projects: SHELF }))
+  const [todoList, setTodoList] = useState<TodoList>(() => ({
+    ...TODOS,
+    projects: STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
+    // A dated step whose day has passed, asked about.
+    pastSteps: STEP_EVENT ? [{ id: 'hw-yard', projectId: 'pr-halloween', project: 'Halloween decorations', title: 'The yard: tombstones and the fog machine', date: '2026-09-24', start: '2026-09-24' }] : [],
+  }))
   const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
   const todos = {
     list: todoList,
     useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),
     act: async (r: TodoAction) => {
-      if (r.action === 'project_edit') return setProjects((all) => ({ ...all, [r.id]: applyProjectEdit(all[r.id], r.op, r.args) }))
+      if (r.action === 'project_edit') {
+        // A past step answered (done, or moved) leaves the question; a step done ticks on its card too.
+        const stepId = String(r.args?.step_id ?? '')
+        setTodoList((l) => ({
+          ...l,
+          pastSteps: (l.pastSteps ?? []).filter((st) => st.id !== stepId),
+          projects: l.projects.map((p) => (p.id === r.id && p.detail && r.op === 'done_step' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === stepId ? { ...st, done_at: new Date().toISOString() } : st)) } } : p)),
+        }))
+        return setProjects((all) => ({ ...all, [r.id]: applyProjectEdit(all[r.id], r.op, r.args) }))
+      }
       if (r.action === 'update') {
         const change = (i: TodoItem) => (i.id === r.id ? { ...i, ...(r.patch.title ? { title: r.patch.title } : {}), ...('due' in r.patch ? { due: r.patch.due ?? null } : {}) } : i)
         return setTodoList((l) => ({ ...l, nextUp: l.nextUp.map(change), groups: Object.fromEntries(Object.entries(l.groups).map(([k, v]) => [k, v.map(change)])) as TodoList['groups'] }))
