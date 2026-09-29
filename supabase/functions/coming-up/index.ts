@@ -7,7 +7,7 @@
 //   'send_pokes'               → morning push for items whose plan-by day is today, once each (cron coming-up-daily-pokes)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { memberNamed } from '../_shared/family-names.mjs'
-import { buildComingUp } from '../_shared/coming-up.mjs'
+import { buildComingUp, SEASONS } from '../_shared/coming-up.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     for (const r of [eventsRes, giftsRes, stateRes, rulesRes]) if (r.error) throw new Error(r.error.message)
     const state = Object.fromEntries((stateRes.data ?? []).map((s: Record<string, unknown>) => [s.item_key as string, s]))
     const rules = rulesRes.data ?? []
-    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [] }) as Item[]
+    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [], seasons: SEASONS }) as Item[]
 
     // The screens show every gift idea (on the wall too, for now — Jake, 2026-09-27).
     // Each under the family member's own name, so "Olivia" and "Liv" are one person on screen.

@@ -20,6 +20,8 @@ const KEPT = {
 }
 // First match wins.
 const KINDS = [
+  // Spirit and theme days (Jake, 2026-09-29): the outfit, before "Holiday Spirit Day" reads as no school.
+  { kind: 'spirit_day', re: /\b(spirit (day|week)|pajama day|pj day|crazy (hair|socks?) day|hat day|twin day|jersey day|theme day|dress[- ]up day|color day|character day|decades? day|pink out|white out|tie[- ]dye day|red ribbon|wear (your |a |the )?\w+)\b/i, lead: 5, step: 'Outfit ready?' },
   { kind: 'hosting', re: /\b(thanksgiving|christmas day|easter|passover|hanukkah)\b/i, lead: 30, step: 'Hosting or going?' },
   { kind: 'no_school', re: /\b(holiday|no school|columbus day|veterans day|labor day|memorial day|mlk|presidents'? day|teacher (planning|workday)|early release|spring break|winter break)\b/i, allDayOnly: true, lead: 14, step: 'No school? Who’s with the kids' },
   { kind: 'deadline', re: /\b(due|deadline|registration|register|sign[- ]?ups?|forms?|aktivate)\b/i, lead: 7, step: 'Get it done' },
@@ -31,10 +33,30 @@ const KINDS = [
   { kind: 'birthday', re: /\b(birthday|b-?day|anniversary)\b/i, lead: 21, step: 'Card or gift?', gifts: true },
   { kind: 'gift_holiday', re: /\b(mother'?s day|father'?s day|valentine'?s day)\b/i, lead: 14, step: 'Card or gift?' },
   { kind: 'sympathy', re: /\b(funeral|memorial service|celebration of life|wake|shiva)\b/i, lead: 2, step: 'Flowers or a card' },
+  // Visitors (Jake, 2026-09-29): the guest room and groceries.
+  { kind: 'guests', re: /\b(visiting|visit from|in town|staying with us|house ?guests?|coming to stay)\b/i, lead: 5, step: 'Guest room and groceries' },
   { kind: 'big_day', re: /\b(tryouts?|tournament|recital|concert|performance|showcase|competition|championship|camp)\b/i, lead: 14, step: 'Check what’s needed and who drives' },
   { kind: 'travel', re: /\b(flight|trip|hotel|vacation|cruise|travel)\b/i, lead: 30, step: 'Book and plan the trip' },
   { kind: 'appointment', re: /\b(dentist|doctor|pediatric\w*|orthodont\w*|check-?up|appointment|surgery|clinic|physical)\b/i, lead: 7, step: 'Make sure it works with work' },
   { kind: 'outing', re: /\b(preview|exhibition|tickets?|gala|fundraiser|premiere|play|musical)\b/i, lead: 7, step: 'Tickets, and who’s going' },
+]
+
+// The seasons, which no calendar carries (Jake, 2026-09-29: "we go all out" for Halloween and
+// Christmas; Halloween decorations and costumes "more or less now so we beat the rush", Christmas
+// decorating before Thanksgiving, gifts from November). `date` is the day itself; `poke` is when to start.
+const thanksgiving = (y) => {
+  const first = new Date(Date.UTC(y, 10, 1)).getUTCDay()
+  return `${y}-11-${String(1 + ((4 - first + 7) % 7) + 21).padStart(2, '0')}`
+}
+export const SEASONS = [
+  { id: 'halloween_decor', title: 'Halloween decorations', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Decorate now, before the rush' },
+  { id: 'halloween_costumes', title: 'Halloween costumes', date: (y) => `${y}-10-31`, poke: (y) => `${y}-09-15`, step: 'Pick and order costumes' },
+  { id: 'thanksgiving_prep', title: 'Thanksgiving prep', date: thanksgiving, poke: (y) => addDays(thanksgiving(y), -14), step: 'Plans, the menu and groceries' },
+  { id: 'christmas_decor', title: 'Christmas decorating', date: (y) => `${y}-12-25`, poke: (y) => addDays(thanksgiving(y), -21), step: 'Decorate before Thanksgiving' },
+  { id: 'christmas_lights', title: 'Christmas lights', date: (y) => `${y}-12-25`, poke: (y) => addDays(thanksgiving(y), -21), step: 'Lights up before Thanksgiving' },
+  { id: 'christmas_gifts', title: 'Christmas gifts', date: (y) => `${y}-12-25`, poke: (y) => `${y}-11-01`, step: 'Start the gift list' },
+  { id: 'christmas_cards', title: 'Christmas cards', date: (y) => `${y}-12-25`, poke: (y) => `${y}-11-15`, step: 'The photo and the card list' },
+  { id: 'hurricane', title: 'Hurricane season', date: (y) => `${y}-06-01`, poke: (y) => `${y}-05-15`, step: 'Check the storm supplies' },
 ]
 
 const localDate = (e) => {
@@ -82,7 +104,7 @@ const ideaNames = (g, family) => {
 }
 const wholeWord = (title, name) => new RegExp(`(^|[^a-z])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z])`, 'i').test(title)
 
-export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [], family = [] }) {
+export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [], family = [], seasons = [] }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const horizon = addDays(today, COMING_UP_WEEKS * 7)
   const seen = new Set()
@@ -115,6 +137,20 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     // Whose ideas these are (family members only), so a phone can keep them from that person.
     const ideasFor = matched ? [...new Set(matched.map((g) => ideaOwner(g, family)?.id).filter(Boolean))] : null
     items.push({ key: e.id, kind: k.kind, title, date, daysAway: daysBetween(today, date), nextStep: k.step, pokeOn, late: pokeOn < today, ...(ideas ? { ideas, ideasFor } : {}) })
+  }
+  // This year's season, or next year's once this one has passed; keyed by year so "done" lasts a year.
+  const year = Number(today.slice(0, 4))
+  for (const season of seasons) {
+    for (const y of [year, year + 1]) {
+      const date = season.date(y)
+      const pokeOn = season.poke(y)
+      if (date < today || pokeOn > horizon) continue
+      const key = `season:${season.id}:${y}`
+      const s = state[key] ?? {}
+      if (s.done_at || s.dismissed_at || (s.snoozed_until && s.snoozed_until > today)) break
+      items.push({ key, kind: 'season', title: season.title, date, daysAway: daysBetween(today, date), nextStep: s.custom_step ?? season.step, pokeOn, late: pokeOn < today })
+      break
+    }
   }
   return items.sort((a, b) => a.pokeOn.localeCompare(b.pokeOn) || a.date.localeCompare(b.date))
 }

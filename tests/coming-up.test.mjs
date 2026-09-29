@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildComingUp } from '../supabase/functions/_shared/coming-up.mjs'
+import { buildComingUp, SEASONS } from '../supabase/functions/_shared/coming-up.mjs'
 
 // The Sunday "coming up" digest (FAMILY_WALL_PLAN.md P3.19 step 3): only what needs lead time, each
 // with one next step and one "poke me" date. Birthdays and relationship dates two months ahead
@@ -89,7 +89,7 @@ test('only six weeks of events, but dates we keep from two months out', () => {
 // Jake, 2026-09-27: "if there's a spirit day coming up for Emme and Owen I would like to know because
 // they usually need specific kind of T-shirts … I need a way to easily mark it so it goes on the list."
 test('something you add by voice goes on the list with your step and your notice', () => {
-  const spirit = ev('spirit', "St. Patrick's Spirit Day", '2026-10-16T08:00:00-04:00')
+  const spirit = ev('spirit', "St. Patrick's parade at school", '2026-10-16T08:00:00-04:00')
   assert.equal(buildComingUp({ now, events: [spirit] }).length, 0, 'Casa would not catch it on its own')
   const state = { spirit: { custom_step: 'Green shirts for Emme and Owen', custom_lead_days: 5 } }
   const [item] = buildComingUp({ now, events: [spirit], state })
@@ -195,4 +195,70 @@ test('more occasions: a gift (housewarming, communion, gift exchange), something
   assert.equal(items['snack'].nextStep, 'Get what to bring')
   assert.equal(items['fun'].nextStep, 'Flowers or a card')
   assert.equal(items['val'], undefined, 'February is beyond the six weeks')
+})
+
+// Jake, 2026-09-29: "yes on visitors/guests, spirit/theme days … seasonal (halloween decorating, put up
+// christmas lights, christmas gifts (start that in November), Thanksgiving prep and plans … extra
+// emphasis on christmas prep … xmas decorating before thanksgiving, halloween decorations and costumes
+// have to get done more or less now so we beat the rush)".
+test('visitors: the guest room and groceries, a few days ahead', () => {
+  const items = byKey(buildComingUp({ now, events: [
+    ev('gma', 'Grandma visiting', '2026-10-09T15:00:00-04:00'),
+    allDay('sis', 'Aunt Kate in town', '2026-10-16'),
+    ev('doc', 'Doctor visit', '2026-10-09T09:00:00-04:00'),
+  ] }))
+  assert.equal(items['gma'].kind, 'guests')
+  assert.equal(items['gma'].nextStep, 'Guest room and groceries')
+  assert.equal(items['gma'].pokeOn, '2026-10-04')
+  assert.equal(items['sis'].kind, 'guests')
+  assert.equal(items['doc'].kind, 'appointment', 'a doctor visit is not a visitor')
+})
+
+test('spirit and theme days: the outfit, before a school "holiday" or party reads them', () => {
+  const items = byKey(buildComingUp({ now, events: [
+    allDay('pj', 'Pajama Day', '2026-10-06'),
+    allDay('hat', 'Spirit Week: Crazy Hair Day', '2026-10-07'),
+    allDay('red', 'Red Ribbon Week — wear red', '2026-10-26'),
+    allDay('xmas', 'Holiday Spirit Day', '2026-12-18'),
+    allDay('costume', 'Book Character Day', '2026-10-30'),
+  ] }))
+  for (const k of ['pj', 'hat', 'red', 'costume']) {
+    assert.equal(items[k].kind, 'spirit_day', k)
+    assert.equal(items[k].nextStep, 'Outfit ready?', k)
+  }
+  assert.equal(items['pj'].pokeOn, '2026-10-01')
+  assert.equal(items['xmas'], undefined, 'December is beyond the six weeks')
+})
+
+test('the seasons come round without a calendar entry: Halloween now, Christmas gifts from November', () => {
+  const items = buildComingUp({ now, events: [], seasons: SEASONS })
+  const by = Object.fromEntries(items.map((i) => [i.key, i]))
+  assert.equal(by['season:halloween_decor:2026'].late, true, 'Halloween decorating is already due')
+  assert.equal(by['season:halloween_costumes:2026'].late, true)
+  assert.equal(by['season:halloween_costumes:2026'].date, '2026-10-31')
+  assert.equal(by['season:christmas_gifts:2026'].pokeOn, '2026-11-01')
+  assert.equal(by['season:christmas_gifts:2026'].date, '2026-12-25')
+  assert.equal(by['season:christmas_decor:2026'].late, false, 'Christmas decorating already shows, not yet due')
+  assert.equal(by['season:hurricane:2027'], undefined, 'next June is far off')
+  for (const i of items) assert.equal(i.kind, 'season')
+})
+
+test('Christmas decorating and lights come before Thanksgiving; Thanksgiving prep two weeks ahead', () => {
+  const oct = new Date('2026-10-20T09:00:00-04:00')
+  const by = Object.fromEntries(buildComingUp({ now: oct, events: [], seasons: SEASONS }).map((i) => [i.key, i]))
+  // Thanksgiving 2026 is Nov 26: decorate and light up in the three weeks before it.
+  assert.equal(by['season:christmas_decor:2026'].pokeOn, '2026-11-05')
+  assert.equal(by['season:christmas_decor:2026'].nextStep, 'Decorate before Thanksgiving')
+  assert.equal(by['season:christmas_lights:2026'].pokeOn, '2026-11-05')
+  assert.equal(by['season:thanksgiving_prep:2026'].date, '2026-11-26')
+  assert.equal(by['season:thanksgiving_prep:2026'].pokeOn, '2026-11-12')
+  assert.equal(by['season:halloween_decor:2026'].late, true)
+})
+
+test('a season marked done stays done that year and comes back the next', () => {
+  const state = { 'season:halloween_decor:2026': { done_at: '2026-09-29T20:00:00Z' } }
+  const keys = buildComingUp({ now, events: [], seasons: SEASONS, state }).map((i) => i.key)
+  assert.ok(!keys.includes('season:halloween_decor:2026'))
+  const nextYear = buildComingUp({ now: new Date('2027-09-20T09:00:00-04:00'), events: [], seasons: SEASONS, state }).map((i) => i.key)
+  assert.ok(nextYear.includes('season:halloween_decor:2027'))
 })
