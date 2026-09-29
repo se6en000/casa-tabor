@@ -448,6 +448,10 @@
       {
         "path": "src/wall/WallChooser.tsx",
         "reason": "Family Wall: picking a project (Move to…, a project inside, Part of) or confirming a delete (P3.23) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–76px targets."
+      },
+      {
+        "path": "src/wall/WallProjectShelf.tsx",
+        "reason": "Family Wall: the projects shelf on the To do list — a card per project, and \"N more\" (P3.23, canvas 10a, approved 2026-09-29) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 220px cards."
       }
     ]
   }

@@ -80,11 +80,22 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
     unsorted: rest.filter((i) => i.shape === 'unsorted'),
   }
 
+  // Projects (P3.23): the shelf draws each card from the project and its steps. A project inside
+  // another rides on its parent's card; a paused one still shows.
+  const stepsOf = (id) => (steps ?? []).filter((s) => s.project_id === id).sort((a, b) => (a.grp ?? a.position) - (b.grp ?? b.position) || a.position - b.position)
+  const byId = new Map((projects ?? []).map((p) => [p.id, p]))
+  const childIds = new Set((steps ?? []).map((s) => s.child_project_id).filter(Boolean))
+  const childOf = (id) => {
+    const p = byId.get(id)
+    if (!p) return null
+    const own = stepsOf(id)
+    return { id, title: p.title, done: own.filter((s) => s.done_at).length, total: own.length, next: own.find((s) => !s.done_at)?.title ?? null, status: p.status }
+  }
   const projectList = (projects ?? [])
-    .filter((p) => p.status === 'active')
+    .filter((p) => (p.status === 'active' || p.status === 'paused') && !childIds.has(p.id))
     .map((p) => {
-      const own = (steps ?? []).filter((s) => s.project_id === p.id).sort((a, b) => a.position - b.position)
-      const current = own.find((s) => !s.done_at) ?? null
+      const own = stepsOf(p.id)
+      const current = own.find((s) => !s.done_at && !s.child_project_id) ?? null
       return {
         id: p.id,
         title: p.title,
@@ -93,6 +104,10 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         next: current?.title ?? null,
         nextEventId: current?.reminder_event_id ?? null,
         aimDate: p.aim_date ?? null,
+        detail: {
+          project: p,
+          steps: own.map((s) => ({ fits: [], ...s, child: s.child_project_id ? childOf(s.child_project_id) : null })),
+        },
       }
     })
 

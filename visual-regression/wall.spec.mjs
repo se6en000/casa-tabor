@@ -670,16 +670,21 @@ test('wall: no "No one yet" row when everything has someone', async ({ page }) =
 // To do (P3.22, board 09b, approved 2026-09-28).
 test('wall: To do — the tile opens Next up; Done and "Not now" answer an item; groups open one at a time; Casa noticed waits for a yes (board 09b)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00')
-  await page.getByRole('button', { name: /^To do: 4 ready now/ }).click()
-  await expect(page.getByText('4 ready now')).toBeVisible()
+  await page.getByRole('button', { name: /^To do: 3 ready now/ }).click()
+  await expect(page.getByText('3 ready now')).toBeVisible()
   await expect(page.getByText('Replace the outside GFI outlet')).toBeVisible()
   await expect(page.getByText('Quick one · was due Aug 24 · 15 min · Call')).toBeVisible()
+  // Projects on their own shelf (P3.23, canvas 10a), not a folded group.
+  const shelf = page.getByRole('region', { name: 'Projects' })
+  await expect(shelf.getByText('PROJECTS · 3 GOING')).toBeVisible()
+  await expect(shelf.getByText('Inside: Stucco cracks: seal and patch · 1 of 4')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Projects/ })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-todo.png')
 
-  // Done takes it off.
-  const anthony = page.locator('div').filter({ hasText: /^Call Anthony about house insurance alternatives/ }).first()
-  await page.getByRole('button', { name: 'Done' }).nth(3).click()
+  // Done takes it off; the next one moves up beside the shelf.
+  await page.getByRole('button', { name: 'Done' }).nth(2).click()
+  await expect(page.getByText('Call Anthony about house insurance alternatives')).toBeVisible()
   await expect(page.getByText('3 ready now')).toBeVisible()
   // Not now: a quiet link that offers when; picking one takes it out of Next up.
   await page.getByRole('button', { name: 'Not now' }).first().click()
@@ -687,9 +692,10 @@ test('wall: To do — the tile opens Next up; Done and "Not now" answer an item;
   await page.getByRole('button', { name: '3 days' }).click()
   await expect(page.getByText('2 ready now')).toBeVisible()
 
-  // One group open at a time.
+  // One group open at a time; the shelf steps aside while one is open.
   await page.getByRole('button', { name: /^Fixes/ }).click()
   await expect(page.getByText('Troubleshoot the water heater E05 error').first()).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Projects' })).toHaveCount(0)
   await page.getByRole('button', { name: /^Quick ones/ }).click()
   await expect(page.getByRole('button', { name: /^Fixes/ })).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByText('Look for a cable to fix the pool')).toBeVisible()
@@ -755,8 +761,7 @@ const openTodo = async (page) => {
 // you work; a step's details open beside the list; Project settings is the same screen for every project.
 const openPaint = async (page) => {
   await openTodo(page)
-  await page.getByRole('button', { name: /^Projects/ }).click()
-  await page.getByRole('button', { name: 'Open Paint the house' }).click()
+  await page.getByRole('region', { name: 'Projects' }).getByRole('button', { name: 'Open Paint the house' }).click()
   await expect(page.getByText('3 of 9 done')).toBeVisible()
 }
 const typeOnWall = async (page, text) => {
@@ -764,7 +769,7 @@ const typeOnWall = async (page, text) => {
   for (const key of text) await keyboard.getByRole('button', { name: key === ' ' ? 'space' : new RegExp(`^${key}$`, 'i') }).first().click()
   await keyboard.getByRole('button', { name: 'Done', exact: true }).click()
 }
-const plan = (page) => page.locator('button[aria-label^="Open "]').filter({ hasNotText: /Paint the house|^MT$/ }).allInnerTexts()
+const plan = (page) => page.getByRole('region', { name: /— project$/ }).locator('button[aria-label^="Open "]').allInnerTexts()
 
 test('wall: a project page — Now, Then lines, a project inside; drag a step beside another; add one on a Then line (canvas 10b)', async ({ page }) => {
   await openPaint(page)
@@ -895,8 +900,9 @@ test('wall: Project settings — the goal, who does what, the phone, every year,
 
 test('wall: a to-do — tap it to add a date and time, then delete it', async ({ page }) => {
   await openTodo(page)
-  await page.getByRole('button', { name: 'Edit Call Anthony about house insurance alternatives' }).click()
-  const sheet = page.getByRole('region', { name: /Call Anthony about house insurance alternatives — edit/ })
+  await page.getByRole('button', { name: /^Quick ones/ }).click()
+  await page.getByRole('button', { name: 'Edit Look for a cable to fix the pool' }).click()
+  const sheet = page.getByRole('region', { name: /Look for a cable to fix the pool — edit/ })
   await expect(sheet.getByText('No date', { exact: true }).first()).toBeVisible()
   await sheet.getByRole('button', { name: 'Add a date' }).click()
   await sheet.getByRole('button', { name: 'Wednesday, September 30' }).click()

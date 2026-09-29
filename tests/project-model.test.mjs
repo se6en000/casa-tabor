@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { planGroups, doneSteps, arrangement, moveStep, nudgeStep, placeNew, dropTargetAt, effortText, moneyText, projectStats, whoOptions } from '../src/wall/projectModel.ts'
+import { shelfCard, hoursText, planGroups, doneSteps, arrangement, moveStep, nudgeStep, placeNew, dropTargetAt, effortText, moneyText, projectStats, whoOptions } from '../src/wall/projectModel.ts'
 
 // The project page (P3.23, canvas 10b/10c, approved by Jake 2026-09-29): top to bottom is the order;
 // steps side by side share a group; "Then" lines separate groups. Jake: "it should be very easy to
@@ -128,4 +128,26 @@ test('the fixture edits the way the database does: arrange, add here, a project 
   assert.equal(d.project.budget_cents, 900000)
   d = applyProjectEdit(d, 'status', { status: 'paused', until: '2026-10-15' })
   assert.equal(d.project.paused_until, '2026-10-15')
+})
+
+// The shelf on the To do list (canvas 10a): one card per project, from the same numbers as its page.
+test('a shelf card: a segment per step, steps and your time and money, the target and your pace, what’s Now, a project inside', () => {
+  const c = shelfCard(PAINT, '2026-09-29')
+  assert.equal(c.kind, 'PROJECT')
+  assert.deepEqual(c.segments, ['done', 'done', 'done', 'now', 'inside', 'later', 'later', 'later', 'later', 'later'])
+  assert.equal(c.stats, '3 of 9 steps · ~4.5 hr yours · $6,040 left')
+  assert.equal(c.target, 'Target Sat, Nov 21 · 53 days')
+  assert.deepEqual(c.pace, { text: 'On pace: Oct 20', late: false })
+  assert.deepEqual(c.now, ['colours'])
+  assert.deepEqual(c.inside, { title: 'Stucco cracks', done: 1, total: 4 })
+  const late = shelfCard({ ...PAINT, project: { ...PAINT.project, aim_date: '2026-10-10' } }, '2026-09-29')
+  assert.deepEqual(late.pace, { text: 'At your pace: Oct 20, 10 days late', late: true })
+  assert.equal(shelfCard({ ...PAINT, project: { ...PAINT.project, yearly: true } }, '2026-09-29').kind, 'EVERY YEAR')
+  assert.equal(shelfCard({ ...PAINT, project: { ...PAINT.project, status: 'paused', paused_until: '2026-10-15' } }, '2026-09-29').kind, 'PAUSED UNTIL OCT 15')
+})
+
+test('totals in hours: 48 hours of work is "48 hr", not "6 days"', () => {
+  assert.equal(hoursText(2880), '48 hr')
+  assert.equal(hoursText(270), '4.5 hr')
+  assert.equal(hoursText(45), '45 min')
 })

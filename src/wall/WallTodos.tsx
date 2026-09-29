@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { GROUPS, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
+import { GROUPS, nextUpRoom, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion } from './todos'
 import { useTodoProject } from './useTodos'
 import WallProject from './WallProject'
+import WallProjectShelf from './WallProjectShelf'
 import WallTodoSheet from './WallTodoSheet'
 
 // To do (P3.22, board 09b, approved by Jake 2026-09-28): what needs doing, from his Reminders list,
@@ -90,6 +91,9 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   const project = useProject(projectId)
   const openItem = (item: TodoItem) => (item.projectId ? setProjectId(item.projectId) : setEditing(item))
   const clock = formatWallClock(now)
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  // The shelf steps aside while a folded group is open, so the group has the room.
+  const showShelf = list.projects.some((p) => p.detail) && openGroup === null
   const act = async (request: TodoAction) => {
     setSnoozingId(null)
     await onAct(request)
@@ -99,9 +103,10 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   // an empty group isn't shown.
   const groups = [
     ...(list.suggestions.length ? [{ key: 'noticed', label: 'Casa noticed', count: list.suggestions.length, summary: `${list.suggestions.length} for a yes` }] : []),
-    ...GROUPS.map((g) => {
-      const count = g.key === 'projects' ? list.projects.length : list.groups[g.key].length
-      const names = g.key === 'projects' ? list.projects.map((p) => p.title) : list.groups[g.key].map((i) => i.title)
+    // Projects have their own shelf above (P3.23, canvas 10a), not a folded group.
+    ...GROUPS.filter((g) => g.key !== 'projects').map((g) => {
+      const count = list.groups[g.key].length
+      const names = list.groups[g.key].map((i) => i.title)
       return { key: g.key, label: g.label, count, summary: names.slice(0, 2).join(' · ') + (names.length > 2 ? ' · …' : '') }
     }).filter((g) => g.count > 0),
   ]
@@ -158,7 +163,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
           <div className="flex min-w-0 flex-col gap-[8px]">
             <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">TO DO · WHAT NEEDS DOING</div>
-            <div className="font-display text-wall-move font-semibold">{list.nextUp.length ? `${list.nextUp.length} ready now` : 'All clear for now'}</div>
+            <div className="font-display text-wall-move font-semibold">{list.nextUp.length ? `${Math.min(list.nextUp.length, nextUpRoom(list))} ready now` : 'All clear for now'}</div>
             <div className="truncate text-wall-body text-wall-ink-2">
               {list.sorting ? 'Casa is sorting what’s new from your Reminders. ' : ''}The rest stays folded — open a group to see it.
             </div>
@@ -167,13 +172,15 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </header>
 
+      {showShelf && <WallProjectShelf projects={list.projects} today={today} onOpen={setProjectId} />}
+
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         <div className="flex min-w-0 flex-[1.35] flex-col overflow-hidden">
           <div className="pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NEXT UP</div>
           {list.nextUp.length === 0 && (
             <div className="font-display text-wall-date italic text-wall-ink-2">Nothing waiting right now. Anything you add to Reminders shows up here, sorted.</div>
           )}
-          {list.nextUp.map((item) => (
+          {list.nextUp.slice(0, showShelf ? nextUpRoom(list) : 4).map((item) => (
             <NextRow
               key={item.id}
               item={item}

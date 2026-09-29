@@ -22,7 +22,11 @@ export interface TodoItem {
   projectId: string | null
   suggestion: { kind: 'merge' | 'done' | 'shopping'; with?: string; reason?: string } | null
 }
-export interface TodoProject { id: string; title: string; done: number; total: number; next: string | null; nextEventId: string | null; aimDate: string | null }
+export interface TodoProject {
+  id: string; title: string; done: number; total: number; next: string | null; nextEventId: string | null; aimDate: string | null
+  /** The project and its steps, for its card on the shelf (P3.23, canvas 10a). */
+  detail?: Pick<ProjectDetail, 'project' | 'steps'>
+}
 export interface TodoSuggestion { id: string; title: string; kind: 'merge' | 'done' | 'shopping'; reason: string; with: string | null; withTitle: string | null }
 export interface TodoList {
   nextUp: TodoItem[]
@@ -58,13 +62,16 @@ export function sizeLine(item: TodoItem): string {
   return [...parts, ...item.needs].join(' · ')
 }
 
+/** How many of Next up fit on the screen: three beside the projects shelf (canvas 10a), four without. */
+export const nextUpRoom = (list: Pick<TodoList, 'projects'>) => (list.projects.some((p) => p.detail) ? 3 : 4)
+
 /** The week strip's To do tile: how many are ready now, and what else waits. */
 export function todoTile(list: Pick<TodoList, 'nextUp' | 'projects' | 'suggestions'>) {
   const extras = [
     list.suggestions.length ? `${list.suggestions.length} for a yes` : null,
     list.projects.length ? `${list.projects.length} project${list.projects.length === 1 ? '' : 's'}` : null,
   ].filter(Boolean)
-  return { ready: list.nextUp.length, line: extras.length ? extras.join(' · ') : list.nextUp.length ? 'Nothing else waiting' : 'All clear' }
+  return { ready: Math.min(list.nextUp.length, nextUpRoom(list)), line: extras.length ? extras.join(' · ') : list.nextUp.length ? 'Nothing else waiting' : 'All clear' }
 }
 
 /** The folded groups on the right, in order. */

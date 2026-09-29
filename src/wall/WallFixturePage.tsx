@@ -131,6 +131,27 @@ const STUCCO: TodoProjectDetail = {
   others: [{ id: 'pr-paint', title: 'Paint the house' }],
 }
 
+// The shelf's other projects (canvas 10a): a yearly one on pace, and one not started.
+const HALLOWEEN: TodoProjectDetail = {
+  project: { ...PAINT.project, id: 'pr-halloween', title: 'Halloween decorations', aim_date: '2026-10-31', budget_cents: null, yearly: true, created_at: '2026-09-15T12:00:00Z', people: [{ name: 'Me' }, { name: 'Kelly' }, { name: 'The kids' }], notes: null },
+  steps: numbered([
+    pstep('hw-bins', 1, 'Get the bins from the garage', { done_at: '2026-09-19T12:00:00Z', minutes: 30 }),
+    pstep('hw-inside', 2, 'Inside: the mantel and the stairs', { done_at: '2026-09-23T12:00:00Z', minutes: 90 }),
+    pstep('hw-yard', 3, 'The yard: tombstones and the fog machine', { minutes: 120, who: 'Me' }),
+    pstep('hw-porch', 3, 'The porch: lights and the spider web', { minutes: 60, who: 'The kids' }),
+    pstep('hw-test', 4, 'Test the timers after dark', { minutes: 20 }),
+  ]),
+}
+const FLOOR: TodoProjectDetail = {
+  project: { ...PAINT.project, id: 'pr-floor', title: 'Redo floorboards on the roof patio', aim_date: null, budget_cents: null, created_at: '2026-09-28T12:00:00Z', people: [{ name: 'Me' }, { name: 'Kelly' }], notes: null },
+  steps: numbered(['Measure the patio', 'Buy the boards', 'Pull up the old boards', 'Lay the new ones', 'Seal them'].map((t, i) => pstep(`fl-${i}`, i + 1, t, { minutes: 120 }))),
+}
+const summary = (d: TodoProjectDetail) => {
+  const open = d.steps.filter((x) => !x.done_at && !x.child_project_id)
+  return { id: d.project.id, title: d.project.title, done: d.steps.filter((x) => x.done_at).length, total: d.steps.length, next: open[0]?.title ?? null, nextEventId: null, aimDate: d.project.aim_date, detail: d }
+}
+const SHELF = [PAINT, HALLOWEEN, FLOOR].map(summary)
+
 export default function WallFixturePage() {
   const fontsReady = useFixtureFonts()
   const now = new Date(new URLSearchParams(window.location.search).get('at') ?? '2026-09-25T07:12:00')
@@ -198,8 +219,8 @@ export default function WallFixturePage() {
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
-  const [todoList, setTodoList] = useState<TodoList>(TODOS)
-  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO })
+  const [todoList, setTodoList] = useState<TodoList>(() => ({ ...TODOS, projects: SHELF }))
+  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
   const todos = {
     list: todoList,
     useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),

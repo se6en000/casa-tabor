@@ -308,3 +308,38 @@ export function applyProjectEdit(detail: ProjectDetail, op: string, args: Record
   }
   return { ...detail, project, steps: renumber(next) }
 }
+
+/** A total of work in hours (48 hours of steps is "48 hr", not "6 days"); under ten, to the half hour. */
+export function hoursText(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`
+  const hours = minutes < 600 ? Math.round(minutes / 30) / 2 : Math.round(minutes / 60)
+  return `${hours} hr`
+}
+
+const shortDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+const longDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+/**
+ * One card on the To do list's projects shelf (canvas 10a): a segment per step (done, Now, a project
+ * inside, later), the size of what's left, the target and his pace, what's Now, and a project inside.
+ */
+export function shelfCard(detail: Pick<ProjectDetail, 'project' | 'steps'>, today: string) {
+  const { project } = detail
+  const stats = projectStats(detail, today)
+  const groups = planGroups(detail)
+  const now = new Set((groups[0] ?? []).map((s) => s.id))
+  const segments = [...doneSteps(detail).map(() => 'done' as const), ...groups.flat().map((s) => (s.child_project_id ? 'inside' as const : now.has(s.id) ? 'now' as const : 'later' as const))]
+  const size = [`${stats.done} of ${stats.total} steps`, stats.yourMinutes ? `~${hoursText(stats.yourMinutes)} yours` : null, stats.moneyLeft ? `${moneyText(stats.moneyLeft)} left` : null].filter(Boolean).join(' · ')
+  const kind = project.status === 'paused'
+    ? `PAUSED${project.paused_until ? ` UNTIL ${shortDate(project.paused_until).toUpperCase()}` : ''}`
+    : project.yearly ? 'EVERY YEAR' : 'PROJECT'
+  return {
+    kind,
+    segments,
+    stats: size,
+    target: project.aim_date ? `Target ${longDate(project.aim_date)} · ${stats.daysLeft} days` : null,
+    pace: stats.finish ? (stats.lateBy ? { text: `At your pace: ${shortDate(stats.finish)}, ${stats.lateBy} days late`, late: true } : { text: `On pace: ${shortDate(stats.finish)}`, late: false }) : null,
+    now: (groups[0] ?? []).filter((s) => !s.child_project_id).map((s) => s.title),
+    inside: stats.inside[0] ?? null,
+  }
+}

@@ -71,7 +71,26 @@ test('the rest folds by kind; nothing appears twice; undated things are never "o
 })
 
 test('projects: progress and the current step', () => {
-  assert.deepEqual(list.projects, [{ id: 'paint', title: 'Paint the house', done: 2, total: 4, next: 'Get 3 quotes', nextEventId: 'quotes', aimDate: null }])
+  const { detail, ...summary } = list.projects[0]
+  assert.deepEqual(summary, { id: 'paint', title: 'Paint the house', done: 2, total: 4, next: 'Get 3 quotes', nextEventId: 'quotes', aimDate: null })
+  // The shelf (canvas 10a) draws each card from the project and its steps, in order.
+  assert.equal(detail.project.id, 'paint')
+  assert.deepEqual(detail.steps.map((s) => s.title), ['Decide: DIY or hire', 'Walk the house', 'Get 3 quotes', 'Fix the wall cracks'])
+})
+
+test('the shelf: a project inside another rides on its parent’s card; a paused one still shows', () => {
+  const l = buildTodoList({
+    reminders: [], details: {}, today,
+    projects: [{ id: 'paint', title: 'Paint the house', status: 'active' }, { id: 'stucco', title: 'Stucco cracks', status: 'active' }, { id: 'pool', title: 'Pool deck', status: 'paused' }],
+    steps: [
+      { project_id: 'paint', grp: 1, position: 1, title: 'Colours', done_at: null },
+      { project_id: 'paint', grp: 1, position: 2, title: 'Stucco cracks', done_at: null, child_project_id: 'stucco' },
+      { project_id: 'stucco', grp: 1, position: 1, title: 'Quote', done_at: '2026-09-24T12:00:00Z' },
+      { project_id: 'stucco', grp: 2, position: 2, title: 'Patch', done_at: null },
+    ],
+  })
+  assert.deepEqual(l.projects.map((p) => p.id), ['paint', 'pool'])
+  assert.deepEqual(l.projects[0].detail.steps[1].child, { id: 'stucco', title: 'Stucco cracks', done: 1, total: 2, next: 'Patch', status: 'active' })
 })
 
 test('snoozed three times sinks below the rest', () => {

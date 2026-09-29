@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { todoTile, sizeLine, GROUPS } from '../src/wall/todos.ts'
+import { todoTile, sizeLine, GROUPS, nextUpRoom } from '../src/wall/todos.ts'
 
 // Board 09b on the wall: the To do tile, and each row's size line.
 const item = (id, extra = {}) => ({ id, title: id, shape: 'quick', minutes: null, costCents: null, nextStep: null, needs: [], due: null, overdue: false, snoozedUntil: null, snoozeCount: 0, projectId: null, suggestion: null, ...extra })
@@ -81,4 +81,12 @@ test('a to-do\'s time: a date stored at 5 PM means no time (the iOS sync\'s way)
   assert.equal(timeOf({ due: '2026-10-02', dueAt: new Date(2026, 9, 2, 18, 30).toISOString() }), '18:30')
   assert.equal(timeOf({ due: '2026-10-02', dueAt: new Date(2026, 9, 2, 17, 0).toISOString() }), null)
   assert.equal(timeOf({ due: null, dueAt: null }), null)
+})
+
+test('beside the projects shelf, Next up keeps three; the tile says the same', () => {
+  const nextUp = ['a', 'b', 'c', 'd'].map((id) => item(id))
+  const groups = { quick: [], fix: [], nudge: [], dated: [], unsorted: [] }
+  assert.equal(nextUpRoom({ projects: [{ id: 'p', detail: {} }] }), 3)
+  assert.equal(todoTile({ nextUp, groups, projects: [{ id: 'p', detail: {} }], suggestions: [] }).ready, 3)
+  assert.equal(todoTile({ nextUp, groups, projects: [], suggestions: [] }).ready, 4)
 })

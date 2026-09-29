@@ -213,8 +213,9 @@ Deno.serve(async (req) => {
         .eq('event_type', 'reminder').eq('record_kind', 'single').is('deleted_at', null).neq('status', 'cancelled')
         .order('created_at').limit(500),
       sb.from('todo_details').select('event_id, shape, minutes, cost_cents, next_step, needs, snoozed_until, snooze_count, project_id, sorted_by, suggestion'),
-      sb.from('todo_projects').select('id, title, status, aim_date').eq('status', 'active'),
-      sb.from('todo_steps').select('project_id, position, title, done_at, reminder_event_id'),
+      // The shelf (P3.23) draws each project's card from all of this.
+      sb.from('todo_projects').select('id, title, status, aim_date, aim_firm, budget_cents, people, phone, yearly, season_id, paused_until, notes, created_at').in('status', ['active', 'paused']),
+      sb.from('todo_steps').select('id, project_id, grp, position, title, minutes, cost_cents, who, done_at, reminder_event_id, child_project_id, cal_start, cal_end'),
       // Morning-prep reminders are the old prep system's, not his list.
       sb.from('event_enrichments').select('event_id').eq('category', 'morning_prep'),
     ])

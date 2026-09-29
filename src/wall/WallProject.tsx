@@ -5,7 +5,7 @@ import WallNumberPad from './WallNumberPad'
 import WallProjectSettings from './WallProjectSettings'
 import WallStepPanel, { EffortChoices, Pill, type StepInput } from './WallStepPanel'
 import {
-  applyProjectEdit, arrangement, doneSteps, dropTargetAt, effortText, moneyText, moveStep, nudgeStep, placeNew, planGroups, projectStats, whoOptions,
+  applyProjectEdit, arrangement, hoursText, doneSteps, dropTargetAt, effortText, moneyText, moveStep, nudgeStep, placeNew, planGroups, projectStats, whoOptions,
   type DropTarget, type LineBox, type ProjectDetail, type ProjectStep, type RowBox,
 } from './projectModel'
 
@@ -239,7 +239,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
   const theirs = stats.theirs.map((t) => `${effortText(t.minutes)} of the ${t.who.toLowerCase()}’s`).join(', ')
 
   return (
-    <div data-no-swipe className="absolute inset-0 z-20 flex flex-col gap-[14px] bg-wall-ground px-[44px] py-[36px] font-body text-wall-ink" onClick={() => { setQuick(null) }}>
+    <section data-no-swipe aria-label={`${project.title} — project`} className="absolute inset-0 z-20 flex flex-col gap-[14px] bg-wall-ground px-[44px] py-[36px] font-body text-wall-ink" onClick={() => { setQuick(null) }}>
       <div className="flex shrink-0 items-end justify-between gap-[24px]">
         <div className="flex min-w-0 flex-col gap-[6px]">
           <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">TO DO › PROJECTS{detail.parent ? ` › INSIDE ${detail.parent.title.toUpperCase()}` : ''}</span>
@@ -259,7 +259,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
       <div className="flex shrink-0 gap-[14px]">
         {[
           ['STEPS', `${stats.done} of ${stats.total} done`, stats.inside.length ? `plus ${stats.inside.map((c) => `${c.title}, ${c.done} of ${c.total}`).join('; ')}` : `${stats.total - stats.done} to go`, false],
-          ['YOUR TIME LEFT', stats.yourMinutes ? `~${effortText(stats.yourMinutes)}` : '—', theirs ? `and ${theirs}` : 'yours and Kelly’s', false],
+          ['YOUR TIME LEFT', stats.yourMinutes ? `~${hoursText(stats.yourMinutes)}` : '—', theirs ? `and ${theirs}` : 'yours and Kelly’s', false],
           ['MONEY LEFT', stats.moneyLeft ? moneyText(stats.moneyLeft) : '—', stats.budget ? `of a ${moneyText(stats.budget)} budget` : 'no budget set', Boolean(stats.budget && stats.moneyLeft + stats.spent > stats.budget)],
           ['TARGET', project.aim_date ? niceDate(project.aim_date) : 'No target', stats.finish ? `At your pace: ${niceDate(stats.finish, { month: 'short', day: 'numeric' })}${stats.lateBy ? `, ${stats.lateBy} days late` : ''}` : stats.daysLeft != null ? `in ${stats.daysLeft} days` : 'set one in Project settings', Boolean(stats.lateBy)],
         ].map(([k, v, sub, warn]) => (
@@ -394,6 +394,6 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
           <WallKeyboard showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
         </>
       )}
-    </div>
+    </section>
   )
 }
