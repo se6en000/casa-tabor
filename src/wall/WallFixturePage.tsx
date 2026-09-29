@@ -17,6 +17,7 @@ import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
 import { applyProjectEdit, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from './todos'
 import type { ProjectStep } from './projectModel'
+import { WallSpeechContext } from './speechContext'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -226,6 +227,7 @@ export default function WallFixturePage() {
     <Routes>
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
+    <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
       <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} overlay={band} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
@@ -235,6 +237,7 @@ export default function WallFixturePage() {
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
         } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} comingUp={comingUp} todos={todos} />
     </div>
+    </WallSpeechContext.Provider>
     } />
     </Routes>
     </MemoryRouter>

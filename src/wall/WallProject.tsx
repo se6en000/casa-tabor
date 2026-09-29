@@ -41,7 +41,9 @@ const niceDate = (d: string, opts: Intl.DateTimeFormatOptions = { weekday: 'shor
 function Grip({ title, onDown }: { title: string; onDown: (e: ReactPointerEvent<HTMLButtonElement>) => void }) {
   return (
     // data-native-drag: the app-wide mouse drag-to-scroll (pointerGestures) leaves this drag alone.
-    <button type="button" data-native-drag aria-label={`Hold and drag to move ${title}`} onPointerDown={onDown} className="flex h-[48px] w-[36px] shrink-0 touch-none items-center justify-center border-0 bg-transparent p-0 text-wall-ink-2">
+    // touch-action inline: the app's `button { touch-action: manipulation }` beats a class, and with it the
+    // touchscreen took the drag for a scroll and cancelled it a few pixels in (Jake, 2026-09-29).
+    <button type="button" data-native-drag aria-label={`Hold and drag to move ${title}`} onPointerDown={onDown} style={{ touchAction: 'none' }} className="flex h-[48px] w-[36px] shrink-0 items-center justify-center border-0 bg-transparent p-0 text-wall-ink-2">
       <svg width="16" height="24" viewBox="0 0 16 24" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="2" /><circle cx="12" cy="4" r="2" /><circle cx="4" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="4" cy="20" r="2" /><circle cx="12" cy="20" r="2" /></svg>
     </button>
   )
@@ -389,7 +391,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
             <span className="min-w-0 truncate font-display text-wall-date font-semibold">{typing.value}<span className="text-wall-brass">|</span></span>
             <button type="button" onClick={() => setTyping(null)} className="ml-auto h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
           </div>
-          <WallKeyboard value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
+          <WallKeyboard showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
         </>
       )}
     </div>

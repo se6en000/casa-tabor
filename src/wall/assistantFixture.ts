@@ -107,7 +107,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
 
 /**
  * A stand-in microphone for the fixture (`useSpeechInput`'s shape): Playwright speaks through
- * `window.__mic` — `say(text)` hears a sentence, `quiet()` is silence running out, `yes()` /
+ * `window.__mic` — `hear(text)` is words mid-sentence, `say(text)` hears a sentence, `quiet()` is silence running out, `yes()` /
  * `no()` answer a card — and `window.__mic.starts` counts how often the band opened the mic.
  */
 export function useFixtureSpeech(options: Parameters<typeof import('../hooks/useSpeechInput').useSpeechInput>[0]) {
@@ -116,6 +116,8 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   useEffect(() => { latest.current = options })
   const mic = (window as unknown as { __mic?: Record<string, unknown> }).__mic ??= { starts: 0 }
   mic.say = (text: string) => { latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
+  // Words heard so far, mid-sentence (what shows live while he speaks).
+  mic.hear = (text: string) => latest.current.onInterim(text)
   mic.quiet = () => { setListening(false); latest.current.onAutoDismiss?.('wake_silence') }
   mic.yes = () => latest.current.onConfirm()
   mic.no = () => latest.current.onCancel()

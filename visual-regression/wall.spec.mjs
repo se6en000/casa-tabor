@@ -803,6 +803,44 @@ test('wall: a project page — Now, Then lines, a project inside; drag a step be
   await expect(page.getByText('NEXT UP')).toBeVisible()
 })
 
+// Jake, 2026-09-29, on the wall: "the drag does not work on the touch screen … it seems to let go of
+// the drag once I try to move it". A finger, not a mouse: the browser took the touch for a scroll.
+test.describe('touchscreen', () => {
+  test.use({ hasTouch: true })
+  test('wall: a project step drags with a finger — the touch isn’t taken for a scroll', async ({ page }) => {
+    await openPaint(page)
+    const cdp = await page.context().newCDPSession(page)
+    const grip = await page.getByRole('button', { name: 'Hold and drag to move Take down shutters and house numbers' }).boundingBox()
+    const onto = await page.getByRole('button', { name: 'Open Choose the painter and book dates' }).boundingBox()
+    const x = grip.x + grip.width / 2
+    const to = onto.y + onto.height * 0.8
+    let y = grip.y + grip.height / 2
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
+    while (y > to) {
+      y = Math.max(to, y - 12)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] })
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    expect(await plan(page)).toEqual(['Pick colours: 3 sample pots', 'Choose the painter and book dates', 'Take down shutters and house numbers', 'Move patio furniture, cover plants', 'The painter: 5 days, a dry week', 'Touch-ups and the final walk-round'])
+  })
+})
+
+// Jake, 2026-09-29: "on the pop up keyboard, can you add a 'mic' option so I can do speech to text" —
+// "the screen should show the text in realtime like the way the AI works".
+test('wall: the keyboard’s Say it — words show as they’re heard, and land when he pauses', async ({ page }) => {
+  await openPaint(page)
+  await page.getByRole('button', { name: '+ Add a step' }).click()
+  await page.getByRole('button', { name: 'Say it' }).click()
+  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
+  await page.evaluate(() => window.__mic.hear('buy drop'))
+  await expect(page.getByText(/^Buy drop\|$/)).toBeVisible()
+  await page.evaluate(() => window.__mic.say('buy drop cloths'))
+  await expect(page.getByText(/^Buy drop cloths\|$/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Say it' })).toBeVisible()
+  await page.getByRole('region', { name: 'Keyboard' }).getByRole('button', { name: 'Done', exact: true }).click()
+  expect(await plan(page)).toContain('Buy drop cloths')
+})
+
 test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {
   await openPaint(page)
   await page.getByRole('button', { name: 'Open The painter: 5 days, a dry week' }).click()

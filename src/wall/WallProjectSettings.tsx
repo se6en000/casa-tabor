@@ -157,7 +157,7 @@ export default function WallProjectSettings({ detail, now, onEdit, onBack, onDel
             <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{typing.what === 'name' ? 'SOMEONE NEW · THEIR NAME' : `WHAT ${typing.name?.toUpperCase()} DOES · E.G. PAINTER (EMPTY FOR FAMILY)`}</span>
             <span className="font-display text-wall-date font-semibold">{typing.value}<span className="text-wall-brass">|</span></span>
           </div>
-          <WallKeyboard value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
+          <WallKeyboard showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
         </>
       )}
     </div>
