@@ -44,6 +44,11 @@ const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { in
   { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 68, pokeIn: 8, late: false, ideas: ['A fly-fishing reel'] },
   { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving', nextStep: 'Hosting or going?', inDays: 60, pokeIn: 30, late: false },
 ]
+// `?comingUp=projects` (P3.23, canvas 10e): a project's dated step on the list, with Open project.
+const COMING_UP_PROJECTS: typeof COMING_UP = [
+  { key: 'step:st-choose', kind: 'project_step', title: 'Choose the painter and book dates', nextStep: 'Paint the house', inDays: 15, pokeIn: 8, late: false, projectId: 'pr-paint' },
+  ...COMING_UP,
+]
 // The live list on the kiosk the night of 2026-09-27 (nine items; the fifth once ran under the week strip).
 const COMING_UP_LIVE: typeof COMING_UP = [
   { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning Appointment', nextStep: 'Make sure it works with work', inDays: 3, pokeIn: -4, late: true },
@@ -218,7 +223,7 @@ export default function WallFixturePage() {
     </ProfileSessionContext.Provider>
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-  const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
+  const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => ({ live: COMING_UP_LIVE, projects: COMING_UP_PROJECTS }[new URLSearchParams(window.location.search).get('comingUp') ?? ''] ?? COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const [todoList, setTodoList] = useState<TodoList>(() => ({ ...TODOS, projects: SHELF }))
   const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
   const todos = {

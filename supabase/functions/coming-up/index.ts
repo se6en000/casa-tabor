@@ -20,7 +20,7 @@ const todayLocal = (now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: T
 const plusDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
 const niceDate = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 
-type Item = { key: string; kind: string; title: string; date: string; daysAway: number; nextStep: string; pokeOn: string; late: boolean; ideas?: string[] }
+type Item = { key: string; kind: string; title: string; date: string; daysAway: number; nextStep: string; pokeOn: string; late: boolean; ideas?: string[]; projectId?: string }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -34,6 +34,15 @@ Deno.serve(async (req) => {
     if (action === 'done' || action === 'dismiss' || action === 'snooze') {
       const key = String(body.key ?? '').slice(0, 80)
       if (!key) return json({ error: 'key required' }, 400)
+      // A project step's Done is the step done (P3.23): the project moves on, his phone with it.
+      if (action === 'done' && key.startsWith('step:')) {
+        const { data: st } = await sb.from('todo_steps').select('project_id').eq('id', key.slice(5)).maybeSingle()
+        if (st) {
+          const { error } = await sb.rpc('todo_project_edit_with_calendar', { p_project: st.project_id, p_op: 'done_step', p_args: { step_id: key.slice(5) } })
+          if (error) throw new Error(error.message)
+          return json({ ok: true, key, action })
+        }
+      }
       const patch = action === 'done' ? { done_at: now.toISOString() }
         : action === 'dismiss' ? { dismissed_at: now.toISOString() }
         : { snoozed_until: plusDays(today, 7) }
@@ -43,7 +52,7 @@ Deno.serve(async (req) => {
     }
 
     // Two months for birthdays plus the six-week window: look ~110 days out.
-    const [eventsRes, giftsRes, stateRes, rulesRes, familyRes] = await Promise.all([
+    const [eventsRes, giftsRes, stateRes, rulesRes, familyRes, projectsRes, stepsRes] = await Promise.all([
       sb.from('events').select('id, title, start_time, end_time, all_day, event_type, description')
         .is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
         .gte('start_time', new Date(now.getTime() - 86400e3).toISOString())
@@ -55,11 +64,14 @@ Deno.serve(async (req) => {
       sb.from('coming_up_rules').select('match, step, lead_days, off').is('removed_at', null).order('created_at', { ascending: false }),
       // Ideas saved under a full name ("Olivia") still belong on that person's birthday.
       sb.from('family_members').select('id, name, full_name'),
+      // Projects' dated steps and targets (P3.23).
+      sb.from('todo_projects').select('id, title, status, aim_date').eq('status', 'active'),
+      sb.from('todo_steps').select('id, project_id, title, cal_start, cal_end, cal_event_id, done_at').not('cal_start', 'is', null),
     ])
-    for (const r of [eventsRes, giftsRes, stateRes, rulesRes]) if (r.error) throw new Error(r.error.message)
+    for (const r of [eventsRes, giftsRes, stateRes, rulesRes, projectsRes, stepsRes]) if (r.error) throw new Error(r.error.message)
     const state = Object.fromEntries((stateRes.data ?? []).map((s: Record<string, unknown>) => [s.item_key as string, s]))
     const rules = rulesRes.data ?? []
-    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [], seasons: SEASONS }) as Item[]
+    const items = buildComingUp({ now, events: eventsRes.data ?? [], giftIdeas: giftsRes.data ?? [], state, rules, family: familyRes.data ?? [], seasons: SEASONS, projects: { projects: projectsRes.data ?? [], steps: stepsRes.data ?? [] } }) as Item[]
 
     // The screens show every gift idea (on the wall too, for now — Jake, 2026-09-27).
     // Each under the family member's own name, so "Olivia" and "Liv" are one person on screen.

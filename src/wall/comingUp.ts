@@ -16,6 +16,8 @@ export interface ComingUpItem {
   ideas?: string[]
   /** The family members those ideas are for — a phone keeps them from that person. */
   ideasFor?: string[]
+  /** A project's step or target (P3.23): its project, to open. */
+  projectId?: string
 }
 export interface GiftIdea { for_name: string; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'

@@ -151,3 +151,10 @@ test('totals in hours: 48 hours of work is "48 hr", not "6 days"', () => {
   assert.equal(hoursText(270), '4.5 hr')
   assert.equal(hoursText(45), '45 min')
 })
+
+test('moving a step’s start carries its end along: the painter’s Nov 9–13 moved to the 16th is Nov 16–20', () => {
+  const d = applyProjectEdit(PAINT, 'set_step', { step_id: 'painter', cal_start: '2026-11-09', cal_end: '2026-11-13' })
+  const moved = applyProjectEdit(d, 'set_step', { step_id: 'painter', cal_start: '2026-11-16' })
+  const st = moved.steps.find((x) => x.id === 'painter')
+  assert.deepEqual([st.cal_start, st.cal_end], ['2026-11-16', '2026-11-20'])
+})

@@ -114,6 +114,8 @@ export default function WallView(props: WallViewProps) {
   const [comingUpUntil, setComingUpUntil] = useState(0)
   // To do, opened from its tile (or a swipe past Coming up): up until "Back", or 2 idle minutes.
   const [todoUntil, setTodoUntil] = useState(0)
+  // A project to open straight away (a Coming up row's "Open project", P3.23).
+  const [todoProject, setTodoProject] = useState<string | null>(null)
   // "Later tonight" on a nudge: off the wall for 45 minutes (the watch's reminder is untouched).
   const [nudgeLater, setNudgeLater] = useState<{ id: string; until: number } | null>(null)
 
@@ -272,7 +274,7 @@ export default function WallView(props: WallViewProps) {
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
   const todoOpen = Boolean(todos) && todoUntil > 0 && !comingUpOpen
   const openComingUp = () => { setDayPreview(null); setTodoUntil(0); setComingUpUntil(Date.now() + PREVIEW_MS) }
-  const openTodo = () => { setDayPreview(null); setComingUpUntil(0); setTodoUntil(Date.now() + PREVIEW_MS) }
+  const openTodo = () => { setDayPreview(null); setComingUpUntil(0); setTodoProject(null); setTodoUntil(Date.now() + PREVIEW_MS) }
   const showDay = (date: Date) => {
     setComingUpUntil(0)
     setTodoUntil(0)
@@ -335,9 +337,10 @@ export default function WallView(props: WallViewProps) {
         }}
         canOpen={(id) => eventsById.has(id)}
         onOpen={(id) => setSelectedId(id)}
-        onBack={() => setTodoUntil(0)}
+        onBack={() => { setTodoUntil(0); setTodoProject(null) }}
         onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
         week={weekStrip}
+        initialProject={todoProject}
         {...(todos.useProject ? { useProject: todos.useProject } : {})}
       />
     )
@@ -354,6 +357,7 @@ export default function WallView(props: WallViewProps) {
         }}
         onBack={() => setComingUpUntil(0)}
         week={weekStrip}
+        onOpenProject={todos ? (id) => { openTodo(); setTodoProject(id) } : undefined}
       />
     )
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {

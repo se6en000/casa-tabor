@@ -104,12 +104,14 @@ const ideaNames = (g, family) => {
 }
 const wholeWord = (title, name) => new RegExp(`(^|[^a-z])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z])`, 'i').test(title)
 
-export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [], family = [], seasons = [] }) {
+export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules = [], family = [], seasons = [], projects = { projects: [], steps: [] } }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const horizon = addDays(today, COMING_UP_WEEKS * 7)
   const seen = new Set()
   const items = []
-  const sorted = [...(events ?? [])].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)))
+  // A project step's own calendar event shows as the step (below), not twice.
+  const stepEvents = new Set((projects.steps ?? []).map((st) => st.cal_event_id).filter(Boolean))
+  const sorted = [...(events ?? [])].filter((e) => !stepEvents.has(e.id)).sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)))
   for (const e of sorted) {
     const k = classify(e, rules, state[e.id])
     if (!k) continue
@@ -137,6 +139,23 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
     // Whose ideas these are (family members only), so a phone can keep them from that person.
     const ideasFor = matched ? [...new Set(matched.map((g) => ideaOwner(g, family)?.id).filter(Boolean))] : null
     items.push({ key: e.id, kind: k.kind, title, date, daysAway: daysBetween(today, date), nextStep: k.step, pokeOn, late: pokeOn < today, ...(ideas ? { ideas, ideasFor } : {}) })
+  }
+  // A project's dated steps (a week to get ready) and its target (two weeks), under its name (P3.23).
+  const live = new Map((projects.projects ?? []).filter((p) => p.status === 'active').map((p) => [p.id, p]))
+  const add = (key, fields) => {
+    const s = state[key] ?? {}
+    if (s.done_at || s.dismissed_at || (s.snoozed_until && s.snoozed_until > today)) return
+    if (fields.date < today || fields.pokeOn > horizon) return
+    items.push({ key, ...fields, daysAway: daysBetween(today, fields.date), late: fields.pokeOn < today })
+  }
+  for (const st of projects.steps ?? []) {
+    const p = live.get(st.project_id)
+    if (!p || st.done_at || !st.cal_start) continue
+    add(`step:${st.id}`, { kind: 'project_step', title: st.title, date: st.cal_start, nextStep: p.title, pokeOn: addDays(st.cal_start, -7), projectId: p.id })
+  }
+  for (const p of live.values()) {
+    if (!p.aim_date) continue
+    add(`target:${p.id}`, { kind: 'project_target', title: `${p.title}: the target`, date: p.aim_date, nextStep: 'Is it on track?', pokeOn: addDays(p.aim_date, -14), projectId: p.id })
   }
   // This year's season, or next year's once this one has passed; keyed by year so "done" lasts a year.
   const year = Number(today.slice(0, 4))

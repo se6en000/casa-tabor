@@ -289,6 +289,8 @@ export function applyProjectEdit(detail: ProjectDetail, op: string, args: Record
           if (has(k)) (x as Record<string, unknown>)[k] = args[k] === '' ? null : args[k]
         }
         if (has('cal_start') && !args.cal_start) x.cal_end = null
+        // Moving the start carries the end along (as the database's todo_step_keep_length does).
+        if (has('cal_start') && args.cal_start && !has('cal_end') && s.cal_start && s.cal_end) x.cal_end = plusDays(s.cal_end, daysBetween(s.cal_start, String(args.cal_start)))
         if (x.repeat_minutes && x.repeat_count && (has('repeat_minutes') || has('repeat_count'))) x.minutes = x.repeat_minutes * x.repeat_count
         return x
       })

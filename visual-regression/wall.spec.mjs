@@ -846,6 +846,18 @@ test('wall: the keyboard’s Say it — words show as they’re heard, and land 
   expect(await plan(page)).toContain('Buy drop cloths')
 })
 
+// A project's dated step on Coming up opens its project (P3.23 step 2, canvas 10e).
+test('wall: Coming up — a project’s dated step, named for its project, opens the project', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
+  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await expect(page.getByText('Choose the painter and book dates')).toBeVisible()
+  await expect(page.getByText('Paint the house', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Open project' }).click()
+  await expect(page.getByRole('region', { name: 'Paint the house — project' })).toBeVisible()
+  await page.getByRole('button', { name: 'Back to the list' }).click()
+  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+})
+
 test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {
   await openPaint(page)
   await page.getByRole('button', { name: 'Open The painter: 5 days, a dry week' }).click()

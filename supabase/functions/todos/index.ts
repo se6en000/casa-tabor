@@ -164,8 +164,24 @@ Deno.serve(async (req) => {
     }
     if (action === 'project_edit') {
       if (!id || !b.op) return json({ error: 'id and op required' }, 400)
-      const { data, error } = await sb.rpc('todo_project_edit', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
+      // The edit, and the project's steps on the calendar kept in step (P3.23 step 2).
+      const { data, error } = await sb.rpc('todo_project_edit_with_calendar', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
       if (error) throw new Error(error.message)
+      // Google follows, as it does for the assistant's events: a new one is created, a moved one
+      // pushed (queued for a retry if Google fails), a removed one deleted.
+      const changes = ((data as { calendar?: Array<{ op: string; event_id: string }> } | null)?.calendar ?? [])
+      if (changes.length) {
+        const job = Promise.all(changes.map(async (c) => {
+          if (c.op === 'created') return sb.functions.invoke('create-google-event', { body: { event_id: c.event_id } }).catch(() => null)
+          if (c.op === 'deleted') return sb.functions.invoke('delete-google-event', { body: { event_id: c.event_id } }).catch(() => null)
+          const res = await sb.functions.invoke('push-to-google', { body: { event_id: c.event_id } }).catch((e: Error) => ({ data: null, error: e }))
+          const failed = res?.error?.message ?? (res?.data as { error?: string } | null)?.error
+          if (failed) await sb.rpc('enqueue_google_sync_job', { p_event_id: c.event_id, p_audit_history_id: null, p_error: String(failed) })
+        }))
+        // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(job)
+        else await job
+      }
       return json(data ?? { ok: true })
     }
     if (action === 'update') {

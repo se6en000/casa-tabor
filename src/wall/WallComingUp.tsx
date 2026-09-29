@@ -15,6 +15,8 @@ export interface WallComingUpProps {
   onAct: (key: string, action: ComingUpAction) => Promise<void>
   onBack: () => void
   week: ReactNode
+  /** A project's step or target opens its project (P3.23, canvas 10e). */
+  onOpenProject?: (id: string) => void
 }
 
 function Answer({ label, primary = false, onClick }: { label: string; primary?: boolean; onClick: () => void }) {
@@ -32,7 +34,7 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
   )
 }
 
-function Row({ item, today, onAct }: { item: ComingUpItem; today: string; onAct: WallComingUpProps['onAct'] }) {
+function Row({ item, today, onAct, onOpenProject }: { item: ComingUpItem; today: string; onAct: WallComingUpProps['onAct']; onOpenProject?: (id: string) => void }) {
   const day = new Date(`${item.date}T12:00:00Z`)
   const part = (options: Intl.DateTimeFormatOptions) => day.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' }).toUpperCase()
   return (
@@ -51,7 +53,9 @@ function Row({ item, today, onAct }: { item: ComingUpItem; today: string; onAct:
       </div>
       <div className="flex shrink-0 gap-[8px]">
         <Answer label="Done" primary onClick={() => void onAct(item.key, 'done')} />
-        <Answer label="Snooze" onClick={() => void onAct(item.key, 'snooze')} />
+        {item.projectId && onOpenProject
+          ? <Answer label="Open project" onClick={() => onOpenProject(item.projectId!)} />
+          : <Answer label="Snooze" onClick={() => void onAct(item.key, 'snooze')} />}
         <Answer label="Not needed" onClick={() => void onAct(item.key, 'dismiss')} />
       </div>
     </div>
@@ -80,7 +84,7 @@ function IdeasSheet({ ideas, onClose }: { ideas: GiftIdea[]; onClose: () => void
   )
 }
 
-export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week }: WallComingUpProps) {
+export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
@@ -131,7 +135,7 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
                 {heading && (
                   <div className="pb-[8px] pt-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{heading}</div>
                 )}
-                <Row item={item} today={today} onAct={onAct} />
+                <Row item={item} today={today} onAct={onAct} onOpenProject={onOpenProject} />
               </div>
             ))}
           </div>

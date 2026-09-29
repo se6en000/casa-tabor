@@ -21,6 +21,8 @@ export interface WallTodosProps {
   /** Any touch on the screen: keeps it up. */
   onActivity?: () => void
   week: ReactNode
+  /** A project to open straight away (from Coming up). */
+  initialProject?: string | null
   /** Loads a project with its steps (the fixture passes its own). */
   useProject?: (id: string | null) => { data?: TodoProjectDetail | null }
 }
@@ -81,13 +83,13 @@ function NextRow({ item, snoozing, onSnoozeToggle, onAct, onOpen, onEdit }: { it
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, week, useProject = useTodoProject }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, week, initialProject = null, useProject = useTodoProject }: WallTodosProps) {
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   // Tapping in (step 5): a to-do opens its sheet; a project (or one of its steps) opens the project.
   const [editing, setEditing] = useState<TodoItem | null>(null)
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(initialProject)
   const project = useProject(projectId)
   const openItem = (item: TodoItem) => (item.projectId ? setProjectId(item.projectId) : setEditing(item))
   const clock = formatWallClock(now)

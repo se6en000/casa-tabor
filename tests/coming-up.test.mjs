@@ -262,3 +262,31 @@ test('a season marked done stays done that year and comes back the next', () => 
   const nextYear = buildComingUp({ now: new Date('2027-09-20T09:00:00-04:00'), events: [], seasons: SEASONS, state }).map((i) => i.key)
   assert.ok(nextYear.includes('season:halloween_decor:2027'))
 })
+
+// A project's dated steps and its target (P3.23 step 2, canvas 10e): on Coming up under the project's
+// name, with its own calendar event left out so nothing shows twice.
+test('a project step with dates and a project’s target come up, named for the project', () => {
+  const projects = {
+    projects: [{ id: 'paint', title: 'Paint the house', status: 'active', aim_date: '2026-11-21' }, { id: 'old', title: 'Old job', status: 'dropped', aim_date: '2026-10-20' }],
+    steps: [
+      { id: 'choose', project_id: 'paint', title: 'Choose the painter', cal_start: '2026-10-10', cal_end: null, cal_event_id: 'ev-choose', done_at: null },
+      { id: 'painter', project_id: 'paint', title: 'The painter: 5 days', cal_start: '2026-11-09', cal_end: '2026-11-13', cal_event_id: 'ev-painter', done_at: null },
+      { id: 'walk', project_id: 'paint', title: 'Walk the house', cal_start: '2026-10-02', cal_end: null, cal_event_id: null, done_at: '2026-09-27T12:00:00Z' },
+      { id: 'x', project_id: 'old', title: 'Something', cal_start: '2026-10-05', cal_end: null, cal_event_id: null, done_at: null },
+    ],
+  }
+  const events = [allDay('ev-choose', 'Paint the house: Choose the painter', '2026-10-10'), ev('tryouts', 'BAK Softball Tryouts', '2026-10-19T15:00:00-04:00')]
+  const items = byKey(buildComingUp({ now, events, projects }))
+  assert.equal(items['ev-choose'], undefined, 'its calendar event doesn’t show twice')
+  assert.deepEqual(
+    { title: items['step:choose'].title, next: items['step:choose'].nextStep, kind: items['step:choose'].kind, poke: items['step:choose'].pokeOn, project: items['step:choose'].projectId },
+    { title: 'Choose the painter', next: 'Paint the house', kind: 'project_step', poke: '2026-10-03', project: 'paint' },
+  )
+  assert.equal(items['step:painter'].pokeOn, '2026-11-02', 'a week to get ready')
+  assert.equal(items['step:walk'], undefined, 'done')
+  assert.equal(items['step:x'], undefined, 'the project was dropped')
+  assert.equal(items['target:paint'].title, 'Paint the house: the target')
+  assert.equal(items['target:paint'].pokeOn, '2026-11-07')
+  assert.equal(items['target:old'], undefined)
+  assert.ok(items['tryouts'])
+})
