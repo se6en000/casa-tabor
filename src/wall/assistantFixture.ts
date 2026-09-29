@@ -122,6 +122,7 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   // Words heard so far, mid-sentence (what shows live while he speaks).
   mic.hear = (text: string) => latest.current.onInterim(text)
   mic.quiet = () => { setListening(false); latest.current.onAutoDismiss?.('wake_silence') }
+  mic.noise = () => { setListening(false); latest.current.onAutoDismiss?.('speech_without_transcript') }
   mic.yes = () => latest.current.onConfirm()
   mic.no = () => latest.current.onCancel()
   mic.bye = () => { setListening(false); latest.current.onDismiss() }

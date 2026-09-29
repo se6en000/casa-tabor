@@ -441,7 +441,10 @@ test('wall assistant: an answer that offers something gets a one-tap yes, and op
 const mic = (page, call) => page.evaluate(call)
 const starts = (page) => page.evaluate(() => window.__mic?.starts ?? 0)
 
-test('wall assistant: after an answer the mic opens again by itself; quiet after a plain answer, the band slips away', async ({ page }) => {
+// Jake, 2026-09-29, planning Emme's costume: "the ai dismisses like a second after it makes a statement.
+// It's gotta stay open till we either agree or I dismiss it." Once there's a conversation, quiet, room
+// noise and asides only turn the mic off; he carries on with the mic or the wake word, or closes it.
+test('wall assistant: after an answer the mic opens again by itself; quiet or room noise only turns the mic off — the band stays', async ({ page }) => {
   await band(page, 'answer')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section).toBeVisible()
@@ -452,6 +455,19 @@ test('wall assistant: after an answer the mic opens again by itself; quiet after
   await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
   await expect.poll(() => starts(page)).toBe(opened + 1)
   await expect(section.getByText('Keep talking, or')).toBeVisible()
+  await mic(page, () => window.__mic.quiet())
+  await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
+  await expect(section.getByText(/Say the wake word/)).toBeVisible()
+  // Sound the mic can't make words of (the room, the TV): the same — the mic goes off, the answer stays.
+  await section.getByRole('button', { name: 'Talk', exact: true }).click()
+  await mic(page, () => window.__mic.noise())
+  await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
+})
+
+test('wall assistant: woken with nothing said, the band still slips away', async ({ page }) => {
+  await band(page, 'empty')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
   await mic(page, () => window.__mic.quiet())
   await expect(section).toHaveCount(0)
 })
@@ -481,7 +497,7 @@ test('wall assistant: a spoken yes saves the card and the mic opens again; "that
   await expect(section).toHaveCount(0)
 })
 
-test('wall assistant: talk not meant for Casa gets no answer and leaves no trace; two in a row and the band slips away', async ({ page }) => {
+test('wall assistant: talk not meant for Casa gets no answer and leaves no trace; two in a row and the mic goes off, the band stays', async ({ page }) => {
   await band(page, 'answer')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section).toBeVisible()
@@ -489,7 +505,8 @@ test('wall assistant: talk not meant for Casa gets no answer and leaves no trace
   await expect(section.getByText('“Could Kelly take it instead?”')).toBeVisible()
   await expect(section.getByText(/owen get your shoes/)).toHaveCount(0)
   await mic(page, () => window.__mic.say('psst honey where are my keys'))
-  await expect(section).toHaveCount(0)
+  await expect(section.getByText('“Could Kelly take it instead?”')).toBeVisible()
+  await expect(section.getByText(/Say the wake word/)).toBeVisible()
 })
 
 // The LED strip follows the band (P3.14), as the fixture records it (window.__led).
@@ -583,6 +600,7 @@ test('wall assistant: while Casa looks something up, the band says what (the liv
   await section.getByRole('button', { name: 'Stop listening' }).click()
   await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
   await expect(section.getByText('Searching the web: outdoor Halloween decorations Florida Reddit')).toBeVisible()
+  await expect(section.getByText('One moment')).toHaveCount(0)
   await expect(section.getByText(/^Tip: /)).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-looking-up.png')

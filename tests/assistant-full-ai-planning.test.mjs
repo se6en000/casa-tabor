@@ -124,7 +124,8 @@ test('ai-assistant switches to the planning model on think_it_through', async ()
   const run = src.slice(src.indexOf('const runFullAi = async'), src.indexOf('const runPipeline = async'))
   assert.match(run, /THINK_IT_THROUGH/)
   assert.match(run, /PLANNING_GEMINI_MODEL/)
-  assert.match(run, /emitStatus\('Thinking it through…'\)/)
+  // Jake, 2026-09-29: "thinking is way redundant" — the ring and THINKING say it; lines only name a lookup.
+  assert.doesNotMatch(run, /emitStatus\('(Thinking it through|Putting it together)…'\)/)
   assert.match(run, /semantic_intent: planning \? 'full_ai\.plan_answer' : 'full_ai\.answer'/, 'a planning answer is told apart in the traces')
 })
 

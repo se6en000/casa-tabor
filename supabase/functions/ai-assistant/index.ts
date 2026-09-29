@@ -1287,7 +1287,6 @@ Deno.serve(async (req) => {
         planning = true
         model = PLANNING_GEMINI_MODEL
         system = systemFor(true)
-        emitStatus('Thinking it through…')
         contents.length = asked
         parts = []
         retriedEmpty = false
@@ -1344,7 +1343,6 @@ Deno.serve(async (req) => {
       }))
       contents.push({ role: 'model', parts }, { role: 'user', parts: answers })
       parts = []
-      emitStatus('Putting it together…')
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))

@@ -23,7 +23,10 @@ import { noteSaid, tipFor, tipsByTopic } from './tips'
 // and asks for a yes before it changes anything. The whole AI backend is the
 // existing one (useAIAssistant, execute-ai-action); only the presentation is new.
 
-const ANSWER_IDLE_MS = 60_000
+/** A safety net only: once there's a conversation it stays until he agrees or closes it (Jake,
+ *  2026-09-29: "it's gotta stay open till we either agree or I dismiss it") — this clears the wall
+ *  if everyone walked away. */
+const ANSWER_IDLE_MS = 15 * 60_000
 /** Quiet this long after a plain answer, and the band slips away (8 s was too short to think in; Jake, 2026-09-26). */
 const ANSWERED_SILENCE_MS = 20_000
 /** Longer while a card, "which one?" or a question back waits for the person. */
@@ -103,6 +106,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const [relisten, setRelisten] = useState(0)
   const pendingRef = useRef(pending)
   pendingRef.current = pending
+  // A conversation has started: from here only he closes the band (quiet or noise just turn the mic off).
+  const talkingRef = useRef(false)
+  talkingRef.current = messages.length > 0
+  const asidesRef = useRef(0)
+  asidesRef.current = asidesInARow
   // Something is waiting on the person: a card, "which one?", or a question back.
   const waitingOnYou = Boolean(pending) || Boolean(which) || /\?\s*$/.test(answer?.content ?? '')
 
@@ -155,11 +163,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     },
     hasPendingAction: Boolean(pending),
     autoDismissOnFailure: true,
-    // Quiet for a while, or gibberish twice: the band slips away — but a card waiting for a
-    // yes stays on screen (the mic just closes), so it can still be tapped.
+    // Quiet for a while, or gibberish twice: the mic closes. With nothing said yet (a wake word
+    // heard by mistake) the band slips away; once there's a conversation, or a card waiting for a
+    // yes, it stays on screen — he carries on with the mic or the wake word, or closes it.
     silenceDismissMs: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS,
     onAutoDismiss: () => {
-      if (pendingRef.current || reportingRef.current) return
+      if (pendingRef.current || reportingRef.current || talkingRef.current) return
       onClose()
     },
   })
@@ -168,10 +177,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
 
   // The band keeps listening (P3.13): once an answer lands (or a yes/no is done), the mic opens
   // again by itself — no wake word for every sentence — until "go away", silence, or gibberish.
-  // Two asides in a row (the room is just talking, not to Casa): the band quietly slips away.
+  // Two asides in a row (the room is just talking, not to Casa): the mic goes off; the band stays.
   useEffect(() => {
-    if (asidesInARow >= 2 && !pendingRef.current && !reportingRef.current) onClose()
-  }, [asidesInARow, onClose])
+    if (asidesInARow >= 2) stopRef.current()
+  }, [asidesInARow])
 
   const busy = loading || Boolean(answer?.streaming) || working
   const wasBusy = useRef(false)
@@ -180,7 +189,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     wasBusy.current = busy
   }, [busy])
   useEffect(() => {
-    if (relisten === 0 || reportingRef.current) return
+    // Not after two asides in a row: the room is talking, so the mic stays off until he wants it.
+    if (relisten === 0 || reportingRef.current || asidesRef.current >= 2) return
     captured.current = ''
     void speech.start()
   }, [relisten]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -411,7 +421,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           {state === 'NEEDS A YES'
             ? 'Say yes, or change\nanything on it'
             : state === 'THINKING'
-              ? 'One moment'
+              ? '' // the ring and THINKING say it (Jake, 2026-09-29: "way redundant")
               : state === 'LISTENING' && question
                 ? 'Keep talking, or\nsay “that’s all”'
                 : state === 'LISTENING'
@@ -528,7 +538,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
 
         {status && state === 'THINKING' ? (
           // What Casa is doing on a longer think (P3.25 phase 1): in place of the tip.
-          <div className="mt-auto max-w-[1180px] text-wall-body text-wall-night-brass">{status}</div>
+          <div className="mt-auto max-w-[1180px] truncate text-wall-detail text-wall-night-ink-2/70">{status}</div>
         ) : tip ? (
           // One quiet line, no card: the question stays the focus (Jake, 2026-09-27; board 07e).
           <div className="mt-auto max-w-[1180px] text-wall-detail text-wall-night-ink-2/70">Tip: {tip}</div>
