@@ -13,8 +13,9 @@
 //                                    it), shopping (add to the grocery list, close the to-do)
 //   'dismiss' with { id }          → keep it as it is; the suggestion goes away
 //   'project' with { id }          → a project with all its steps (the project screen)
-//   'project_edit' with { id, op, args } → todo_project_edit (rename, target date, steps: add / edit /
-//                                    move / delete / done / undo, delete the project)
+//   'project_edit' with { id, op, args } → todo_project_edit (P3.23: rename, target, settings, status,
+//                                    add_step, add_child, take_out, part_of, arrange, set_step, move_to,
+//                                    delete_step, done_step, undo_step, delete_project)
 //   'update' with { id, patch }    → a to-do's title and date/time (todo_update); 'delete' → todo_delete
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { buildTodoList } from '../_shared/todos.mjs'
@@ -130,19 +131,42 @@ Deno.serve(async (req) => {
     const b = body as { op?: string; args?: Record<string, unknown>; patch?: Record<string, unknown> }
     if (action === 'project') {
       if (!id) return json({ error: 'id required' }, 400)
-      const [projRes, stepsRes] = await Promise.all([
-        sb.from('todo_projects').select('id, title, aim_date, status, created_at').eq('id', id).maybeSingle(),
-        sb.from('todo_steps').select('id, position, title, minutes, cost_cents, done_at, reminder_event_id').eq('project_id', id).order('position'),
+      // The project page (P3.23): every step's details, a project inside with its own progress, the
+      // project this one sits in, and the other projects (for "Move to…", "a project inside", "Part of").
+      const [projRes, stepsRes, othersRes, parentRes] = await Promise.all([
+        sb.from('todo_projects').select('id, title, aim_date, aim_firm, budget_cents, people, phone, yearly, season_id, status, paused_until, notes, created_at').eq('id', id).maybeSingle(),
+        sb.from('todo_steps').select('id, position, grp, title, minutes, cost_cents, done_at, reminder_event_id, who, fits, repeat_minutes, repeat_count, repeat_unit, notes, cal_start, cal_end, shop_item, child_project_id').eq('project_id', id).order('grp').order('position'),
+        sb.from('todo_projects').select('id, title').in('status', ['active', 'paused']).neq('id', id).order('title'),
+        sb.from('todo_steps').select('project_id').eq('child_project_id', id).limit(1).maybeSingle(),
       ])
-      if (projRes.error || stepsRes.error) throw new Error((projRes.error ?? stepsRes.error)!.message)
+      for (const r of [projRes, stepsRes, othersRes, parentRes]) if (r.error) throw new Error(r.error.message)
       if (!projRes.data) return json({ error: 'That project is gone' }, 404)
-      return json({ project: projRes.data, steps: stepsRes.data ?? [] })
+      const steps = stepsRes.data ?? []
+      const childIds = steps.map((s) => s.child_project_id).filter(Boolean) as string[]
+      const [childRes, childStepsRes, parentProjRes] = await Promise.all([
+        childIds.length ? sb.from('todo_projects').select('id, title, status').in('id', childIds) : Promise.resolve({ data: [], error: null }),
+        childIds.length ? sb.from('todo_steps').select('project_id, title, done_at, grp, position').in('project_id', childIds).order('grp').order('position') : Promise.resolve({ data: [], error: null }),
+        parentRes.data ? sb.from('todo_projects').select('id, title').eq('id', parentRes.data.project_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      ])
+      for (const r of [childRes, childStepsRes, parentProjRes]) if (r.error) throw new Error(r.error.message)
+      const child = (cid: string) => {
+        const p = (childRes.data ?? []).find((c) => c.id === cid)
+        if (!p) return null
+        const own = (childStepsRes.data ?? []).filter((c) => c.project_id === cid)
+        return { id: p.id, title: p.title, status: p.status, done: own.filter((c) => c.done_at).length, total: own.length, next: own.find((c) => !c.done_at)?.title ?? null }
+      }
+      return json({
+        project: projRes.data,
+        steps: steps.map((s) => ({ ...s, fits: s.fits ?? [], child: s.child_project_id ? child(s.child_project_id) : null })),
+        parent: parentProjRes.data ?? null,
+        others: othersRes.data ?? [],
+      })
     }
     if (action === 'project_edit') {
       if (!id || !b.op) return json({ error: 'id and op required' }, 400)
-      const { error } = await sb.rpc('todo_project_edit', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
+      const { data, error } = await sb.rpc('todo_project_edit', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
       if (error) throw new Error(error.message)
-      return json({ ok: true })
+      return json(data ?? { ok: true })
     }
     if (action === 'update') {
       if (!id) return json({ error: 'id required' }, 400)

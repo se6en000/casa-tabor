@@ -751,34 +751,108 @@ const openTodo = async (page) => {
   await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
 }
 
-test('wall: a project in full — the next step, done, reorder, delete a step, target date (board 09c)', async ({ page }) => {
+// Projects, your way (P3.23, canvas 10b–10d, approved by Jake 2026-09-29): the project page is where
+// you work; a step's details open beside the list; Project settings is the same screen for every project.
+const openPaint = async (page) => {
   await openTodo(page)
   await page.getByRole('button', { name: /^Projects/ }).click()
   await page.getByRole('button', { name: 'Open Paint the house' }).click()
-  await expect(page.getByText('1 of 5 steps done')).toBeVisible()
-  await expect(page.getByText('NEXT STEP · ON YOUR PHONE')).toBeVisible()
-  await expect(page.getByText('in 62 days')).toBeVisible()
+  await expect(page.getByText('3 of 9 done')).toBeVisible()
+}
+const typeOnWall = async (page, text) => {
+  const keyboard = page.getByRole('region', { name: 'Keyboard' })
+  for (const key of text) await keyboard.getByRole('button', { name: key === ' ' ? 'space' : new RegExp(`^${key}$`, 'i') }).first().click()
+  await keyboard.getByRole('button', { name: 'Done', exact: true }).click()
+}
+const plan = (page) => page.locator('button[aria-label^="Open "]').filter({ hasNotText: /Paint the house|^MT$/ }).allInnerTexts()
+
+test('wall: a project page — Now, Then lines, a project inside; drag a step beside another; add one on a Then line (canvas 10b)', async ({ page }) => {
+  await openPaint(page)
+  await expect(page.getByText('NOW · ON YOUR PHONE')).toBeVisible()
+  await expect(page.getByText('A PROJECT INSIDE', { exact: true })).toBeVisible()
+  await expect(page.getByText('At your pace: Oct 23')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-project.png')
 
-  // Reorder: "Move patio furniture" up one.
-  await page.getByRole('button', { name: 'Move Move patio furniture, cover plants up' }).click()
-  const later = await page.locator('span.truncate.text-wall-body').allInnerTexts()
-  expect(later).toEqual(['Pick colours — buy 3 sample pots', 'Move patio furniture, cover plants', 'Choose the painter and book dates'])
-  // Delete one.
-  await page.getByRole('button', { name: 'Delete Choose the painter and book dates' }).click()
-  await expect(page.getByText('1 of 4 steps done')).toBeVisible()
-  // Done on the next step: the one after takes its place.
-  await page.getByRole('button', { name: 'Done', exact: true }).first().click()
-  await expect(page.getByText('2 of 4 steps done')).toBeVisible()
-  await expect(page.locator('div.bg-wall-ink').getByText('Pick colours — buy 3 sample pots')).toBeVisible()
-  // Target date: a month ahead.
-  await page.getByRole('button', { name: 'Change', exact: true }).click()
-  await page.getByRole('button', { name: 'Month after' }).click()
-  await page.getByRole('button', { name: 'Tuesday, December 15' }).click()
-  await expect(page.getByText(/Tue, December 15/)).toBeVisible()
+  // Drag "Take down shutters" by its handle onto "Choose the painter": side by side with it.
+  const grip = await page.getByRole('button', { name: 'Hold and drag to move Take down shutters and house numbers' }).boundingBox()
+  const onto = await page.getByRole('button', { name: 'Open Choose the painter and book dates' }).boundingBox()
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + grip.width / 2, grip.y - 40, { steps: 4 })
+  await page.mouse.move(grip.x + grip.width / 2, onto.y + onto.height * 0.8, { steps: 8 })
+  await page.mouse.up()
+  expect(await plan(page)).toEqual(['Pick colours: 3 sample pots', 'Choose the painter and book dates', 'Take down shutters and house numbers', 'Move patio furniture, cover plants', 'The painter: 5 days, a dry week', 'Touch-ups and the final walk-round'])
+  await expect(page.getByText('SIDE BY SIDE · ANY ORDER').nth(1)).toBeVisible()
+
+  // "+ Add here" on the Then line before the painter: a group of its own there.
+  await page.getByRole('button', { name: '+ Add here' }).nth(2).click()
+  await typeOnWall(page, 'tarps')
+  expect((await plan(page)).slice(3, 6)).toEqual(['Move patio furniture, cover plants', 'Tarps', 'The painter: 5 days, a dry week'])
+
+  // Done in Now: the colours go; the project inside is still Now.
+  await page.getByRole('button', { name: 'Mark Pick colours: 3 sample pots done' }).click()
+  await expect(page.getByText('4 of 10 done')).toBeVisible()
+
+  // The project inside opens on its own page, and comes back.
+  await page.getByRole('button', { name: 'Open', exact: true }).click()
+  await expect(page.getByText('TO DO › PROJECTS › INSIDE PAINT THE HOUSE')).toBeVisible()
+  await page.getByRole('button', { name: 'Back to Paint the house' }).click()
+  await expect(page.getByText('4 of 10 done')).toBeVisible()
   await page.getByRole('button', { name: 'Back to the list' }).click()
   await expect(page.getByText('NEXT UP')).toBeVisible()
+})
+
+test('wall: a step’s details — the same controls for every step: who, time (same job ×10), cost on the number pad, when, calendar (canvas 10c)', async ({ page }) => {
+  await openPaint(page)
+  await page.getByRole('button', { name: 'Open The painter: 5 days, a dry week' }).click()
+  const panel = page.getByRole('region', { name: 'The painter: 5 days, a dry week — details' })
+  await expect(panel.getByText('STEP 8 OF 9 · PAINT THE HOUSE')).toBeVisible()
+  await expect(panel.getByText('theirs (painter)')).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Change the dates' })).toHaveText('Nov 9 – Nov 13')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-project-step.png')
+
+  // A cost typed on the number pad, not picked from chips.
+  await panel.getByRole('button', { name: 'Change the cost' }).click()
+  const pad = page.getByRole('region', { name: /number pad/ })
+  for (let i = 0; i < 4; i++) await pad.getByRole('button', { name: 'Delete a digit' }).click()
+  for (const d of '6800') await pad.getByRole('button', { name: d, exact: true }).click()
+  await pad.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(panel.getByRole('button', { name: 'Change the cost' })).toHaveText('$6,800')
+
+  // Another step: the very same controls. The same job, many times.
+  await page.getByRole('button', { name: 'Open Take down shutters and house numbers' }).click()
+  const shutters = page.getByRole('region', { name: 'Take down shutters and house numbers — details' })
+  for (const label of ['WHO', 'EFFORT', 'COST', 'WHEN IT FITS', 'ON THE CALENDAR', 'NOTES']) await expect(shutters.getByText(label, { exact: true })).toBeVisible()
+  await shutters.getByRole('switch', { name: 'The same job, many times' }).click()
+  for (let i = 0; i < 4; i++) await shutters.getByRole('button', { name: 'More', exact: true }).click()
+  await expect(shutters.getByRole('button', { name: 'Change the effort' })).toHaveText('2 hr')
+  // A quick change from the row itself.
+  await page.getByRole('button', { name: 'Change who does Take down shutters and house numbers' }).click()
+  await page.getByRole('button', { name: 'Kelly', exact: true }).last().click()
+  await expect(page.getByRole('button', { name: 'Change who does Take down shutters and house numbers' })).toHaveText('Kelly')
+  // ↑ Earlier: out of its shared group, just above.
+  await shutters.getByRole('button', { name: 'Move it earlier' }).click()
+  expect((await plan(page)).slice(2, 4)).toEqual(['Take down shutters and house numbers', 'Move patio furniture, cover plants'])
+})
+
+test('wall: Project settings — the goal, who does what, the phone, every year, status (canvas 10d)', async ({ page }) => {
+  await openPaint(page)
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await expect(page.getByText('PAINT THE HOUSE › SETTINGS')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-project-settings.png')
+  await page.getByRole('button', { name: 'Everything in “Now”' }).click()
+  await expect(page.getByText(/Every step in Now is on your Reminders list/)).toBeVisible()
+  await page.getByRole('switch', { name: 'Comes back every year' }).click()
+  await expect(page.getByText(/Next year starts from this year’s steps/)).toBeVisible()
+  await page.getByRole('button', { name: '+ Add someone' }).click()
+  await typeOnWall(page, 'brush bros')
+  await typeOnWall(page, 'painter')
+  await expect(page.getByText('Brush bros')).toBeVisible()
+  await page.getByRole('button', { name: 'Back to the plan' }).click()
+  await expect(page.getByText('NOW · ON YOUR PHONE')).toBeVisible()
 })
 
 test('wall: a to-do — tap it to add a date and time, then delete it', async ({ page }) => {

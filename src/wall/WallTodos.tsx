@@ -167,14 +167,6 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </header>
 
-      {projectId && project.data ? (
-        <WallProject
-          detail={project.data}
-          now={now}
-          onEdit={(op, args) => onAct({ action: 'project_edit', id: projectId, op, args })}
-          onBack={() => setProjectId(null)}
-        />
-      ) : (
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         <div className="flex min-w-0 flex-[1.35] flex-col overflow-hidden">
           <div className="pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NEXT UP</div>
@@ -230,10 +222,18 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </div>
 
-      )}
-
       {week}
       {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onClose={() => setEditing(null)} />}
+      {/* A project opens full screen (canvas 10b), over the list. */}
+      {projectId && project.data && (
+        <WallProject
+          detail={project.data}
+          now={now}
+          onEdit={(op, args) => onAct({ action: 'project_edit', id: projectId, op, args })}
+          onBack={() => setProjectId(null)}
+          onOpenProject={setProjectId}
+        />
+      )}
     </div>
   )
 }

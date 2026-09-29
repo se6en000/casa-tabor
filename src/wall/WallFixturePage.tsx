@@ -16,6 +16,7 @@ import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
 import { applyProjectEdit, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from './todos'
+import type { ProjectStep } from './projectModel'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -81,7 +82,7 @@ const TODOS: TodoList = {
     dated: [],
     unsorted: [],
   },
-  projects: [{ id: 'pr-paint', title: 'Paint the house', done: 1, total: 5, next: 'Get 3 painter quotes', nextEventId: 'td-paint', aimDate: '2026-11-26' }],
+  projects: [{ id: 'pr-paint', title: 'Paint the house', done: 3, total: 9, next: 'Pick colours: 3 sample pots', nextEventId: 'td-paint', aimDate: '2026-11-21' }],
   suggestions: [
     { id: 'td-cupcakes', title: 'Pick up Owen’s birthday cupcakes', kind: 'done', reason: 'Owen’s birthday was in July', with: null, withTitle: null },
     { id: 'td-heater2', title: 'Troubleshoot the water heater E05 error', kind: 'merge', reason: 'Same thing', with: 'td-heater', withTitle: 'Troubleshoot the water heater E05 error' },
@@ -89,15 +90,44 @@ const TODOS: TodoList = {
   ],
 }
 
+// Paint the house as canvas 10b draws it (P3.23): three done, Now is colours beside the stucco project,
+// then choosing the painter, the patio and shutters side by side, the painter, touch-ups.
+const pstep = (id: string, grp: number, title: string, extra: Partial<ProjectStep> = {}): ProjectStep => ({
+  id, grp, position: 0, title, minutes: null, cost_cents: null, done_at: null, reminder_event_id: null, who: null, fits: [], repeat_minutes: null, repeat_count: null,
+  repeat_unit: null, notes: null, cal_start: null, cal_end: null, shop_item: null, child_project_id: null, child: null, ...extra,
+})
+const numbered = (steps: ProjectStep[]) => steps.map((st, i) => ({ ...st, position: i + 1 }))
 const PAINT: TodoProjectDetail = {
-  project: { id: 'pr-paint', title: 'Paint the house', aim_date: '2026-11-26', status: 'active' },
-  steps: [
-    { id: 'st1', position: 1, title: 'Fix the wall cracks', minutes: 240, cost_cents: 5000, done_at: '2026-09-24T12:00:00Z', reminder_event_id: null },
-    { id: 'st2', position: 2, title: 'Get 3 painter quotes', minutes: 60, cost_cents: null, done_at: null, reminder_event_id: 'td-paint' },
-    { id: 'st3', position: 3, title: 'Pick colours — buy 3 sample pots', minutes: 60, cost_cents: 4000, done_at: null, reminder_event_id: null },
-    { id: 'st4', position: 4, title: 'Choose the painter and book dates', minutes: 30, cost_cents: null, done_at: null, reminder_event_id: null },
-    { id: 'st5', position: 5, title: 'Move patio furniture, cover plants', minutes: 60, cost_cents: null, done_at: null, reminder_event_id: null },
-  ],
+  project: {
+    id: 'pr-paint', title: 'Paint the house', aim_date: '2026-11-21', aim_firm: false, budget_cents: 800000, phone: 'next', yearly: false, season_id: null,
+    status: 'active', paused_until: null, notes: 'Gomez might do the stucco too. Ask on the quote.', created_at: '2026-09-13T12:00:00Z',
+    people: [{ name: 'Me' }, { name: 'Kelly' }, { name: 'Gomez Painting', role: 'Painter' }, { name: 'Mario’s Stucco', role: 'Stucco', contact: '(561) 555-0142' }],
+  },
+  steps: numbered([
+    pstep('st-decide', 1, 'Decide: hire it out', { done_at: '2026-09-15T12:00:00Z' }),
+    pstep('st-walk', 2, 'Walk the house, list the repairs', { done_at: '2026-09-18T12:00:00Z' }),
+    pstep('st-quotes', 3, 'Ask 3 painters for quotes', { done_at: '2026-09-22T12:00:00Z' }),
+    pstep('st-colours', 4, 'Pick colours: 3 sample pots', { minutes: 60, cost_cents: 4000, who: 'Me', fits: ['weekends', 'daylight'], reminder_event_id: 'td-paint' }),
+    pstep('st-stucco', 4, 'Stucco cracks: seal and patch', { child_project_id: 'pr-stucco', child: { id: 'pr-stucco', title: 'Stucco cracks: seal and patch', done: 1, total: 4, next: 'Mario’s quote', status: 'active' } }),
+    pstep('st-choose', 5, 'Choose the painter and book dates', { minutes: 30, who: 'Me', cal_start: '2026-10-10' }),
+    pstep('st-patio', 6, 'Move patio furniture, cover plants', { minutes: 60, who: 'Kelly' }),
+    pstep('st-shutters', 6, 'Take down shutters and house numbers', { minutes: 60, who: 'Me' }),
+    pstep('st-painter', 7, 'The painter: 5 days, a dry week', { minutes: 2400, cost_cents: 600000, who: 'Gomez Painting', fits: ['weekdays', 'dry'], cal_start: '2026-11-09', cal_end: '2026-11-13', notes: 'Gate code for the crew: 4471. Cover the pool pump.' }),
+    pstep('st-touch', 8, 'Touch-ups and the final walk-round', { minutes: 60, who: 'Me' }),
+  ]),
+  parent: null,
+  others: [{ id: 'pr-stucco', title: 'Stucco cracks: seal and patch' }, { id: 'pr-floor', title: 'Redo floorboards on the roof patio' }],
+}
+const STUCCO: TodoProjectDetail = {
+  project: { ...PAINT.project, id: 'pr-stucco', title: 'Stucco cracks: seal and patch', aim_date: null, budget_cents: null, notes: null, people: [{ name: 'Me' }, { name: 'Mario’s Stucco', role: 'Stucco' }] },
+  steps: numbered([
+    pstep('sc-walk', 1, 'Walk the cracks with Mario', { done_at: '2026-09-24T12:00:00Z' }),
+    pstep('sc-quote', 2, 'Mario’s quote', { who: 'Mario’s Stucco' }),
+    pstep('sc-patch', 3, 'Patch and seal', { minutes: 960, who: 'Mario’s Stucco' }),
+    pstep('sc-cure', 4, 'Let it cure a week', { minutes: 15 }),
+  ]),
+  parent: { id: 'pr-paint', title: 'Paint the house' },
+  others: [{ id: 'pr-paint', title: 'Paint the house' }],
 }
 
 export default function WallFixturePage() {
@@ -168,7 +198,7 @@ export default function WallFixturePage() {
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => (new URLSearchParams(window.location.search).get('comingUp') === 'live' ? COMING_UP_LIVE : COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const [todoList, setTodoList] = useState<TodoList>(TODOS)
-  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT })
+  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO })
   const todos = {
     list: todoList,
     useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),

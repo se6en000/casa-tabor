@@ -20,7 +20,9 @@ export function useDaySwipe(ref: RefObject<HTMLElement | null>, onStep: (step: D
 
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0]
-      start = e.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY, t: e.timeStamp } : null
+      // A page where fingers drag things (a project's steps) is never a day swipe.
+      const noSwipe = e.target instanceof Element && e.target.closest('[data-no-swipe]')
+      start = e.touches.length === 1 && touch && !noSwipe ? { x: touch.clientX, y: touch.clientY, t: e.timeStamp } : null
     }
     const onTouchEnd = (e: TouchEvent) => {
       const touch = e.changedTouches[0]
