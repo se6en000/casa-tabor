@@ -113,6 +113,10 @@ export function dayTable(nowIso, utcOffset, days = 15) {
 }
 
 /** The one prompt that reads a turn in its context. */
+// Six weeks of days (any day, 2026-09-30): "Is anything happening on Halloween?" and "Put the 20th up on
+// the screen" named no day while the list stopped at two weeks.
+export const TURN_DAYS = 45
+
 export function buildTurnPrompt({ messages, draft, referents, upcoming, family, nowLine, utcOffset, nowIso }) {
   const history = (Array.isArray(messages) ? messages : []).slice(-MAX_HISTORY)
   const latest = history.at(-1)
@@ -123,7 +127,7 @@ export function buildTurnPrompt({ messages, draft, referents, upcoming, family, 
 
 Now: ${nowLine}
 Days (look dates up here; a weekday means its next date in this list):
-${dayTable(nowIso, utcOffset)}
+${dayTable(nowIso, utcOffset, TURN_DAYS)}
 Family: ${(family ?? []).map((m) => (m.role ? `${m.name} (${m.role})` : m.name)).join(', ')}
 ${draft ? `\nWAITING FOR THE PERSON'S YES (a draft, not saved yet):\n  ${describeDraft(draft, utcOffset)}\n` : ''}${referents?.length ? `\nCALENDAR ITEMS THE CONVERSATION IS ABOUT (numbered in the order Casa last listed or named them):\n${referents.map((e, i) => describeReferent(e, i, utcOffset)).join('\n')}\n` : ''}${rest.length ? `\nOTHER UPCOMING ITEMS ON THE CALENDAR:\n${rest.map((e) => describeReferent(e, -1, utcOffset)).join('\n')}\n` : ''}
 CONVERSATION SO FAR:
@@ -154,7 +158,9 @@ Asking whether someone could take, drive, join or move a calendar item is sugges
 "changes" (revise_draft or change): only what changes — "title", "date" ("YYYY-MM-DD", with "date_basis" as above), "start"/"end" ("HH:MM", 24-hour, local), "duration_minutes", "place", "add_people", "remove_people", "all_day", "notes", "kind" ("event" | "reminder"), "driver" (the family member who'll drive).
 Dates: always take them from the Days list. In scheduling, pushing or moving something back (or out) means later; moving it up (or forward, or earlier) means earlier. Times: 24-hour local; read a bare hour as the sensible part of the day for that kind of thing, in the context of any time already set. A new start without an end keeps the length.
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false}`
+"day": when the latest message is about one calendar day — what's on it, whether anything is happening then, or to see it (a date, a weekday, a holiday, "that day" from the conversation): {"date": "YYYY-MM-DD", "date_basis": as above, "open": true only when they ask to see, open, show or pull up the day itself (on the wall, the screen, the calendar)} — else null (an add or a change, several days, a range, no day).
+
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null}`
 }
 
 const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
@@ -183,7 +189,12 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const question = typeof r.question === 'string' && r.question.trim() ? r.question.trim().slice(0, 400) : null
   if (act === 'clarify' && (candidates.length < 2 || !question)) act = 'other'
   const answerable = act === 'question' && r.answerable === true
-  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question }
+  // The one day the turn is about (any day, 2026-09-30): the answer can open it, or offer to. Never for
+  // an add or a change — those are cards about a day, not a look at one.
+  const day = ['question', 'other'].includes(act) && r.day && typeof r.day === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(String(r.day.date ?? ''))
+    ? { date: String(r.day.date), date_basis: typeof r.day.date_basis === 'string' ? r.day.date_basis : 'date', open: r.day.open === true }
+    : null
+  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/

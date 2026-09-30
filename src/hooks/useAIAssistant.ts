@@ -28,6 +28,8 @@ interface AssistantServerPayload {
   type?: string
   /** Answered by the planning model (P3.25): the rest of the conversation stays with it. */
   planning?: boolean
+  /** The one day this answer is about (show_day): the wall opens it, or offers to. */
+  show_day?: { date: string; open: boolean }
   closes_draft?: boolean
   /** The words weren't said to Casa (heard by the wall's open mic): no reply. */
   aside?: boolean
@@ -563,6 +565,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         ...(data?.aside === true ? { aside: true } : {}),
         ...(data?.confirms_draft === true ? { confirmsDraft: true } : {}),
         ...(data?.planning === true ? { planning: true } : {}),
+        ...(data?.show_day && typeof data.show_day.date === 'string' ? { showDay: data.show_day } : {}),
         ...sourceMetadata,
       }
     }

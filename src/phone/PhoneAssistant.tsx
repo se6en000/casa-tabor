@@ -6,7 +6,7 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
-import { cardText, nextStep, voiceFinal, whichOne } from '../wall/assistant'
+import { answerDay, cardText, nextStep, voiceFinal, whichOne } from '../wall/assistant'
 import { assistantCard, replacedAction } from '../wall/assistantCard'
 import type { DayPlan, WallEvent, WallMember } from '../wall/engine/types'
 import { pigmentIndexes } from '../wall/score'
@@ -19,7 +19,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -29,6 +29,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   onOpenEvent: (id: string) => void
   /** A saved plan's line, opened where it lives (board 12d): a project, To do. */
   onOpenPlace?: (open: PlanOpen) => void
+  /** Open a day on Me (Casa's show_day, or an answer about one day). */
+  onOpenDay?: (date: Date) => void
   /** Words said first (a project's "Talk to Casa", P3.25). */
   opening?: string | null
   /** The conversation and the drive lookup; the screenshot fixture passes canned ones. */
@@ -38,6 +40,14 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const { profile } = useProfileSession()
   const turn = useTurn({ surface: 'phone', events, family })
   const { messages, loading, status, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan } = turn
+  // The day the answer is about (Jake, 2026-09-29): opened when he asked to see it, else a button.
+  const day = answerDay(answer, new Date())
+  const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id) return
+    openedFor.current = answer.id
+    onOpenDay(day.date)
+  }, [answer, day?.open, day?.date, onOpenDay])
   // Plan it with Casa (P3.25; board 12e): the plan on screen, its Agree sheet, and what it saved.
   const planAction = pending?.toolAction?.tool === 'apply_plan' ? pending.toolAction : null
   const plan = planAction ? (planAction.args as unknown as PlanArgs) : null
@@ -123,6 +133,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
         },
       } : undefined}
       onOpenEvent={pointAt && events.some((e) => e.id === pointAt) ? () => onOpenEvent(pointAt) : undefined}
+      openDay={day && onOpenDay ? { label: `Open ${day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`, go: () => onOpenDay(day.date) } : null}
       onSend={(text) => {
         setNote(null)
         void send(text)

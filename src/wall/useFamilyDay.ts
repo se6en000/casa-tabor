@@ -20,11 +20,11 @@ import type { Audience } from './audience'
  * a decision's "keep it"), which save the same way from either surface. `audience` is who's
  * looking: the wall, or one person's phone (what's kept from them, Giselle's lens).
  */
-export function useFamilyDay(audience: Audience = { kind: 'wall' }) {
+export function useFamilyDay(audience: Audience = { kind: 'wall' }, around: Date | null = null) {
   const now = useMinuteClock()
   const trips = useWallTripState()
   const { keep, setKeptFrom } = useKeepFrom()
-  const day = useWallDay(now, trips.state, audience, keep)
+  const day = useWallDay(now, trips.state, audience, keep, around)
   const { members, today, tomorrow, week, allEvents } = day
   const queryClient = useQueryClient()
   const tripStateFor = useCallback((date: Date) => dayState(trips.state, date), [trips.state])

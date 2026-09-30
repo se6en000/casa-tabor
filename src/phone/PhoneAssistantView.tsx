@@ -26,6 +26,8 @@ export interface PhoneAssistantViewProps {
   mic?: { listening: boolean; interim: string; toggle: () => void }
   /** The calendar item the latest answer is about. */
   onOpenEvent?: () => void
+  /** The day the answer is about (show_day): "Open Saturday, Oct 17". */
+  openDay?: { label: string; go: () => void } | null
   onSend: (text: string) => void
   onConfirm: () => void
   onCancel: () => void
@@ -47,7 +49,7 @@ export interface PhoneAssistantViewProps {
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -192,10 +194,11 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             )}
             {which && !thinking && <PhoneWhich which={which} members={members} pigmentOf={pigmentOf} onPick={submit} onNeither={() => submit('Never mind')} />}
             {note && <div className="text-phone-body font-semibold text-wall-ink">{note}</div>}
-            {(offer || onOpenEvent) && !pending && !thinking && (
+            {(offer || onOpenEvent || openDay) && !pending && !thinking && (
               <div className="flex flex-wrap gap-[8px]">
                 {offer && <button type="button" onClick={() => submit(offer.say)} className={dark}>{offer.label}</button>}
                 {onOpenEvent && <button type="button" onClick={onOpenEvent} className={pill}>Open it</button>}
+                {openDay && <button type="button" onClick={openDay.go} className={pill}>{openDay.label}</button>}
               </div>
             )}
             <div ref={endRef} />

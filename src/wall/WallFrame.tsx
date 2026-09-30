@@ -18,14 +18,17 @@ import { useTodos } from './useTodos'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
-  const { now, members, today, tomorrow, week, allEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient } = useFamilyDay()
+  // A far day on show (dayFocus.ts): its week is loaded so it can be swiped through.
+  const [aroundDay, setAroundDay] = useState<Date | null>(null)
+  const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
+  const { now, members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient } = useFamilyDay({ kind: 'wall' }, aroundDay)
   const { data: currentWeather } = useHomeWeather()
 
   // The assistant band: the mic button or the wake word (heard on the Pi) opens it and starts listening.
   const [bandOpen, setBandOpen] = useState(false)
   const [listenNonce, setListenNonce] = useState(0)
   const [pointAt, setPointAt] = useState<string | null>(null)
-  const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; nonce: number } | null>(null)
+  const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; day?: string; nonce: number } | null>(null)
   const [opening, setOpening] = useState<{ text: string; nonce: number } | null>(null)
   // `say`: opened with words to send first (a project's "Talk to Casa about it", P3.25).
   const ask = useCallback((say?: string) => {
@@ -64,6 +67,10 @@ export default function WallFrame() {
         setOpenRequest({ id, nonce: Date.now() })
       }}
       opening={opening}
+      onOpenDay={(date) => {
+        setBandOpen(false)
+        setOpenRequest({ day: date.toISOString(), nonce: Date.now() })
+      }}
       onOpenPlace={(open) => {
         setBandOpen(false)
         if (open.kind === 'event') setOpenRequest({ id: open.id, nonce: Date.now() })
@@ -76,5 +83,5 @@ export default function WallFrame() {
 
   const comingUp = useComingUp()
   const todos = useTodos()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
 }

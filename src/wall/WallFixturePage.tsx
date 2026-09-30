@@ -87,6 +87,12 @@ export default function WallFixturePage() {
       id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
       all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
     } as unknown as WallEvent] : []),
+    // `?far=1` (any day): the week around Sat, Oct 17 — weeks past the usual strip.
+    ...(new URLSearchParams(window.location.search).get('far') ? [
+      { id: 'far-dentist', title: 'Owen dentist', start_time: new Date(2026, 9, 15, 15, 30).toISOString(), end_time: new Date(2026, 9, 15, 16, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'owen', role: 'primary' }] },
+      { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'emme', role: 'primary' }] },
+      { id: 'far-market', title: 'Green Market', start_time: new Date(2026, 9, 18, 9, 0).toISOString(), end_time: new Date(2026, 9, 18, 11, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'kelly', role: 'primary' }] },
+    ] as unknown as WallEvent[] : []),
     // `?stepEvent=1` (P3.23): a project step's all-day calendar event today.
     ...(STEP_EVENT ? [{
       id: 'ev-colours', title: 'Paint the house: Pick colours: 3 sample pots', start_time: '2026-09-25T00:00:00Z', end_time: '2026-09-25T23:59:59Z',
@@ -120,6 +126,7 @@ export default function WallFixturePage() {
   const [bandOpen, setBandOpen] = useState(true)
   const [assistantDraft, setAssistantDraft] = useState<WallEvent | null>(null)
   const [pointAt, setPointAt] = useState<string | null>(null)
+  const [openRequest, setOpenRequest] = useState<{ day?: string; nonce: number } | null>(null)
   const band = useTurn && bandOpen ? (
     <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
       <WallAssistantBand
@@ -130,6 +137,7 @@ export default function WallFixturePage() {
         onPointAt={setPointAt}
         onOpenEvent={() => setBandOpen(false)}
         onOpenPlace={() => setBandOpen(false)}
+        onOpenDay={(date) => { setBandOpen(false); setOpenRequest({ day: date.toISOString(), nonce: Date.now() }) }}
         members={members as WallMember[]}
         planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
         onDraft={setAssistantDraft}
@@ -176,7 +184,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={band} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={band} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

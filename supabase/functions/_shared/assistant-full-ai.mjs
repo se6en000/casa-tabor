@@ -194,6 +194,8 @@ export const FULL_AI_TOOLS = [
   { name: 'get_travel_eta', description: 'Drive time and when to leave (from home unless an origin is given); times are ISO.', parameters: { type: 'OBJECT', properties: { destination: { type: 'STRING' }, origin: { type: 'STRING' }, arrival_time: { type: 'STRING' }, departure_time: { type: 'STRING' } }, required: ['destination'] } },
   { name: 'get_recipe', description: 'Open one saved recipe by its [id]: ingredients and steps.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' } }, required: ['id'] } },
   { name: 'search_family_notes', description: "Search the family's emails, notes and remembered facts (a school email, a confirmation, something someone said to remember).", parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+  // A day on the screen (Jake, 2026-09-29: "Can you open this day for me" — it couldn't). Changes nothing.
+  { name: 'show_day', description: 'Put one day on the screen: the wall\u2019s day view (the phone\u2019s Me), with the week around it to swipe through. open true when he asks to open, show or look at a day ("open October 17th", "can you open this day for me", "show me next Saturday"); open false when your answer is about one particular day, so the screen offers a button to open it. Then answer in words as usual.', parameters: { type: 'OBJECT', properties: { date: { type: 'STRING', description: 'YYYY-MM-DD' }, open: { type: 'BOOLEAN' } }, required: ['date'] } },
 ]
 
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
@@ -224,7 +226,17 @@ export function fullAiTools({ planning }) {
 
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
-export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events'])
+export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events', 'show_day'])
+
+/** show_day's arguments: a real calendar date (YYYY-MM-DD) and whether to open it now. */
+export function readShowDay(args) {
+  const date = typeof args?.date === 'string' ? args.date.trim() : ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!m) return null
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  if (d.getUTCMonth() !== Number(m[2]) - 1 || d.getUTCDate() !== Number(m[3])) return null
+  return { date, open: args.open === true }
+}
 
 /** "YYYY-MM-DDTHH:MM" local → ISO with the family's offset, or null when it isn't a real, sensible moment. */
 function localToIso(value, utcOffset, now) {
@@ -609,6 +621,7 @@ export function fullAiStatus(call) {
     case 'get_recipe': return 'Opening the recipe…'
     case 'get_gift_ideas': return 'Checking the gift ideas…'
     case 'search_family_notes': return 'Looking through the family notes…'
+    case 'show_day': return null
     default: return 'Looking that up…'
   }
 }

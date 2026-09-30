@@ -87,6 +87,15 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Could Kelly take it instead?'),
     said('Kelly’s free then. Want me to make her the driver for softball? Jake would be off the hook.', { conversationState: { activeEntityType: 'event', activeEventId: 'softball', expectedFollowUp: 'event_follow_up', establishedAt: '' } }),
   ],
+  // Any day (Jake, 2026-09-29): an answer about one far day offers to open it; asked to open it, it opens.
+  'open-day': () => [
+    user('Show me the events on October 17th'),
+    said('Saturday, October 17: Emme’s build night, 6 to 8 PM.', { showDay: { date: '2026-10-17', open: false } }),
+  ],
+  'open-day-now': () => [
+    user('Can you open October 17th for me'),
+    said('Here’s Saturday, October 17.', { showDay: { date: '2026-10-17', open: true } }),
+  ],
   // 07e: a question still thinking — the tip line shows under it.
   thinking: () => [user('When’s Carl’s birthday again?')],
   // P3.25 phase 1: a longer think, with the live line of what Casa is looking up.

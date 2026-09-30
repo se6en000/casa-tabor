@@ -18,6 +18,8 @@ export interface AIMessage {
   id: string
   /** Answered by the planning model (P3.25): the conversation stays with it. */
   planning?: boolean
+  /** The one day this answer is about (Casa's `show_day`): the wall opens it, or offers to. */
+  showDay?: { date: string; open: boolean }
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string

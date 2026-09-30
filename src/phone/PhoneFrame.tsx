@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent } from '../wall/engine/types'
 import { useProfileSession } from '../contexts/useProfileSession'
@@ -41,7 +41,10 @@ async function findSimilar(items: ScannedItem[]) {
 
 export default function PhoneFrame() {
   const { profile } = useProfileSession()
-  const { now, members, week, allEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' })
+  // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
+  const [aroundDay, setAroundDay] = useState<Date | null>(null)
+  const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
+  const { now, members, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' }, aroundDay)
   // The assistant's card is told from the same engine as the wall's (board 06e).
   const planDay = useCallback(
     (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
@@ -70,7 +73,10 @@ export default function PhoneFrame() {
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
       findSimilar={findSimilar}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
-      assistant={({ onClose, onOpenEvent, onOpenPlace, opening }) => <PhoneAssistant opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} />}
+      assistant={({ onClose, onOpenEvent, onOpenPlace, onOpenDay, opening }) => <PhoneAssistant opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} onOpenDay={onOpenDay} />}
+      planDay={planDay}
+      aroundEvents={aroundEvents}
+      onFocusDay={onFocusDay}
       keepFrom={keep}
       setKeptFrom={setKeptFrom}
       contacts={contacts}

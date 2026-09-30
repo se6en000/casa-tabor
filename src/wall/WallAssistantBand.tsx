@@ -7,7 +7,7 @@ import WallKeyboard from './WallKeyboard'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -65,11 +65,13 @@ export interface WallAssistantBandProps {
   useSpeech?: typeof useSpeechInput
   /** A saved plan's line, opened where it lives (board 12d): a project, an event, To do. */
   onOpenPlace?: (open: PlanOpen) => void
+  /** Open a day on the wall (Casa's show_day, or an answer about one day). */
+  onOpenDay?: (date: Date) => void
   /** Opened with something to say first (a project's "Talk to Casa about it", P3.25). */
   opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, opening = null }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, opening = null }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -254,6 +256,15 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }, [opening]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => onPointAt(pointAt), [pointAt, onPointAt])
+  // The day the answer is about (Jake, 2026-09-29: "Can you open this day for me"): opened when he
+  // asked to see it, else offered as a button.
+  const day = answerDay(answer, new Date())
+  const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id) return
+    openedFor.current = answer.id
+    onOpenDay(day.date)
+  }, [answer, day?.open, day?.date, onOpenDay])
   useEffect(() => () => onPointAt(null), [onPointAt])
 
   const state = bandState({ listening: speech.listening || speech.connecting, loading, answer, pending })
@@ -608,6 +619,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           {pointAt && events.some((e) => e.id === pointAt) && (
             <button type="button" className={offer ? pill : lightPill} onClick={() => onOpenEvent(pointAt)}>
               Open {shortTitle(events.find((e) => e.id === pointAt)?.title ?? '') || 'it'}
+            </button>
+          )}
+          {day && onOpenDay && (
+            <button type="button" className={offer || pointAt ? pill : lightPill} onClick={() => onOpenDay(day.date)}>
+              Open {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
             </button>
           )}
           <button type="button" className={pill} onClick={() => { setNote(null); captured.current = ''; void speech.start() }}>

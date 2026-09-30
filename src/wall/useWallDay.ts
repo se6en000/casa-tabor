@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useRollingEvents, useTodayEvents, useTomorrowEvents } from '../hooks/useCalendarEvents'
+import { useRollingEvents, useTodayEvents, useTomorrowEvents, useWeekAroundEvents } from '../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutineFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
@@ -18,6 +18,8 @@ export interface WallDay {
   week: DayPlan[]
   /** The rolling event cache (the event sheet and its previews rebuild days from it). */
   allEvents: WallEvent[]
+  /** The week around a far day on show (dayFocus.ts), or null. */
+  aroundEvents: WallEvent[] | null
   routines: FamilyRoutine[]
   dayOffs: DayOff[]
 }
@@ -29,7 +31,7 @@ export interface WallDay {
  * `audience` is who's looking (the wall, or one person's phone): only what they may see
  * goes into the plans (audience.ts).
  */
-export function useWallDay(now: Date, tripState: WallTripState = {}, audience: Audience = { kind: 'wall' }, keep: KeepFrom = {}): WallDay {
+export function useWallDay(now: Date, tripState: WallTripState = {}, audience: Audience = { kind: 'wall' }, keep: KeepFrom = {}, around: Date | null = null): WallDay {
   const audienceKey = audience.kind === 'wall' ? 'wall' : audience.memberId
   const dayKey = now.toDateString()
   const { data: familyMembers } = useFamilyMembers()
@@ -42,6 +44,9 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
   // eslint-disable-next-line react-hooks/exhaustive-deps -- audienceKey stands for audience
   const shown = useMemo(() => (list: WallEvent[]) => eventsFor(audience, list, members, keep), [audienceKey, members, keep])
   const allEvents = useMemo(() => shown((rollingEvents ?? []) as unknown as WallEvent[]), [rollingEvents, shown])
+  // A far day's week (dayFocus.ts), seen the same way as the rest.
+  const { data: aroundRaw } = useWeekAroundEvents(around)
+  const aroundEvents = useMemo(() => (around && aroundRaw ? shown(aroundRaw as unknown as WallEvent[]) : null), [around, aroundRaw, shown])
   const todayShown = useMemo(() => (todayEvents ? shown(todayEvents as unknown as WallEvent[]) : null), [todayEvents, shown])
   const tomorrowShown = useMemo(() => (tomorrowEvents ? shown(tomorrowEvents as unknown as WallEvent[]) : null), [tomorrowEvents, shown])
 
@@ -76,5 +81,5 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
     return [today, tomorrow, ...later]
   }, [ready, today, tomorrow, dayKey, members, routines, allEvents, exceptions, tripState])
 
-  return { members, today, tomorrow, week, allEvents, routines, dayOffs: exceptions as DayOff[] }
+  return { members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs: exceptions as DayOff[] }
 }

@@ -91,7 +91,14 @@ export default function PhoneFixturePage() {
   const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})
   const [checklist, setChecklist] = useState(CHECKLIST)
-  const [evs, setEvs] = useState(events as unknown as WallEvent[])
+  const [evs, setEvs] = useState(() => [
+    ...(events as unknown as WallEvent[]),
+    // `?far=1` (any day): Jake's week around Sat, Oct 17 — weeks past the usual strip.
+    ...(params.get('far') ? [
+      { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }, { family_member_id: 'emme', role: 'attendee' }] },
+      { id: 'far-market', title: 'Green Market', start_time: new Date(2026, 9, 18, 9, 0).toISOString(), end_time: new Date(2026, 9, 18, 11, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
+    ] as unknown as WallEvent[] : []),
+  ])
   const [keep, setKeep] = useState<KeepFrom>({})
   const [comingUp, setComingUp] = useState(COMING_UP)
   // Gift ideas (one for Kelly: never on her phone), each correctable by hand.
@@ -128,7 +135,9 @@ export default function PhoneFixturePage() {
               checklist={checklist}
               scan={async () => SCANNED}
               findSimilar={params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
-              assistant={({ onClose, onOpenEvent, opening }) => askTurn ? (
+              planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
+              aroundEvents={shown}
+              assistant={({ onClose, onOpenEvent, onOpenDay, opening }) => askTurn ? (
                 // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
                 <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
                   <PhoneAssistant
@@ -138,6 +147,7 @@ export default function PhoneFixturePage() {
                     planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
                     onClose={onClose}
                     onOpenEvent={onOpenEvent}
+                    onOpenDay={onOpenDay}
                     useTurn={askTurn}
                     opening={opening}
                     lookupDrive={async () => 24}

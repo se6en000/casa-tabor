@@ -170,7 +170,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -406,6 +406,7 @@ async function readTurn(
     }
     settle(resolution.newItem as Record<string, unknown> | null)
     settle(resolution.draftChanges as Record<string, unknown> | null)
+    settle(resolution.day as Record<string, unknown> | null)
     const originalText = String(messages.at(-1)?.content ?? '')
     const about = resolution.eventId ? loaded.find((e) => e.id === resolution.eventId) ?? null : null
     const out: TurnContext = { ...none, resolution, referents: about && !referents.includes(about) ? [about, ...referents] : referents, originalText }
@@ -1260,6 +1261,8 @@ Deno.serve(async (req) => {
     let parts: Array<Record<string, unknown>> = []
     let retriedEmpty = false
     let finishReason: string | null = null
+    // The day the answer is about (show_day): the wall opens it, or offers to.
+    let shownDay: { date: string; open: boolean } | null = null
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
     const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
     // Up to five rounds: a lookup's answer goes back to the model, which then answers or proposes; the
@@ -1306,11 +1309,14 @@ Deno.serve(async (req) => {
       }
       const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
       if (!reads.length) break
-      for (const p of reads) emitStatus(fullAiStatus(p.functionCall))
+      for (const p of reads) { const line = fullAiStatus(p.functionCall); if (line) emitStatus(line) }
       const answers = await Promise.all(reads.map(async (p) => {
         const call = p.functionCall as { name: string; args: Record<string, unknown> }
         let result: Record<string, unknown> | null = null
-        if (call.name === 'get_recipe') {
+        if (call.name === 'show_day') {
+          shownDay = readShowDay(call.args) ?? shownDay
+          result = shownDay ? { shown: shownDay.date, note: shownDay.open ? 'It is on the screen now. Say one short line about the day.' : 'The screen offers to open it.' } : { error: 'The date must be YYYY-MM-DD' }
+        } else if (call.name === 'get_recipe') {
           const { data } = await sb.from('recipes').select('name, servings, cook_time, recipe_ingredients(raw_text, name, quantity, unit, optional, sort_order), recipe_steps(step_number, instruction)').eq('id', String(call.args?.id ?? '')).maybeSingle()
           result = data ? data as Record<string, unknown> : { error: 'No recipe with that id' }
         } else if (call.name === 'get_coming_up') {
@@ -1376,11 +1382,13 @@ Deno.serve(async (req) => {
       const shown = card.tool === 'apply_plan' ? (said || `Here’s the plan: ${String(card.args.title ?? '')}.`) : buildDisplayText(card.tool, card.args)
       return { status: 200, payload: { ...(planning ? { planning: true } : {}), type: 'tool_action', tool: card.tool, args: card.args, display_text: shown, conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
     }
-    const text = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+    const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+    // A day opened with nothing more to say still says which day it is.
+    const text = said || (shownDay ? `Here’s ${new Date(`${shownDay.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })}.` : '')
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { ...(planning ? { planning: true } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
@@ -6783,6 +6791,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
     // The turn also dropped the open card ("never mind — what time is …?"): close it with the answer.
     if (turnResolution?.closesDraft && !out.payload.closes_draft && out.payload.type !== 'tool_action') out.payload.closes_draft = true
+    // The one day the words were about (any day): the wall opens it, or offers to — whoever answered.
+    if (out.payload.type === 'text' && !out.payload.aside && !out.payload.show_day && turnResolution?.day) out.payload.show_day = { date: turnResolution.day.date, open: turnResolution.day.open }
     if (turnResolution) {
       out.payload.turn_context = {
         act: turnResolution.act,

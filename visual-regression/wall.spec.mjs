@@ -821,6 +821,40 @@ test('wall: a two-finger trackpad swipe moves one day; scrolling does not', asyn
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Saturday, September 26/)
 })
 
+// Any day (Jake, 2026-09-29/30): "Show me the events on October 17th" → "Open Saturday, Oct 17", and the
+// week around it comes onto the strip ("load the week so I can swipe before and after the day I asked about").
+test('wall: Casa opens a far day; the week around it is on the strip to swipe through', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&band=open-day&far=1')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await band.getByRole('button', { name: 'Stop listening' }).click()
+  await band.getByRole('button', { name: 'Open Saturday, Oct 17' }).click()
+  await expect(band).toBeHidden()
+  await expect(page.getByText('LOOKING AHEAD · SATURDAY, OCT 17')).toBeVisible()
+  await expect(page.getByText('Emme’s build night').first()).toBeVisible()
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Saturday, October 17/)
+  const strip = page.getByRole('region', { name: 'Next seven days' })
+  await expect(strip.locator('button[aria-label^="Today"]')).toHaveCount(1)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('far-day.png')
+  await touchSwipe(page, [1500, 600], [1100, 610])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Sunday, October 18/)
+  await expect(page.getByText('Green Market').first()).toBeVisible()
+  for (let i = 0; i < 3; i++) await touchSwipe(page, [1100, 600], [1500, 590])
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Thursday, October 15/)
+  await expect(page.getByText('Owen dentist').first()).toBeVisible()
+  // A swipe swallows the click it leaves behind for 450 ms (useDaySwipe); a real tap comes later.
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: 'Back to today' }).click()
+  await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
+  await expect(strip.locator('button[aria-label^="Saturday, October 17"]')).toHaveCount(0)
+})
+
+test('wall: asked to open a day, Casa opens it straight away', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:08:00&band=open-day-now&far=1')
+  await expect(page.getByText('LOOKING AHEAD · SATURDAY, OCT 17')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeHidden()
+})
+
 test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()

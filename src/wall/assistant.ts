@@ -36,6 +36,31 @@ export function pendingAction(messages: AIMessage[]): AIMessage | null {
   return [...messages].reverse().find((m) => m.toolAction?.status === 'pending') ?? null
 }
 
+/**
+ * The one day an answer is about, so the wall can open it (Jake, 2026-09-29: "Show me the events on
+ * October 17th" … "Can you open this day for me" — it couldn't). Casa names it (`show_day`, opened when
+ * he asked to open or see it); a quick answer whose events all fall on one day offers it too. Today is
+ * already on the wall; a range across days (the long Oct 17 answer carried Sep 30 – Oct 18) names none.
+ */
+export function answerDay(message: AIMessage | null, now: Date): { date: Date; open: boolean } | null {
+  if (!message) return null
+  const local = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const named = message.showDay
+  if (named) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(named.date)
+    if (!m) return null
+    const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    return date.toDateString() === now.toDateString() ? null : { date, open: Boolean(named.open) }
+  }
+  const state = message.conversationState
+  if (state?.activeEntityType !== 'calendar_range') return null
+  const start = new Date(state.range.start)
+  const end = new Date(state.range.end)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null
+  if (start.toDateString() !== end.toDateString() || start.toDateString() === now.toDateString()) return null
+  return { date: local(start), open: false }
+}
+
 /** The calendar item an answer is about, so the wall can outline it. */
 export function answerEventId(message: AIMessage | null): string | null {
   if (!message) return null

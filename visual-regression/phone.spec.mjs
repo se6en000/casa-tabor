@@ -387,6 +387,27 @@ const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
   el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [at(...to)] }))
 }, [from, to])
 
+// Any day on the phone (Jake, 2026-09-30): an answer about Oct 17 opens that day on Family (everyone's
+// day, as asked), with the week around it to swipe; tapping Family or Me comes back to today.
+test('phone: Casa opens a far day on Family; its week swipes; a tab comes back to today', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=open-day&far=1')
+  const phone = page.getByTestId('phone-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  const ask = phone.getByRole('region', { name: 'Ask Casa' })
+  await ask.getByRole('button', { name: 'Open Saturday, Oct 17' }).click()
+  await expect(ask).toBeHidden()
+  await expect(phone.getByText('Saturday, October 17')).toBeVisible()
+  await expect(phone.getByText('Emme’s build night').first()).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-far-day.png')
+  await phoneSwipe(page, [320, 400], [120, 410])
+  await expect(phone.getByText('Sunday, October 18')).toBeVisible()
+  await expect(phone.getByText('Green Market').first()).toBeVisible()
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await expect(phone.getByText('Friday, September 25')).toBeVisible()
+})
+
 test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {
   const phone = await open(page)
   await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()

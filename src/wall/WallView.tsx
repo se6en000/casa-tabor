@@ -31,6 +31,7 @@ import WallLaunch from './WallLaunch'
 import WallMenu, { AddButton, MenuButton, MicButton } from './WallMenu'
 import WallWeek from './WallWeek'
 import { weekDays } from './week'
+import { dayHeading, mergeEvents, needsAroundFetch, stripDates } from './dayFocus'
 import type { ScoreInteraction } from './WallScore'
 
 export interface WallViewProps {
@@ -57,7 +58,7 @@ export interface WallViewProps {
   assistantDraft?: WallEvent | null
   /** Open this item's sheet ("Open it" in the band); the nonce repeats a request. */
   /** Open an event, a project or To do from outside (the band's Open, a saved plan's lines). */
-  openRequest?: { id?: string; project?: string; todo?: boolean; nonce: number } | null
+  openRequest?: { id?: string; project?: string; todo?: boolean; day?: string; nonce: number } | null
   /** Decisions made on the wall for a day (hand-offs, "Leaving now"), applied to previews too. */
   tripStateFor?: (date: Date) => DayTripState
   /** "Leaving now", its undo, and "Hand off" from the Next Move. */
@@ -71,6 +72,10 @@ export interface WallViewProps {
   }
   /** Today and the next six days (decisions look this far ahead). */
   week?: DayPlan[]
+  /** The week around a far day on show (dayFocus.ts), loaded by the frame when asked with onFocusDay. */
+  aroundEvents?: WallEvent[] | null
+  /** The far day whose week to load (null: none); told whenever it changes. */
+  onFocusDay?: (date: Date | null) => void
   /** Deletes an event or reminder (the event sheet's Delete, after a yes). */
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Ticks or unticks a packing item. */
@@ -99,7 +104,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -125,7 +130,9 @@ export default function WallView(props: WallViewProps) {
   // "Later tonight" on a nudge: off the wall for 45 minutes (the watch's reminder is untouched).
   const [nudgeLater, setNudgeLater] = useState<{ id: string; until: number } | null>(null)
 
-  const eventsById = useMemo(() => new Map(allEvents.map((e) => [e.id, e as EditableEvent])), [allEvents])
+  // A far day's week (dayFocus.ts) joins the cache, so its events open like any other.
+  const knownEvents = useMemo(() => mergeEvents(allEvents, aroundEvents), [allEvents, aroundEvents])
+  const eventsById = useMemo(() => new Map(knownEvents.map((e) => [e.id, e as EditableEvent])), [knownEvents])
   // Surprise-safe: a celebration's prep (the gift, the card) never reaches the wall, where the honoree can see it.
   const checklist = useMemo(() => surpriseSafeChecklist(allChecklist, allEvents, members), [allChecklist, allEvents, members])
   const buildPlanFor = useCallback(
@@ -166,8 +173,21 @@ export default function WallView(props: WallViewProps) {
     ? draftDay
     : dayPreview && Date.now() < dayPreview.until ? dayPreview.date : null
   const dayOnShow = picked ?? autoDay
+  // Any day (Jake, 2026-09-30): a day outside the usual week brings the week around it onto the strip,
+  // to swipe before and after; the frame loads it when it's past the cache.
+  const focusDay = sameDay(dayOnShow, autoDay) ? null : dayOnShow
+  const farDates = stripDates(week.map((p) => p.date), focusDay, now)
+  const farKey = farDates?.map((d) => d.toDateString()).join('|') ?? ''
+  const farPlans = useMemo(
+    () => farDates?.map((d) => week.find((p) => sameDay(p.date, d)) ?? buildPlanFor(d, knownEvents)) ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- farKey stands for farDates
+    [farKey, week, knownEvents, buildPlanFor],
+  )
+  const strip = farPlans ?? week
+  const aroundKey = needsAroundFetch(focusDay, now) && focusDay ? focusDay.toDateString() : ''
+  useEffect(() => { onFocusDay?.(aroundKey ? new Date(aroundKey) : null) }, [aroundKey, onFocusDay])
   const planFor = (date: Date) =>
-    sameDay(date, now) ? shownToday : tomorrow && sameDay(date, tomorrow.date) ? shownTomorrow : withDraft(week.find((p) => sameDay(p.date, date)) ?? null)
+    sameDay(date, now) ? shownToday : tomorrow && sameDay(date, tomorrow.date) ? shownTomorrow : withDraft(strip.find((p) => sameDay(p.date, date)) ?? week.find((p) => sameDay(p.date, date)) ?? null)
 
   // Drop the preview exactly when it lapses (the minute clock alone could keep it up to a minute longer).
   useEffect(() => {
@@ -205,6 +225,7 @@ export default function WallView(props: WallViewProps) {
     if (openRequest?.project) { openTodo(); setTodoProject(openRequest.project) }
     else if (openRequest?.todo) openTodo()
     else if (openRequest?.id) setSelectedId(openRequest.id)
+    else if (openRequest?.day) showDay(new Date(openRequest.day))
   }, [openRequest])
 
   // An event deleted elsewhere closes its sheet.
@@ -247,13 +268,21 @@ export default function WallView(props: WallViewProps) {
         .sort((a, b) => a.at.getTime() - b.at.getTime()),
     [week, members, now, tripStateFor],
   )
+  // The strip's decisions: this week's, or a far week's while it's on show (the TO DECIDE count stays this week's).
+  const stripDecisions: DatedDecision[] = useMemo(
+    () =>
+      farPlans
+        ? farPlans.flatMap((plan) => decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date })))
+        : weekDecisions,
+    [farPlans, weekDecisions, members, now, tripStateFor],
+  )
   const marksFor = (date: Date | undefined) =>
     Object.fromEntries(
-      weekDecisions.filter((d) => date && sameDay(d.date, date)).flatMap((d) => d.sourceIds.map((id) => [id, d.key])),
+      stripDecisions.filter((d) => date && sameDay(d.date, date)).flatMap((d) => d.sourceIds.map((id) => [id, d.key])),
     ) as Record<string, string>
   const answer = async (decision: DatedDecision, action: DecisionAction) => {
     if (!tripActions) return
-    const plan = week.find((p) => sameDay(p.date, decision.date))
+    const plan = strip.find((p) => sameDay(p.date, decision.date)) ?? week.find((p) => sameDay(p.date, decision.date))
     if (action.type === 'dismiss') return tripActions.dismiss(decision.date, decision.key)
     if (!plan) return
     if (action.type === 'pick') {
@@ -279,7 +308,7 @@ export default function WallView(props: WallViewProps) {
     : undefined
 
   const openMenu = () => setMenuOpen(true)
-  const decisionsOn = (date: Date) => weekDecisions.filter((d) => sameDay(d.date, date))
+  const decisionsOn = (date: Date) => stripDecisions.filter((d) => sameDay(d.date, date))
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
   const todoOpen = Boolean(todos) && todoUntil > 0 && !comingUpOpen
@@ -297,20 +326,20 @@ export default function WallView(props: WallViewProps) {
   const swipeDay = (step: DayStep) => {
     // After the days: Coming up, then To do.
     const extras = [comingUp ? 'coming' : null, todos ? 'todo' : null].filter(Boolean) as Array<'coming' | 'todo'>
-    const index = comingUpOpen ? week.length + extras.indexOf('coming')
-      : todoOpen ? week.length + extras.indexOf('todo')
-      : Math.max(0, week.findIndex((p) => sameDay(p.date, dayOnShow)))
-    const next = stepWithin(index, step, week.length + extras.length - 1)
+    const index = comingUpOpen ? strip.length + extras.indexOf('coming')
+      : todoOpen ? strip.length + extras.indexOf('todo')
+      : Math.max(0, strip.findIndex((p) => sameDay(p.date, dayOnShow)))
+    const next = stepWithin(index, step, strip.length + extras.length - 1)
     if (next == null) return
-    if (next < week.length) showDay(week[next].date)
-    else if (extras[next - week.length] === 'coming') openComingUp()
+    if (next < strip.length) showDay(strip[next].date)
+    else if (extras[next - strip.length] === 'coming') openComingUp()
     else openTodo()
   }
-  useDaySwipe(rootRef, swipeDay, { enabled: week.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen, minDistance: 200 })
+  useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen, minDistance: 200 })
   const tomorrowDate = tomorrow?.date ?? null
-  const weekStrip = week.length > 1 ? (
+  const weekStrip = strip.length > 1 ? (
     <WallWeek
-      days={weekDays(week, members, weekDecisions, now, checklist)}
+      days={weekDays(strip, members, stripDecisions, now, checklist)}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
       shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
@@ -383,7 +412,7 @@ export default function WallView(props: WallViewProps) {
       ? (focus.day === 'tomorrow' ? 'TOMORROW' : 'TODAY')
       : tomorrowDate && sameDay(dayOnShow, tomorrowDate)
         ? 'TOMORROW'
-        : `LOOKING AHEAD · ${dayOnShow.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()}`
+        : dayHeading(dayOnShow, now)
     face = (
       <WallEvening
         now={now}

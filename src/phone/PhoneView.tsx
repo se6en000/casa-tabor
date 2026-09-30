@@ -1,11 +1,12 @@
 import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { stepWithin, type DayStep } from '../lib/daySwipe'
 import { useDaySwipe } from '../lib/useDaySwipe'
 import { Link } from 'react-router-dom'
 import { CalendarDays, Check, ChefHat, Grid2x2, Lock, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
+import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
 import { driverChoices } from '../wall/people'
@@ -65,7 +66,12 @@ export interface PhoneViewProps {
   /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
-  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; opening?: string | null }) => ReactNode
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; onOpenDay?: (date: Date) => void; opening?: string | null }) => ReactNode
+  /** Builds a day's plan from events (a far day's week, dayFocus.ts). */
+  planDay?: (date: Date, events: WallEvent[]) => DayPlan
+  /** The week around a far day on Me, loaded by the frame when asked with onFocusDay. */
+  aroundEvents?: WallEvent[] | null
+  onFocusDay?: (date: Date | null) => void
   /** Keep from… (05g): who each event is kept from, and the change. */
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
@@ -112,7 +118,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -121,6 +127,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [meIndex, setMeIndex] = useState<number | null>(null)
+  // A far day Casa opened (Jake, 2026-09-30), with the week around it to swipe through on Family and Me.
+  const [farDay, setFarDay] = useState<Date | null>(null)
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan } | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
@@ -139,17 +147,30 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const ahead = now.getHours() >= LOOK_AHEAD_HOUR && week.length > 1
   const focusIndex = ahead ? 1 : 0
   // Me can be swiped to another day (2026-09-28); it starts on today, or tomorrow from 7 PM.
-  const meAt = Math.min(meIndex ?? focusIndex, Math.max(0, week.length - 1))
-  const focus = week[meAt] ?? today
+  const shownEvents = useMemo(() => mergeEvents(events as WallEvent[], aroundEvents) as typeof events, [events, aroundEvents])
+  const farDates = planDay ? stripDates(week.map((p) => p.date), farDay, now) : null
+  const farKey = farDates?.map((d) => d.toDateString()).join('|') ?? ''
+  const shownDays = useMemo(
+    () => farDates?.map((d) => week.find((p) => p.date.toDateString() === d.toDateString()) ?? planDay!(d, shownEvents as WallEvent[])) ?? week,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- farKey stands for farDates
+    [farKey, week, planDay, shownEvents],
+  )
+  const farAt = farDay ? shownDays.findIndex((p) => p.date.toDateString() === farDay.toDateString()) : -1
+  const meAt = Math.min(meIndex ?? (farAt >= 0 ? farAt : focusIndex), Math.max(0, shownDays.length - 1))
+  const focus = shownDays[meAt] ?? today
+  const aroundKey = needsAroundFetch(farDay, now) && farDay ? farDay.toDateString() : ''
+  useEffect(() => { onFocusDay?.(aroundKey ? new Date(aroundKey) : null) }, [aroundKey, onFocusDay])
+  const meWhen = focus ? dayWhen(focus.date, now) : 'today'
+  const onToday = !focus || focus.date.toDateString() === now.toDateString()
+  const onTomorrow = Boolean(focus) && focus!.date.toDateString() === new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
   const meWeekday = focus ? focus.date.toLocaleDateString('en-US', { weekday: 'long' }) : ''
-  const meWhen = meAt === 0 ? 'today' : meAt === 1 ? 'tomorrow' : `on ${meWeekday}`
   const focusNow = useMemo(() => {
-    if (meAt === 0 || !focus) return now
+    if (onToday || !focus) return now
     const start = new Date(focus.date)
     start.setHours(0, 0, 0, 0)
     return start
-  }, [meAt, focus, now])
-  const me = useMemo(() => meView({ viewerId, plan: focus, members, events, checklist, now: focusNow }), [viewerId, focus, members, events, checklist, focusNow])
+  }, [onToday, focus, now])
+  const me = useMemo(() => meView({ viewerId, plan: focus, members, events: shownEvents, checklist, now: focusNow }), [viewerId, focus, members, shownEvents, checklist, focusNow])
   const lanePeople = members.filter((m) => m.show_on_home_sidebar !== false)
   const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
   const eventIds = useMemo(() => new Set(events.map((e) => e.id)), [events])
@@ -168,11 +189,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <div className="flex items-center justify-between">
         <div>
           <div className="text-phone-detail text-wall-ink-2">
-            {meAt === 0 || !focus
+            {onToday || !focus
               ? `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-              : meAt === 1 ? `Tomorrow · ${meWeekday}` : focus.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              : onTomorrow ? `Tomorrow · ${meWeekday}` : focus.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
-          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s ${meAt === 0 ? 'day' : meAt === 1 ? 'tomorrow' : meWeekday}` : meAt === 0 ? 'Your day' : meAt === 1 ? 'Tomorrow' : meWeekday}</h1>
+          <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{viewer ? `${viewer.name}'s ${onToday ? 'day' : onTomorrow ? 'tomorrow' : meWeekday}` : onToday ? 'Your day' : onTomorrow ? 'Tomorrow' : meWeekday}</h1>
         </div>
         {viewer && <Disc id={viewer.id} members={members} pigments={pigments} size="h-[40px] w-[40px] text-phone-heading" />}
       </div>
@@ -276,7 +297,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </div>
   )
 
-  const shownDay = week[dayIndex ?? focusIndex] ?? today
+  const shownDay = shownDays[dayIndex ?? (farAt >= 0 ? farAt : focusIndex)] ?? today
   const items = familyItems(shownDay, members, filter)
   const familyScreen = (
     <div className="flex flex-col gap-[14px]">
@@ -378,7 +399,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <button
           key={d.key}
           type="button"
-          onClick={() => { setDayIndex(i); setTab('family') }}
+          onClick={() => { setFarDay(null); setDayIndex(i); setTab('family') }}
           className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === focusIndex ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
         >
           <span className="flex w-[80px] flex-col">
@@ -441,7 +462,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       key={t.id}
       type="button"
       aria-current={tab === t.id ? 'page' : undefined}
-      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') setDayIndex(null); if (t.id === 'me') setMeIndex(null) }}
+      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) } if (t.id === 'me') { setMeIndex(null); setFarDay(null) } }}
       className={`flex h-[52px] w-[62px] flex-col items-center justify-center gap-[3px] border-0 bg-transparent p-0 text-phone-label ${tab === t.id ? 'font-bold text-wall-ink' : 'font-medium text-wall-ink-2'}`}
     >
       {t.icon}
@@ -453,12 +474,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // next day, right for the day before, within the week; stops at the ends; off while a sheet is up.
   const mainRef = useRef<HTMLElement>(null)
   const swipeDay = (step: DayStep) => {
-    const last = week.length - 1
     if (tab === 'me') {
-      const next = stepWithin(meAt, step, last)
+      const next = stepWithin(meAt, step, shownDays.length - 1)
       if (next != null) setMeIndex(next)
     } else if (tab === 'family') {
-      const next = stepWithin(dayIndex ?? focusIndex, step, last)
+      const next = stepWithin(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), step, shownDays.length - 1)
       if (next != null) setDayIndex(next)
     }
   }
@@ -518,6 +538,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         onClose: () => { setAskOpen(false); setAskOpening(null) },
         opening: askOpening,
         onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) },
+        // A day Casa opened (show_day): Family on that day — everyone's day, as asked — with the week
+        // around it to swipe (Me, the drives alone, follows the same week).
+        onOpenDay: (date) => {
+          setAskOpen(false)
+          setTab('family')
+          const i = week.findIndex((p) => p.date.toDateString() === date.toDateString())
+          setFarDay(i >= 0 || !planDay ? null : date)
+          setDayIndex(i >= 0 ? i : null)
+          setMeIndex(null)
+        },
         // A saved plan's project or To do (P3.25; board 12d).
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },
       })}

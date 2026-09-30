@@ -280,10 +280,11 @@ export function useEventDetails(event: EventWithDetails | null, enabled = true) 
   })
 }
 
-function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date) {
+function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date, enabled = true) {
   useRealtimeEventInvalidation()
   const eventsQuery = useQuery({
     queryKey,
+    enabled,
     queryFn: () => fetchEventsForRange(start, end),
     // Range window is published as meta so addEventToCaches can place an
     // optimistic create into exactly the caches whose window it overlaps.
@@ -479,6 +480,18 @@ export function useWeekEvents(selectedDate: Date) {
   const weekEnd = addDays(endOfWeek(selectedDate, { weekStartsOn: 0 }), 1)
 
   return useEventsForRange(['events', 'week', weekStart.toISOString()], weekStart, weekEnd)
+}
+
+/**
+ * The week around a day the Wall opened outside the rolling window (Jake, 2026-09-30: "load the week so
+ * I can swipe before and after the day I asked about"): three days before to three after, fetched only
+ * while such a day is on show (`focus` null: nothing).
+ */
+export function useWeekAroundEvents(focus: Date | null) {
+  const day = startOfDay(focus ?? new Date(0))
+  const start = subDays(day, 3)
+  const end = addDays(day, 4)
+  return useEventsForRange(['events', 'around', start.toISOString()], start, end, Boolean(focus))
 }
 
 /** Fetches past 7 days through +14 days for calendar deduplication, AI context, and rolling views. */
