@@ -30,8 +30,11 @@ Deno.serve(async (req) => {
     if (!body.id) return json({ error: 'Which email?' }, 400)
     if (what === 'add') {
       // Every offer of that email, as the card Casa already saves (a yes from him, from the review card).
-      const { data: row } = await sb.from('email_offers').select('id, decision, offers, person').eq('id', body.id).maybeSingle()
+      const { data: row } = await sb.from('email_offers').select('id, decision, offers, person, status').eq('id', body.id).maybeSingle()
       if (!row) return json({ error: 'That email is gone' }, 404)
+      // Added once is enough: a second screen with an older list (the wall, then the phone) added the
+      // "Reply to" to-dos twice (2026-09-30).
+      if (row.status === 'added') return json({ ok: true, saved: [], already: true })
       const actions = row.decision === 'person' ? [personToAction(row.person)] : (row.offers ?? []).map((o: Record<string, unknown>) => offerToAction(o, { decision: row.decision }))
       const saved: string[] = []
       const failed: string[] = []

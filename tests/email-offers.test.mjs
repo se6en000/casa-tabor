@@ -37,6 +37,8 @@ test('"Add it" is the card Casa already saves, for each kind', () => {
   assert.deepEqual(offerToAction({ kind: 'shopping', title: 'Clear dome umbrella' }), { tool: 'add_grocery_items', args: { items: [{ name: 'Clear dome umbrella' }] } })
   assert.equal(offerToAction({ kind: 'event' }), null)
   assert.deepEqual(personToAction({ who: 'Towhid Nishat', wants: 'Feedback on Owen’s progress' }), { tool: 'add_todo', args: { title: 'Reply to Towhid Nishat — Feedback on Owen’s progress', due: null } })
+  // Live, 2026-09-30: the whole summary made two-line titles.
+  assert.deepEqual(personToAction({ who: 'Towhid Nishat (Hope Center ABA)', wants: 'Feedback and suggestions on Owen’s progress, strengths, and challenges at home.' }).args.title, 'Reply to Towhid Nishat — Feedback and suggestions on Owen’s…')
 })
 
 test('the same offer twice (an email and its forward) shows once, the newest', () => {
@@ -79,4 +81,12 @@ test('new details update the event already there — its time and place, never i
   assert.deepEqual(offerToAction(festival, { decision: 'details' }), { tool: 'update_event', args: { id: 'ev-fest', location: 'Dreyfoos High School' } })
   assert.equal(offerToAction({ ...festival, changes: { instructions: 'x' } }, { decision: 'details' }), null, 'nothing it can safely change')
   assert.equal(offerToAction({ ...flight, event_id: undefined }, { decision: 'details' }), null)
+})
+
+test('an email already added is never added again (a second screen with an older list)', async () => {
+  const fs = await import('node:fs')
+  const fn = fs.readFileSync(new URL('../supabase/functions/email-offers/index.ts', import.meta.url), 'utf8')
+  assert.match(fn, /if \(row\.status === 'added'\) return json\(\{ ok: true, saved: \[\], already: true \}\)/)
+  const hook = fs.readFileSync(new URL('../src/wall/useEmailOffers.ts', import.meta.url), 'utf8')
+  assert.match(hook, /refetchOnMount: 'always'/)
 })

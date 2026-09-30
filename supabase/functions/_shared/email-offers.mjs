@@ -74,5 +74,12 @@ export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' 
 /** A person writing: "Add it" is a to-do to answer them. */
 export function personToAction(person) {
   if (!person?.who) return null
-  return { tool: 'add_todo', args: { title: `Reply to ${person.who}${person.wants ? ` — ${person.wants}` : ''}`.slice(0, 160), due: null } }
+  // Short, like a to-do he'd write (2026-09-30: the whole summary made two-line titles): the name without
+  // its "(Hope Center ABA)", and a few words of what they want.
+  const who = String(person.who).replace(/\s*\([^)]*\)\s*$/, '').trim()
+  const words = String(person.wants ?? '').replace(/[.!]+$/, '').split(/\s+/).filter(Boolean)
+  let about = ''
+  for (const w of words) { if ((about + ' ' + w).trim().length > 36) break; about = (about + ' ' + w).trim() }
+  if (about && about.length < String(person.wants ?? '').replace(/[.!]+$/, '').length) about += '…'
+  return { tool: 'add_todo', args: { title: about ? `Reply to ${who} — ${about}` : `Reply to ${who}`, due: null } }
 }

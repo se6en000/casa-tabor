@@ -18,7 +18,9 @@ export function useEmailOffers() {
       if (error) throw error
       return { count: Number(data?.count ?? 0), offers: data?.offers ?? [], skipped: data?.skipped ?? [] }
     },
-    staleTime: 5 * 60_000,
+    // Fresh each time a review opens (the phone mounts it then): an older list added the same to-dos twice.
+    staleTime: 0,
+    refetchOnMount: 'always',
     refetchInterval: 15 * 60_000,
   })
   const act = useCallback(async (id: string, what: EmailAnswer): Promise<{ ok: boolean; message?: string }> => {
