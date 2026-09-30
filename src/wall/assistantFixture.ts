@@ -1,3 +1,4 @@
+import type { EmailReviewData } from './emailReview'
 import { useEffect, useRef, useState } from 'react'
 import type { AIMessage } from '../hooks/useAISession'
 import { answerEventId, latestExchange, pendingAction, withoutAsides } from './assistant'
@@ -100,6 +101,11 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   directions: () => [
     user('Navigate to Alice’s house'),
     said('Alice’s house is 8255 West Lake Drive in Lake Clark Shores — about 12 minutes from here right now.', { directions: { name: 'Alice', address: '8255 West Lake Drive, Lake Clark Shores, FL 33406', phone: '(561) 555-0101', maps: 'https://www.google.com/maps/dir/?api=1&destination=8255%20West%20Lake%20Drive%2C%20Lake%20Clark%20Shores%2C%20FL%2033406' } }),
+  ],
+  // Casa reads the email (canvas 14c): "Anything from email?" opens the review.
+  email: () => [
+    user('Anything from email?'),
+    said('Three things came in. First, Owen’s teacher.', { emailReview: true }),
   ],
   // 07e: a question still thinking — the tip line shows under it.
   thinking: () => [user('When’s Carl’s birthday again?')],
@@ -208,4 +214,31 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
     stop: async () => setListening(false),
     finish: () => setListening(false),
   } as unknown as ReturnType<typeof import('../hooks/useSpeechInput').useSpeechInput>
+}
+
+// `?email=1` (canvas row 14): three emails waiting and three it skipped, from the shadow run of 2026-09-30.
+export const EMAIL_FIXTURE: EmailReviewData = {
+  count: 3,
+  offers: [
+    { id: 'em-slip', from: 'Rosangela Paine', subject: 'K updates- Permission S.- 9.28.26', received_at: '2026-09-28T13:00:00Z', open: 'https://mail.google.com/mail/#all/em-slip', decision: 'offer', reason: 'Owen’s class needs permission slips signed.', quote: 'Please check your child’s communicator folder for permission slips to sign and return.', offers: [{ kind: 'todo', title: 'Sign Owen’s permission slips (communicator folder)' }], person: null },
+    { id: 'em-fee', from: 'SchoolCash Online', subject: 'SchoolCash Online: Item payment reminder', received_at: '2026-09-30T12:00:00Z', open: 'https://mail.google.com/mail/#all/em-fee', decision: 'offer', reason: 'Liv’s $15 debate tournament fee is due Friday.', quote: 'DEBATE CLUB - PBMSFL Tournament #1 $15.00 Oct/02/2026', offers: [{ kind: 'reminder', title: 'Pay $15 for Liv’s debate tournament', date: '2026-10-02' }], person: null },
+    { id: 'em-aba', from: 'Towhid Nishat', subject: 'HCBC Collaboration', received_at: '2026-09-29T15:00:00Z', open: 'https://mail.google.com/mail/#all/em-aba', decision: 'person', reason: 'Owen’s ABA therapist asked for your thoughts.', quote: 'I would really value your perspective on what you have been noticing at home.', offers: [], person: { who: 'Towhid Nishat', wants: 'Your thoughts on Owen’s progress at home' } },
+  ],
+  skipped: [
+    { id: 'sk-vet', from: 'West Palm Animal Clinic', subject: 'invoice for Gilbert', received_at: '2026-09-29T12:00:00Z', open: 'x', reason: 'a paid receipt, $0 due' },
+    { id: 'sk-att', from: 'AT&T', subject: 'rate plan changes', received_at: '2026-09-29T12:00:00Z', open: 'x', reason: 'a plan change; the bill is on autopay' },
+    { id: 'sk-5k', from: 'Palm Beach Public PTO', subject: 'Heroes 5K/Walk', received_at: '2026-09-25T12:00:00Z', open: 'x', reason: 'an optional fundraiser sent to every family' },
+  ],
+}
+
+/** A stand-in for useEmailOffers: the fixture's emails; answers are recorded on window.__emailAnswers. */
+export function fixtureEmail() {
+  return {
+    data: EMAIL_FIXTURE,
+    act: async (id: string, what: string) => {
+      const w = window as unknown as { __emailAnswers?: string[] }
+      w.__emailAnswers = [...(w.__emailAnswers ?? []), `${id}:${what}`]
+      return { ok: true }
+    },
+  }
 }

@@ -917,6 +917,46 @@ test('wall: a swipe down on the band closes it; so does Esc on a computer', asyn
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeHidden()
 })
 
+// Casa reads the email, phase 2 (canvas row 14, approved by Jake 2026-09-30): the count on the launch face,
+// the review one email at a time, then "a few I skipped" — each answer kept as a label.
+test('wall: "3 FROM EMAIL" opens the review; each answer moves on; then a few it skipped', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=1')
+  const count = page.getByRole('button', { name: '3 from email' })
+  await expect(count).toBeVisible()
+  // It stays clear of the divider and the ring beyond it (x 612): the first try ran into the countdown ring.
+  const pill = await count.boundingBox()
+  expect(pill.x + pill.width).toBeLessThanOrEqual(600)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-count.png')
+  await count.click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('1 OF 3')).toBeVisible()
+  await expect(review.getByText('Owen’s class needs permission slips signed.')).toBeVisible()
+  await expect(review.getByText('“Please check your child’s communicator folder for permission slips to sign and return.”')).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-review.png')
+  await review.getByRole('button', { name: 'Add it' }).click()
+  await expect(review.getByText('2 OF 3')).toBeVisible()
+  await review.getByRole('button', { name: 'Not needed' }).click()
+  await expect(review.getByText('Towhid Nishat: Your thoughts on Owen’s progress at home')).toBeVisible()
+  await review.getByRole('button', { name: 'Later' }).click()
+  await expect(review.getByText('A FEW I SKIPPED THIS WEEK · TELL ME IF ONE MATTERED')).toBeVisible()
+  await review.getByRole('button', { name: 'That one mattered' }).first().click()
+  await expect(review.getByText('Noted — it mattered')).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-skipped.png')
+  await review.getByRole('button', { name: 'All fine' }).click()
+  await expect(review).toBeHidden()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['em-slip:add', 'em-fee:not_needed', 'em-aba:later', 'sk-vet:mattered', 'sk-att:fine', 'sk-5k:fine'])
+})
+
+test('wall: the email review closes with a tap outside; Open email is a link on a computer', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=1&keyboard=device')
+  await page.getByRole('button', { name: '3 from email' }).click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByRole('link', { name: 'Open email' })).toHaveAttribute('href', 'https://mail.google.com/mail/#all/em-slip')
+  await page.mouse.click(960, 150)
+  await expect(review).toBeHidden()
+})
+
 test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()

@@ -5,7 +5,7 @@ import { ProfileSessionContext } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { FamilyMember } from '../types'
-import { fixtureTurn } from '../wall/assistantFixture'
+import { fixtureEmail, fixtureTurn } from '../wall/assistantFixture'
 import PhoneAssistant from './PhoneAssistant'
 import { useFixtureFonts } from '../wall/fixtureFonts'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -148,6 +148,7 @@ export default function PhoneFixturePage() {
                     onClose={onClose}
                     onOpenEvent={onOpenEvent}
                     onOpenDay={onOpenDay}
+                    useEmail={fixtureEmail as never}
                     useTurn={askTurn}
                     opening={opening}
                     lookupDrive={async () => 24}

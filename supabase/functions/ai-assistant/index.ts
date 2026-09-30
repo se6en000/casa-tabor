@@ -1306,6 +1306,8 @@ Deno.serve(async (req) => {
     let shownDay: { date: string; open: boolean } | null = null
     // The route the answer carries (show_directions): a QR code on the wall, a button elsewhere.
     let shownRoute: { name: string; address: string; phone: string | null; maps: string } | null = null
+    // The email review (canvas row 14): the screen opens it.
+    let emailReview = false
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
     const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
     // Up to five rounds: a lookup's answer goes back to the model, which then answers or proposes; the
@@ -1356,7 +1358,11 @@ Deno.serve(async (req) => {
       const answers = await Promise.all(reads.map(async (p) => {
         const call = p.functionCall as { name: string; args: Record<string, unknown> }
         let result: Record<string, unknown> | null = null
-        if (call.name === 'show_directions') {
+        if (call.name === 'open_email_review') {
+          const { data } = await sb.functions.invoke('email-offers', { body: { action: 'list' } })
+          emailReview = true
+          result = { waiting: (data as { count?: number } | null)?.count ?? 0, note: 'The review is on the screen, one email at a time.' }
+        } else if (call.name === 'show_directions') {
           const found = directionsFor(call.args?.to, { contacts, places })
           if (found && 'address' in found) {
             shownRoute = found
@@ -1422,7 +1428,7 @@ Deno.serve(async (req) => {
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), ...(emailReview ? { email_review: true } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {

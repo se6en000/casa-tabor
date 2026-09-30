@@ -419,6 +419,24 @@ test('phone: "Navigate to Alice\'s house" — Directions opens Google Maps; Call
   await expect(phone).toHaveScreenshot('phone-directions.png')
 })
 
+// Casa reads the email, phase 2, on the phone (canvas 14c, approved 2026-09-30).
+test('phone: "Anything from email?" — the review in Ask Casa, one at a time, then a few it skipped', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'email')
+  const review = ask.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('FROM EMAIL · 1 OF 3')).toBeVisible()
+  await expect(review.getByText('Owen’s class needs permission slips signed.')).toBeVisible()
+  await expect(review.getByRole('link', { name: 'Open email' })).toHaveAttribute('href', 'https://mail.google.com/mail/#all/em-slip')
+  await expect(phone).toHaveScreenshot('phone-email-review.png')
+  await review.getByRole('button', { name: 'Add it' }).click()
+  await review.getByRole('button', { name: 'Not needed' }).click()
+  await review.getByRole('button', { name: 'Later' }).click()
+  await expect(review.getByText('A FEW I SKIPPED · TELL ME IF ONE MATTERED')).toBeVisible()
+  await review.getByRole('button', { name: 'It mattered' }).first().click()
+  await review.getByRole('button', { name: 'All fine' }).click()
+  await expect(ask.getByText('That’s everything from email.')).toBeVisible()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['em-slip:add', 'em-fee:not_needed', 'em-aba:later', 'sk-vet:mattered', 'sk-att:fine', 'sk-5k:fine'])
+})
+
 test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {
   const phone = await open(page)
   await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()

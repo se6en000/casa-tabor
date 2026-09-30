@@ -194,6 +194,8 @@ export const FULL_AI_TOOLS = [
   { name: 'get_travel_eta', description: 'Drive time and when to leave (from home unless an origin is given); times are ISO.', parameters: { type: 'OBJECT', properties: { destination: { type: 'STRING' }, origin: { type: 'STRING' }, arrival_time: { type: 'STRING' }, departure_time: { type: 'STRING' } }, required: ['destination'] } },
   { name: 'get_recipe', description: 'Open one saved recipe by its [id]: ingredients and steps.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' } }, required: ['id'] } },
   { name: 'search_family_notes', description: "Search the family's emails, notes and remembered facts (a school email, a confirmation, something someone said to remember).", parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+  // The email review (canvas row 14): Casa opens it on the screen.
+  { name: 'open_email_review', description: 'Open the review of what came in by email on the screen, one email at a time ("what came in by email?", "anything from email?", "any emails I should know about?"). It returns how many are waiting; say it in a few words.', parameters: { type: 'OBJECT', properties: {} } },
   // Get & pack by voice (Jake, 2026-09-30: nobody says "get and pack").
   { name: 'add_prep_item', description: 'Propose a line on an upcoming event\u2019s get & pack list — something to get ready for it: check, dry, find, pack, bring, charge, wash, print, sign ("dry Liv\u2019s cleats" for her game, "find Owen\u2019s pink kindergarten shirt" for the field trip, "don\u2019t forget Emme\u2019s violin"). The event\u2019s [id] from the calendar; the item as a short line. Several events could fit: ask which.', parameters: { type: 'OBJECT', properties: { event_id: { type: 'STRING' }, item: { type: 'STRING' } }, required: ['event_id', 'item'] } },
   // Directions (Jake, 2026-09-29: "Navigate to Alice's house" — it couldn't). The route goes on the screen.
@@ -231,7 +233,7 @@ export function fullAiTools({ planning }) {
 
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
-export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events', 'show_day', 'show_directions'])
+export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events', 'show_day', 'show_directions', 'open_email_review'])
 
 /** show_day's arguments: a real calendar date (YYYY-MM-DD) and whether to open it now. */
 export function readShowDay(args) {
@@ -643,6 +645,7 @@ export function fullAiStatus(call) {
     case 'search_family_notes': return 'Looking through the family notes…'
     case 'show_day': return null
     case 'show_directions': return null
+    case 'open_email_review': return null
     default: return 'Looking that up…'
   }
 }

@@ -32,6 +32,8 @@ interface AssistantServerPayload {
   show_day?: { date: string; open: boolean }
   /** The route this answer carries (show_directions). */
   directions?: { name: string; address: string; phone: string | null; maps: string }
+  /** Casa opened the email review (canvas row 14). */
+  email_review?: boolean
   closes_draft?: boolean
   /** The words weren't said to Casa (heard by the wall's open mic): no reply. */
   aside?: boolean
@@ -569,6 +571,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         ...(data?.planning === true ? { planning: true } : {}),
         ...(data?.show_day && typeof data.show_day.date === 'string' ? { showDay: data.show_day } : {}),
         ...(data?.directions && typeof data.directions.maps === 'string' ? { directions: data.directions } : {}),
+        ...(data?.email_review === true ? { emailReview: true } : {}),
         ...sourceMetadata,
       }
     }

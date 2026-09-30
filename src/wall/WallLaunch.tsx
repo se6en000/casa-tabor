@@ -5,7 +5,7 @@ import { describeNextMove, weatherLine } from './header'
 import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
-import { DecisionCount } from './WallDecisions'
+import { DecisionCount, EmailCount } from './WallDecisions'
 import { AddButton, MenuButton, MicButton } from './WallMenu'
 import WallScore, { type ScoreInteraction } from './WallScore'
 import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
@@ -24,6 +24,9 @@ export interface WallLaunchProps {
   moveActions?: NextMoveActions
   decisionCount?: number
   onOpenDecisions?: () => void
+  /** What came in by email and waits (canvas 14d), and opening its review. */
+  emailCount?: number
+  onOpenEmail?: () => void
   /** The week strip, drawn under the Score. */
   week?: ReactNode
   /** Tomorrow speaking up in the afternoon. */
@@ -31,7 +34,7 @@ export interface WallLaunchProps {
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, week, tomorrow = null }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow = null }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -46,8 +49,10 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
             {onAsk && <MicButton onAsk={onAsk} small className="ml-[4px]" />}
             {onAdd && <AddButton onAdd={onAdd} />}
-            <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">MAISON TABOR</span>
+            {/* The row fits the name or the email count, not both beside TO DECIDE: the count ran into the ring (2026-09-30). */}
+            {!(onOpenEmail && emailCount > 0) && <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">MAISON TABOR</span>}
             {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
+            {onOpenEmail && <EmailCount count={emailCount} onOpen={onOpenEmail} />}
           </div>
           <div className="mt-[2px] flex items-baseline gap-[10px]">
             <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>

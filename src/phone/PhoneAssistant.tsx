@@ -1,4 +1,6 @@
 import { PhonePlanAgree, PhonePlanCard, PhonePlanSaved } from './PhonePlan'
+import PhoneEmailReview from './PhoneEmailReview'
+import { useEmailOffers } from '../wall/useEmailOffers'
 import type { PlanArgs, PlanOpen } from '../wall/plan'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProfileSession } from '../contexts/useProfileSession'
@@ -19,7 +21,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -31,6 +33,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   onOpenPlace?: (open: PlanOpen) => void
   /** Open a day on Me (Casa's show_day, or an answer about one day). */
   onOpenDay?: (date: Date) => void
+  /** What came in by email (a stand-in in the fixture). */
+  useEmail?: typeof useEmailOffers
   /** Words said first (a project's "Talk to Casa", P3.25). */
   opening?: string | null
   /** The conversation and the drive lookup; the screenshot fixture passes canned ones. */
@@ -40,6 +44,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const { profile } = useProfileSession()
   const turn = useTurn({ surface: 'phone', events, family })
   const { messages, loading, status, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan } = turn
+  // "Anything from email?" (canvas 14c): the review, in the conversation.
+  const email = useEmail()
   // The day the answer is about (Jake, 2026-09-29): opened when he asked to see it, else a button.
   const day = answerDay(answer, new Date())
   const openedFor = useRef<string | null>(null)
@@ -116,7 +122,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   return (
     <>
     <PhoneAssistantView
-      planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : null}
+      planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : answer?.emailReview && email.data ? <PhoneEmailReview data={email.data} act={email.act} /> : null}
       lines={lines}
       thinking={thinking}
       status={status ?? null}

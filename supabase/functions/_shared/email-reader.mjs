@@ -15,8 +15,13 @@ const NOISE_SUBJECT = [
 ]
 
 /** A reason to drop it before the model (a receipt, a code, a promotion), or null to read it. */
+// Travel carries a trip's details (flights, times, a hotel) even when it calls itself a receipt: the reader
+// always sees it (2026-09-30: "Travel Receipt for TABOR/JACOB Travel Date 07Oct" was dropped as a receipt).
+const TRAVEL = /\b(travel|flight|itinerary|reservation|booking|boarding|hotel|check-?in)\b/i
+
 export function firstPass(email) {
   const subject = String(email?.subject ?? '')
+  if (TRAVEL.test(subject)) return null
   const hit = NOISE_SUBJECT.find((re) => re.test(subject))
   return hit ? `noise: ${hit.source}` : null
 }
@@ -44,7 +49,7 @@ Decide one:
 - "already": it's about something on the calendar above, with nothing new.
 - "details": something on the calendar above, with new details (a time, a place, things to bring) — offers with "event_id" and "changes".
 - "offer": something new to do — offers of kind "event" (with a date and times), "reminder" (a date, a time if given), "todo" (no time), "prep" (something to get ready for a listed item, with its "event_id"), or "shopping". A newsletter with several things: one offer each.
-- "person": a real person wrote and wants something (and it isn't one of the above) — who, and what they want in one line.
+- "person": a real person wrote and wants something (and it isn't one of the above) — who, and what they want in one line. Mail from the family themselves (a reply or forward of their own) is not "person".
 
 Return only JSON: {"decision": "...", "reason": "one short line: why", "quote": "the words in the email that matter", "offers": [{"kind": "...", "title": "...", "date": "YYYY-MM-DD" or null, "start": "HH:MM" or null, "end": "HH:MM" or null, "place": "..." or null, "people": [family names], "event_id": "..." or null, "changes": {...} or null}], "person": {"who": "...", "wants": "..."} or null}
 

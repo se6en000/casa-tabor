@@ -19,6 +19,8 @@ test('the first pass drops receipts, bills, codes and promotions without asking 
   assert.equal(skip('Katherine Cooper <kcooper@gmail.com>', 'Fwd: 2026 Strings Festival'), null)
   assert.equal(skip('EDS Air Conditioning <noreply@eds.com>', 'Reminder: Your appointment with EDS Air Conditioning is tomorrow!'), null)
   assert.equal(skip('SchoolCash Online <noreply@schoolcashonline.com>', 'SchoolCash Online: Item payment reminder'), null, 'a school payment due is his to decide')
+  // Live, 2026-09-30: a trip's travel receipt carries its flights — the reader sees it.
+  assert.equal(skip('American Express Travel <travel@amex.com>', 'Travel Receipt for TABOR/JACOB Travel Date 07Oct'), null)
 })
 
 test('the prompt: the bar, the real-person rule, what is already on the calendar, and email as data', () => {

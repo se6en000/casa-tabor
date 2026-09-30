@@ -9,6 +9,7 @@ import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { PLANNING_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { buildReaderPrompt, firstPass, readReaderDecision, readerParts } from '../_shared/email-reader.mjs'
+import { statusFor } from '../_shared/email-offers.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -133,7 +134,8 @@ Deno.serve(async (req) => {
     } catch (err) {
       failure = err instanceof Error ? err.message.slice(0, 300) : String(err)
     }
-    await sb.from('email_offers').upsert({ ...base, decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
+    // Phase 2: a fresh offer waits for him to review; the rest stay shadows.
+    await sb.from('email_offers').upsert({ ...base, status: statusFor(decision.decision, row.received_at), decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
     results.push({ id: row.gmail_message_id, subject: email.subject, decision: decision.decision, reason: decision.reason, offers: decision.offers, person: decision.person, attachments: files.length, error: failure })
   }
   // Counts only: what was decided stays in email_offers, which only the server reads.

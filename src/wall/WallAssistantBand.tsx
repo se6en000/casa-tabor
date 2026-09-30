@@ -69,11 +69,13 @@ export interface WallAssistantBandProps {
   onOpenPlace?: (open: PlanOpen) => void
   /** Open a day on the wall (Casa's show_day, or an answer about one day). */
   onOpenDay?: (date: Date) => void
+  /** Casa opened the email review ("anything from email?"). */
+  onOpenEmail?: () => void
   /** Opened with something to say first (a project's "Talk to Casa about it", P3.25). */
   opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, opening = null }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, opening = null }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -293,6 +295,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // asked to see it, else offered as a button.
   const day = answerDay(answer, new Date())
   const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (answer?.emailReview && onOpenEmail) onOpenEmail()
+  }, [answer?.id, answer?.emailReview, onOpenEmail])
   useEffect(() => {
     if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id) return
     openedFor.current = answer.id

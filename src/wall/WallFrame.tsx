@@ -15,6 +15,9 @@ import { createEventByTouch } from './createEvent'
 import WallView from './WallView'
 import { useComingUp } from './useComingUp'
 import { useTodos } from './useTodos'
+import { useEmailOffers } from './useEmailOffers'
+import WallEmailReview from './WallEmailReview'
+import { deviceKeyboardHere } from './keyboardMode'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
@@ -30,6 +33,7 @@ export default function WallFrame() {
   const [pointAt, setPointAt] = useState<string | null>(null)
   const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; day?: string; nonce: number } | null>(null)
   const [opening, setOpening] = useState<{ text: string; nonce: number } | null>(null)
+  const [emailOpen, setEmailOpen] = useState(false)
   // `say`: opened with words to send first (a project's "Talk to Casa about it", P3.25).
   const ask = useCallback((say?: string) => {
     setBandOpen(true)
@@ -67,6 +71,7 @@ export default function WallFrame() {
         setOpenRequest({ id, nonce: Date.now() })
       }}
       opening={opening}
+      onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }}
       onOpenDay={(date) => {
         setBandOpen(false)
         setOpenRequest({ day: date.toISOString(), nonce: Date.now() })
@@ -82,6 +87,10 @@ export default function WallFrame() {
   const createEvent = (args: Record<string, unknown>) => createEventByTouch(queryClient, args, 'wall')
 
   const comingUp = useComingUp()
+  // What came in by email (phase 2, canvas row 14): its count on the launch face, its review in the band's place.
+  const email = useEmailOffers()
+  const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  const review = emailOpen && email.data ? <WallEmailReview data={email.data} act={email.act} onClose={() => setEmailOpen(false)} computer={deviceKeyboardHere()} today={localDay} /> : null
   const todos = useTodos()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
 }

@@ -76,6 +76,9 @@ export interface WallViewProps {
   aroundEvents?: WallEvent[] | null
   /** The far day whose week to load (null: none); told whenever it changes. */
   onFocusDay?: (date: Date | null) => void
+  /** What came in by email and waits (canvas 14d), and opening its review. */
+  emailCount?: number
+  onOpenEmail?: () => void
   /** Deletes an event or reminder (the event sheet's Delete, after a yes). */
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Ticks or unticks a packing item. */
@@ -104,7 +107,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -450,6 +453,8 @@ export default function WallView(props: WallViewProps) {
         moveActions={moveActions}
         decisionCount={weekDecisions.length}
         onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined}
+        emailCount={emailCount}
+        onOpenEmail={onOpenEmail}
         tomorrow={tomorrowNote}
         week={weekStrip}
       />
