@@ -145,10 +145,11 @@ Then the act — what they want (besides dropping the draft). Decide in this ord
 - "revise_draft": changes or adds something to the draft above, which stays the same item — give "changes". If they say the draft is about the wrong item, that isn't a revision: it's a "change" (or "add") for the right one.
 - "confirm_draft": says yes / go ahead to the draft and nothing else.
 - "add": asks Casa to put something new on the calendar (an event or a reminder) — give "new_item". Something to get ready for a listed item ("add checking Liv's cleats are dry to tomorrow's game", "for tomorrow's get and pack, add …") is still "add", and also give "prep" for it.
-- "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id" and "changes". (Deleting is "other".) When the person corrects which item they meant, carry over the change they asked for before.
+- "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id" and "changes". (Taking something off is "remove".) When the person corrects which item they meant, carry over the change they asked for before.
+- "remove": asks to take one calendar item off — delete it, cancel it, call it off, it's rained out or not happening any more ("cancel the softball game tonight, it rained", "the dentist canceled on us", "take Friday's party off") — give "event_id", and "called_off": true when it's off because of something that happened (the weather, someone canceled), false when it was a mistake or isn't wanted. More than one item could fit: "clarify".
 - "clarify": asks to change something, but more than one calendar item fits what they said (for example several on the day they named, and nothing in the message tells them apart) — give "candidates" (their ids) and "question" (asking which, naming them). Never pick one when it's unclear; "my" or "the" doesn't make it clear.
 - "question": (asking what's on the Coming up list, or about gift ideas, is "other") asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web). A question about any or every time something happens or happened, the last or first time, or anything before today — is false: those need the whole calendar, not the weeks listed.
-- "other": deleting things, and anything not about the family's plans — groceries, recipes, contacts, gift ideas, the Coming up list and its rules, general knowledge, small talk.
+- "other": anything not about the family's calendar — groceries, recipes, contacts, gift ideas, the Coming up list and its rules (adding or removing any of those), general knowledge, small talk.
 Asking whether someone could take, drive, join or move a calendar item is suggesting a change: "change".
 
 "standalone": the latest message the way the person would say it if they had said everything at once — short, plain and complete, making sense with no conversation before it. A question stays a question; a request starts with what to do, then the thing itself in a few words, then who, when and where. Resolve every reference — pronouns, positions in a list Casa gave, "that one"-style pointers, and shortened follow-ups that repeat the previous question or request with a different day, person or item — to the actual titles, names, days and times. Change only what's needed to make it stand on its own; if it already does, return it word for word. Keep the person's meaning exactly: don't answer it, and don't add anything they didn't say or clearly mean.
@@ -165,10 +166,10 @@ Dates: always take them from the Days list. In scheduling, pushing or moving som
 "keep_posted": when the latest message asks to hear from someone, or about something, from now on — to be told whenever a person, a group or a subject comes up (their emails, said or not: "keep me posted on emails from Liv's coach", "let me know whenever Owen's therapist writes", "make sure I see stuff from the PTO from now on", "always show me anything from Sally Rozanski"): who or what, as a short name ("Owen's therapist", "the PTO", "Sally Rozanski") — else null (a question about email now, "anything from email?", is not this; nor is a reminder for one thing at a time).
 "prep": when the latest message is something to get ready for an upcoming calendar item — check, dry, find, pack, bring, charge, wash, print, sign ("make sure Liv's cleats are dry", "find Owen's pink kindergarten shirt for the field trip", "don't forget Emme's violin tomorrow") — and one listed item is clearly what it's for (the person, the day, the kind of thing): {"item": a short line to tick off ("Dry Liv's cleats"), "event_id": its id in [brackets]} — else null (unclear which, or no such item: then it's an add).
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null, "keep_posted": "..." or null}`
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null, "keep_posted": "..." or null, "called_off": true|false}`
 }
 
-const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
+const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'remove', 'clarify', 'question', 'other']
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
 /** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
@@ -190,6 +191,9 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   // Answering "which one?" names only the item; the change asked for before is still pending.
   if (act === 'change' && (!eventId || (!changes && !pendingChange))) act = 'other'
   if (act === 'add' && !newItem) act = 'other'
+  // Taking one item off (2026-09-30: "cancel the softball game tonight" became a title change).
+  if (act === 'remove' && !eventId) act = 'other'
+  const calledOff = act === 'remove' && r.called_off === true
   const candidates = Array.isArray(r.candidates) ? r.candidates.filter((id) => (knownIds ?? []).includes(id)).slice(0, 6) : []
   const question = typeof r.question === 'string' && r.question.trim() ? r.question.trim().slice(0, 400) : null
   if (act === 'clarify' && (candidates.length < 2 || !question)) act = 'other'
@@ -221,7 +225,7 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const prep = pr && typeof pr.item === 'string' && pr.item.trim() && (knownIds ?? []).includes(pr.event_id) ? { item: pr.item.trim().slice(0, 160), eventId: pr.event_id } : null
   // Emails to hear about from now on (Keep me posted, canvas row 15): who or what, in his words.
   const keepPosted = act !== 'aside' && typeof r.keep_posted === 'string' && r.keep_posted.trim() ? r.keep_posted.trim().slice(0, 200) : null
-  return { act, closesDraft, answerable, standalone, search, prep, keepPosted, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
+  return { act, closesDraft, answerable, standalone, search, prep, keepPosted, calledOff, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/

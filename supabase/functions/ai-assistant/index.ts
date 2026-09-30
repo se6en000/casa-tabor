@@ -316,7 +316,7 @@ async function loadReferents(sb: TurnDb, ids: string[], family: Array<{ id: stri
 type TurnContext = {
   resolution: ReturnType<typeof readTurnResolution> | null
   /** A card to show: a revised draft, a new item, or a change to one calendar item. */
-  card: { tool: string; args: Record<string, unknown>; about: TurnReferent | null } | null
+  card: { tool: string; args: Record<string, unknown>; about: TurnReferent | null; note?: string } | null
   cancelledDraft: { tool: string } | null
   /** A question about one calendar item, answered from its facts. */
   /** `calendarSays` false: the calendar doesn't hold the answer (the hybrid's layer 2 can look it up). */
@@ -434,6 +434,11 @@ async function readTurn(
     } else if (resolution.act === 'add') {
       const args = newItemArgs(resolution.newItem, { utcOffset, familyNames })
       if (args) out.card = { tool: 'create_event', args, about: null }
+    } else if (resolution.act === 'remove' && about && !about.repeating) {
+      // Taking one item off (Jake's bug report 2026-09-30 17:47: "cancel the softball game tonight" was read
+      // as a title change): the delete card for the item named; a repeating one goes on to the full assistant.
+      const card = fullAiCard({ name: 'delete_event', args: { id: about.id } }, { events: loaded, utcOffset, now: new Date() }) as { tool?: string; args?: Record<string, unknown> }
+      if (card.tool && card.args) out.card = { tool: card.tool, args: { ...card.args, start: about.start_time, all_day: about.all_day }, about, note: resolution.calledOff ? 'Sorry it’s off. ' : '' }
     } else if (resolution.act === 'change' && about && !about.repeating) {
       // Answering Casa's "which one?": apply the change asked for then to the item picked now.
       const asked = context?.conversationState as { activeEntityType?: string; candidateEvents?: Array<{ id: string }>; pendingMutation?: { tool?: string; args?: Record<string, unknown> } } | undefined
@@ -1505,14 +1510,14 @@ Deno.serve(async (req) => {
     return { status: 200, payload: { type: 'tool_action', tool, args, display_text: buildDisplayText(tool, args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: 'conversation.prep_item', correlation_id: cid } }
   }
   if (turnContext?.card) {
-    const { tool, args, about } = turnContext.card
+    const { tool, args, about, note } = turnContext.card
     return {
       status: 200,
       payload: {
         type: 'tool_action',
         tool,
         args,
-        display_text: buildDisplayText(tool, args),
+        display_text: `${note ?? ''}${buildDisplayText(tool, args)}`,
         conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null,
         semantic_intent: `conversation.${turnResolution?.act ?? 'card'}`,
         correlation_id: cid,
@@ -6327,7 +6332,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     if (name === 'update_event') {
       // Build a human-readable single-line summary of what will change
       const parts: string[] = []
-      if (args.title !== undefined) parts.push(`title → "${String(args.title).slice(0, 40)}"`)
+      if (args.title !== undefined) parts.push(`title → "${String(args.title)}"`)
       if (args.start !== undefined) parts.push(`time → ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`)
       if (args.all_day !== undefined) parts.push(args.all_day ? 'all-day' : 'timed')
       if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
