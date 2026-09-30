@@ -345,7 +345,7 @@ test('phone: Ask Casa — while Casa looks something up, it says what', async ({
 test('phone: Ask Casa — a plan: the draft in the conversation, Set it up, untick, Agree, Undo', async ({ page }) => {
   const { phone, ask } = await askScene(page, 'plan')
   const card = ask.getByRole('region', { name: 'Emme — light-up jellyfish — the plan' })
-  await expect(card.getByText('Just changed: added “Try it on after dark”')).toBeVisible()
+  await expect(card.getByText(/Just changed/)).toHaveCount(0)
   await expect(card.getByText('+ 4 shopping · 3 on the calendar · 1 pack')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-plan.png')
   await card.getByRole('button', { name: 'Set it up…' }).click()

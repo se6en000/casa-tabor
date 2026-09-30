@@ -1,4 +1,4 @@
-import { Check, RotateCcw, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { agreeGroups, planChange, planCount, planSections, savedRows, withDependents, type PlanArgs, type PlanItem, type PlanOpen, type PlanResult } from './plan'
 
 // Plan it with Casa on the wall (FAMILY_WALL_PLAN.md P3.25 phase 3; canvas 12b–12d, approved by Jake
@@ -25,12 +25,8 @@ export function WallPlanDraft({ plan, previous, working, onSetUp, onKeepTalking 
         <div className="min-w-0 truncate font-display text-wall-quote font-semibold">{plan.title}</div>
         <div className={`${eyebrow} shrink-0 text-wall-brass-ink`}>PLAN · NOT SAVED YET</div>
       </div>
-      {change.line && (
-        <div className="flex items-center gap-[10px] self-start rounded-full bg-wall-brass/15 px-[16px] py-[8px] text-wall-detail font-semibold text-wall-brass-ink">
-          <RotateCcw size={18} aria-hidden="true" />
-          {change.line}
-        </div>
-      )}
+      {/* What changed shows as the tan on its lines, nothing more (Jake, 2026-09-29: a list of every
+          change on top of the plan "is just noise"). */}
       <div className="grid min-h-0 grid-cols-2 gap-x-[36px] gap-y-[8px]">
         {sections.map((s) => (
           <div key={s.heading} className={`flex min-w-0 flex-col ${s.heading === 'STEPS' ? 'col-span-2' : ''}`}>

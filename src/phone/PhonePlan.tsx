@@ -23,7 +23,6 @@ export function PhonePlanCard({ plan, previous, working, onSetUp }: { plan: Plan
         <span className="min-w-0 font-display text-phone-heading font-bold leading-tight">{plan.title}</span>
         <span className={`${label} shrink-0 text-wall-brass-ink`}>PLAN · NOT SAVED</span>
       </div>
-      {change.line && <span className="self-start rounded-full bg-wall-brass/15 px-[10px] py-[4px] text-phone-detail font-semibold text-wall-brass-ink">{change.line}</span>}
       {steps && (
         <div className="flex flex-col">
           {steps.intro && <span className={`${label} text-wall-ink-2`}>{steps.intro.toUpperCase()}</span>}

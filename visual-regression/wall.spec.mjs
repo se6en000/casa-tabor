@@ -544,7 +544,8 @@ test('wall assistant: a plan — the draft beside the conversation, one card wit
   await section.getByRole('button', { name: 'Stop listening' }).click()
   const draft = section.getByRole('region', { name: 'Emme — light-up jellyfish — the plan' })
   await expect(draft.getByText('PLAN · NOT SAVED YET')).toBeVisible()
-  await expect(draft.getByText('Just changed: added “Try it on after dark”')).toBeVisible()
+  // What changed is the tan on its line, not a list on top (Jake, 2026-09-29).
+  await expect(draft.getByText(/Just changed/)).toHaveCount(0)
   await expect(draft.getByText('A project inside Halloween costumes')).toBeVisible()
   await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
