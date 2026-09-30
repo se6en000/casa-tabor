@@ -880,23 +880,34 @@ test('wall on a computer: directions are a link that opens Google Maps, and Call
 
 // Dismissing Casa without the small button (Jake, 2026-09-30: "I can't be forced to only click the small button
 // to close, I need an easier way"): a tap outside, a swipe down, Esc; a card waiting asks once more first.
-test('wall: a tap anywhere outside the band closes it', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+test('wall: before anything is said, a tap anywhere outside the band closes it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=wake')
   const band = page.getByRole('region', { name: 'Assistant' })
   await expect(band).toBeVisible()
   await page.mouse.click(960, 150)
   await expect(band).toBeHidden()
 })
 
-test('wall: with a card waiting, a tap outside asks first; a second tap closes', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=add')
+// Jake, 2026-09-30, talking over a project: "the project screen went away and the calm home screen came into
+// view … when I touch the project the AI goes away". Once there's a conversation, a tap reaches the wall
+// under Casa (Casa stays), and what's open stays up past the idle minutes until the conversation ends.
+test('wall: in a conversation, a tap reaches the wall under Casa, and what it opens stays until Casa closes', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-25T13:10:00') })
+  // To do open under a conversation (as a project page is when he talks about it).
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&band=answer&open=todo')
   const band = page.getByRole('region', { name: 'Assistant' })
   await expect(band).toBeVisible()
-  await page.mouse.click(960, 150)
-  await expect(page.getByRole('status').filter({ hasText: 'Tap again to close — the card isn’t saved.' })).toBeVisible()
+  await expect(page.getByText('3 ready now')).toBeVisible()
+  // A tap on the wall above the band no longer closes Casa.
+  await page.mouse.click(960, 60)
   await expect(band).toBeVisible()
-  await page.mouse.click(960, 150)
+  await page.clock.fastForward('04:00')
+  await expect(page.getByText('3 ready now')).toBeVisible()
+  await expect(band).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(band).toBeHidden()
+  await page.clock.fastForward('02:30')
+  await expect(page.getByText('3 ready now')).toBeHidden()
 })
 
 test('wall: a swipe down on the band closes it; so does Esc on a computer', async ({ page }) => {

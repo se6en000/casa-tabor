@@ -14,6 +14,7 @@ export type PlanItem =
   | { id: string; kind: 'edit_step'; project_id: string; step_id: string; project: string; title: string; changes: StepChanges; why?: string }
   | { id: string; kind: 'add_step'; project_id: string; project: string; title: string; after_step_id?: string; after?: string; changes?: StepChanges; why?: string }
   | { id: string; kind: 'remove_step'; project_id: string; step_id: string; project: string; title: string; why?: string }
+  | { id: string; kind: 'move_step'; project_id: string; step_id: string; project: string; title: string; after_step_id?: string; after?: string; why?: string }
   | { id: string; kind: 'close_project'; project_id: string; title: string; reason: string; open_steps?: number; why?: string }
 export interface StepChanges { title?: string; who?: string; cal_start?: string; cal_end?: string; minutes?: number; cost_cents?: number }
 
@@ -42,8 +43,8 @@ const stepMeta = (st: PlanStep) => [st.cal_start ? dayText(st.cal_start) : null,
 const itemName = (i: PlanItem) => (i.kind === 'shopping' ? i.name : i.kind === 'pack' ? i.label : i.title)
 /** "→ Sun, Oct 18 · Kelly" — what a change to a step does, in order: name, day, who, time, cost. */
 const changeText = (c: StepChanges | undefined) => [c?.title ? `“${c.title}”` : null, c?.cal_start ? dayText(c.cal_start) : null, c?.who, c?.minutes ? effort(c.minutes) : null, c?.cost_cents ? money(c.cost_cents) : null].filter(Boolean).join(' · ')
-type Change = Extract<PlanItem, { kind: 'edit_step' | 'add_step' | 'remove_step' }>
-const isChange = (i: PlanItem): i is Change => i.kind === 'edit_step' || i.kind === 'add_step' || i.kind === 'remove_step'
+type Change = Extract<PlanItem, { kind: 'edit_step' | 'add_step' | 'remove_step' | 'move_step' }>
+const isChange = (i: PlanItem): i is Change => i.kind === 'edit_step' || i.kind === 'add_step' || i.kind === 'remove_step' || i.kind === 'move_step'
 const changeProjects = (items: PlanItem[]) => [...new Set(items.filter(isChange).map((i) => i.project))]
 
 export interface PlanLine { key: string; text: string; meta: string; why?: string; done?: boolean; number?: number; struck?: boolean }
@@ -72,7 +73,8 @@ export function planSections(items: PlanItem[]): PlanSection[] {
     out.push({ heading: `CHANGES TO ${project.toUpperCase()}`, lines: items.filter(isChange).filter((i) => i.project === project).map((i) => (
       i.kind === 'edit_step' ? { key: `edit_step:${i.title}`, text: i.title, meta: `→ ${changeText(i.changes)}`, why: i.why }
         : i.kind === 'add_step' ? { key: `add_step:${i.title}`, text: `+ ${i.title}`, meta: [i.after ? `after ${i.after}` : null, changeText(i.changes) || null].filter(Boolean).join(' · '), why: i.why }
-          : { key: `remove_step:${i.title}`, text: i.title, meta: 'comes off', struck: true, why: i.why }
+          : i.kind === 'move_step' ? { key: `move_step:${i.title}`, text: i.title, meta: i.after ? `→ after ${i.after}` : '→ first', why: i.why }
+            : { key: `remove_step:${i.title}`, text: i.title, meta: 'comes off', struck: true, why: i.why }
     )) })
   }
   const shopping = items.filter((i): i is Extract<PlanItem, { kind: 'shopping' }> => i.kind === 'shopping')
@@ -125,7 +127,7 @@ export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line
 }
 const rank = (p: string) => (p.startsWith('added') ? 1 : p.startsWith('took off') ? 2 : 0)
 
-const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack', edit_step: 'project', add_step: 'project', remove_step: 'project', close_project: 'project' }
+const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack', edit_step: 'project', add_step: 'project', remove_step: 'project', move_step: 'project', close_project: 'project' }
 /** "7 things, in 5 places": each line on the card is a thing. */
 export function planCount(items: PlanItem[], skip: string[]): { things: number; label: string } {
   const kept = items.filter((i) => !skip.includes(i.id))
@@ -148,7 +150,8 @@ export function agreeGroups(items: PlanItem[]): Array<{ heading: string; rows: A
     add(`CHANGES TO ${project.toUpperCase()}`, items.filter(isChange).filter((i) => i.project === project).map((i) => (
       i.kind === 'edit_step' ? { id: i.id, label: `${i.title} → ${changeText(i.changes)}`, meta: '' }
         : i.kind === 'add_step' ? { id: i.id, label: `Add “${i.title}”`, meta: i.after ? `after ${i.after}` : '' }
-          : { id: i.id, label: `Remove “${i.title}”`, meta: '' }
+          : i.kind === 'move_step' ? { id: i.id, label: `Move “${i.title}”`, meta: i.after ? `after ${i.after}` : 'to the start' }
+            : { id: i.id, label: `Remove “${i.title}”`, meta: '' }
     )))
   }
   add('CALENDAR · AND GOOGLE', items.filter((i): i is Extract<PlanItem, { kind: 'event' }> => i.kind === 'event').map((e) => ({ id: e.id, label: e.title, meta: `${dayText(e.start)} · ${timeRange(e.start, e.end)}` })))

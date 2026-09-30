@@ -52,6 +52,9 @@ export interface WallViewProps {
   onAsk?: (say?: string) => void
   /** The band, drawn over the wall. */
   overlay?: ReactNode
+  /** A conversation with Casa (or the email review) is going: the idle timers hold — a project page or
+   * To do stays up, and Calm doesn't come back (Jake, 2026-09-30). */
+  busy?: boolean
   /** The item the assistant's answer is about: outlined like a selection. */
   pointAt?: string | null
   /** The assistant's draft or change waiting for a yes: previewed on the Score, on its day. */
@@ -107,7 +110,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -163,7 +166,7 @@ export default function WallView(props: WallViewProps) {
   const shownTomorrow = useMemo(() => withDraft(tomorrow), [withDraft, tomorrow])
 
   const chosen = selectPosture(today, now)
-  const auto: Posture = chosen === 'calm' && Date.now() < awakeUntil ? 'launch' : chosen
+  const auto: Posture = chosen === 'calm' && (busy || Date.now() < awakeUntil) ? 'launch' : chosen
   const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
   const shown = shownPosture(auto, preview, Date.now())
   const evening = shown.posture === 'evening'
@@ -174,7 +177,7 @@ export default function WallView(props: WallViewProps) {
   const draftDay = assistantDraft && !selectedId ? new Date(assistantDraft.start_time) : null
   const picked = draftDay && Number.isFinite(draftDay.getTime()) && !sameDay(draftDay, autoDay)
     ? draftDay
-    : dayPreview && Date.now() < dayPreview.until ? dayPreview.date : null
+    : dayPreview && (busy || Date.now() < dayPreview.until) ? dayPreview.date : null
   const dayOnShow = picked ?? autoDay
   // Any day (Jake, 2026-09-30): a day outside the usual week brings the week around it onto the strip,
   // to swipe before and after; the frame loads it when it's past the cache.
@@ -200,21 +203,35 @@ export default function WallView(props: WallViewProps) {
   }, [preview])
   useEffect(() => {
     const left = comingUpUntil - Date.now()
-    if (left <= 0) return
+    if (left <= 0 || busy) return
     const timer = window.setTimeout(() => setComingUpUntil(0), left)
     return () => window.clearTimeout(timer)
-  }, [comingUpUntil])
+  }, [comingUpUntil, busy])
   useEffect(() => {
     const left = todoUntil - Date.now()
-    if (left <= 0) return
+    if (left <= 0 || busy) return
     const timer = window.setTimeout(() => setTodoUntil(0), left)
     return () => window.clearTimeout(timer)
-  }, [todoUntil])
+  }, [todoUntil, busy])
   useEffect(() => {
-    if (!dayPreview) return
+    if (!dayPreview || busy) return
     const timer = window.setTimeout(() => setDayPreview(null), Math.max(0, dayPreview.until - Date.now()))
     return () => window.clearTimeout(timer)
-  }, [dayPreview])
+  }, [dayPreview, busy])
+  // Talking with Casa isn't idle (Jake, 2026-09-30: "the project screen went away and the calm home screen
+  // came into view, the AI kept talking to me"): while busy, whatever is open stays and the wall stays awake;
+  // the idle minutes start again when the conversation ends.
+  // (The close timers below don't run while busy; when it ends, the idle minutes start again from then.)
+  useEffect(() => {
+    if (!busy) return
+    return () => {
+      const until = Date.now() + PREVIEW_MS
+      setTodoUntil((u) => (u ? Math.max(u, until) : u))
+      setComingUpUntil((u) => (u ? Math.max(u, until) : u))
+      setDayPreview((d) => (d ? { ...d, until: Math.max(d.until, until) } : d))
+      setAwakeUntil((u) => Math.max(u, Date.now() + WAKE_MS))
+    }
+  }, [busy])
   // Fall back asleep exactly when the 5 idle minutes are up.
   const [, setTick] = useState(0)
   useEffect(() => {

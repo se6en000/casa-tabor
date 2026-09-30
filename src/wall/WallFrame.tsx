@@ -29,6 +29,8 @@ export default function WallFrame() {
 
   // The assistant band: the mic button or the wake word (heard on the Pi) opens it and starts listening.
   const [bandOpen, setBandOpen] = useState(false)
+  // A conversation going on the band: the wall holds its idle timers meanwhile.
+  const [talking, setTalking] = useState(false)
   const [listenNonce, setListenNonce] = useState(0)
   const [pointAt, setPointAt] = useState<string | null>(null)
   const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; day?: string; nonce: number } | null>(null)
@@ -73,6 +75,7 @@ export default function WallFrame() {
       onDraft={setAssistantDraft}
       onLed={onBandLed}
       onOutcome={onOutcome}
+      onTalking={setTalking}
       onOpenEvent={(id) => {
         setBandOpen(false)
         setOpenRequest({ id, nonce: Date.now() })
@@ -100,5 +103,5 @@ export default function WallFrame() {
   const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const review = emailOpen && email.data ? <WallEmailReview data={email.data} act={email.act} onClose={() => setEmailOpen(false)} computer={deviceKeyboardHere()} today={localDay} /> : null
   const todos = useTodos()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
 }

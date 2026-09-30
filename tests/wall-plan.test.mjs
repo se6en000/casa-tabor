@@ -131,3 +131,13 @@ test('saved: a closed project and a changed one each open where they live', () =
     ['Emme — jellyfish: 3 changes', 'p-jelly'],
   ])
 })
+
+test('a move reads as where the step goes, on the draft and the Agree card', () => {
+  const moves = [
+    { id: 'i1', kind: 'move_step', project_id: 'p-paint', step_id: 's1', project: 'Paint the house', title: 'Hire the painter', after_step_id: 's2', after: 'Fix the stucco' },
+    { id: 'i2', kind: 'move_step', project_id: 'p-paint', step_id: 's3', project: 'Paint the house', title: 'Get quotes' },
+  ]
+  assert.deepEqual(planSections(moves)[0].lines.map((l) => [l.text, l.meta]), [['Hire the painter', '→ after Fix the stucco'], ['Get quotes', '→ first']])
+  assert.deepEqual(agreeGroups(moves)[0].rows.map((r) => [r.label, r.meta]), [['Move “Hire the painter”', 'after Fix the stucco'], ['Move “Get quotes”', 'to the start']])
+  assert.equal(planCount(moves, []).label, '2 things, in 1 place')
+})

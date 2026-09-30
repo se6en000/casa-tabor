@@ -9,7 +9,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, isSwipeDown, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -62,6 +62,8 @@ export interface WallAssistantBandProps {
   lookupDrive?: DriveLookup
   /** What the LED strip should show for the band (P3.14), and a card's outcome (saved / not). */
   onLed?: (band: { state: BandState; micOpen: boolean }) => void
+  /** Whether a conversation is going: the wall then holds its idle timers (a project page stays, no calm). */
+  onTalking?: (talking: boolean) => void
   onOutcome?: (kind: 'confirm' | 'cancel') => void
   /** The microphone; the screenshot fixture passes a stand-in its tests can speak through. */
   useSpeech?: typeof useSpeechInput
@@ -77,7 +79,7 @@ export interface WallAssistantBandProps {
   opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, viaWake = false, opening = null }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, viaWake = false, opening = null, onTalking }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -325,6 +327,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // The LED strip (P3.14): what the band is doing, and a card's outcome as a warm or rust swell.
   const micOpen = speech.listening || speech.connecting
   useEffect(() => onLed?.({ state, micOpen }), [state, micOpen, onLed])
+  const talking = messages.length > 0
+  useEffect(() => { onTalking?.(talking) }, [talking, onTalking])
+  useEffect(() => () => onTalking?.(false), [onTalking])
   const lastPending = useRef<string | null>(null)
   useEffect(() => {
     if (pending) {
@@ -492,8 +497,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
 
   return (
     <>
-    {/* Anywhere outside the band closes it (a card waiting asks once more first). */}
-    <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
+    {/* Before anything's said, anywhere outside the band closes it (an accidental wake). Once there's a
+        conversation, a tap reaches the screen underneath — he works on the project while talking. */}
+    {tapOutsideCloses(messages.length) && <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />}
     <section
       aria-label="Assistant"
       onPointerDown={(e) => { swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() } }}

@@ -178,6 +178,15 @@ export function withoutAsides<T extends Pick<AIMessage, 'role'> & { aside?: bool
 }
 
 /**
+ * A tap outside the band closes it only before anything's been said — an accidental wake (Jake, 2026-09-30).
+ * Once there's a conversation, a tap reaches the screen underneath (he works on the project while talking:
+ * "when I touch the project the AI goes away"); he closes it with a swipe down, Close, or "that's all".
+ */
+export function tapOutsideCloses(messageCount: number): boolean {
+  return messageCount === 0
+}
+
+/**
  * Dismissing Casa without the small button (Jake, 2026-09-30): a tap outside, a swipe down, Esc. With a card
  * waiting for a yes, a tap outside first asks ("Tap again to close — the card isn't saved"); a second tap
  * within 4 seconds closes. A swipe down or Esc is on purpose, and closes.

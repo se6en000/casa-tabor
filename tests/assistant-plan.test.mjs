@@ -234,3 +234,33 @@ test('a change to a project step’s calendar entry goes to the planning model a
   assert.match(early, /from\('todo_steps'\)\.select\('id'\)\.eq\('cal_event_id', stepEventId\)/)
   assert.match(early, /\(planningConversation \|\| stepCard\) && turnResolution\?\.act !== 'confirm_draft'/)
 })
+
+// Step 4 (P3.25): "move the painter after the stucco" — a saved project's step, moved after another of its
+// steps (or first); never a step that isn't there, and never after itself.
+test('a plan can move a saved step after another one, or to the start', () => {
+  const plan = call4({ title: 'Scuba order', items: [
+    { kind: 'move_step', project_id: 'p-scuba', step_id: 's-fit', after_step_id: 's-mask' },
+    { kind: 'move_step', project_id: 'p-scuba', step_id: 's-tank' },
+    { kind: 'move_step', project_id: 'p-scuba', step_id: 's-fit', after_step_id: 's-fit' },
+    { kind: 'move_step', project_id: 'p-scuba', step_id: 'nope', after_step_id: 's-mask' },
+    { kind: 'move_step', project_id: 'p-scuba', step_id: 's-fit', after_step_id: 'elsewhere' },
+  ] })
+  assert.deepEqual(plan.args.items, [
+    { id: 'i1', kind: 'move_step', project_id: 'p-scuba', step_id: 's-fit', project: 'Liv — scuba diver', title: 'Fitting', after_step_id: 's-mask', after: 'Buy the mask' },
+    { id: 'i2', kind: 'move_step', project_id: 'p-scuba', step_id: 's-tank', project: 'Liv — scuba diver', title: 'Build the tank' },
+  ])
+  const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
+  assert.ok(tool.parameters.properties.items.items.properties.kind.enum.includes('move_step'))
+})
+
+test('the planning model is told how to fit a day’s time and money, and how to reorder', () => {
+  const system = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', planning: true, projects: [costumes] })
+  assert.match(system, /I've got two hours and \$100 Saturday"\), pick the open steps of his projects that fit it/)
+  assert.match(system, /is move_step/)
+})
+
+test('what to work on with the time or money he has goes to the planning model (live: the fast model said it couldn’t tell)', () => {
+  const quick = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', projects: [costumes] })
+  assert.match(quick, /what to work on with the time or money he has \("I've got two hours and \$100 Saturday"\) — call think_it_through/)
+  assert.match(fullAiTools({ planning: false }).find((t) => t.name === 'think_it_through').description, /what to get done with the time or money he has/)
+})

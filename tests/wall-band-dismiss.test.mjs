@@ -51,3 +51,13 @@ test('an answer opens the email review or a day once, however often the band ope
   const frame = fs.readFileSync(new URL('../src/wall/WallFrame.tsx', import.meta.url), 'utf8')
   assert.match(frame, /const ask = useCallback\(\(say\?: string\) => \{\n\s+setEmailOpen\(false\)/)
 })
+
+// Jake, 2026-09-30 (talking over a project page): "when I touch the project the AI goes away" — a tap outside
+// closes Casa only before anything's been said (an accidental wake); once there's a conversation, a tap
+// reaches the screen underneath, and Casa stays until a swipe down, Close, or "that's all".
+test('a tap outside closes Casa only before there is a conversation', async () => {
+  const { tapOutsideCloses } = await import('../src/wall/assistant.ts')
+  assert.equal(tapOutsideCloses(0), true)
+  assert.equal(tapOutsideCloses(1), false)
+  assert.equal(tapOutsideCloses(6), false)
+})
