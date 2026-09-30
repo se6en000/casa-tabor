@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { stepWithin, type DayStep } from '../lib/daySwipe'
 import { useDaySwipe } from '../lib/useDaySwipe'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Check, ChefHat, Grid2x2, Lock, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
+import { CalendarDays, Check, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -17,6 +17,8 @@ import { eventView, familyItems, meView, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
+import PhoneEmailSettings from './PhoneEmailSettings'
+import { useEmailSettings } from '../wall/useEmailOffers'
 import PhoneScanSheet from './PhoneScanSheet'
 import PhoneComingUp, { comingUpSummary } from './PhoneComingUp'
 import PhoneTodo from './PhoneTodo'
@@ -72,6 +74,8 @@ export interface PhoneViewProps {
   /** The week around a far day on Me, loaded by the frame when asked with onFocusDay. */
   aroundEvents?: WallEvent[] | null
   onFocusDay?: (date: Date | null) => void
+  /** Settings › Email's data (the fixture page passes its own). */
+  useEmailSettingsHook?: typeof useEmailSettings
   /** Keep from… (05g): who each event is kept from, and the change. */
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
@@ -118,7 +122,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -134,6 +138,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
   const [addOpen, setAddOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [emailSettingsOpen, setEmailSettingsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
   // Opened from a project ("Talk to Casa"): its words are said first.
@@ -434,6 +439,14 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           <span className="text-phone-detail text-wall-ink-2">Find someone · call, text, directions</span>
         </span>
       </button>
+      {/* Settings › Email (canvas 15e): what Casa keeps you posted on, what's quiet, the wall switch. */}
+      <button type="button" onClick={() => setEmailSettingsOpen(true)} className="flex min-h-[72px] items-center gap-[14px] rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment px-[16px] py-[12px] text-left text-wall-ink">
+        <span className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-phone-card"><Mail size={20} /></span>
+        <span className="flex flex-col gap-[2px]">
+          <span className="font-display text-phone-heading font-bold">Email</span>
+          <span className="text-phone-detail text-wall-ink-2">Keep me posted · what’s quiet · the wall</span>
+        </span>
+      </button>
       <div className="grid grid-cols-2 gap-[10px]">
         {tiles.map((t) => (
           <Link key={t.label} to={t.to} className="flex h-[124px] flex-col justify-between rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment p-[14px] text-wall-ink no-underline">
@@ -482,7 +495,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       if (next != null) setDayIndex(next)
     }
   }
-  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || scanOpen || askOpen || adding || projectId || editingTodo)
+  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || emailSettingsOpen || scanOpen || askOpen || adding || projectId || editingTodo)
   useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
@@ -534,6 +547,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
 
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
+      {emailSettingsOpen && <PhoneEmailSettings onClose={() => setEmailSettingsOpen(false)} useSettings={useEmailSettingsHook} />}
       {askOpen && assistant?.({
         onClose: () => { setAskOpen(false); setAskOpening(null) },
         opening: askOpening,

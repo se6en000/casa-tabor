@@ -488,6 +488,10 @@
       {
         "path": "src/phone/PhonePlan.tsx",
         "reason": "The phone lens: Plan it with Casa (P3.25 phase 3; canvas 12e) — Set it up / See it all, one tick per thing, Agree, Open, Undo — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
+      },
+      {
+        "path": "src/phone/PhoneEmailSettings.tsx",
+        "reason": "The phone lens: Settings › Email (canvas 15e, approved 2026-09-30) — Keep me posted (add, remove), Bring back, the \"Email text on the wall\" switch, Back — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
       }
     ]
   }

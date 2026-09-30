@@ -44,7 +44,7 @@ test('the prompt: the bar, the real-person rule, what is already on the calendar
 
 test('the decision is read strictly: one of five outcomes, offers only with what they need', () => {
   assert.deepEqual(readReaderDecision({ decision: 'offer', reason: 'Permission slip due Friday', quote: 'sign by Friday', offers: [{ kind: 'reminder', title: 'Sign Owen’s permission slip', date: '2026-10-01' }, { kind: 'event' }] }),
-    { decision: 'offer', reason: 'Permission slip due Friday', quote: 'sign by Friday', offers: [{ kind: 'reminder', title: 'Sign Owen’s permission slip', date: '2026-10-01' }], person: null })
+    { decision: 'offer', reason: 'Permission slip due Friday', quote: 'sign by Friday', offers: [{ kind: 'reminder', title: 'Sign Owen’s permission slip', date: '2026-10-01' }], person: null, gist: null, gist_tag: null, posted: null })
   assert.deepEqual(readReaderDecision({ decision: 'person', reason: 'A friend asking to meet', person: { who: 'Katherine Cooper', wants: 'Wants to carpool to the Strings Festival' } }).person, { who: 'Katherine Cooper', wants: 'Wants to carpool to the Strings Festival' })
   assert.equal(readReaderDecision({ decision: 'maybe' }).decision, 'none', 'anything else is nothing')
   assert.equal(readReaderDecision(null).decision, 'none')

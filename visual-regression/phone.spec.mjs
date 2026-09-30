@@ -432,9 +432,47 @@ test('phone: "Anything from email?" — the review in Ask Casa, one at a time, t
   await review.getByRole('button', { name: 'Later' }).click()
   await expect(review.getByText('A FEW I SKIPPED · TELL ME IF ONE MATTERED')).toBeVisible()
   await review.getByRole('button', { name: 'It mattered' }).first().click()
+  await review.getByRole('button', { name: 'Just this one' }).click()
   await review.getByRole('button', { name: 'All fine' }).click()
   await expect(ask.getByText('That’s everything from email.')).toBeVisible()
   expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['em-slip:add', 'em-fee:not_needed', 'em-aba:later', 'sk-vet:mattered', 'sk-att:fine', 'sk-5k:fine'])
+})
+
+// Keep me posted on the phone (canvas row 15): the lines in Ask Casa, and Settings › Email under More.
+test('phone: "Keep me posted" lines in Ask Casa — Add it on the dated one, Got it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=email&email=posted')
+  const phone = page.getByTestId('phone-fixture')
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  const review = phone.getByRole('region', { name: 'Ask Casa' }).getByRole('region', { name: 'From email' })
+  await expect(review.getByText('KEEP ME POSTED · SALLY ROZANSKI · 3 THIS WEEK')).toBeVisible()
+  await review.getByRole('button', { name: 'Add it' }).click()
+  await review.getByRole('button', { name: 'Got it' }).click()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['ps-show:add', 'ps-thriller:seen'])
+})
+
+test('phone: Settings › Email — keep me posted, what’s quiet with Bring back, the wall switch', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id')
+  const phone = page.getByTestId('phone-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: /Email Keep me posted/ }).click()
+  const settings = phone.getByRole('region', { name: 'Email settings' })
+  await expect(settings.getByText('Sally Rozanski')).toBeVisible()
+  await expect(settings.getByText('Rosangela Paine · to-dos')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-email-settings.png')
+  await settings.getByRole('textbox', { name: 'Keep me posted on' }).fill('emails from Liv’s coach')
+  await settings.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(settings.getByText('I’ll keep you posted on emails from Liv’s coach.')).toBeVisible()
+  await settings.getByRole('button', { name: 'Bring back' }).click()
+  await settings.getByRole('button', { name: 'Email text on the wall' }).click()
+  await settings.getByRole('button', { name: 'Stop keeping me posted on Sally Rozanski' }).click()
+  expect(await page.evaluate(() => window.__emailSettings)).toEqual([
+    { action: 'add_rule', text: 'emails from Liv’s coach' },
+    { action: 'bring_back', id: 'q1' },
+    { action: 'text_on_wall', on: false },
+    { action: 'remove_rule', id: 'k1' },
+  ])
 })
 
 test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {

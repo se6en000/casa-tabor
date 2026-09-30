@@ -1,4 +1,4 @@
-import type { EmailReviewData } from './emailReview'
+import type { EmailOffer, EmailReviewData } from './emailReview'
 import { useEffect, useRef, useState } from 'react'
 import type { AIMessage } from '../hooks/useAISession'
 import { answerEventId, latestExchange, pendingAction, withoutAsides } from './assistant'
@@ -233,13 +233,63 @@ export const EMAIL_FIXTURE: EmailReviewData = {
   ],
 }
 
+// Keep me posted (canvas row 15): Sally Rozanski's three emails of the last week, as the live reader wrote them
+// (2026-09-30), and her Showcase email before she was kept — "That one mattered" brings it back as an offer.
+const sally = (id: string, day: string, gist: string, tag: string | null, can_add: boolean) => ({ id, from: 'Sally Rozanski', subject: null, received_at: `${day}T14:00:00Z`, open: `https://mail.google.com/mail/#all/${id}`, gist, tag, can_add, kept_by: 'Sally Rozanski', sender: 'sally.rozanski@palmbeachschools.org', decision: can_add ? 'offer' : 'none', reason: null, quote: null, offers: [], person: null })
+export const SHOWCASE_OFFER: EmailOffer = { id: 'sk-show', from: 'Sally Rozanski', subject: 'Showcase of Schools 10/6 & Choice Applications', received_at: '2026-09-27T22:01:00Z', open: 'https://mail.google.com/mail/#all/sk-show', decision: 'offer', reason: 'The Showcase of Schools is Oct 6; choice applications close Dec 4.', quote: 'The Showcase of Schools is being held at the South Florida Fairgrounds on Tuesday, October 6, 2026 | from 4 - 8 p.m.', offers: [{ kind: 'event', title: 'Showcase of Schools', date: '2026-10-06', start: '16:00', place: 'South Florida Fairgrounds' }, { kind: 'reminder', title: 'Choice applications close', date: '2026-12-04' }], person: null }
+export const EMAIL_SCENES: Record<string, EmailReviewData> = {
+  '1': EMAIL_FIXTURE,
+  posted: {
+    count: 3, offers: [], skipped: [], text_on_wall: true,
+    posted: [
+      sally('ps-thriller', '2026-09-28', 'Bak Thriller tickets sold out over the weekend', 'News', false),
+      sally('ps-show', '2026-09-27', 'Showcase of Schools on Oct 6; Choice Applications open Oct 8 and close Dec 4', 'An event', true),
+      sally('ps-yearbook', '2026-09-26', 'Bak 8th grade yearbooks and yearbook ads are available for purchase online', 'An ad', false),
+    ],
+  },
+  // Opened from the count (in life, also by asking "anything from email?").
+  ask: {
+    count: 2, offers: [], posted: [], text_on_wall: true,
+    skipped: [
+      { id: 'sk-show', from: 'Sally Rozanski', subject: 'Showcase of Schools 10/6 & choice applications', received_at: '2026-09-27T22:01:00Z', open: 'x', reason: 'news sent to every eighth-grade family' },
+      { id: 'sk-quiet', from: 'Mrs. Paine', subject: 'spelling list for next week', received_at: '2026-09-29T12:00:00Z', open: 'x', reason: 'You said Not needed to one like it from Rosangela Paine on Sep 30' },
+    ],
+  },
+  textoff: { ...EMAIL_FIXTURE, text_on_wall: false },
+}
+
+/** The email scene a fixture page asked for (`?email=1|posted|ask|textoff`). */
+export function emailScene(): EmailReviewData {
+  return EMAIL_SCENES[new URLSearchParams(window.location.search).get('email') ?? '1'] ?? EMAIL_FIXTURE
+}
+
+/** A stand-in for the review's answers: recorded on window.__emailAnswers; "That one mattered" on the
+ * Showcase brings it back as an offer, as the live reader did. */
+export async function fixtureEmailAct(id: string, what: string) {
+  const w = window as unknown as { __emailAnswers?: string[] }
+  w.__emailAnswers = [...(w.__emailAnswers ?? []), `${id}:${what}`]
+  return { ok: true, offer: id === 'sk-show' && (what === 'keep_posted' || what === 'mattered') ? SHOWCASE_OFFER : null }
+}
+
 /** A stand-in for useEmailOffers: the fixture's emails; answers are recorded on window.__emailAnswers. */
 export function fixtureEmail() {
+  return { data: emailScene(), act: fixtureEmailAct }
+}
+
+/** A stand-in for useEmailSettings (Settings › Email, canvas 15e): changes are recorded on window.__emailSettings. */
+export function fixtureEmailSettings() {
   return {
-    data: EMAIL_FIXTURE,
-    act: async (id: string, what: string) => {
-      const w = window as unknown as { __emailAnswers?: string[] }
-      w.__emailAnswers = [...(w.__emailAnswers ?? []), `${id}:${what}`]
+    data: {
+      keep: [
+        { id: 'k1', kind: 'sender' as const, label: 'Sally Rozanski', source: 'mattered', created_at: '2026-09-30T19:00:00Z' },
+        { id: 'k2', kind: 'topic' as const, label: 'Anything about Owen’s therapy', source: 'voice', created_at: '2026-09-30T19:05:00Z' },
+      ],
+      quiet: [{ id: 'q1', from: 'Rosangela Paine', kind: 'todo', since: '2026-09-30T13:00:00Z', skipped: 1 }],
+      text_on_wall: true,
+    },
+    change: async (body: Record<string, unknown>) => {
+      const w = window as unknown as { __emailSettings?: Array<Record<string, unknown>> }
+      w.__emailSettings = [...(w.__emailSettings ?? []), body]
       return { ok: true }
     },
   }

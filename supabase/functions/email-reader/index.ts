@@ -2,14 +2,17 @@
 // For each email: the first pass drops plain noise; the rest — body and every attachment (PDFs and images
 // as their pages, Word documents as their text, up to 20 MB) — is read by the planning model, which decides
 // what Casa would offer. Decisions go to email_offers as shadows: nothing is shown, nothing is saved on the
-// calendar. POST { message_ids?: string[], since_hours?: number, limit?: number, rerun?: boolean }.
+// calendar. POST { message_ids?: string[], since_hours?: number, limit?: number, rerun?: boolean, matters?: boolean }.
+// Phase 3 (canvas row 15): a kept sender or topic ("Keep me posted") makes the email a posted line — never
+// dropped by the first pass; every email gets a line of what it says (gist); `matters` re-reads one he said
+// mattered, so it comes back as an offer.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { PLANNING_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { buildReaderPrompt, firstPass, readReaderDecision, readerParts } from '../_shared/email-reader.mjs'
-import { statusFor } from '../_shared/email-offers.mjs'
+import { keptPostedBy, postedStatus, statusFor } from '../_shared/email-offers.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -57,7 +60,7 @@ Deno.serve(async (req) => {
   const expected = Deno.env.get('EMAIL_READER_KEY')
   if (!expected || req.headers.get('x-casa-email-reader') !== expected) return json({ error: 'Not allowed' }, 401)
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const body = await req.json().catch(() => ({})) as { message_ids?: string[]; since_hours?: number; limit?: number; rerun?: boolean }
+  const body = await req.json().catch(() => ({})) as { message_ids?: string[]; since_hours?: number; limit?: number; rerun?: boolean; matters?: boolean }
   const limit = Math.max(1, Math.min(Number(body.limit) || 10, 40))
 
   let q = sb.from('gmail_processed_messages').select('gmail_message_id, family_member_id, from_email, subject, email_subject, received_at, email_body, attachments')
@@ -73,12 +76,15 @@ Deno.serve(async (req) => {
   }
   if (!todo.length) return json({ read: 0, decisions: {} })
 
-  const [{ data: llmRow }, { data: family }, { data: upcoming }, { data: tokens }] = await Promise.all([
+  const [{ data: llmRow }, { data: family }, { data: upcoming }, { data: tokens }, { data: kept }] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
     sb.from('events').select('id, title, start_time').is('deleted_at', null).neq('status', 'cancelled').gte('start_time', new Date(Date.now() - 86400e3).toISOString()).lt('start_time', new Date(Date.now() + 45 * 86400e3).toISOString()).order('start_time').limit(250),
     sb.from('google_tokens').select('family_member_id, refresh_token, access_token, expires_at'),
+    sb.from('email_keep_posted').select('id, kind, sender, topic, label'),
   ])
+  const rules = (kept ?? []) as Array<{ id: string; kind: string; sender: string | null; topic: string | null; label: string }>
+  const topics = rules.filter((r) => r.kind === 'topic' && r.topic).map((r) => r.topic as string)
   const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
   if (!llm?.api_key) return json({ error: 'AI not configured' }, 400)
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -100,7 +106,8 @@ Deno.serve(async (req) => {
   for (const row of todo) {
     const email = { from_email: row.from_email, subject: row.email_subject ?? row.subject, received_at: row.received_at, body: row.email_body ?? '' }
     const base = { gmail_message_id: row.gmail_message_id, mailbox_member_id: row.family_member_id, from_email: row.from_email, subject: email.subject, received_at: row.received_at, status: 'shadow', updated_at: new Date().toISOString() }
-    const skipped = firstPass(email)
+    // A kept sender's mail always reaches the reader.
+    const skipped = keptPostedBy(email, rules, null) ? null : firstPass(email)
     if (skipped) {
       await sb.from('email_offers').upsert({ ...base, decision: 'skipped', reason: skipped, offers: [], person: null, model: null, error: null }, { onConflict: 'gmail_message_id' })
       results.push({ id: row.gmail_message_id, subject: email.subject, decision: 'skipped' })
@@ -118,7 +125,7 @@ Deno.serve(async (req) => {
       const isDocx = mime.includes('wordprocessingml') || /\.docx$/i.test(a.filename ?? '')
       files.push({ filename: a.filename ?? 'attachment', mimeType: mime, size: a.size ?? 0, ...(isDocx ? { text: docxText(data) ?? undefined } : { data }) })
     }
-    const prompt = buildReaderPrompt({ email, family: family ?? [], upcoming: calendar, today, attachments: files })
+    const prompt = buildReaderPrompt({ email, family: family ?? [], upcoming: calendar, today, attachments: files, topics, matters: !!body.matters })
     let decision = readReaderDecision(null)
     let failure: string | null = null
     try {
@@ -134,8 +141,13 @@ Deno.serve(async (req) => {
     } catch (err) {
       failure = err instanceof Error ? err.message.slice(0, 300) : String(err)
     }
-    // Phase 2: a fresh offer waits for him to review; the rest stay shadows.
-    await sb.from('email_offers').upsert({ ...base, status: statusFor(decision.decision, row.received_at), decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
+    // Phase 2: a fresh offer waits for him to review; the rest stay shadows. Phase 3: a kept sender or topic
+    // is a posted line for a week; one he said mattered waits as an offer if there's anything in it.
+    const keptBy = failure ? null : keptPostedBy(email, rules, decision.posted)
+    const status = keptBy ? postedStatus(row.received_at)
+      : body.matters ? (['offer', 'details', 'person'].includes(decision.decision) ? 'waiting' : 'shadow')
+      : statusFor(decision.decision, row.received_at)
+    await sb.from('email_offers').upsert({ ...base, status, decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, gist: decision.gist, gist_tag: decision.gist_tag, posted_by: keptBy?.id ?? null, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
     results.push({ id: row.gmail_message_id, subject: email.subject, decision: decision.decision, reason: decision.reason, offers: decision.offers, person: decision.person, attachments: files.length, error: failure })
   }
   // Counts only: what was decided stays in email_offers, which only the server reads.

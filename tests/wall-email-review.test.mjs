@@ -23,3 +23,15 @@ test('who and when, and "a few I skipped" once a day', () => {
   assert.equal(showSkippedToday('2026-09-30', '2026-09-30', [{ id: 's' }]), false)
   assert.equal(showSkippedToday(null, '2026-09-30', []), false)
 })
+
+// Keep me posted (canvas 15b, approved 2026-09-30): a kept sender's emails, a line each, after the offers.
+test('the posted lines: one sender is named in the header; her emails open as a Gmail search', async () => {
+  const { postedHeader, herEmails, lineDay } = await import('../src/wall/emailReview.ts')
+  const line = (kept_by, sender) => ({ id: kept_by, kept_by, sender, from: kept_by, subject: null, received_at: '2026-09-28T14:00:00Z', open: 'x', gist: 'g', tag: null, can_add: false, decision: 'none', reason: null, quote: null, offers: [], person: null })
+  assert.equal(postedHeader([line('Sally Rozanski', 's@x.org'), line('Sally Rozanski', 's@x.org'), line('Sally Rozanski', 's@x.org')]), 'KEEP ME POSTED · SALLY ROZANSKI · 3 THIS WEEK')
+  assert.equal(postedHeader([line('Sally Rozanski', 's@x.org'), line('Owen’s therapy', 't@x.org')]), 'KEEP ME POSTED · 2 THIS WEEK')
+  assert.equal(postedHeader([line('Sally Rozanski', 's@x.org')]), 'KEEP ME POSTED · SALLY ROZANSKI · 1 THIS WEEK')
+  assert.equal(herEmails([line('Sally Rozanski', 'sally.rozanski@palmbeachschools.org')]), 'https://mail.google.com/mail/#search/from%3Asally.rozanski%40palmbeachschools.org')
+  assert.equal(herEmails([line('a', 'a@x.org'), line('b', 'b@x.org')]), null)
+  assert.equal(lineDay('2026-09-28T14:00:00Z'), 'Mon')
+})

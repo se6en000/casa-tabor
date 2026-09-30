@@ -95,7 +95,9 @@ export function senderOf(from) {
 /** The display name ("Palm Beach Day"), else the address. */
 export function senderName(from) {
   const m = /^\s*"?([^"<]+?)"?\s*</.exec(String(from ?? ''))
-  return (m ? m[1] : String(from ?? '')).trim()
+  const name = (m ? m[1] : String(from ?? '')).trim()
+  // Some senders write their name in capitals ("SALLY ROZANSKI"); a short acronym (PTO) stays.
+  return /[a-z]/.test(name) || !/[A-Z]{2,}\s+[A-Z]{2,}/.test(name) ? name : name.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase())
 }
 
 /** What it would add: a person writing, new details, or its first offer's kind (event, reminder, todo, …). */
@@ -113,13 +115,47 @@ const shortDay = (iso) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/
  * back himself is never quieted again. Returns { by, reason } or null.
  */
 export function quietFor(row, answered) {
-  if (!row || row.feedback === 'mattered') return null
+  if (!row || row.feedback === 'mattered' || row.posted_by) return null
   const from = senderOf(row.from_email)
   const kind = kindOf(row)
   const latest = (answered ?? [])
-    .filter((a) => a.id !== row.id && a.answered_at && senderOf(a.from_email) === from)
+    // A kept-posted line's Not needed teaches nothing; one he brought back (Settings › Email) no longer quiets.
+    .filter((a) => a.id !== row.id && a.answered_at && !a.posted_by && !a.unquieted_at && senderOf(a.from_email) === from)
     .filter((a) => a.feedback === 'mattered' || (['added', 'not_needed'].includes(a.status) && kindOf(a) === kind))
     .sort((a, b) => Date.parse(b.answered_at) - Date.parse(a.answered_at))[0]
   if (!latest || latest.feedback === 'mattered' || latest.status !== 'not_needed') return null
   return { by: latest.id, reason: `You said Not needed to one like it from ${senderName(latest.from_email)} on ${shortDay(latest.answered_at)}` }
+}
+
+// Keep me posted (canvas row 15, approved 2026-09-30): for a sender who writes both what matters and ads
+// (Sally Rozanski: dances and yearbook ads), every email is a line of what it says — nothing skipped or quieted.
+
+/** The rule that keeps this email posted: its sender by address, or a topic the reader said it's about. */
+export function keptPostedBy(email, rules, readerPosted) {
+  const from = senderOf(email?.from_email)
+  const bySender = (rules ?? []).find((r) => r.kind === 'sender' && r.sender && r.sender === from)
+  if (bySender) return bySender
+  const said = String(readerPosted ?? '').trim().toLowerCase()
+  return said ? (rules ?? []).find((r) => r.kind === 'topic' && String(r.topic ?? '').trim().toLowerCase() === said) ?? null : null
+}
+
+/** A posted line waits for him for a week; older mail stays a shadow. */
+export function postedStatus(receivedAt, now = new Date()) {
+  return receivedAt && now.getTime() - new Date(receivedAt).getTime() <= 7 * 86400e3 ? 'posted' : 'shadow'
+}
+
+const TAG_WORDS = { event: 'An event', deadline: 'A deadline', todo: 'Something to do', news: 'News', ad: 'An ad', request: 'Asks for something', receipt: 'A receipt' }
+
+/** One line of a kept-posted email: what it says, a plain tag, and whether there is something to add. */
+export function postedLine(row) {
+  const canAdd = (['offer', 'details'].includes(row?.decision) && (row?.offers ?? []).length > 0) || (row?.decision === 'person' && !!row?.person)
+  return { gist: String(row?.gist || row?.subject || '').trim(), tag: TAG_WORDS[row?.gist_tag] ?? null, can_add: canAdd }
+}
+
+/** What he typed in Settings › Email: an address keeps that sender; anything else is a topic. */
+export function ruleFromText(text) {
+  const t = String(text ?? '').trim()
+  if (!t) return null
+  if (/^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(t)) return { kind: 'sender', sender: t.toLowerCase(), topic: null, label: t.toLowerCase() }
+  return { kind: 'topic', sender: null, topic: t, label: t }
 }

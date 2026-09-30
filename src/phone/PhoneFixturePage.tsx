@@ -5,7 +5,7 @@ import { ProfileSessionContext } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { FamilyMember } from '../types'
-import { fixtureEmail, fixtureTurn } from '../wall/assistantFixture'
+import { fixtureEmail, fixtureEmailSettings, fixtureTurn } from '../wall/assistantFixture'
 import PhoneAssistant from './PhoneAssistant'
 import { useFixtureFonts } from '../wall/fixtureFonts'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -122,6 +122,7 @@ export default function PhoneFixturePage() {
         <Route path="*" element={
           <div data-testid="phone-fixture" className="h-[844px] w-[390px] overflow-hidden">
             <PhoneView
+              useEmailSettingsHook={fixtureEmailSettings}
               now={now}
               viewerId={viewerId}
               members={members as WallMember[]}

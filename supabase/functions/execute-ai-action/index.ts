@@ -9,6 +9,7 @@ import {
   hasSmartEnrichmentInputs,
 } from '../_shared/enrichment-impact.mjs'
 import { requireEnv, optionalEnv } from '../_shared/env.mjs'
+import { ruleFromText } from '../_shared/email-offers.mjs'
 import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { verifyPlaceAddress } from '../_shared/verify-place-address.mjs'
 import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
@@ -1784,6 +1785,18 @@ Deno.serve(async (req) => {
       const { data, error } = await sb.from('saved_contacts').update({ address, updated_at: new Date().toISOString() }).eq('id', contactId).select('id, name, address').single()
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, contact: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (tool === 'keep_me_posted') {
+      // Keep me posted (canvas 15e): said to Casa, saved on a yes. An address keeps that sender; anything
+      // else ("emails from Liv's coach", "Owen's therapy") is a topic the email reader matches.
+      const rule = ruleFromText(normalizeOptionalText(args.about, 200))
+      if (!rule) throw new Error('Keeping you posted needs what to keep you posted on')
+      const { data, error } = await sb.from('email_keep_posted').insert({ ...rule, source: 'voice' }).select('id, kind, label').single()
+      if (error && error.code !== '23505') throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, rule: data ?? rule, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

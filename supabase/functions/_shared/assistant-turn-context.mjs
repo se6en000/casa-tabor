@@ -162,9 +162,10 @@ Dates: always take them from the Days list. In scheduling, pushing or moving som
 "directions_to": when they want directions, a route, to navigate, or a link to go to one person or place — who or where, as they said it ("Alice", "Liv's coach", "Lake Lytal") — else null.
 "address_for": when the latest message gives the address of a person or place ("It's 412 Palm Way, Jupiter" after Casa asked for Mary's address; "Alice lives at 8255 West Lake Drive"): {"who": the person or place, as named in the conversation, "address": the address as said} — else null.
 "search": when the question is about any or every time something happens or happened, the last or first time, anything before today, or asks to find something on the calendar: {"words": one to three key words from it (a name, a thing, a place — "Gilbert", "vet", "yoga"), "from": "YYYY-MM-DD" or null, "to": "YYYY-MM-DD" or null} — dates only when they gave some — else null.
+"keep_posted": when the latest message asks to hear from someone, or about something, from now on — to be told whenever a person, a group or a subject comes up (their emails, said or not: "keep me posted on emails from Liv's coach", "let me know whenever Owen's therapist writes", "make sure I see stuff from the PTO from now on", "always show me anything from Sally Rozanski"): who or what, as a short name ("Owen's therapist", "the PTO", "Sally Rozanski") — else null (a question about email now, "anything from email?", is not this; nor is a reminder for one thing at a time).
 "prep": when the latest message is something to get ready for an upcoming calendar item — check, dry, find, pack, bring, charge, wash, print, sign ("make sure Liv's cleats are dry", "find Owen's pink kindergarten shirt for the field trip", "don't forget Emme's violin tomorrow") — and one listed item is clearly what it's for (the person, the day, the kind of thing): {"item": a short line to tick off ("Dry Liv's cleats"), "event_id": its id in [brackets]} — else null (unclear which, or no such item: then it's an add).
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null}`
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null, "keep_posted": "..." or null}`
 }
 
 const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
@@ -218,7 +219,9 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   // Something to get ready for one listed event (get & pack by voice, 2026-09-30).
   const pr = act !== 'aside' && r.prep && typeof r.prep === 'object' ? r.prep : null
   const prep = pr && typeof pr.item === 'string' && pr.item.trim() && (knownIds ?? []).includes(pr.event_id) ? { item: pr.item.trim().slice(0, 160), eventId: pr.event_id } : null
-  return { act, closesDraft, answerable, standalone, search, prep, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
+  // Emails to hear about from now on (Keep me posted, canvas row 15): who or what, in his words.
+  const keepPosted = act !== 'aside' && typeof r.keep_posted === 'string' && r.keep_posted.trim() ? r.keep_posted.trim().slice(0, 200) : null
+  return { act, closesDraft, answerable, standalone, search, prep, keepPosted, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/

@@ -941,11 +941,55 @@ test('wall: "3 FROM EMAIL" opens the review; each answer moves on; then a few it
   await review.getByRole('button', { name: 'Later' }).click()
   await expect(review.getByText('A FEW I SKIPPED THIS WEEK · TELL ME IF ONE MATTERED')).toBeVisible()
   await review.getByRole('button', { name: 'That one mattered' }).first().click()
+  // One question first (canvas 15a): keep that sender posted, or just this one.
+  await review.getByRole('button', { name: 'Just this one' }).click()
   await expect(review.getByText('Noted — it mattered')).toBeVisible()
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-skipped.png')
   await review.getByRole('button', { name: 'All fine' }).click()
   await expect(review).toBeHidden()
   expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['em-slip:add', 'em-fee:not_needed', 'em-aba:later', 'sk-vet:mattered', 'sk-att:fine', 'sk-5k:fine'])
+})
+
+// Keep me posted (canvas row 15, approved by Jake 2026-09-30): Sally Rozanski's emails, a line each, after the
+// offers — Add it on the dated one, an ad is a line to glance past; Got it marks them read.
+test('wall: "Keep me posted" — a line for each of Sally’s emails, Add it on the dated one, Got it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=posted')
+  await page.getByRole('button', { name: '3 from email' }).click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('KEEP ME POSTED · SALLY ROZANSKI · 3 THIS WEEK')).toBeVisible()
+  await expect(review.getByText('An ad')).toBeVisible()
+  await expect(review.getByRole('button', { name: 'Add it' })).toHaveCount(1)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-posted.png')
+  await review.getByRole('button', { name: 'Add it' }).click()
+  await expect(review.getByText('Added', { exact: true })).toBeVisible()
+  await review.getByRole('button', { name: 'Got it' }).click()
+  await expect(review.getByText('That’s everything from email.')).toBeVisible()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['ps-show:add', 'ps-thriller:seen'])
+})
+
+test('wall: "That one mattered" asks to keep Sally posted; yes brings the Showcase back as an offer; a quiet one says why', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=ask')
+  await page.getByRole('button', { name: '2 from email' }).click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('Quiet: You said Not needed to one like it from Rosangela Paine on Sep 30')).toBeVisible()
+  await review.getByRole('button', { name: 'That one mattered' }).first().click()
+  await expect(review.getByText('Keep you posted on everything from Sally Rozanski?')).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-keep-posted-ask.png')
+  await review.getByRole('button', { name: 'Yes, a line for each' }).click()
+  await expect(review.getByText('I’ll keep you posted on Sally Rozanski. Here it is.')).toBeVisible()
+  await expect(review.getByText('Showcase of Schools', { exact: true })).toBeVisible()
+  await review.getByRole('button', { name: 'Add it' }).click()
+  await expect(review.getByText('A FEW I SKIPPED THIS WEEK · TELL ME IF ONE MATTERED')).toBeVisible()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['sk-show:keep_posted', 'sk-show:add'])
+})
+
+test('wall: with "Email text on the wall" off, the card keeps its words to itself', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=textoff')
+  await page.getByRole('button', { name: '3 from email' }).click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('Owen’s class needs permission slips signed.')).toBeVisible()
+  await expect(review.getByText(/communicator folder for permission slips to sign/)).toHaveCount(0)
+  await expect(review.getByText('The email’s own words are hidden on the wall · Open it on your phone')).toBeVisible()
 })
 
 test('wall: the email review closes with a tap outside; Open email is a link on a computer', async ({ page }) => {

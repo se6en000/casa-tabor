@@ -238,7 +238,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project', 'save_address', 'add_prep_item'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project', 'save_address', 'add_prep_item', 'keep_me_posted'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -327,6 +327,7 @@ type TurnContext = {
   originalText: string | null
   /** Get & pack by voice: a line for one event's list, as a card. */
   prepCard?: { tool: string; args: Record<string, unknown>; about: TurnReferent | null } | null
+  keepPostedCard?: { tool: string; args: Record<string, unknown> } | null
   ms: number
 }
 
@@ -425,6 +426,11 @@ async function readTurn(
       const prep = resolution.prep
       const card = fullAiCard({ name: 'add_prep_item', args: { event_id: prep.eventId, item: prep.item } }, { events: loaded, utcOffset, now: new Date() }) as { tool?: string; args?: Record<string, unknown> }
       if (card.tool && card.args) out.prepCard = { tool: card.tool, args: card.args, about: loaded.find((e) => e.id === prep.eventId) ?? null }
+    } else if (resolution.keepPosted) {
+      // Keep me posted, said in any words (canvas 15e; live 2026-09-30: the model said "I'll make a card" and
+      // made none): the card, from the reader's words for who or what.
+      const card = fullAiCard({ name: 'keep_me_posted', args: { about: resolution.keepPosted } }, { events: loaded, utcOffset, now: new Date() }) as { tool?: string; args?: Record<string, unknown> }
+      if (card.tool && card.args) out.keepPostedCard = { tool: card.tool, args: card.args }
     } else if (resolution.act === 'add') {
       const args = newItemArgs(resolution.newItem, { utcOffset, familyNames })
       if (args) out.card = { tool: 'create_event', args, about: null }
@@ -1489,6 +1495,10 @@ Deno.serve(async (req) => {
   if ((planningConversation || stepCard) && turnResolution?.act !== 'confirm_draft' && !turnContext?.cancelledDraft) {
     const planned = await runFullAi(buildDisplayText, false, true)
     if (planned) return { ...planned, payload: { ...planned.payload, layer: 'plan' } }
+  }
+  if (turnContext?.keepPostedCard) {
+    const { tool, args } = turnContext.keepPostedCard
+    return { status: 200, payload: { type: 'tool_action', tool, args, display_text: buildDisplayText(tool, args), conversation_state: incomingConversationState ?? null, semantic_intent: 'conversation.keep_posted', correlation_id: cid } }
   }
   if (turnContext?.prepCard) {
     const { tool, args, about } = turnContext.prepCard
@@ -6307,6 +6317,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
     if (name === 'add_prep_item') return `Add to **${String(args.event_title ?? 'the event')}** · get & pack: ${String(args.label ?? '')}`
     if (name === 'save_address') return `Save **${String(args.name ?? 'their')}**’s address: ${String(args.address ?? '')}`
+    if (name === 'keep_me_posted') return `Keep you posted on emails from or about **${String(args.about ?? '')}**: a line for each in “Anything from email?”, never skipped`
     if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
@@ -6883,6 +6894,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         directions_to: turnResolution.directionsTo ?? null,
         address_for: turnResolution.addressFor ?? null,
         prep: turnResolution.prep ?? null,
+        keep_posted: turnResolution.keepPosted ?? null,
         search: turnResolution.search ?? null,
         ms: turnContext?.ms ?? null,
         rewritten: turnContext?.originalText !== turnResolution.standalone,
