@@ -455,7 +455,7 @@ test('phone: a closed project — CLOSED in its parent, a banner with Reopen on 
   await phone.getByRole('button', { name: 'To do', exact: true }).click()
   await phone.getByRole('button', { name: 'Open Paint the house' }).click()
   const paint = phone.getByRole('region', { name: 'Paint the house — project' })
-  await paint.getByRole('button', { name: /done$/ }).click()
+  await paint.getByRole('button', { name: /^\d+ done$/ }).click()
   await expect(paint.getByText('CLOSED · MARIO’S DOING IT WITH THE PAINTING')).toBeVisible()
   await paint.getByRole('button', { name: 'Open', exact: true }).first().click()
   const stucco = phone.getByRole('region', { name: 'Stucco cracks: seal and patch — project' })

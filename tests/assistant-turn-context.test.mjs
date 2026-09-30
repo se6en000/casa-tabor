@@ -231,3 +231,24 @@ test('a yes to the draft that reaches the server confirms it — never the same 
   const client = readFileSync(new URL('../src/wall/useAssistantTurn.ts', import.meta.url), 'utf8')
   assert.match(client, /answer\?\.confirmsDraft/)
 })
+
+// Overnight queue (4), measured 2026-09-29: with a card waiting on screen, a new subject said to Casa
+// ("Owen changed his mind, he wants to be a skeleton now instead of a ghost") came back as an aside 3 of
+// 3 — the card pulls the reading toward "is this about the card?". An aside now gets a second, narrow
+// look: who were the words said to — no card, no draft, just the last few turns.
+test('an aside gets a second look that asks only who the words were said to', async () => {
+  const { buildAsidePrompt, readAsideCheck } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  const prompt = buildAsidePrompt({ messages: [{ role: 'user', content: 'Move the build night' }, { role: 'assistant', content: 'Update: time → Sun' }, { role: 'user', content: 'Liv has a sleepover Friday' }] })
+  assert.match(prompt, /who the LATEST words were said to/i)
+  assert.match(prompt, /"room"/)
+  assert.match(prompt, /"casa"/)
+  assert.doesNotMatch(prompt, /WAITING FOR THE PERSON'S YES/, 'no draft to pull the reading')
+  assert.match(prompt, /LATEST: "Liv has a sleepover Friday"/)
+  assert.equal(readAsideCheck({ said_to: 'room' }), 'room')
+  assert.equal(readAsideCheck({ said_to: 'casa' }), 'casa')
+  assert.equal(readAsideCheck(null), 'casa', 'unsure: never drop what might be for Casa')
+  const fs = await import('node:fs')
+  const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  assert.match(ai, /if \(resolution\.act === 'aside'\) \{/)
+  assert.match(ai, /buildAsidePrompt\(\{ messages \}\), 'aside-check'/)
+})

@@ -362,3 +362,29 @@ export function draftOverlaps(draft, events) {
   if (!Number.isFinite(start) || draft?.args?.all_day) return []
   return (events ?? []).filter((e) => !e.all_day && e.id !== draft.args.id && Date.parse(e.start_time) < end && Date.parse(e.end_time) > start)
 }
+
+/**
+ * A second look at an aside (overnight queue 4, 2026-09-29): with a card waiting, a new subject said to
+ * Casa came back as an aside 3 of 3. This asks only who the words were said to — no card, no draft, just
+ * the last few turns.
+ */
+export function buildAsidePrompt({ messages }) {
+  const recent = (messages ?? []).slice(-4, -1).map((m) => `${m.role === 'user' ? 'PERSON' : 'CASA'}: ${String(m.content ?? '').slice(0, 300)}`).join('\n')
+  const latest = String((messages ?? []).at(-1)?.content ?? '')
+  return `Casa is the family's voice assistant on the kitchen wall. After it answers, its microphone stays open, so it can hear the room. Decide who the LATEST words were said to.
+"room": to someone else in the room — spoken to them directly (by their name, a pet name, "kids", or asking or telling them something), a TV or radio, or muttering to themselves.
+"casa": anything a person would tell or ask the family's assistant — family news or plans, someone changing their mind, something that needs doing, a question — even on a new subject, unrelated to what Casa just said.
+When unsure, "casa".
+
+RECENT:
+${recent || '(nothing)'}
+
+LATEST: "${latest}"
+
+Reply with JSON only: {"said_to": "casa" | "room"}`
+}
+
+/** "room" only when the second look says so; anything else (unsure, no answer) is for Casa. */
+export function readAsideCheck(raw) {
+  return raw && typeof raw === 'object' && raw.said_to === 'room' ? 'room' : 'casa'
+}

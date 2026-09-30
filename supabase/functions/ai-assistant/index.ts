@@ -20,7 +20,7 @@ import { normalizeAssistantExperienceMode } from '../_shared/assistant-experienc
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
 import { formatLocal, humanWhen, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
 import { driversLine } from '../_shared/assistant-event-drivers.mjs'
-import { applyDraftChanges, buildAnswerPrompt, draftOverlaps, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange } from '../_shared/assistant-turn-context.mjs'
+import { applyDraftChanges, buildAnswerPrompt, draftOverlaps, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange, buildAsidePrompt, readAsideCheck } from '../_shared/assistant-turn-context.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -393,6 +393,12 @@ async function readTurn(
     const asked = context?.conversationState as { activeEntityType?: string; pendingMutation?: { tool?: string } } | undefined
     const pendingChange = asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change'
     const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange })
+    // An aside gets a second look that asks only who the words were said to (overnight queue 4: with a
+    // card waiting, a new subject said to Casa was dropped). Unsure, or no answer: it's for Casa.
+    if (resolution.act === 'aside') {
+      const second = await geminiJson(sb, buildAsidePrompt({ messages }), 'aside-check', cid, 4000).catch(() => null)
+      if (readAsideCheck(second) === 'casa') resolution.act = 'other'
+    }
     // Days are settled here, not by the model: a bare weekday is the next one.
     const nowIso = String(context?.currentDate ?? new Date().toISOString())
     const settle = (fields: Record<string, unknown> | null) => {

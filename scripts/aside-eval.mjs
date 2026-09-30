@@ -23,6 +23,10 @@ const ASIDES = [
   ['aside', 'Honey, where did you put my keys?'],
   ['aside', 'Emme stop poking your brother.'],
   ['aside', 'Go brush your teeth, both of you.'],
+  // held out: written after the prompt's last change, never tuned against
+  ['aside', 'Babe, did you feed the dog?'],
+  ['aside', 'Kids, dinner’s ready, come sit down.'],
+  ['held', 'Owen needs new cleats before Saturday.'],
 ]
 // Two moments: after a plain answer, and with a card waiting for a yes (the miss: a new subject said
 // while a change card was on screen was dropped, 3 of 3).
