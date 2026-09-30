@@ -170,7 +170,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { defaultPeople, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
+import { defaultPeople, dueThought, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
@@ -1264,9 +1264,16 @@ Deno.serve(async (req) => {
       sb.from('contact_directory').select('id, name, aliases, relationship, phone, email, address, place_name').eq('confirmed', true).is('dismissed_at', null).order('name').limit(120),
       sb.from('recipes').select('id, name').order('last_used_at', { ascending: false, nullsFirst: false }).limit(60),
       // Casa's memory (phase 1): the facts and open thoughts, each with where it came from.
-      sb.from('casa_memory').select('id, kind, about_label, about_member_id, text, words, confidence, source, evidence, created_at').eq('status', 'active').order('about_label').order('created_at').limit(300),
+      sb.from('casa_memory').select('id, kind, about_label, about_member_id, text, words, confidence, source, evidence, created_at, last_nudged_at, nudge_count, status, sensitive').eq('status', 'active').order('about_label').order('created_at').limit(300),
     ])
-    const memory = (memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string }>
+    // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
+    // health, therapy and money facts are left out on the wall; they're answered on a phone.
+    const { data: privacy } = await sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle()
+    const onWall = String(context?.page ?? '').startsWith('wall')
+    const memory = ((memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string; sensitive?: boolean }>)
+      .filter((m) => !(privacy?.value === true && onWall && m.sensitive))
+    // Phase 4: at most one open thought a day comes back, at the end of an answer.
+    const due = dueThought(memory, now) as { id: string } | null
     const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
     const events = await loadReferents(sb, ((idRows.data ?? []) as Array<{ id: string }>).map((r) => r.id), family)
     const groceries = (groceryRows.data ?? []) as Array<{ id: string; name: string; quantity: string | null; checked: boolean }>
@@ -1315,7 +1322,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
@@ -1508,6 +1515,9 @@ Deno.serve(async (req) => {
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
+    // The due thought was offered with this answer: counted, so it comes back no more than weekly (quiet after three).
+    const dueWords = due ? String((memory.find((m) => m.id === due.id) as { text?: string } | undefined)?.text ?? '').toLowerCase().match(/\p{L}{5,}/gu) ?? [] : []
+    if (due && !dryRun && text && dueWords.some((w) => text.toLowerCase().includes(w))) await sb.from('casa_memory').update({ last_nudged_at: new Date().toISOString(), nudge_count: (Number((memory.find((m) => m.id === due.id) as { nudge_count?: number } | undefined)?.nudge_count) || 0) + 1 }).eq('id', due.id)
     return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), ...(emailReview ? { email_review: true } : {}), ...(memoryCalls.length ? { memory: memoryCalls } : {}), ...(nudgedPromise ? { promise_sent_back: true } : {}), ...(dryRun ? { rounds: roundLog } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 

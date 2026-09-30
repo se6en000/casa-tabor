@@ -8,14 +8,14 @@ const since = (iso) => { const d = new Date(iso); return `${MONTHS[d.getUTCMonth
 const whereFrom = (row) => (Array.isArray(row.evidence) && row.evidence.length ? row.evidence.map((e) => [e?.what, e?.when].filter(Boolean).join(', ')).join('; ') : row.source === 'told' ? 'you said it' : 'learned')
 
 /** The memory as the model reads it: sure facts first, then not sure yet, each with where from; open thoughts apart. */
-export function memoryContext(rows) {
+export function memoryContext(rows, { due = null } = {}) {
   const facts = (rows ?? []).filter((r) => r.kind !== 'thought')
   const thoughts = (rows ?? []).filter((r) => r.kind === 'thought')
   if (!facts.length && !thoughts.length) return 'WHAT CASA KNOWS: nothing yet.'
   const order = [...facts.filter((r) => r.confidence === 'sure'), ...facts.filter((r) => r.confidence !== 'sure')]
   const lines = order.map((r) => `- [${r.id}] ${r.about_label}: ${r.text} (${r.confidence === 'sure' ? 'sure' : 'not sure yet'} · ${whereFrom(r)})`)
   const out = [`WHAT CASA KNOWS ([id] first; use the sure facts to tell who something is for; "not sure yet" only when asked):\n${lines.join('\n') || '- nothing yet'}`]
-  if (thoughts.length) out.push(`OPEN THOUGHTS HE ASKED CASA TO KEEP:\n${thoughts.map((r) => `- [${r.id}] ${r.about_label}: ${r.text} (since ${since(r.created_at)})`).join('\n')}`)
+  if (thoughts.length) out.push(`OPEN THOUGHTS HE ASKED CASA TO KEEP:\n${thoughts.map((r) => `- [${r.id}] ${r.about_label}: ${r.text} (since ${since(r.created_at)})${r.id === due ? ' — DUE: bring it up once, in passing, at the end of your answer ("You asked me to remember: … Still on your mind?")' : ''}`).join('\n')}`)
   return out.join('\n\n')
 }
 
@@ -77,4 +77,16 @@ export function defaultPeople({ title, people = [], speakerId = null, facts = []
   const who = pointed ?? family.find((m) => m.id === speakerId) ?? family.find((m) => m.is_admin) ?? null
   if (!who) return { people: [], driver: null }
   return { people: [who.name], driver: who.role === 'parent' && who.can_drive !== false ? who.name : null }
+}
+
+// Phase 4 — open thoughts come back (design doc): at most one a day; each at most weekly; quiet after three.
+const DAY = 86400e3
+/** The open thought to bring up now, or null. */
+export function dueThought(rows, now = new Date()) {
+  const t = now.getTime()
+  const thoughts = (rows ?? []).filter((r) => r.kind === 'thought' && (r.status ?? 'active') === 'active')
+  if (thoughts.some((r) => r.last_nudged_at && t - Date.parse(r.last_nudged_at) < 20 * 3600e3)) return null
+  return thoughts
+    .filter((r) => (r.nudge_count ?? 0) < 3 && t - Date.parse(r.created_at) >= 20 * 3600e3 && (!r.last_nudged_at || t - Date.parse(r.last_nudged_at) >= 7 * DAY))
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))[0] ?? null
 }

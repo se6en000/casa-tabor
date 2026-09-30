@@ -93,3 +93,28 @@ test('a new event with no one on it: the one its words point to, else whoever is
   assert.deepEqual(defaultPeople({ title: 'Dentist', people: [], speakerId: null, facts, family: fam }), { people: ['Jake'], driver: 'Jake' })
   assert.deepEqual(defaultPeople({ title: 'Haircut', people: ['Owen'], speakerId: 'm-jake', facts, family: fam }), { people: ['Owen'], driver: null }, 'named people stay as said')
 })
+
+// Phase 4: open thoughts come back — one a day at most, each at most weekly, quiet after three unanswered.
+test('which open thought is due: none if one came up in the last 20 hours; else the oldest not raised this week, fewer than three times', async () => {
+  const { dueThought } = await import('../supabase/functions/_shared/casa-memory.mjs')
+  const now = new Date('2026-10-02T15:00:00Z')
+  const t = (id, created, last, count = 0) => ({ id, kind: 'thought', status: 'active', created_at: created, last_nudged_at: last, nudge_count: count })
+  assert.equal(dueThought([t('a', '2026-09-30T10:00:00Z', null), t('b', '2026-09-29T10:00:00Z', null)], now)?.id, 'b')
+  assert.equal(dueThought([t('a', '2026-09-30T10:00:00Z', '2026-10-02T02:00:00Z', 1), t('b', '2026-09-29T10:00:00Z', null)], now), null, 'one came up last night')
+  assert.equal(dueThought([t('a', '2026-09-20T10:00:00Z', '2026-09-28T10:00:00Z', 1)], now), null, 'raised this week')
+  assert.equal(dueThought([t('a', '2026-09-01T10:00:00Z', '2026-09-20T10:00:00Z', 3)], now), null, 'quiet after three')
+  assert.equal(dueThought([t('a', '2026-10-02T14:00:00Z', null)], now), null, 'not the same day it was kept')
+})
+
+test('a due thought is marked for the model, which brings it up once at the end', async () => {
+  const { memoryContext } = await import('../supabase/functions/_shared/casa-memory.mjs')
+  const block = memoryContext(rows, { due: 't1' })
+  assert.match(block, /- \[t1\] Jake: Look at a pergola in the spring \(since Sep 30\) — DUE: bring it up once, in passing, at the end of your answer/)
+})
+
+test('the privacy switch: built, off by default; when on, sensitive facts stay off the wall', () => {
+  const server = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  assert.match(server, /\.filter\(\(m\) => !\(privacy\?\.value === true && onWall && m\.sensitive\)\)/)
+  const sql = readFileSync(new URL('../supabase/migrations/20261001240000_casa_memory_learner.sql', import.meta.url), 'utf8')
+  assert.match(sql, /\('memory_private_on_wall', 'false'::jsonb/)
+})
