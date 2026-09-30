@@ -201,3 +201,14 @@ export function isSwipeDown(start: { x: number; y: number; t: number }, end: { x
 export function bandCompact({ viaWake, heard, messages, expanded }: { viaWake: boolean; heard: string; messages: number; expanded: boolean }): boolean {
   return viaWake && !expanded && messages === 0 && !heard.trim()
 }
+
+// Answers already acted on (an email review or a day opened), for as long as the page is open: the band keeps
+// its conversation, so its last answer is still there each time it opens (2026-09-30: the finished email
+// review reopened on every wake, and the band never started listening).
+const actedOn = new Set<string>()
+/** True the first time a key is seen on this page, false after. */
+export function firstTime(key: string): boolean {
+  if (actedOn.has(key)) return false
+  actedOn.add(key)
+  return true
+}

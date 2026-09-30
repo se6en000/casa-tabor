@@ -9,7 +9,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -300,10 +300,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const day = answerDay(answer, new Date())
   const openedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (answer?.emailReview && onOpenEmail) onOpenEmail()
+    if (answer?.emailReview && onOpenEmail && firstTime(`email:${answer.id}`)) onOpenEmail()
   }, [answer?.id, answer?.emailReview, onOpenEmail])
   useEffect(() => {
-    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id) return
+    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id || !firstTime(`day:${answer.id}`)) return
     openedFor.current = answer.id
     onOpenDay(day.date)
   }, [answer, day?.open, day?.date, onOpenDay])

@@ -8,7 +8,7 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
-import { answerDay, cardText, nextStep, voiceFinal, whichOne } from '../wall/assistant'
+import { answerDay, cardText, firstTime, nextStep, voiceFinal, whichOne } from '../wall/assistant'
 import { assistantCard, replacedAction } from '../wall/assistantCard'
 import type { DayPlan, WallEvent, WallMember } from '../wall/engine/types'
 import { pigmentIndexes } from '../wall/score'
@@ -50,7 +50,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const day = answerDay(answer, new Date())
   const openedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id) return
+    if (!day?.open || !onOpenDay || !answer || openedFor.current === answer.id || !firstTime(`day:${answer.id}`)) return
     openedFor.current = answer.id
     onOpenDay(day.date)
   }, [answer, day?.open, day?.date, onOpenDay])

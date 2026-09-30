@@ -34,3 +34,20 @@ test('a wake shows the small pill until words are heard; the mic button opens th
   assert.equal(bandCompact({ viaWake: true, heard: '', messages: 0, expanded: true }), false, 'tapped open')
   assert.equal(bandCompact({ viaWake: false, heard: '', messages: 0, expanded: false }), false, 'the mic button is on purpose')
 })
+
+// Jake, 2026-09-30: "after I used the email function … it's stuck on the email 'done' when I invoke Alexa, it
+// doesn't start a new session and start listening". The kept conversation's last answer ("open the email
+// review") reopened the finished review on every open. An answer opens things once, however often the band
+// opens; and asking Casa always shows the band, never a review left behind.
+test('an answer opens the email review or a day once, however often the band opens', async () => {
+  const { firstTime } = await import('../src/wall/assistant.ts')
+  assert.equal(firstTime('answer-1'), true)
+  assert.equal(firstTime('answer-1'), false, 'the band opened again with the same answer')
+  assert.equal(firstTime('answer-2'), true)
+  const fs = await import('node:fs')
+  const band = fs.readFileSync(new URL('../src/wall/WallAssistantBand.tsx', import.meta.url), 'utf8')
+  assert.match(band, /answer\?\.emailReview && onOpenEmail && firstTime\(`email:\$\{answer\.id\}`\)/)
+  assert.match(band, /firstTime\(`day:\$\{answer\.id\}`\)/)
+  const frame = fs.readFileSync(new URL('../src/wall/WallFrame.tsx', import.meta.url), 'utf8')
+  assert.match(frame, /const ask = useCallback\(\(say\?: string\) => \{\n\s+setEmailOpen\(false\)/)
+})

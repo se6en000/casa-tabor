@@ -38,6 +38,7 @@ export default function WallFrame() {
   // Opened by the wake word (a trigger that may be a false one): the band starts as the small pill.
   const [viaWake, setViaWake] = useState(false)
   const ask = useCallback((say?: string) => {
+    setEmailOpen(false)
     setViaWake(false)
     setBandOpen(true)
     setListenNonce((n) => n + 1)
