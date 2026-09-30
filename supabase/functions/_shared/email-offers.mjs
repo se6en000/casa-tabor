@@ -83,3 +83,43 @@ export function personToAction(person) {
   if (about && about.length < String(person.wants ?? '').replace(/[.!]+$/, '').length) about += '…'
   return { tool: 'add_todo', args: { title: about ? `Reply to ${who} — ${about}` : `Reply to ${who}`, due: null } }
 }
+
+// Phase 3, learning (design doc, 2026-09-30): "Not needed quiets that kind of email from that sender."
+
+/** The sender's address, lowercased: the display name changes, the address doesn't. */
+export function senderOf(from) {
+  const m = /<([^>]+)>/.exec(String(from ?? ''))
+  return (m ? m[1] : String(from ?? '')).trim().toLowerCase()
+}
+
+/** The display name ("Palm Beach Day"), else the address. */
+export function senderName(from) {
+  const m = /^\s*"?([^"<]+?)"?\s*</.exec(String(from ?? ''))
+  return (m ? m[1] : String(from ?? '')).trim()
+}
+
+/** What it would add: a person writing, new details, or its first offer's kind (event, reminder, todo, …). */
+export function kindOf(row) {
+  if (row?.decision === 'person') return 'person'
+  if (row?.decision === 'details') return 'details'
+  return String(row?.offers?.[0]?.kind ?? row?.decision ?? '')
+}
+
+const shortDay = (iso) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' }).format(new Date(iso))
+
+/**
+ * Is this offer quiet? The latest of his answers about that sender decides: Not needed to one of the same
+ * kind quiets it; Add it (same kind) or That one mattered (any kind) brings the sender back. One he brought
+ * back himself is never quieted again. Returns { by, reason } or null.
+ */
+export function quietFor(row, answered) {
+  if (!row || row.feedback === 'mattered') return null
+  const from = senderOf(row.from_email)
+  const kind = kindOf(row)
+  const latest = (answered ?? [])
+    .filter((a) => a.id !== row.id && a.answered_at && senderOf(a.from_email) === from)
+    .filter((a) => a.feedback === 'mattered' || (['added', 'not_needed'].includes(a.status) && kindOf(a) === kind))
+    .sort((a, b) => Date.parse(b.answered_at) - Date.parse(a.answered_at))[0]
+  if (!latest || latest.feedback === 'mattered' || latest.status !== 'not_needed') return null
+  return { by: latest.id, reason: `You said Not needed to one like it from ${senderName(latest.from_email)} on ${shortDay(latest.answered_at)}` }
+}

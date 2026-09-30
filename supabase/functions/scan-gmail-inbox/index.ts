@@ -709,6 +709,12 @@ function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): In
   })
 }
 
+// Casa reads the email, phase 4 (design doc, approved 2026-09-30): the old scanner no longer writes "needs you"
+// items (prep_items) or event suggestions — the new reader (email-reader → email_offers) offers what matters,
+// and nothing on the new Wall or phone reads these. The mail fetch, the read log, the family evidence and the
+// reader's trigger stay. The rest retires with the old homepage (P5.3).
+const OLD_NEEDS_YOU_ITEMS = false
+
 async function persistInboxActions(
   sb: ReturnType<typeof createClient>,
   sourceOwnerMemberId: string | null,
@@ -723,6 +729,7 @@ async function persistInboxActions(
   isUserLabeled = false,
   clusterId: string | null = null,
 ): Promise<number> {
+  if (!OLD_NEEDS_YOU_ITEMS) return 0
   if (actions.length === 0) return 0
   let persistedCount = 0
 
@@ -841,6 +848,7 @@ async function persistEventSuggestions(
   isUserLabeled = false,
   clusterId: string | null = null,
 ): Promise<number> {
+  if (!OLD_NEEDS_YOU_ITEMS) return 0
   if (events.length === 0) return 0
   const rows: Record<string, unknown>[] = []
 
@@ -1455,7 +1463,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
             llmUsage,
             extractedDocumentSummary,
           ),
-          (isActionCandidate || isUserLabeled) && !backfillFamilyEvidenceOnly
+          OLD_NEEDS_YOU_ITEMS && (isActionCandidate || isUserLabeled) && !backfillFamilyEvidenceOnly
             ? extractInboxActions(
                 details.subject,
                 details.from,

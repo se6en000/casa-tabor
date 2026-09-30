@@ -2,8 +2,10 @@
 // Casa, and his answers. POST { action: 'list' } → the waiting offers (newest first; past-dated ones expire),
 // and up to three recent emails it skipped that he hasn't judged; POST { action: 'act', id, what } with what =
 // added | not_needed | later (back tomorrow at 6 AM) | mattered | fine. Every answer is kept as a label.
+// Phase 3 (learning): Not needed quiets that kind of email from that sender — a quiet one shows among "a few I
+// skipped" with its reason, and That one mattered brings it, and that sender, back.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { gmailLink, isExpired, offerToAction, personToAction, withoutRepeats } from '../_shared/email-offers.mjs'
+import { gmailLink, isExpired, offerToAction, personToAction, quietFor, senderName, withoutRepeats } from '../_shared/email-offers.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,12 +14,7 @@ const CORS = {
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'content-type': 'application/json' } })
 
-type Offer = { id: string; gmail_message_id: string; from_email: string | null; subject: string | null; received_at: string | null; decision: string; reason: string | null; quote: string | null; offers: Array<Record<string, unknown>>; person: { who: string; wants: string } | null; status: string; later_until: string | null; feedback: string | null }
-
-const sender = (from: string | null) => {
-  const m = /^\s*"?([^"<]+?)"?\s*</.exec(from ?? '')
-  return (m ? m[1] : from ?? '').trim()
-}
+type Offer = { id: string; gmail_message_id: string; from_email: string | null; subject: string | null; received_at: string | null; decision: string; reason: string | null; quote: string | null; offers: Array<Record<string, unknown>>; person: { who: string; wants: string } | null; status: string; later_until: string | null; feedback: string | null; answered_at?: string | null }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -57,6 +54,11 @@ Deno.serve(async (req) => {
       : what === 'mattered' || what === 'fine' ? { feedback: what }
       : {}
     if (!Object.keys(patch).length) return json({ error: 'Unknown answer' }, 400)
+    // A quiet one that mattered is offered again (and the next list brings that sender's others back).
+    if (what === 'mattered') {
+      const { data: row } = await sb.from('email_offers').select('status').eq('id', body.id).maybeSingle()
+      if (row?.status === 'quiet') Object.assign(patch, { status: 'waiting', quieted_by: null })
+    }
     const { error } = await sb.from('email_offers').update({ ...patch, answered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', body.id)
     return error ? json({ error: error.message }, 500) : json({ ok: true })
   }
@@ -64,18 +66,36 @@ Deno.serve(async (req) => {
   // The list: waiting offers, and "later" ones whose time has come.
   const { data: rows, error } = await sb.from('email_offers')
     .select('id, gmail_message_id, from_email, subject, received_at, decision, reason, quote, offers, person, status, later_until, feedback')
-    .in('status', ['waiting', 'later'])
+    .in('status', ['waiting', 'later', 'quiet'])
     .order('received_at', { ascending: false })
-    .limit(40)
+    .limit(60)
   if (error) return json({ error: error.message }, 500)
+  // His answers so far (the last half year), which quiet a sender or bring one back.
+  const { data: answered } = await sb.from('email_offers')
+    .select('id, from_email, decision, offers, status, feedback, answered_at')
+    .not('answered_at', 'is', null)
+    .or('status.in.(added,not_needed),feedback.eq.mattered')
+    .gte('answered_at', new Date(Date.now() - 183 * 86400e3).toISOString())
   const now = Date.now()
   const live: Offer[] = []
+  const quiet: Array<Offer & { quietReason: string }> = []
   for (const r of (rows ?? []) as Offer[]) {
-    if (r.status === 'later' && r.later_until && Date.parse(r.later_until) > now) continue
     if (isExpired(r, today)) {
       await sb.from('email_offers').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', r.id)
       continue
     }
+    const q = quietFor(r, answered ?? [])
+    if (q) {
+      if (r.status !== 'quiet') await sb.from('email_offers').update({ status: 'quiet', quieted_by: q.by, updated_at: new Date().toISOString() }).eq('id', r.id)
+      if (!r.feedback && r.received_at && Date.parse(r.received_at) >= now - 7 * 86400e3) quiet.push({ ...r, quietReason: q.reason })
+      continue
+    }
+    if (r.status === 'quiet') {
+      // Its sender was brought back: offered again.
+      await sb.from('email_offers').update({ status: 'waiting', quieted_by: null, updated_at: new Date().toISOString() }).eq('id', r.id)
+      r.status = 'waiting'
+    }
+    if (r.status === 'later' && r.later_until && Date.parse(r.later_until) > now) continue
     live.push(r)
   }
   // "A few I skipped": this week's, not yet judged, at most three (never the noise the first pass dropped).
@@ -86,11 +106,15 @@ Deno.serve(async (req) => {
     .gte('received_at', new Date(now - 7 * 86400e3).toISOString())
     .order('received_at', { ascending: false })
     .limit(3)
-  const view = (r: { id: string; gmail_message_id: string; from_email: string | null; subject: string | null; received_at: string | null }) => ({ id: r.id, from: sender(r.from_email), subject: r.subject, received_at: r.received_at, open: gmailLink(r.gmail_message_id) })
+  const view = (r: { id: string; gmail_message_id: string; from_email: string | null; subject: string | null; received_at: string | null }) => ({ id: r.id, from: senderName(r.from_email), subject: r.subject, received_at: r.received_at, open: gmailLink(r.gmail_message_id) })
   const shown = withoutRepeats(live) as Offer[]
   return json({
     count: shown.length,
     offers: shown.map((r) => ({ ...view(r), decision: r.decision, reason: r.reason, quote: r.quote, offers: r.offers ?? [], person: r.person })),
-    skipped: ((skippedRows ?? []) as Array<Offer>).map((r) => ({ ...view(r), reason: r.reason })),
+    // The quiet ones first: those are what his Not needed is deciding, so he can say one mattered.
+    skipped: [
+      ...quiet.map((r) => ({ ...view(r), reason: r.quietReason })),
+      ...((skippedRows ?? []) as Array<Offer>).map((r) => ({ ...view(r), reason: r.reason })),
+    ].slice(0, 3),
   })
 })
