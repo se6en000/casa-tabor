@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import WallChooser from './WallChooser'
 import { hoursText, shelfCard } from './projectModel'
 import { SEGMENT } from './projectStyle'
@@ -36,7 +36,8 @@ export default function WallProjectShelf({ projects, today, onOpen, upcoming = [
         {shown.map((p) => {
           const c = shelfCard(p.detail!, today)
           return (
-            <button key={p.id} type="button" aria-label={`Open ${p.title}`} onClick={(e) => { e.stopPropagation(); onOpen(p.id) }}
+            <div key={p.id} className="relative flex min-w-0 flex-1">
+            <button type="button" aria-label={`Open ${p.title}`} onClick={(e) => { e.stopPropagation(); onOpen(p.id) }}
               className={`flex min-w-0 flex-1 flex-col gap-[8px] rounded-[20px] border border-solid border-wall-stone bg-wall-on-pigment/50 px-[22px] py-[18px] text-left text-wall-ink ${c.kind.startsWith('PAUSED') ? 'opacity-60' : ''}`}>
               <span className="flex w-full items-center justify-between">
                 <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{c.kind}</span>
@@ -56,17 +57,11 @@ export default function WallProjectShelf({ projects, today, onOpen, upcoming = [
                 <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">{c.nowLabel}</span>
                 <span className="line-clamp-2 text-wall-body font-bold leading-snug">{c.now.length ? c.now.join(' · ') : c.inside ? `Waiting on ${c.inside.title}` : 'Nothing left: done?'}</span>
               </span>
-              {c.inside && (
-                <span className="mt-auto flex w-full items-center gap-[10px] rounded-[12px] border border-solid border-wall-stone bg-wall-ground px-[12px] py-[8px]">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-wall-brass-ink"><path d="M5 3v9a4 4 0 0 0 4 4h10" /><path d="M15 12l4 4-4 4" /></svg>
-                  <span className="flex min-w-0 flex-1 flex-col gap-[4px]">
-                    <span className="flex items-baseline justify-between gap-[8px]"><span className="truncate text-wall-label font-bold">{c.inside.title}</span><span className="shrink-0 text-wall-label text-wall-ink-2">{c.inside.done} of {c.inside.total}</span></span>
-                    <span aria-hidden="true" className="flex h-[6px] gap-[3px]">{Array.from({ length: Math.max(1, c.inside.total) }, (_, i) => <span key={i} className={`h-[6px] flex-1 rounded-full ${SEGMENT[i < c.inside!.done ? 'done' : i === c.inside!.done ? 'now' : 'later']}`} />)}</span>
-                    {c.inside.next && <span className="truncate text-wall-label text-wall-ink-2">next: {c.inside.next}</span>}
-                  </span>
-                </span>
-              )}
+              {/* Room for the projects inside (their swipe sits over it, not inside this button). */}
+              {c.insides.length > 0 && <span aria-hidden="true" className="mt-auto h-[80px] w-full shrink-0" />}
             </button>
+            {c.insides.length > 0 && <InsideSwipe parent={p.title} insides={c.insides} onOpen={onOpen} />}
+            </div>
           )
         })}
         {seasons.map((i) => {
@@ -112,5 +107,46 @@ export default function WallProjectShelf({ projects, today, onOpen, upcoming = [
           onPick={(id) => { setChoosing(false); onOpen(id) }} onCancel={() => setChoosing(false)} />
       )}
     </section>
+  )
+}
+
+/**
+ * The projects inside a project, one at a time (Jake, 2026-09-29: "a swipe through the active child
+ * cases, to not have to add more space to the screen"): swipe to the next, tap to open the one showing.
+ */
+function InsideSwipe({ parent, insides, onOpen }: { parent: string; insides: ReturnType<typeof shelfCard>['insides']; onOpen: (id: string) => void }) {
+  const [shown, setShown] = useState(0)
+  const at = Math.min(shown, insides.length - 1)
+  const c = insides[at]
+  const startX = useRef<number | null>(null)
+  const swiped = useRef(false)
+  return (
+    <button type="button" data-native-drag data-no-swipe aria-label={`Inside ${parent}, ${at + 1} of ${insides.length}: ${c.title}`}
+      style={{ touchAction: 'pan-y' }}
+      onPointerDown={(e) => { startX.current = e.clientX; swiped.current = false }}
+      onPointerUp={(e) => {
+        const dx = startX.current == null ? 0 : e.clientX - startX.current
+        startX.current = null
+        if (Math.abs(dx) > 40 && insides.length > 1) {
+          swiped.current = true
+          setShown((at + (dx < 0 ? 1 : insides.length - 1)) % insides.length)
+        }
+      }}
+      onClick={(e) => { e.stopPropagation(); if (swiped.current) { swiped.current = false; return } onOpen(c.id) }}
+      className="absolute bottom-[18px] left-[22px] right-[22px] flex h-[80px] items-center gap-[10px] rounded-[12px] border border-solid border-wall-stone bg-wall-ground px-[12px] py-[6px] text-left text-wall-ink">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-wall-brass-ink"><path d="M5 3v9a4 4 0 0 0 4 4h10" /><path d="M15 12l4 4-4 4" /></svg>
+      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <span className="flex items-baseline justify-between gap-[8px]"><span className="truncate text-wall-label font-bold">{c.title}</span><span className="shrink-0 text-wall-label text-wall-ink-2">{c.done} of {c.total}</span></span>
+        <span aria-hidden="true" className="flex h-[6px] gap-[3px]">{Array.from({ length: Math.max(1, c.total) }, (_, i) => <span key={i} className={`h-[6px] flex-1 rounded-full ${SEGMENT[i < c.done ? 'done' : i === c.done ? 'now' : 'later']}`} />)}</span>
+        <span className="flex items-center justify-between gap-[8px]">
+          <span className="truncate text-wall-label text-wall-ink-2">{c.next ? `next: ${c.next}` : ''}</span>
+          {insides.length > 1 && (
+            <span aria-hidden="true" className="flex shrink-0 gap-[6px]">
+              {insides.map((x, i) => <span key={x.id} className={`h-[8px] w-[8px] rounded-full ${i === at ? 'bg-wall-ink' : 'bg-wall-stone'}`} />)}
+            </span>
+          )}
+        </span>
+      </span>
+    </button>
   )
 }

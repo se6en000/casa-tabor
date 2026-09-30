@@ -96,15 +96,16 @@ export default function PhoneTodo({ list, today, onAct, onOpenProject, onEdit, u
                   <span className="text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">{c.nowLabel}</span>
                   <span className="text-phone-body font-semibold">{c.now.length ? c.now.join(' · ') : c.inside ? `Waiting on ${c.inside.title}` : 'Nothing left: done?'}</span>
                 </span>
-                {c.inside && (
-                  <span className="flex items-center gap-[8px] rounded-[12px] bg-phone-card px-[10px] py-[6px] text-wall-brass-ink">
+                {/* Every active project inside (the wall swipes; the phone scrolls, so it lists them). */}
+                {c.insides.map((inside) => (
+                  <span key={inside.id} className="flex items-center gap-[8px] rounded-[12px] bg-phone-card px-[10px] py-[6px] text-wall-brass-ink">
                     <Nest />
                     <span className="flex min-w-0 flex-1 flex-col gap-[3px] text-wall-ink">
-                      <span className="flex justify-between gap-[6px] text-phone-label"><b className="truncate">{c.inside.title}</b><span className="shrink-0 text-wall-ink-2">{c.inside.done} of {c.inside.total}</span></span>
-                      <span aria-hidden="true" className="flex h-[5px] gap-[2px]">{Array.from({ length: Math.max(1, c.inside.total) }, (_, i) => <span key={i} className={`h-[5px] flex-1 rounded-full ${SEGMENT[i < c.inside!.done ? 'done' : i === c.inside!.done ? 'now' : 'later']}`} />)}</span>
+                      <span className="flex justify-between gap-[6px] text-phone-label"><b className="truncate">{inside.title}</b><span className="shrink-0 text-wall-ink-2">{inside.done} of {inside.total}</span></span>
+                      <span aria-hidden="true" className="flex h-[5px] gap-[2px]">{Array.from({ length: Math.max(1, inside.total) }, (_, i) => <span key={i} className={`h-[5px] flex-1 rounded-full ${SEGMENT[i < inside.done ? 'done' : i === inside.done ? 'now' : 'later']}`} />)}</span>
                     </span>
                   </span>
-                )}
+                ))}
               </button>
             )
           })}

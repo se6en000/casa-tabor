@@ -160,3 +160,23 @@ test('moving a step’s start carries its end along: the painter’s Nov 9–13 
   const st = moved.steps.find((x) => x.id === 'painter')
   assert.deepEqual([st.cal_start, st.cal_end], ['2026-11-16', '2026-11-20'])
 })
+
+// Jake, 2026-09-29: Owen's ghost costume went inside Halloween costumes beside Emme's jellyfish, but the
+// card showed only Emme's — "maybe the child case cards can be a swipe through the active child cases".
+test('the shelf card carries every active project inside, in plan order, for the swipe', () => {
+  const costumes = {
+    ...PAINT,
+    steps: [
+      step('ask', 1, { done_at: '2026-09-29T20:00:00Z' }),
+      step('emme', 2, { child_project_id: 'e', child: { id: 'e', title: 'Emme — jellyfish', done: 1, total: 5, next: 'Decorate the dome', status: 'active' } }),
+      step('owen', 2, { child_project_id: 'o', child: { id: 'o', title: 'Owen’s ghost', done: 1, total: 2, next: 'Try it on', status: 'active' } }),
+      step('old', 3, { child_project_id: 'x', done_at: '2026-09-20T00:00:00Z', child: { id: 'x', title: 'Last year’s', done: 3, total: 3, next: null, status: 'done' } }),
+    ],
+  }
+  const c = shelfCard(costumes, '2026-09-29')
+  assert.deepEqual(c.insides.map((i) => [i.id, i.title, `${i.done} of ${i.total}`, i.next]), [
+    ['e', 'Emme — jellyfish', '1 of 5', 'Decorate the dome'],
+    ['o', 'Owen’s ghost', '1 of 2', 'Try it on'],
+  ])
+  assert.equal(c.inside.title, 'Emme — jellyfish', 'the first still leads')
+})

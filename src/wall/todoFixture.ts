@@ -100,15 +100,22 @@ export const summary = (d: TodoProjectDetail) => {
 export const SHELF = [PAINT, HALLOWEEN, FLOOR].map(summary)
 
 
-export function useFixtureTodos({ stepEvent = false }: { stepEvent?: boolean } = {}) {
+// `twoInside` (P3.25, Jake 2026-09-29): Paint the house with two projects inside, side by side (the
+// floorboards join the stucco), for the card's swipe.
+const PAINT_TWO: TodoProjectDetail = {
+  ...PAINT,
+  steps: [...PAINT.steps.slice(0, 5), pstep('st-floor', 4, 'Redo floorboards on the roof patio', { child_project_id: 'pr-floor', child: { id: 'pr-floor', title: 'Redo floorboards on the roof patio', done: 0, total: 3, next: 'Price the boards', status: 'active' } }), ...PAINT.steps.slice(5)],
+}
+
+export function useFixtureTodos({ stepEvent = false, twoInside = false }: { stepEvent?: boolean; twoInside?: boolean } = {}) {
   const STEP_EVENT = stepEvent
   const [todoList, setTodoList] = useState<TodoList>(() => ({
     ...TODOS,
-    projects: STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
+    projects: twoInside ? [PAINT_TWO, HALLOWEEN].map(summary) : STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
     // A dated step whose day has passed, asked about.
     pastSteps: STEP_EVENT ? [{ id: 'hw-yard', projectId: 'pr-halloween', project: 'Halloween decorations', title: 'The yard: tombstones and the fog machine', date: '2026-09-24', start: '2026-09-24' }] : [],
   }))
-  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
+  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': twoInside ? PAINT_TWO : PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
   const todos = {
     list: todoList,
     useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),

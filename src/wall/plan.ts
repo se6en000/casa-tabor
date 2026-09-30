@@ -76,9 +76,10 @@ export function planSections(items: PlanItem[]): PlanSection[] {
 }
 
 /** What changed since the plan before (board 12b's "Just changed"), and which lines to mark. */
-export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line: string | null; marked: Set<string> } {
+export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line: string | null; marked: Set<string>; removed: string[] } {
   const marked = new Set<string>()
-  if (!before) return { line: null, marked }
+  const removed: string[] = []
+  if (!before) return { line: null, marked, removed }
   const flat = (items: PlanItem[]) => {
     const m = new Map<string, { name: string; sig: string; date?: string; who?: string }>()
     for (const i of items) {
@@ -97,10 +98,10 @@ export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line
     marked.add(key)
     parts.push(v.date && v.date !== old.date ? `${v.name} → ${dayText(v.date)}` : v.who && v.who !== old.who ? `${v.name} → ${v.who}` : `${v.name} changed`)
   }
-  for (const [key, v] of was) if (!now.has(key)) parts.push(`took off “${v.name}”`)
+  for (const [key, v] of was) if (!now.has(key)) { parts.push(`took off “${v.name}”`); removed.push(v.name) }
   // Changes to existing lines first, then what's new, then what went.
   parts.sort((a, b) => rank(a) - rank(b))
-  return { line: parts.length ? `Just changed: ${parts.join(' · ')}` : null, marked }
+  return { line: parts.length ? `Just changed: ${parts.join(' · ')}` : null, marked, removed }
 }
 const rank = (p: string) => (p.startsWith('added') ? 1 : p.startsWith('took off') ? 2 : 0)
 

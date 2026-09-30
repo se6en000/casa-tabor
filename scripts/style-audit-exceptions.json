@@ -292,6 +292,10 @@
         "reason": "Family Wall project page (P3.23, canvas 10b): a dragged step follows the finger (translateY) and the drop line sits where it will land — both known only at runtime."
       },
       {
+        "path": "src/wall/WallProjectShelf.tsx",
+        "reason": "Family Wall projects shelf (P3.25; Jake 2026-09-29, \"a swipe through the active child cases\"): the projects-inside panel takes a horizontal swipe, so it sets touch-action: pan-y inline — the global button rule (touch-action: manipulation) beats a class, as on the project page's drag handles."
+      },
+      {
         "path": "src/wall/WallAssistantCard.tsx",
         "reason": "Family Wall: the assistant card's lane preview (board 06a) positions the person's day and the draft on a timeline from event times at runtime."
       },

@@ -162,3 +162,15 @@ test('a plan event Google refused is queued for a retry, not dropped', async () 
   assert.match(part, /invoke\(c\.op === 'created' \? 'create-google-event' : 'push-to-google'/)
   assert.doesNotMatch(part, /'create-google-event', \{ body: \{ event_id: c\.event_id \} \}\)\.catch\(\(\) => null\)/)
 })
+
+// Jake, 2026-09-29, Owen's ghost costume: mid-plan, "add a white t-shirt and shorts to the shopping
+// list" became separate cards, and he had to say "we should have that to the plan along with everything
+// else". While planning, the model only looks things up and changes the plan: one Agree for all of it.
+test('the planning model can look things up and change the plan — nothing else', () => {
+  const names = fullAiTools({ planning: true }).map((t) => t.name)
+  assert.ok(names.includes('set_plan'))
+  assert.ok(names.includes('search_web') && names.includes('find_events') && names.includes('get_coming_up'))
+  for (const write of ['add_grocery_items', 'create_event', 'add_todo', 'plan_project', 'update_event']) assert.equal(names.includes(write), false, write)
+  const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
+  assert.match(tool.description, /keep everything already in it unless he asks/i, '"Where did the plan steps go?"')
+})

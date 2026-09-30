@@ -350,5 +350,11 @@ export function shelfCard(detail: Pick<ProjectDetail, 'project' | 'steps'>, toda
     now: nowSteps.map((s) => s.title),
     nowLabel: nowSteps.length > 1 || (groups[0]?.length ?? 0) > 1 ? 'NOW · SIDE BY SIDE' : 'NOW',
     inside: insideStep?.child ? { title: insideStep.child.title, done: insideStep.child.done, total: insideStep.child.total, next: insideStep.child.next } : null,
+    // Every active project inside, in plan order, for the card's swipe (Jake, 2026-09-29: Owen's ghost
+    // sat beside Emme's jellyfish and only hers showed); the finished one when none are active.
+    insides: (() => {
+      const active = detail.steps.filter((s) => s.child && !s.done_at)
+      return (active.length ? active : insideStep ? [insideStep] : []).map((s) => ({ id: s.child!.id, title: s.child!.title, done: s.child!.done, total: s.child!.total, next: s.child!.next }))
+    })(),
   }
 }

@@ -79,3 +79,12 @@ test('an event left out takes its pack lines with it', async () => {
   assert.deepEqual(withDependents(items, ['i5']), ['i5', 'i6'])
   assert.deepEqual(withDependents(items, ['i3']), ['i3'])
 })
+
+// "Where did the plan steps go?" (Owen's costume, 2026-09-29): what a revision took off is named, briefly;
+// what changed or was added shows only as the tan on its line.
+test('what a revision took off is named, nothing else', () => {
+  const before = items
+  const after = items.filter((i) => i.id !== 'i3' && i.id !== 'i7')
+  assert.deepEqual(planChange(before, after).removed, ['Clear dome umbrella', 'Charge the fairy lights'])
+  assert.deepEqual(planChange(null, after).removed, [])
+})

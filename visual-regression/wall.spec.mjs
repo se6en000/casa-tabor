@@ -1000,6 +1000,28 @@ test('wall: Coming up — a season starts as this year’s project, in Jake’s 
   await expect(page.getByRole('region', { name: 'Projects' }).getByText('Christmas lights')).toBeVisible()
 })
 
+// Jake, 2026-09-29: Owen's ghost sat inside Halloween costumes beside Emme's jellyfish, and only hers
+// showed — "maybe the child case cards can be a swipe through the active child cases … its tight".
+test('wall: a project card swipes through the projects inside it; a tap opens the one showing', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&twoInside=1')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  const shelf = page.getByRole('region', { name: 'Projects' })
+  const inside = shelf.getByRole('button', { name: /^Inside Paint the house/ })
+  await expect(inside).toHaveAccessibleName('Inside Paint the house, 1 of 2: Stucco cracks: seal and patch')
+  await expect(inside.getByText('1 of 4')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-shelf-inside-swipe.png')
+  const box = await inside.boundingBox()
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect(inside).toHaveAccessibleName('Inside Paint the house, 2 of 2: Redo floorboards on the roof patio')
+  await expect(inside.getByText('0 of 3')).toBeVisible()
+  await inside.click()
+  await expect(page.getByRole('region', { name: 'Redo floorboards on the roof patio — project' })).toBeVisible()
+})
+
 // Board 10a (Jake: "gold for done, brown/black for the current step … the diagonal line for in progress"
 // and "the seasonal prep with that dotted line"): the full shelf, and a season starting from its card.
 test('wall: the projects shelf — progress by colour, a project inside hatched, a season coming up dashed and started from its card (canvas 10a)', async ({ page }) => {
