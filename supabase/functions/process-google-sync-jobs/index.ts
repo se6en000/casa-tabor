@@ -24,80 +24,89 @@ Deno.serve(async (req) => {
     let processed = 0
     let succeeded = 0
     let failed = 0
+    // A successful sync clears the event's queued jobs — the one this worker holds too — so finishing it
+    // can find nothing: that's done, not an error (2026-09-29: the throw left whole batches "running").
+    const cleared = (message: string | undefined) => /not found/i.test(message ?? '')
 
     for (const job of jobs ?? []) {
       processed += 1
-      const syncRes = await sb.functions.invoke('sync-event-to-google', {
-        body: {
-          event_id: job.event_id,
-          audit_history_id: job.audit_history_id ?? null,
-          enqueue_on_failure: false,
-          title_only: job.sync_mode === 'title_only',
-        },
-      }).catch((err: Error) => ({ data: null, error: err }))
+      try {
+        const syncRes = await sb.functions.invoke('sync-event-to-google', {
+          body: {
+            event_id: job.event_id,
+            audit_history_id: job.audit_history_id ?? null,
+            enqueue_on_failure: false,
+            title_only: job.sync_mode === 'title_only',
+          },
+        }).catch((err: Error) => ({ data: null, error: err }))
 
-      const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
-      let syncError: string | null = null
-      if (syncRes?.error) {
-        try {
-          if (syncRes.error.context && typeof syncRes.error.context.json === 'function') {
-            const body = await syncRes.error.context.json()
-            syncError = body?.error || body?.message || syncRes.error.message
-          } else if (syncRes.error.context && typeof syncRes.error.context.text === 'function') {
-            const txt = await syncRes.error.context.text()
-            try {
-              const parsed = JSON.parse(txt)
-              syncError = parsed?.error || parsed?.message || txt
-            } catch {
-              syncError = txt || syncRes.error.message
+        const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
+        let syncError: string | null = null
+        if (syncRes?.error) {
+          try {
+            if (syncRes.error.context && typeof syncRes.error.context.json === 'function') {
+              const body = await syncRes.error.context.json()
+              syncError = body?.error || body?.message || syncRes.error.message
+            } else if (syncRes.error.context && typeof syncRes.error.context.text === 'function') {
+              const txt = await syncRes.error.context.text()
+              try {
+                const parsed = JSON.parse(txt)
+                syncError = parsed?.error || parsed?.message || txt
+              } catch {
+                syncError = txt || syncRes.error.message
+              }
+            } else {
+              syncError = syncRes.error.message
             }
-          } else {
+          } catch {
             syncError = syncRes.error.message
           }
-        } catch {
-          syncError = syncRes.error.message
+        } else if (syncRes?.data?.error) {
+          syncError = syncRes.data.error
+        } else if (syncStatus === 'failed') {
+          syncError = 'sync-event-to-google failed'
         }
-      } else if (syncRes?.data?.error) {
-        syncError = syncRes.data.error
-      } else if (syncStatus === 'failed') {
-        syncError = 'sync-event-to-google failed'
-      }
-      if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
+        if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
+          const { error: finishError } = await sb.rpc('finish_google_sync_job', {
+            p_job_id: job.id,
+            p_worker_id: workerId,
+            p_success: true,
+          })
+          if (finishError && !cleared(finishError.message)) console.warn('[process-google-sync-jobs] finish (success):', finishError.message)
+
+          if (job.audit_history_id) {
+            await sb
+              .from('ai_event_edit_history')
+              .update({ sync_status: 'succeeded' })
+              .eq('id', job.audit_history_id)
+          }
+
+          succeeded += 1
+          continue
+        }
+
+        const exhausted = Number(job.attempts ?? 0) >= Number(job.max_attempts ?? 5)
         const { error: finishError } = await sb.rpc('finish_google_sync_job', {
           p_job_id: job.id,
           p_worker_id: workerId,
-          p_success: true,
+          p_success: false,
+          p_error: syncError,
         })
-        if (finishError) throw new Error(finishError.message)
+        if (finishError && !cleared(finishError.message)) console.warn('[process-google-sync-jobs] finish (failure):', finishError.message)
 
         if (job.audit_history_id) {
           await sb
             .from('ai_event_edit_history')
-            .update({ sync_status: 'succeeded' })
+            .update({ sync_status: exhausted ? 'failed' : 'retrying', error_message: syncError })
             .eq('id', job.audit_history_id)
         }
 
-        succeeded += 1
-        continue
+        failed += 1
+      } catch (err) {
+        // One job's trouble never strands the rest of the batch; its lease runs out and it's retried.
+        console.warn('[process-google-sync-jobs] job', job.id, (err as Error).message)
+        failed += 1
       }
-
-      const exhausted = Number(job.attempts ?? 0) >= Number(job.max_attempts ?? 5)
-      const { error: finishError } = await sb.rpc('finish_google_sync_job', {
-        p_job_id: job.id,
-        p_worker_id: workerId,
-        p_success: false,
-        p_error: syncError,
-      })
-      if (finishError) throw new Error(finishError.message)
-
-      if (job.audit_history_id) {
-        await sb
-          .from('ai_event_edit_history')
-          .update({ sync_status: exhausted ? 'failed' : 'retrying', error_message: syncError })
-          .eq('id', job.audit_history_id)
-      }
-
-      failed += 1
     }
 
     return new Response(JSON.stringify({ success: true, processed, succeeded, failed }), {
