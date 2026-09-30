@@ -9,7 +9,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { answerDay, bandAnswer, bandState, cardText, dismissStep, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -69,13 +69,15 @@ export interface WallAssistantBandProps {
   onOpenPlace?: (open: PlanOpen) => void
   /** Open a day on the wall (Casa's show_day, or an answer about one day). */
   onOpenDay?: (date: Date) => void
+  /** Opened by the wake word: the small "Listening…" pill until words are heard (bandCompact). */
+  viaWake?: boolean
   /** Casa opened the email review ("anything from email?"). */
   onOpenEmail?: () => void
   /** Opened with something to say first (a project's "Talk to Casa about it", P3.25). */
   opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, opening = null }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, viaWake = false, opening = null }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -265,6 +267,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // any words were heard — so false wake-word trips can be learned from.
   const openedAt = useRef(Date.now())
   const [closeArmedAt, setCloseArmedAt] = useState(0)
+  // The pill tapped open (a wake-word open with nothing heard yet).
+  const [expanded, setExpanded] = useState(false)
   const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
   const dismiss = (how: 'tap_outside' | 'swipe_down' | 'escape') => {
     const waiting = Boolean(pending?.toolAction)
@@ -272,7 +276,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       setCloseArmedAt(Date.now())
       return
     }
-    emitAssistantTrace('wall_band_dismissed', voiceTrace.current, { payload: { how, open_ms: Date.now() - openedAt.current, heard_words: messages.some((m) => m.role === 'user'), waiting } })
+    emitAssistantTrace('wall_band_dismissed', voiceTrace.current, { payload: { how, open_ms: Date.now() - openedAt.current, heard_words: messages.some((m) => m.role === 'user'), waiting, via_wake: viaWake } })
     onClose()
   }
   useEffect(() => {
@@ -467,6 +471,21 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             onDone={() => setTyping(null)}
           />
         )}
+      </>
+    )
+  }
+
+  // A questionable trigger barely touches the screen (2026-09-30): the pill, until words are heard.
+  if (bandCompact({ viaWake, heard: interim, messages: messages.length, expanded })) {
+    return (
+      <>
+        <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
+        <section aria-label="Assistant" className="absolute bottom-[36px] left-1/2 z-30 flex -translate-x-1/2 items-center gap-[18px] rounded-full bg-wall-band py-[12px] pl-[14px] pr-[14px] font-body text-wall-on-pigment shadow-[0_12px_36px] shadow-wall-night-ground/50">
+          <span aria-hidden="true" className="flex h-[64px] w-[64px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass text-wall-night-brass"><Mic size={28} /></span>
+          <span className="text-wall-body font-semibold">Listening…</span>
+          <button type="button" onClick={() => setExpanded(true)} className="h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-on-pigment">Open</button>
+          <button type="button" onClick={() => dismiss('tap_outside')} className="h-[56px] rounded-full border-0 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-night-ink-2">Not now</button>
+        </section>
       </>
     )
   }

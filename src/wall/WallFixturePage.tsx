@@ -148,6 +148,7 @@ export default function WallFixturePage() {
         onOpenEvent={() => setBandOpen(false)}
         onOpenPlace={() => setBandOpen(false)}
         onOpenDay={(date) => { setBandOpen(false); setOpenRequest({ day: date.toISOString(), nonce: Date.now() }) }}
+        viaWake={new URLSearchParams(window.location.search).get('wake') === '1'}
         members={members as WallMember[]}
         planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
         onDraft={setAssistantDraft}

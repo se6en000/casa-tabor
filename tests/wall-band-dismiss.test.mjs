@@ -22,3 +22,15 @@ test('a swipe down: mostly downward, far enough, quick enough', () => {
   assert.equal(isSwipeDown({ x: 900, y: 900, t: 0 }, { x: 900, y: 700, t: 300 }), false, 'upward')
   assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 900, y: 900, t: 2000 }), false, 'too slow: a drag')
 })
+
+// A questionable trigger barely touches the screen (Jake, 2026-09-30: "finish the little AI band/UX for
+// questionable AI triggers"): a wake-word open is a small "Listening…" pill until words are heard; the mic
+// button (on purpose) opens the full band at once; a tap on the pill opens it too.
+test('a wake shows the small pill until words are heard; the mic button opens the full band', async () => {
+  const { bandCompact } = await import('../src/wall/assistant.ts')
+  assert.equal(bandCompact({ viaWake: true, heard: '', messages: 0, expanded: false }), true)
+  assert.equal(bandCompact({ viaWake: true, heard: 'what time', messages: 0, expanded: false }), false, 'words heard: the full band')
+  assert.equal(bandCompact({ viaWake: true, heard: '', messages: 2, expanded: false }), false, 'a conversation is under way')
+  assert.equal(bandCompact({ viaWake: true, heard: '', messages: 0, expanded: true }), false, 'tapped open')
+  assert.equal(bandCompact({ viaWake: false, heard: '', messages: 0, expanded: false }), false, 'the mic button is on purpose')
+})

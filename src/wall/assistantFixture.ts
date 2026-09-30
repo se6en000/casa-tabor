@@ -102,6 +102,8 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Navigate to Alice’s house'),
     said('Alice’s house is 8255 West Lake Drive in Lake Clark Shores — about 12 minutes from here right now.', { directions: { name: 'Alice', address: '8255 West Lake Drive, Lake Clark Shores, FL 33406', phone: '(561) 555-0101', maps: 'https://www.google.com/maps/dir/?api=1&destination=8255%20West%20Lake%20Drive%2C%20Lake%20Clark%20Shores%2C%20FL%2033406' } }),
   ],
+  // A wake-word open with nothing said yet: the small pill (2026-09-30).
+  wake: () => [],
   // Casa reads the email (canvas 14c): "Anything from email?" opens the review.
   email: () => [
     user('Anything from email?'),

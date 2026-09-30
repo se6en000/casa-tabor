@@ -193,3 +193,11 @@ export function isSwipeDown(start: { x: number; y: number; t: number }, end: { x
   const dx = Math.abs(end.x - start.x)
   return dy >= 140 && dx < dy / 2 && end.t - start.t <= 900
 }
+
+/**
+ * The small "Listening…" pill (2026-09-30): a wake-word open shows only the pill until words are heard, a
+ * conversation is under way, or he taps it open; the mic button, on purpose, opens the full band at once.
+ */
+export function bandCompact({ viaWake, heard, messages, expanded }: { viaWake: boolean; heard: string; messages: number; expanded: boolean }): boolean {
+  return viaWake && !expanded && messages === 0 && !heard.trim()
+}

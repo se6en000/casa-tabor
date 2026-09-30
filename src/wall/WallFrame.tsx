@@ -35,7 +35,10 @@ export default function WallFrame() {
   const [opening, setOpening] = useState<{ text: string; nonce: number } | null>(null)
   const [emailOpen, setEmailOpen] = useState(false)
   // `say`: opened with words to send first (a project's "Talk to Casa about it", P3.25).
+  // Opened by the wake word (a trigger that may be a false one): the band starts as the small pill.
+  const [viaWake, setViaWake] = useState(false)
   const ask = useCallback((say?: string) => {
+    setViaWake(false)
     setBandOpen(true)
     setListenNonce((n) => n + 1)
     setOpening(typeof say === 'string' && say ? { text: say, nonce: Date.now() } : null)
@@ -50,7 +53,10 @@ export default function WallFrame() {
   )
   useWakeWord(bandOpen, false, true)
   useEffect(() => {
-    const open = () => ask()
+    const open = (e: Event) => {
+      ask()
+      if ((e as CustomEvent<{ source?: string }>).detail?.source === 'wake_word') setViaWake(true)
+    }
     document.addEventListener('open-ai-chat', open)
     return () => document.removeEventListener('open-ai-chat', open)
   }, [ask])
@@ -71,6 +77,7 @@ export default function WallFrame() {
         setOpenRequest({ id, nonce: Date.now() })
       }}
       opening={opening}
+      viaWake={viaWake}
       onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }}
       onOpenDay={(date) => {
         setBandOpen(false)

@@ -957,6 +957,22 @@ test('wall: the email review closes with a tap outside; Open email is a link on 
   await expect(review).toBeHidden()
 })
 
+// A questionable trigger barely touches the screen (Jake, 2026-09-30): a wake-word open is the small pill.
+test('wall: a wake-word open is the small "Listening…" pill; Open grows it to the band; a tap outside closes it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=wake&wake=1')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await expect(band.getByText('Listening…')).toBeVisible()
+  await expect(band.getByRole('button', { name: 'What can I say?' })).toHaveCount(0)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wake-pill.png')
+  await band.getByRole('button', { name: 'Open' }).click()
+  await expect(band.getByRole('button', { name: 'What can I say?' })).toBeVisible()
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=wake&wake=1')
+  await expect(page.getByRole('region', { name: 'Assistant' }).getByText('Listening…')).toBeVisible()
+  await page.mouse.click(960, 150)
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeHidden()
+})
+
 test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
