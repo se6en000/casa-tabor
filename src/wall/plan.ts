@@ -14,6 +14,7 @@ export type PlanItem =
   | { id: string; kind: 'edit_step'; project_id: string; step_id: string; project: string; title: string; changes: StepChanges; why?: string }
   | { id: string; kind: 'add_step'; project_id: string; project: string; title: string; after_step_id?: string; after?: string; changes?: StepChanges; why?: string }
   | { id: string; kind: 'remove_step'; project_id: string; step_id: string; project: string; title: string; why?: string }
+  | { id: string; kind: 'event_details'; event_id: string; title: string; changes: { start?: string; end?: string; place?: string; notes?: string; people?: string[] }; why?: string }
   | { id: string; kind: 'move_step'; project_id: string; step_id: string; project: string; title: string; after_step_id?: string; after?: string; why?: string }
   | { id: string; kind: 'close_project'; project_id: string; title: string; reason: string; open_steps?: number; why?: string }
 export interface StepChanges { title?: string; who?: string; cal_start?: string; cal_end?: string; minutes?: number; cost_cents?: number }
@@ -53,6 +54,10 @@ export interface PlanSection { heading: string; intro?: string; why?: string; li
 /** The draft (board 12b): steps first (ticks, then the new steps in order), then where the rest lands. */
 export function planSections(items: PlanItem[]): PlanSection[] {
   const out: PlanSection[] = []
+  // A photo's details for an event already on the calendar (P3.24; board 12f "Add to Owen's field trip").
+  for (const d of items.filter((i): i is Extract<PlanItem, { kind: 'event_details' }> => i.kind === 'event_details')) {
+    out.push({ heading: `ADD TO ${d.title.toUpperCase()}`, why: d.why, lines: detailLines(d).map((l) => ({ key: `details:${d.event_id}:${l.meta}`, text: l.text, meta: l.meta })) })
+  }
   const closing = items.filter((i): i is Extract<PlanItem, { kind: 'close_project' }> => i.kind === 'close_project')
   if (closing.length) out.push({ heading: 'CLOSING', lines: closing.map((c) => ({ key: `close:${c.title}`, text: c.title, meta: `${c.reason}${c.open_steps ? ` · ${c.open_steps} ${c.open_steps === 1 ? 'step' : 'steps'} not done come${c.open_steps === 1 ? 's' : ''} off` : ''}`, struck: true, why: c.why })) })
   const projects = items.filter((i): i is Extract<PlanItem, { kind: 'project' }> => i.kind === 'project')
@@ -127,7 +132,18 @@ export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line
 }
 const rank = (p: string) => (p.startsWith('added') ? 1 : p.startsWith('took off') ? 2 : 0)
 
-const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack', edit_step: 'project', add_step: 'project', remove_step: 'project', move_step: 'project', close_project: 'project' }
+/** What a photo adds to an event already there, one line each: the time, the place, who's going, the notes. */
+function detailLines(d: Extract<PlanItem, { kind: 'event_details' }>): Array<{ text: string; meta: string }> {
+  const c = d.changes
+  return [
+    c.start ? { text: `${dayText(c.start)} · ${c.end ? timeRange(c.start, c.end) : timeRange(c.start, c.start)}`, meta: 'the time' } : null,
+    c.place ? { text: c.place, meta: 'the place' } : null,
+    c.people?.length ? { text: c.people.join(', '), meta: 'going' } : null,
+    c.notes ? { text: c.notes, meta: 'in the notes' } : null,
+  ].filter((l): l is { text: string; meta: string } => Boolean(l))
+}
+
+const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack', edit_step: 'project', add_step: 'project', remove_step: 'project', move_step: 'project', close_project: 'project', event_details: 'calendar' }
 /** "7 things, in 5 places": each line on the card is a thing. */
 export function planCount(items: PlanItem[], skip: string[]): { things: number; label: string } {
   const kept = items.filter((i) => !skip.includes(i.id))
@@ -154,6 +170,9 @@ export function agreeGroups(items: PlanItem[]): Array<{ heading: string; rows: A
             : { id: i.id, label: `Remove “${i.title}”`, meta: '' }
     )))
   }
+  add('CALENDAR · ADDING TO WHAT’S THERE', items.filter((i): i is Extract<PlanItem, { kind: 'event_details' }> => i.kind === 'event_details').map((d) => ({
+    id: d.id, label: `Add to “${d.title}”`, meta: detailLines(d).filter((l) => l.meta !== 'in the notes').map((l) => l.text).join(' · '),
+  })))
   add('CALENDAR · AND GOOGLE', items.filter((i): i is Extract<PlanItem, { kind: 'event' }> => i.kind === 'event').map((e) => ({ id: e.id, label: e.title, meta: `${dayText(e.start)} · ${timeRange(e.start, e.end)}` })))
   add('SHOPPING LIST', items.filter((i) => i.kind === 'shopping').map((i) => ({ id: i.id, label: itemName(i), meta: '' })))
   add('TO DO', items.filter((i): i is Extract<PlanItem, { kind: 'todo' }> => i.kind === 'todo').map((t) => ({ id: t.id, label: t.title, meta: t.due ? `by ${dayText(t.due)}` : '' })))
@@ -183,6 +202,7 @@ export function savedRows(items: PlanItem[], result: PlanResult, skip: string[])
   }
   for (const i of saved) if (i.kind === 'tick_step') rows.push({ label: `“${i.title}” ticked off`, open: { kind: 'project', id: i.project_id, label: 'Open project' } })
   for (const i of saved) {
+    if (i.kind === 'event_details') rows.push({ label: `${i.title} · details added · on Google too`, open: see(link(i.id)?.event_id ?? i.event_id, i.changes.start) })
     if (i.kind === 'event') rows.push({ label: `${i.title} · ${dayText(i.start)} · ${timeRange(i.start, i.end)} · on Google too`, open: see(link(i.id)?.event_id, i.start) })
   }
   const shopping = saved.filter((i) => i.kind === 'shopping')

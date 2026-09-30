@@ -71,6 +71,12 @@ export default function PhoneFrame() {
       saveEvent={(event, draft) => saveDraft({ event, draft, members, queryClient })}
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
+      applyPlan={async (title, items) => {
+        // Scan it's plan (P3.24): the same save as a plan from Ask Casa — Google, and Undo until tomorrow night.
+        const { data, error } = await supabase.functions.invoke('execute-ai-action', { body: { tool: 'apply_plan', args: { title, items, surface: 'phone' }, lane: 'touch', client_trace_source: 'phone-scan', confirmed_by_user: true, correlation_id: `phone-scan:${Date.now().toString(36)}` } })
+        if (error || (data as { success?: boolean } | null)?.success === false) throw new Error((data as { error?: string } | null)?.error ?? 'That didn’t save.')
+        await queryClient.invalidateQueries({ queryKey: ['events'] })
+      }}
       findSimilar={findSimilar}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
       assistant={({ onClose, onOpenEvent, onOpenPlace, onOpenDay, opening }) => <PhoneAssistant opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} onOpenDay={onOpenDay} />}

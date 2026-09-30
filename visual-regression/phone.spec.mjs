@@ -496,15 +496,50 @@ test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me 
   await expect(phone.getByText('Friday, September 25')).toBeVisible()
 })
 
-test('phone: Scan it — something already on the calendar that day starts unticked and says so', async ({ page }) => {
+// P3.24 by improving Scan it (Jake, 2026-09-30): a match already on the calendar gets what's new added to it,
+// never a second copy; what to bring or wear is packing for its event, not a 12 AM reminder.
+test('phone: Scan it — something already on the calendar gets what’s new added to it, not a second copy', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:00:00&similar=1', 'jake-id')
   await phone.getByRole('button', { name: 'Add something' }).click()
   await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
   const sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
-  await expect(sheet.getByText(/Already on your calendar: PTO Fall Festival · 11:00 AM/)).toBeVisible()
-  await expect(sheet.getByRole('button', { name: 'Add Palm Beach Public PTO Fall Festival' })).toHaveAttribute('aria-pressed', 'false')
-  await expect(sheet.getByRole('button', { name: 'Add 1' })).toBeVisible()
+  await expect(sheet.getByText(/Already on your calendar: PTO Fall Festival · 11:00 AM\. I’ll add what’s new to it\./)).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Skip Palm Beach Public PTO Fall Festival' })).toHaveAttribute('aria-pressed', 'true')
+  await sheet.getByRole('button', { name: 'Add 2' }).click()
+  await expect(sheet.getByRole('list', { name: 'Added' }).getByText('Added what’s new to PTO Fall Festival')).toBeVisible()
+  const plan = await page.evaluate(() => window.__scanPlan)
+  expect(plan.items.map((i) => [i.kind, i.event_id])).toEqual([['event_details', 'pto']])
+  expect(plan.items[0].changes.place).toBe('School field')
+})
+
+test('phone: Scan it — what to wear and bring is packing for the field trip, on it whether it’s new or already there', async ({ page }) => {
+  let phone = await open(page, '2026-09-29T19:00:00&scan=trip', 'jake-id')
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  let sheet = phone.getByRole('region', { name: 'Scan it' })
+  await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await expect(sheet.getByText('PACK THE NIGHT BEFORE')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Skip Packed lunch' })).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-scan-trip.png')
+  await sheet.getByRole('button', { name: 'Add 3' }).click()
+  await expect(sheet.getByRole('list', { name: 'Added' }).getByText('Pack for Field Trip: Peter and the Wolf: Neon pink Kindergarten by the Sea shirt, Packed lunch')).toBeVisible()
+  let plan = await page.evaluate(() => window.__scanPlan)
+  expect(plan.items.map((i) => [i.kind, i.label])).toEqual([['pack', 'Neon pink Kindergarten by the Sea shirt'], ['pack', 'Packed lunch']])
+  expect(plan.items[0].event_id).toMatch(/^added-/)
+
+  // The school's field trip already on the calendar: the flyer's details go onto it, with the packing.
+  phone = await open(page, '2026-09-29T19:00:00&scan=trip&similar=trip', 'jake-id')
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  sheet = phone.getByRole('region', { name: 'Scan it' })
+  await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await expect(sheet.getByText(/Already on your calendar: Field trip · .*I’ll add what’s new to it\./)).toBeVisible()
+  await sheet.getByRole('button', { name: 'Add 3' }).click()
+  await expect(sheet.getByRole('list', { name: 'Added' }).getByText('Added what’s new to Field trip')).toBeVisible()
+  plan = await page.evaluate(() => window.__scanPlan)
+  expect(plan.items.map((i) => [i.kind, i.event_id])).toEqual([['event_details', 'school-trip'], ['pack', 'school-trip'], ['pack', 'school-trip']])
+  expect(plan.items[0].changes).toMatchObject({ place: 'Glazer Hall', people: ['Owen'] })
 })
 
 // To do on the phone (P3.22 step 7; the wall's canvas 10a–10d in one column): Week › To do, Jake's only.

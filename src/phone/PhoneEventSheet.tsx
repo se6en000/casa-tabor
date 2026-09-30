@@ -34,7 +34,7 @@ export interface PhoneEventSheetProps {
   /** Open straight into editing (the card's Edit). */
   initialMode?: 'details' | 'edit'
   /** Adding (a blank event, id NEW_EVENT_ID): the calendar's own create call. */
-  createEvent?: (args: Record<string, unknown>) => Promise<void>
+  createEvent?: (args: Record<string, unknown>) => Promise<unknown>
   /** Keep from… (05g): who it's kept from, who the title suggests, and the change. */
   keptFrom?: string[]
   suggestKeepFrom?: string[]
@@ -291,7 +291,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
           <div className="flex gap-[8px]">
             {isNew ? (
-              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => createEvent && void run(() => createEvent(createArgs(draft, kind, members)), 'Adding didn’t work. Nothing was added.')}>
+              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => createEvent && void run(async () => { await createEvent(createArgs(draft, kind, members)) }, 'Adding didn’t work. Nothing was added.')}>
                 {busy ? 'Adding…' : 'Add it'}
               </button>
             ) : (

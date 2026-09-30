@@ -22,3 +22,4 @@ test('a list answer stays a list on the phone: one item per line, markdown gone'
   const [line] = phoneTranscript([{ id: 'a', role: 'assistant', content: 'There are 2 calendar items Saturday:\n- **8:00 AM** — Kelly Yoga\n- 10:30 AM — Softball\n\nAnything else?' }])
   assert.equal(line.text, 'There are 2 calendar items Saturday:\n8:00 AM — Kelly Yoga\n10:30 AM — Softball\nAnything else?')
 })
+

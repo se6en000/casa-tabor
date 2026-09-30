@@ -43,6 +43,16 @@ const SCANNED = {
   ],
 }
 
+// Owen's field-trip flyer (P3.24): the trip, and what to wear and bring as its packing.
+const SCANNED_TRIP = {
+  summary: 'Owen’s field trip: Peter and the Wolf',
+  items: [
+    { id: 't1', type: 'event' as const, title: 'Field Trip: Peter and the Wolf', date: '2026-10-01', start_time_local: '09:30', end_time_local: '12:00', start_time: '', end_time: '', all_day: false, location_name: 'Glazer Hall', address: null, notes: 'By bus from school, back for lunch. Questions: Kim Kerry (561) 329-1269', selectedMemberIds: ['owen'], confidence: 0.92, selected: true },
+    { id: 't2', type: 'prep' as const, for_title: 'Field Trip: Peter and the Wolf', title: 'Neon pink Kindergarten by the Sea shirt', date: '2026-10-01', start_time_local: null, end_time_local: null, start_time: '', end_time: '', all_day: true, location_name: null, address: null, notes: null, selectedMemberIds: [], confidence: 0.9, selected: true },
+    { id: 't3', type: 'prep' as const, for_title: 'Field Trip: Peter and the Wolf', title: 'Packed lunch', date: '2026-10-01', start_time_local: null, end_time_local: null, start_time: '', end_time: '', all_day: true, location_name: null, address: null, notes: null, selectedMemberIds: [], confidence: 0.9, selected: true },
+  ],
+}
+
 // Say it, scripted: a question gets an answer; "add …" gets a draft that waits for a yes.
 function FixtureAssistant({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
   const [lines, setLines] = useState<PhoneLine[]>([])
@@ -134,8 +144,9 @@ export default function PhoneFixturePage() {
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               todos={viewerId === 'jake-id' ? todos : null}
               checklist={checklist}
-              scan={async () => SCANNED}
-              findSimilar={params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
+              scan={async () => (params.get('scan') === 'trip' ? SCANNED_TRIP : SCANNED)}
+              findSimilar={params.get('similar') === 'trip' ? async () => ({ t1: { id: 'school-trip', title: 'Field trip', start_time: new Date(2026, 9, 1, 0, 0).toISOString() } })
+                : params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
               planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
               aroundEvents={shown}
               assistant={({ onClose, onOpenEvent, onOpenDay, opening }) => askTurn ? (
@@ -181,12 +192,18 @@ export default function PhoneFixturePage() {
               onAddItem={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])}
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
-              createEvent={async (args) => setEvs((list) => [...list, {
-                id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: Boolean(args.all_day),
-                start_time: String(args.start), end_time: String(args.end),
-                location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
-                members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-              } as unknown as WallEvent])}
+              createEvent={async (args) => {
+                const id = `added-${Date.now().toString(36)}-${String(args.title).length}`
+                setEvs((list) => [...list, {
+                  id, title: String(args.title), event_type: String(args.event_type), all_day: Boolean(args.all_day),
+                  start_time: String(args.start), end_time: String(args.end),
+                  location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
+                  members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
+                } as unknown as WallEvent])
+                return id
+              }}
+              // Scan it's plan (P3.24): recorded for the tests on window.__scanPlan.
+              applyPlan={async (title, items) => { (window as unknown as { __scanPlan?: unknown }).__scanPlan = { title, items } }}
             />
           </div>
         } />

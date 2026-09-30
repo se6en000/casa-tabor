@@ -91,3 +91,48 @@ test('already on the calendar: same day, mostly the same words (not just any eve
   assert.equal(similarEvent(scanItem({ title: 'Book fair', date: '2026-10-24' }), onCal), null)
   assert.equal(similarEvent(scanItem({ title: 'Strings Festival', date: '2026-10-25' }), onCal), null)
 })
+
+// P3.24, by improving Scan it (Jake, 2026-09-30: "Improve the scanner"): what to bring or wear for an event on
+// the flyer is packing for that event (the wall's pack-tonight), not a 12 AM reminder; a match already on the
+// calendar gets what's new added to it, never a second copy.
+test('the scanner keeps what to bring or wear as packing for its event', () => {
+  const items = scannedItemsFrom({ success: true, items: [
+    { type: 'event', title: 'Field Trip: Peter and the Wolf', date: '2026-10-01', start_time_local: '09:30', end_time_local: '12:00', start_time: '2026-10-01T13:30:00Z', end_time: '2026-10-01T16:00:00Z', all_day: false, confidence: 0.9 },
+    { type: 'prep', title: 'Neon pink Kindergarten shirt', for_title: 'Field Trip: Peter and the Wolf', date: '2026-10-01', start_time: '2026-10-01T04:00:00Z', end_time: '2026-10-01T04:00:00Z', all_day: true, confidence: 0.9 },
+  ] }, family, '2026-09-29', { keepPrep: true })
+  assert.deepEqual(items.map((i) => [i.type, i.title, i.for_title ?? null]), [['event', 'Field Trip: Peter and the Wolf', null], ['prep', 'Neon pink Kindergarten shirt', 'Field Trip: Peter and the Wolf']])
+  // The old scan sheet saves each item as it is: there it stays a reminder, as before.
+  const old = scannedItemsFrom({ success: true, items: [{ type: 'prep', title: 'Packed lunch', for_title: 'Field trip', date: '2026-10-01', start_time: '2026-10-01T04:00:00Z', end_time: '2026-10-01T04:00:00Z', all_day: true, confidence: 0.9 }] }, family, '2026-09-29')
+  assert.equal(old[0].type, 'reminder')
+})
+
+test('packing sits under its event; with one event on the flyer, under that one; with none it stays a reminder', async () => {
+  const { scanGroups } = await import('../src/phone/scan.ts')
+  const trip = { id: 'a', type: 'event', title: 'Field Trip: Peter and the Wolf' }
+  const shirt = { id: 'b', type: 'prep', title: 'Neon pink shirt', for_title: 'field trip: peter and the wolf ' }
+  const lunch = { id: 'c', type: 'prep', title: 'Packed lunch', for_title: null }
+  const g = scanGroups([trip, shirt, lunch])
+  assert.deepEqual(g.events.map((i) => i.id), ['a'])
+  assert.deepEqual(g.packs.a.map((i) => i.id), ['b', 'c'])
+  // Two events: each item under the one it names (live, the scanner once added the date after the title).
+  const two = scanGroups([trip, { id: 'g', type: 'event', title: 'Soccer' }, { id: 'h', type: 'prep', title: 'Cleats', for_title: 'Soccer, 2026-10-03' }, { ...shirt, for_title: 'Field Trip: Peter and the Wolf, 2026-10-01' }])
+  assert.deepEqual([two.packs.a?.map((i) => i.id), two.packs.g?.map((i) => i.id)], [['b'], ['h']])
+  const alone = scanGroups([{ id: 'x', type: 'prep', title: 'Bring a towel', for_title: 'Swim meet' }])
+  assert.deepEqual(alone.events.map((i) => [i.id, i.type]), [['x', 'reminder']], 'no event for it: a reminder, as before')
+})
+
+test('the save: what’s new goes onto a match already there, and the packing onto its event, old or new', async () => {
+  const { scanPlanItems } = await import('../src/phone/scan.ts')
+  const members = [{ id: 'owen', name: 'Owen' }]
+  const trip = { id: 'a', type: 'event', title: 'Field Trip', date: '2026-10-01', start_time_local: '09:30', end_time_local: '12:00', start_time: '', end_time: '', all_day: false, location_name: 'Glazer Hall', address: null, notes: 'By bus from school', selectedMemberIds: ['owen'], selected: true }
+  const game = { id: 'd', type: 'event', title: 'Soccer', date: '2026-10-03', start_time_local: '10:00', end_time_local: null, start_time: '', end_time: '', all_day: false, location_name: null, address: null, notes: null, selectedMemberIds: [], selected: true }
+  const shirt = { id: 'b', type: 'prep', title: 'Neon pink shirt', for_title: 'Field Trip', selected: true }
+  const cleats = { id: 'e', type: 'prep', title: 'Cleats', for_title: 'Soccer', selected: true }
+  const skipped = { id: 'f', type: 'prep', title: 'Sunscreen', for_title: 'Field Trip', selected: false }
+  const items = scanPlanItems({ items: [trip, game, shirt, cleats, skipped], already: { a: { id: 'e-trip', title: 'Field trip', start_time: '2026-10-01T04:00:00Z' } }, created: { d: 'e-soccer' }, members, utcOffset: '-04:00' })
+  assert.deepEqual(items, [
+    { id: 'i1', kind: 'event_details', event_id: 'e-trip', title: 'Field trip', changes: { start: '2026-10-01T09:30:00-04:00', end: '2026-10-01T12:00:00-04:00', place: 'Glazer Hall', notes: 'By bus from school', people: ['Owen'] } },
+    { id: 'i2', kind: 'pack', label: 'Neon pink shirt', event_id: 'e-trip' },
+    { id: 'i3', kind: 'pack', label: 'Cleats', event_id: 'e-soccer' },
+  ])
+})

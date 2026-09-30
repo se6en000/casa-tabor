@@ -3,18 +3,24 @@ import { Bell, CalendarDays, Camera, Check, ChevronLeft, Images, Loader2 } from 
 import type { WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { ScannedItem } from '../utils/documentScanner'
-import { addedLine, scanArgs, scanWhen } from './scan'
+import { addedLine, scanArgs, scanGroups, scanPlanItems, scanWhen, type ScanPlanItem } from './scan'
 
 // Scan it (board 05e): a photo of a flyer, an invite, a schedule — read by the scanner,
 // then every date comes back as a ticked draft to check. Only what's ticked is added,
 // through the calendar's own create call (people, place, drive time, Google).
+// P3.24 (Jake, 2026-09-30: "Improve the scanner"): what to bring or wear is packing for its event, shown
+// under it; something already on the calendar gets what's new added to it (never a second copy) — both
+// saved through the plan engine (event_details, pack) after the new events are made.
 
 export interface PhoneScanSheetProps {
   members: WallMember[]
   pigments: Map<string, number>
   /** Reads the photos (the scanner in the app; a canned answer in the fixture). */
   scan: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
-  createEvent: (args: Record<string, unknown>) => Promise<void>
+  /** Creates one event; its id, for the packing that goes onto it. */
+  createEvent: (args: Record<string, unknown>) => Promise<string | null | void>
+  /** Saves what's new for events already there, and the packing, in one plan (P3.24). */
+  applyPlan?: (title: string, items: ScanPlanItem[]) => Promise<void>
   /** Looks up the calendar on the scanned days for things already there (item id → the match). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, SimilarEvent>>
   onClose: () => void
@@ -28,7 +34,13 @@ export type SimilarEvent = { id: string; title: string; start_time: string }
 /** About how many characters of a title fit on one line of the review list. */
 const TITLE_LINE_CHARS = 26
 
-export default function PhoneScanSheet({ members, pigments, scan, createEvent, findSimilar, onClose }: PhoneScanSheetProps) {
+/** The phone's UTC offset, "-04:00". */
+function localOffset(): string {
+  const m = -new Date().getTimezoneOffset()
+  return `${m < 0 ? '-' : '+'}${String(Math.floor(Math.abs(m) / 60)).padStart(2, '0')}:${String(Math.abs(m) % 60).padStart(2, '0')}`
+}
+
+export default function PhoneScanSheet({ members, pigments, scan, createEvent, applyPlan, findSimilar, onClose }: PhoneScanSheetProps) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
   const [stage, setStage] = useState<Stage>('intake')
@@ -52,10 +64,10 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, f
       setFailed({})
       setAdded(0)
       setAddedLines([])
-      // A second scan of the same flyer: what's already on the calendar starts unticked, and says so.
-      const matches = findSimilar ? await findSimilar(result.items).catch(() => ({} as Record<string, SimilarEvent>)) : {}
+      // Something already on the calendar: what's new goes onto it (ticked), never a second copy.
+      const matches = findSimilar ? await findSimilar(result.items.filter((i) => i.type !== 'prep')).catch(() => ({} as Record<string, SimilarEvent>)) : {}
       setAlready(matches)
-      setItems(result.items.map((i) => (matches[i.id] ? { ...i, selected: false } : i)))
+      setItems(result.items)
       setStage('review')
     } catch (e) {
       setError((e as Error).message || 'That photo couldn’t be read. Try a closer, flatter shot.')
@@ -70,20 +82,42 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, f
   const patch = (id: string, change: (i: ScannedItem) => Partial<ScannedItem>) => setItems((list) => list.map((i) => (i.id === id ? { ...i, ...change(i) } : i)))
   const people = members.filter((m) => m.show_on_home_sidebar !== false)
   const ticked = items.filter((i) => i.selected && i.title.trim())
+  const groups = scanGroups(items)
 
   const addTicked = async () => {
     setBusy(true)
     const misses: Record<string, string> = {}
     let count = 0
     const lines: string[] = []
-    // One at a time, so a miss says which one and the rest still go in.
-    for (const item of ticked) {
+    const created: Record<string, string> = {}
+    // New ones one at a time, so a miss says which one and the rest still go in.
+    for (const item of groups.events.filter((i) => i.selected && i.title.trim() && !already[i.id])) {
       try {
-        await createEvent(scanArgs(item, members))
+        const id = await createEvent(scanArgs(item, members))
+        if (id) created[item.id] = id
         count += 1
         lines.push(addedLine(item))
       } catch (e) {
         misses[item.id] = (e as Error).message || 'Adding didn’t work.'
+      }
+    }
+    // Then what's new for the ones already there, and the packing, as one plan.
+    const plan = scanPlanItems({ items, already, created, members, utcOffset: localOffset() })
+    if (plan.length && applyPlan) {
+      try {
+        await applyPlan(summary || 'A scanned flyer', plan)
+        for (const p of plan) {
+          if (p.kind === 'event_details') { lines.push(`Added what’s new to ${p.title}`); count += 1 }
+        }
+        const packFor = new Map<string, string[]>()
+        for (const p of plan) if (p.kind === 'pack') packFor.set(p.event_id, [...(packFor.get(p.event_id) ?? []), p.label])
+        for (const [eventId, labels] of packFor) {
+          const owner = groups.events.find((e) => (already[e.id]?.id ?? created[e.id]) === eventId)
+          lines.push(`Pack for ${owner ? already[owner.id]?.title ?? owner.title.trim() : 'it'}: ${labels.join(', ')}`)
+          count += labels.length
+        }
+      } catch (e) {
+        for (const ev of groups.events) if (ev.selected && (already[ev.id] || (groups.packs[ev.id] ?? []).some((p) => p.selected))) misses[ev.id] = (e as Error).message || 'Adding what’s new didn’t work.'
       }
     }
     setBusy(false)
@@ -124,7 +158,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, f
         {stage === 'review' && (
           <div className="flex flex-col">
             <div className="pb-[8px] text-phone-detail text-wall-ink-2">{summary}</div>
-            {items.map((item) => (
+            {groups.events.map((item) => (
               <div key={item.id} className="flex gap-[12px] border-0 border-t border-solid border-wall-stone py-[12px]">
                 <button
                   type="button"
@@ -156,6 +190,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, f
                     <button
                       type="button"
                       aria-label={item.type === 'event' ? 'An event — make it a reminder' : 'A reminder — make it an event'}
+                      hidden={Boolean(already[item.id])}
                       onClick={() => patch(item.id, (i) => ({ type: i.type === 'event' ? 'reminder' : 'event' }))}
                       className="flex h-[44px] items-center gap-[6px] rounded-[10px] border-0 bg-phone-card px-[12px] text-phone-detail font-semibold text-wall-ink"
                     >
@@ -179,7 +214,18 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, f
                   </div>
                   {already[item.id] && (
                     <div className="text-phone-detail font-semibold text-wall-brass-ink">
-                      Already on your calendar: {already[item.id].title} · {new Date(already[item.id].start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. Tick it to add another.
+                      Already on your calendar: {already[item.id].title} · {new Date(already[item.id].start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. {item.selected ? 'I’ll add what’s new to it.' : 'Left as it is.'}
+                    </div>
+                  )}
+                  {(groups.packs[item.id] ?? []).length > 0 && (
+                    <div className="flex flex-col">
+                      <span className="pt-[4px] text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">PACK THE NIGHT BEFORE</span>
+                      {(groups.packs[item.id] ?? []).map((p) => (
+                        <button key={p.id} type="button" aria-pressed={p.selected} aria-label={`${p.selected ? 'Skip' : 'Pack'} ${p.title}`} onClick={() => patch(p.id, (i) => ({ selected: !i.selected }))} className="flex min-h-[44px] items-center gap-[10px] border-0 bg-transparent p-0 text-left text-phone-body text-wall-ink">
+                          <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 border-solid ${p.selected ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>{p.selected && <Check size={14} strokeWidth={3} />}</span>
+                          <span className={p.selected ? '' : 'opacity-50'}>{p.title}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
                   {failed[item.id] && <div role="alert" className="text-phone-detail text-wall-rust">{failed[item.id]}</div>}

@@ -141,3 +141,22 @@ test('a move reads as where the step goes, on the draft and the Agree card', () 
   assert.deepEqual(agreeGroups(moves)[0].rows.map((r) => [r.label, r.meta]), [['Move “Hire the painter”', 'after Fix the stucco'], ['Move “Get quotes”', 'to the start']])
   assert.equal(planCount(moves, []).label, '2 things, in 1 place')
 })
+
+// P3.24: a photo's details for an event already on the calendar (board 12f: "Add to Owen's field trip, Thu").
+test('details for an event already there read as what gets added to it, on the draft, the Agree card and Saved', () => {
+  const items = [
+    { id: 'i1', kind: 'event_details', event_id: 'e-trip', title: 'Field trip', changes: { start: '2026-10-01T09:30:00-04:00', end: '2026-10-01T12:00:00-04:00', place: 'Glazer Hall', notes: 'By bus. Questions: Kim Kerry (561) 329-1269', people: ['Owen'] } },
+    { id: 'i2', kind: 'pack', label: 'Neon pink shirt', for_event: 'e-trip', event_id: 'e-trip', event_title: 'Field trip' },
+  ]
+  const s = planSections(items)
+  assert.equal(s[0].heading, 'ADD TO FIELD TRIP')
+  assert.deepEqual(s[0].lines.map((l) => [l.text, l.meta]), [
+    ['Thu, Oct 1 · 9:30 AM–12 PM', 'the time'], ['Glazer Hall', 'the place'], ['Owen', 'going'], ['By bus. Questions: Kim Kerry (561) 329-1269', 'in the notes'],
+  ])
+  const g = agreeGroups(items)
+  assert.deepEqual(g[0].heading, 'CALENDAR · ADDING TO WHAT’S THERE')
+  assert.deepEqual(g[0].rows.map((r) => [r.id, r.label, r.meta]), [['i1', 'Add to “Field trip”', 'Thu, Oct 1 · 9:30 AM–12 PM · Glazer Hall · Owen']])
+  assert.equal(planCount(items, []).label, '2 things, in 2 places')
+  const { rows } = savedRows(items, { links: [{ id: 'i1', kind: 'event_details', event_id: 'e-trip' }] }, [])
+  assert.deepEqual(rows[0], { label: 'Field trip · details added · on Google too', open: { kind: 'event', id: 'e-trip', label: 'See Oct 1' } })
+})

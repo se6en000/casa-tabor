@@ -95,7 +95,7 @@ export default function WallFrame() {
       }}
     />
   ) : null
-  const createEvent = (args: Record<string, unknown>) => createEventByTouch(queryClient, args, 'wall')
+  const createEvent = async (args: Record<string, unknown>) => { await createEventByTouch(queryClient, args, 'wall') }
 
   const comingUp = useComingUp()
   // What came in by email (phase 2, canvas row 14): its count on the launch face, its review in the band's place.

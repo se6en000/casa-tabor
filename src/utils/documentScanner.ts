@@ -6,7 +6,10 @@ import { format } from 'date-fns'
 
 export interface ScannedItem {
   id: string
-  type: 'event' | 'reminder'
+  /** 'prep': something to bring, wear or pack for an event on the same flyer (P3.24) — packing, not a reminder. */
+  type: 'event' | 'reminder' | 'prep'
+  /** A prep item's event, by its title on the flyer. */
+  for_title?: string | null
   title: string
   date: string // YYYY-MM-DD
   start_time_local: string | null // HH:MM
@@ -28,7 +31,8 @@ export interface ScanDocumentResponse {
   document_summary?: string
   items?: Array<{
     id?: string
-    type: 'event' | 'reminder'
+    type: 'event' | 'reminder' | 'prep'
+    for_title?: string | null
     title: string
     date?: string
     start_time_local?: string | null
@@ -165,6 +169,8 @@ export function scannedItemsFrom(
   response: ScanDocumentResponse | null | undefined,
   familyMembers: Array<Pick<FamilyMember, 'id' | 'name' | 'full_name'>>,
   todayIso: string,
+  /** Keep packing as packing (the phone's Scan it, P3.24); elsewhere it stays a reminder, as before. */
+  { keepPrep = false }: { keepPrep?: boolean } = {},
 ): ScannedItem[] {
   if (!response || !response.success || !Array.isArray(response.items)) {
     throw new Error(response?.error || 'No items could be extracted from this document')
@@ -173,7 +179,8 @@ export function scannedItemsFrom(
     const dateStr = item.date || item.start_time?.slice(0, 10) || todayIso
     return {
       id: item.id || `scanned-${idx}-${Date.now()}`,
-      type: item.type === 'reminder' ? 'reminder' : 'event',
+      type: item.type === 'prep' ? (keepPrep ? 'prep' : 'reminder') : item.type === 'reminder' ? 'reminder' : 'event',
+      ...(item.type === 'prep' && keepPrep ? { for_title: item.for_title ?? null } : {}),
       title: item.title,
       date: dateStr,
       start_time_local: item.start_time_local || null,
@@ -214,7 +221,7 @@ export async function scanDocumentFiles(
   })
   if (error) throw error
   const response = data as ScanDocumentResponse
-  const items = scannedItemsFrom(response, familyMembers, format(now, 'yyyy-MM-dd'))
+  const items = scannedItemsFrom(response, familyMembers, format(now, 'yyyy-MM-dd'), { keepPrep: true })
   return { summary: response.document_summary || `Found ${items.length} ${items.length === 1 ? 'item' : 'items'}`, items }
 }
 

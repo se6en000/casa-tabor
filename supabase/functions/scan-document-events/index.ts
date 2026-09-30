@@ -23,7 +23,9 @@ type LlmConfig = {
 
 export type ExtractedScannedItem = {
   id?: string
-  type: 'event' | 'reminder'
+  /** 'prep' (P3.24): something to bring, wear or pack for an event on the same document, by that event's title. */
+  type: 'event' | 'reminder' | 'prep'
+  for_title?: string | null
   title: string
   date: string // YYYY-MM-DD
   start_time_local?: string | null // HH:MM
@@ -112,7 +114,8 @@ function normalizeItem(raw: unknown, index: number, anchorDate: Date): Extracted
   if (!title) return null
 
   const rawType = String(row.type ?? row.event_type ?? 'event').trim().toLowerCase()
-  const type: 'event' | 'reminder' = rawType === 'reminder' || rawType === 'task' || rawType === 'todo' ? 'reminder' : 'event'
+  const type: 'event' | 'reminder' | 'prep' = rawType === 'prep' || rawType === 'pack' || rawType === 'bring' ? 'prep' : rawType === 'reminder' || rawType === 'task' || rawType === 'todo' ? 'reminder' : 'event'
+  const forTitle = type === 'prep' ? String(row.for ?? row.for_title ?? row.for_event ?? '').trim() || null : null
 
   const date = normalizeDateStr(row.date ?? row.start_date ?? row.start_time, anchorDate)
   const startTimeLocal = normalizeTimeStr(row.start_time ?? row.time ?? row.start_time_local)
@@ -151,6 +154,7 @@ function normalizeItem(raw: unknown, index: number, anchorDate: Date): Extracted
   return {
     id: `item-${index + 1}-${Date.now().toString(36)}`,
     type,
+    ...(type === 'prep' ? { for_title: forTitle } : {}),
     title,
     date,
     start_time_local: allDay ? null : startTimeLocal,
@@ -261,7 +265,8 @@ ANCHOR CALENDAR CONTEXT:
 EXTRACTION RULES:
 1. Extract EVERY distinct scheduled event or reminder mentioned on the document.
    - Set "type": "event" for calendar commitments (matches, games, parties, doctor appointments, ceremonies, flights).
-   - Set "type": "reminder" for deadlines, RSVP notices, permission slip due dates, fee payments, prep instructions (e.g. fasting 12h prior).
+   - Set "type": "reminder" for deadlines, RSVP notices, permission slip due dates, fee payments, timed instructions (e.g. fasting 12h prior).
+   - Set "type": "prep" for something to bring, wear, pack or have ready for an event on this same document (a packed lunch, a class shirt, shin guards, a water bottle), one item each, with "for": that event's title exactly as you wrote it (the title only), and "date": the event's date. Never make these reminders or events of their own.
 2. DATES & TIMES (CRITICAL ACCURACY):
    - For "date", output the exact calendar date in "YYYY-MM-DD" format.
    - If the year is not explicitly written on the paper (e.g. "Saturday, Oct 10" or "Friday 10/16"), use the anchor year ${currentYear} (or ${currentYear + 1} if the date is in the past relative to today).
@@ -283,7 +288,8 @@ RETURN STRICT JSON matching this exact schema:
   "document_summary": "1-sentence summary of the document (e.g. Spring Soccer League Schedule with 6 matches)",
   "items": [
     {
-      "type": "event", // or "reminder"
+      "type": "event", // or "reminder", or "prep"
+      "for": null, // a prep item's event title
       "title": "Clean, descriptive title",
       "date": "YYYY-MM-DD",
       "start_time": "HH:MM", // 24-hour local time, or null if all-day

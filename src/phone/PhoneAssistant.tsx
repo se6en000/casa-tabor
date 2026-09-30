@@ -67,6 +67,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
     openedWith.current = opening
     void send(opening)
   }, [opening]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const planRef = useRef(false)
   planRef.current = Boolean(plan)
   const askedRef = useRef(turn.agreeAsked ?? 0)

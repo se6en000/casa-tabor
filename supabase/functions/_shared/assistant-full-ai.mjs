@@ -63,6 +63,7 @@ function describePlan(plan, utcOffset) {
     if (i.kind === 'edit_step') return `change “${i.title}” on ${i.project}: ${what(i.changes)}`
     if (i.kind === 'add_step') return `add “${i.title}” to ${i.project}${i.after ? ` after “${i.after}”` : ''}${i.changes ? ` (${what(i.changes)})` : ''}`
     if (i.kind === 'remove_step') return `remove “${i.title}” from ${i.project}`
+    if (i.kind === 'event_details') return `add to “${i.title}”: ${Object.entries(i.changes ?? {}).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join(', ') : k === 'start' || k === 'end' ? at(v) : v}`).join('; ')}`
     if (i.kind === 'move_step') return `move “${i.title}” on ${i.project} ${i.after ? `after “${i.after}”` : 'to the start'}`
     if (i.kind === 'close_project') return `close ${i.title} (${i.reason})`
     return i.kind
@@ -74,8 +75,8 @@ function describePlan(plan, utcOffset) {
 // Talking something through (P3.25): the fast model only hands it over (think_it_through); how to think
 // with him is the planning model's — in the fast model's instructions it wrote asked-for projects out in
 // words instead of the card (live check, 2026-09-29).
-const HAND_IT_OVER = 'When he wants to talk something through — ideas, a theme, a holiday, a project, whether something is a good idea, what to work on with the time or money he has ("I\'ve got two hours and $100 Saturday") — call think_it_through and nothing else. '
-const THINKING_WITH_HIM = (homeCity) => `When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: lead with substance — a few concrete ideas, options with your pick, or your honest take and why — drawn from what you know of this family (Coming up, the projects, the calendar, who's who, the Florida weather), and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Ask at most one question, after the ideas. Don't steer the conversation toward adding things: steps and a plan come once he's chosen a direction, and only then offer to set it up. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. Once he's settled on a direction, call set_plan with the whole plan, alongside a sentence or two in words; it appears beside the conversation, and every change after that is set_plan again with everything. When he says what time or money he has ("I've got two hours and $100 Saturday"), pick the open steps of his projects that fit it — in their order, their minutes and cost adding up within it — and date them that day (edit_step), saying in words what fits and what's left for later; a step with no minutes or cost: make an honest guess and say so. Changing the order of his saved steps ("do the painter after the stucco") is move_step. `
+const HAND_IT_OVER = 'When he wants to talk something through — ideas, a theme, a holiday, a project, whether something is a good idea — call think_it_through and nothing else. '
+const THINKING_WITH_HIM = (homeCity) => `When he wants to talk something through — a project, a theme, a holiday, whether something is a good idea — think with him and say more: lead with substance — a few concrete ideas, options with your pick, or your honest take and why — drawn from what you know of this family (Coming up, the projects, the calendar, who's who, the Florida weather), and push back when something won't work (the weather, the time it takes, the cost, what's already on the calendar). Ask at most one question, after the ideas. Don't steer the conversation toward adding things: steps and a plan come once he's chosen a direction, and only then offer to set it up. Use search_web for what's current: prices, what people are doing this year (Reddit is good for that), and what's available or happening around ${homeCity ?? 'West Palm Beach'} and in Florida. Once he's settled on a direction, call set_plan with the whole plan, alongside a sentence or two in words; it appears beside the conversation, and every change after that is set_plan again with everything. Changing the order of his saved steps ("do the painter after the stucco") is move_step. `
 
 const shortDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
 const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`)
@@ -210,13 +211,13 @@ export const FULL_AI_TOOLS = [
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
 // The fast model's way to hand a turn to the planning model (P3.25): not a lookup — it changes who answers.
 export const THINK_IT_THROUGH = 'think_it_through'
-const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), a change to one of his saved projects or its steps ("move the build night to Saturday", "Kelly\'s doing the tentacles"), what to get done with the time or money he has ("I\'ve got two hours and $100 Saturday"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
+const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), a change to one of his saved projects or its steps ("move the build night to Saturday", "Kelly\'s doing the tentacles"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
 // The planning model sets the whole plan (P3.25 phase 3; canvas 12b): each call replaces it, so a
 // change is just the plan again — the card is revised in place, and nothing saves until he agrees.
-const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything; keep everything already in it unless he asks to take it off. Anything he wants added while planning (a shopping line, a reminder, a date) goes into the plan. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). To change one of his saved projects, change it — never rebuild it: edit_step (project_id, step_id, and only what changes: title, who, date, minutes, cost), add_step (project_id, title, after_step_id, and any of who, date, minutes, cost), remove_step (project_id, step_id), move_step (project_id, step_id, after_step_id — the step it goes right after; none to go first: "move the painter after the stucco"). When a project is being replaced by a different idea ("she wants to be Chucky now"), close_project it with a short reason and add the new project in its place (the same part_of_project_id); what\'s already done stays. A dated project step goes on the calendar by itself — don\'t add it again as an event; date a step only when it happens on a set day, and one session is one calendar entry (one event, or date only its first step).', parameters: { type: 'OBJECT', properties: {
+const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything; keep everything already in it unless he asks to take it off. Anything he wants added while planning (a shopping line, a reminder, a date) goes into the plan. Only what matters, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan), event_details (event_id: a calendar [id] already there, and only what\'s new: start, end, place, notes, people — a flyer\'s details for an event that\'s already on the calendar, never a second copy of it). To change one of his saved projects, change it — never rebuild it: edit_step (project_id, step_id, and only what changes: title, who, date, minutes, cost), add_step (project_id, title, after_step_id, and any of who, date, minutes, cost), remove_step (project_id, step_id), move_step (project_id, step_id, after_step_id — the step it goes right after; none to go first: "move the painter after the stucco"). When a project is being replaced by a different idea ("she wants to be Chucky now"), close_project it with a short reason and add the new project in its place (the same part_of_project_id); what\'s already done stays. A dated project step goes on the calendar by itself — don\'t add it again as an event; date a step only when it happens on a set day, and one session is one calendar entry (one event, or date only its first step).', parameters: { type: 'OBJECT', properties: {
   title: { type: 'STRING', description: 'what the plan is for, in a few words' },
   items: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-    kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack', 'edit_step', 'add_step', 'remove_step', 'move_step', 'close_project'] },
+    kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack', 'edit_step', 'add_step', 'remove_step', 'move_step', 'close_project', 'event_details'] },
     title: { type: 'STRING' }, why: { type: 'STRING', description: 'one short reason' },
     part_of_project_id: { type: 'STRING' }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' },
     steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' }, who: { type: 'STRING' }, date: { type: 'STRING', description: 'YYYY-MM-DD' }, end_date: { type: 'STRING', description: 'YYYY-MM-DD' } }, required: ['title'] } },
@@ -224,6 +225,7 @@ const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is sett
     start: { type: 'STRING' }, end: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD' },
     name: { type: 'STRING' }, label: { type: 'STRING' }, for_event: { type: 'STRING' },
     who: { type: 'STRING' }, date: { type: 'STRING', description: 'YYYY-MM-DD' }, end_date: { type: 'STRING', description: 'YYYY-MM-DD' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' },
+    event_id: { type: 'STRING' }, place: { type: 'STRING' }, notes: { type: 'STRING' }, people: { type: 'ARRAY', items: { type: 'STRING' } },
     after_step_id: { type: 'STRING' }, reason: { type: 'STRING', description: 'why a project is closed, in a few words: "Changed to Chucky"' },
   }, required: ['kind'] } },
 }, required: ['title', 'items'] } }
@@ -263,7 +265,7 @@ function localToIso(value, utcOffset, now) {
 // set_plan → the draft card (P3.25 phase 3): every item checked against what's really there, with
 // an id for its tick on the card; anything that can't be saved is left out, never guessed.
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
-function planCard(a, { events = [], utcOffset, now, projects = [] }) {
+function planCard(a, { events = [], utcOffset, now, projects = [], family = [] }) {
   const title = text(a.title)
   const raw = Array.isArray(a.items) ? a.items.slice(0, 20) : []
   const day = (v) => (typeof v === 'string' && ISO_DAY_RE.test(v) ? v : null)
@@ -345,6 +347,21 @@ function planCard(a, { events = [], utcOffset, now, projects = [] }) {
       if (i.kind === 'remove_step') { kept.push(withWhy({ kind: 'remove_step', project_id: project.id, step_id: step.id, project: project.title, title: step.title })); continue }
       if (!Object.keys(changes).length) continue
       kept.push(withWhy({ kind: 'edit_step', project_id: project.id, step_id: step.id, project: project.title, title: step.title, changes }))
+    } else if (i?.kind === 'event_details') {
+      // A photo's details for an event already on the calendar (P3.24): only what's new, on the real event.
+      const target = events.find((e) => e.id === i.event_id)
+      if (!target) continue
+      const changes = {}
+      const start = /T\d{2}:\d{2}/.test(String(i.start ?? '')) ? localToIso(i.start, utcOffset, now) : null
+      const end = /T\d{2}:\d{2}/.test(String(i.end ?? '')) ? localToIso(i.end, utcOffset, now) : null
+      if (start) changes.start = start
+      if (start && end && Date.parse(end) > Date.parse(start)) changes.end = end
+      if (text(i.place)) changes.place = text(i.place).slice(0, 200)
+      if (text(i.notes)) changes.notes = text(i.notes).slice(0, 600)
+      const people = (Array.isArray(i.people) ? i.people : []).map((n) => memberNamed(String(n), family)?.name).filter(Boolean)
+      if (people.length) changes.people = [...new Set(people)]
+      if (!Object.keys(changes).length) continue
+      kept.push(withWhy({ kind: 'event_details', event_id: target.id, title: target.title, changes }))
     } else if (i?.kind === 'move_step') {
       // Step 4 (P3.25): a saved step moved right after another of its project's steps, or first.
       const project = projects.find((p) => p.id === i.project_id)
@@ -437,7 +454,7 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     const from = typeof a.from_id === 'string' && ((events ?? []).some((e) => e.id === a.from_id && e.event_type === 'reminder') || (todos ?? []).some((t) => t.id === a.from_id)) ? a.from_id : null
     return { tool: 'plan_project', args: { title, aim_date: aim, from_event_id: from, steps } }
   }
-  if (call?.name === 'set_plan') return planCard(a, { events, utcOffset, now, projects })
+  if (call?.name === 'set_plan') return planCard(a, { events, utcOffset, now, projects, family })
   if (call?.name === 'add_prep_item') {
     const label = text(a.item)
     if (!label) return { error: 'I need to know what to get ready.' }

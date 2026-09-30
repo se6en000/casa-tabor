@@ -37,7 +37,8 @@ test('only the planning model can set a plan', () => {
   assert.equal(FULL_AI_TOOLS.some((t) => t.name === 'set_plan'), false)
   const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
   assert.match(tool.description, /whole plan/i)
-  assert.match(tool.description, /fewest/i)
+  // Only what matters — not the fewest (Jake, 2026-09-30: a photo can hold many things).
+  assert.match(tool.description, /Only what matters, each with a short why/)
 })
 
 test('a plan becomes one draft card: every item checked, with an id for its tick on the card', () => {
@@ -253,14 +254,7 @@ test('a plan can move a saved step after another one, or to the start', () => {
   assert.ok(tool.parameters.properties.items.items.properties.kind.enum.includes('move_step'))
 })
 
-test('the planning model is told how to fit a day’s time and money, and how to reorder', () => {
+test('the planning model is told how to reorder a saved project', () => {
   const system = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', planning: true, projects: [costumes] })
-  assert.match(system, /I've got two hours and \$100 Saturday"\), pick the open steps of his projects that fit it/)
   assert.match(system, /is move_step/)
-})
-
-test('what to work on with the time or money he has goes to the planning model (live: the fast model said it couldn’t tell)', () => {
-  const quick = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', projects: [costumes] })
-  assert.match(quick, /what to work on with the time or money he has \("I've got two hours and \$100 Saturday"\) — call think_it_through/)
-  assert.match(fullAiTools({ planning: false }).find((t) => t.name === 'think_it_through').description, /what to get done with the time or money he has/)
 })

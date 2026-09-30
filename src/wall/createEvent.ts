@@ -9,7 +9,7 @@ import { readActionResult, responseBody } from './assistantActions'
  * (people, place, drive time and Google sync all happen there). The time was chosen on
  * purpose, so a clash doesn't block it. `surface` labels where it came from in the traces.
  */
-export async function createEventByTouch(queryClient: QueryClient, args: Record<string, unknown>, surface: 'wall' | 'phone'): Promise<void> {
+export async function createEventByTouch(queryClient: QueryClient, args: Record<string, unknown>, surface: 'wall' | 'phone'): Promise<string | null> {
   const actionId = crypto.randomUUID()
   const requestArgs = { ...args, allow_calendar_conflicts: true }
   const { data, error } = await supabase.functions.invoke('execute-ai-action', {
@@ -27,4 +27,6 @@ export async function createEventByTouch(queryClient: QueryClient, args: Record<
   const result = readActionResult(await responseBody(data, error), requestArgs)
   if (result.kind !== 'done') throw new Error(result.kind === 'error' ? result.message : 'That clashes with something already on the calendar.')
   invalidateAllCalendarQueries(queryClient, result.eventId ?? '')
+  // Its id, for what goes onto it next (a scanned flyer's packing, P3.24).
+  return result.eventId ?? null
 }

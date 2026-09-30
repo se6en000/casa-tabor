@@ -27,6 +27,7 @@ import PhoneTodoSheet from './PhoneTodoSheet'
 import { todoSummary, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
 import { forViewer, type ComingUpAction, type ComingUpItem } from '../wall/comingUp'
 import type { ScannedItem } from '../utils/documentScanner'
+import type { ScanPlanItem } from './scan'
 import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
 import { keepFromSuggestion, keptFrom as keptFromOf, type KeepFrom } from '../wall/audience'
@@ -59,7 +60,9 @@ export interface PhoneViewProps {
   contacts?: SavedContact[]
   places?: SavedPlace[]
   /** Adding (the + → Type it): the calendar's own create call. */
-  createEvent?: (args: Record<string, unknown>) => Promise<void>
+  createEvent?: (args: Record<string, unknown>) => Promise<string | null | void>
+  /** Scan it's plan: what's new for events already there, and the packing (P3.24). */
+  applyPlan?: (title: string, items: ScanPlanItem[]) => Promise<void>
   /** Saves an edit from the event sheet (the same steps as the wall). */
   saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
   deleteEvent?: (event: EditableEvent) => Promise<void>
@@ -122,7 +125,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -566,7 +569,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },
       })}
       {scanOpen && scan && createEvent && (
-        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
+        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} applyPlan={applyPlan} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
       )}
       {addOpen && (
         <PhoneAddSheet
