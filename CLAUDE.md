@@ -21,7 +21,7 @@ node --test tests/<file>.test.mjs   # run a single test file
 npm run guardrails:check     # npx vitest run tests/guardrails/  (architecture guardrail tests, separate from npm test)
 npm run test:visual          # playwright visual regression (chromium)
 npm run test:visual:update   # update visual snapshots
-npm run test:visual:wall     # Family Wall screenshot guard (1920x1080, each posture, fixture data); also runs inside scripts/ship.sh
+npm run test:visual:wall     # Family Wall screenshot guard (1920x1080, each posture, fixture data); also runs inside scripts/ship.sh, after the deploy
 npm run test:visual:wall:update  # after an intended Wall visual change: regenerate, look at the PNGs, commit them
 npm run preview              # preview production build
 ```
@@ -58,6 +58,8 @@ bash scripts/supabase-cli.sh functions deploy FUNCTION_NAME --project-ref sjiejy
   ```bash
   bash scripts/ship.sh ["commit message"]     # tests -> gates+build (once) -> commit -> push both remotes ->
                                                # Vercel prod (prebuilt, no redundant remote rebuild) -> verify live SHA -> Pi kiosk refresh
+                                               # -> THEN the Wall/phone screenshot guard (exit 2 = live but screenshots changed:
+                                               #    update them, fix, or run the printed vercel rollback line)
   SKIP_KIOSK=1 bash scripts/ship.sh           # web-only deploy, skip the Pi
   ```
   This app is meant to be portable — built and shipped from any machine (Mac, this Pi itself, etc.). `scripts/ship.sh` adapts automatically: if it detects it's running ON the kiosk Pi itself (its own IP matches `PI_HOST`), it self-bootstraps SSH trust (adds its own key to its own `authorized_keys`, its own host key to `known_hosts`) so the refresh step can SSH to itself over the LAN — this only ever self-trusts the exact host it's running on, never a different unknown host. From any other machine it behaves like a normal remote SSH deploy.
