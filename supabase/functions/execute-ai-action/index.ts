@@ -1760,6 +1760,22 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'add_prep_item') {
+      // Get & pack by voice (2026-09-30): a line on the event's list, like one typed on its sheet.
+      const eventId = normalizeOptionalText(args.event_id, 80)
+      const label = normalizeOptionalText(args.label, 160)
+      if (!eventId || !label) throw new Error('A get & pack line needs its event and what to get ready')
+      const { data: last } = await sb.from('event_checklist_items').select('sort_order').eq('event_id', eventId).order('sort_order', { ascending: false }).limit(1).maybeSingle()
+      const { data, error } = await sb.from('event_checklist_items')
+        .insert({ event_id: eventId, label, sort_order: Number(last?.sort_order ?? -1) + 1 })
+        .select('id, event_id, label')
+        .single()
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, item: data, event_id: eventId, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'save_address') {
       // Directions (canvas 13c/13d): an address he told Casa, saved on that person, on a yes.
       const contactId = normalizeOptionalText(args.contact_id, 80)

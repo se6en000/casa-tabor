@@ -238,7 +238,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project', 'save_address'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project', 'save_address', 'add_prep_item'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -325,6 +325,8 @@ type TurnContext = {
   clarify: { question: string; candidates: TurnReferent[]; changes: Record<string, unknown> | null } | null
   referents: TurnReferent[]
   originalText: string | null
+  /** Get & pack by voice: a line for one event's list, as a card. */
+  prepCard?: { tool: string; args: Record<string, unknown>; about: TurnReferent | null } | null
   ms: number
 }
 
@@ -392,7 +394,9 @@ async function readTurn(
     const raw = await geminiJson(sb, buildTurnPrompt({ messages, draft, referents, upcoming, family, nowLine, utcOffset, nowIso: String(context?.currentDate ?? new Date().toISOString()) }), 'turn-context', cid, TURN_CONTEXT_TIMEOUT_MS, thinkingBudget)
     const asked = context?.conversationState as { activeEntityType?: string; pendingMutation?: { tool?: string } } | undefined
     const pendingChange = asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change'
-    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange })
+    const offsetMin = (() => { const m = /^([+-])(\d{2}):(\d{2})$/.exec(utcOffset); return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0 })()
+    const localToday = new Date(Date.parse(String(context?.currentDate ?? new Date().toISOString())) + offsetMin * 60000).toISOString().slice(0, 10)
+    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange, today: localToday })
     // An aside gets a second look that asks only who the words were said to (overnight queue 4: with a
     // card waiting, a new subject said to Casa was dropped). Unsure, or no answer: it's for Casa.
     if (resolution.act === 'aside') {
@@ -414,6 +418,13 @@ async function readTurn(
       out.card = { tool: draft.tool, args: applyDraftChanges(draft, resolution.draftChanges, { utcOffset, familyNames }), about: null }
     } else if (resolution.act === 'none' && resolution.closesDraft && draft) {
       out.cancelledDraft = { tool: draft.tool }
+    } else if (resolution.prep) {
+      // Get & pack by voice (bug report 2026-09-29; Jake 2026-09-30: "dry Liv's cleats"): a line on that
+      // event's list, as a card — ahead of a plain add ("can you add check Olivia's softball shoes…" was
+      // read as an add and became an all-day event).
+      const prep = resolution.prep
+      const card = fullAiCard({ name: 'add_prep_item', args: { event_id: prep.eventId, item: prep.item } }, { events: loaded, utcOffset, now: new Date() }) as { tool?: string; args?: Record<string, unknown> }
+      if (card.tool && card.args) out.prepCard = { tool: card.tool, args: card.args, about: loaded.find((e) => e.id === prep.eventId) ?? null }
     } else if (resolution.act === 'add') {
       const args = newItemArgs(resolution.newItem, { utcOffset, familyNames })
       if (args) out.card = { tool: 'create_event', args, about: null }
@@ -434,6 +445,15 @@ async function readTurn(
       }
     } else if (resolution.act === 'clarify' && resolution.clarifyQuestion) {
       out.clarify = { question: resolution.clarifyQuestion, candidates: (resolution.candidates as string[]).flatMap((id: string) => loaded.filter((e) => e.id === id)), changes: resolution.draftChanges as Record<string, unknown> | null }
+    } else if (resolution.search) {
+      // A whole-calendar question (any / every / the last time / the past; bug report 2026-09-27): searched
+      // here, then answered from what was found — the model alone answered from the next weeks, or said it
+      // could only see three weeks.
+      const searched = await searchCalendar(sb, resolution.search, { now: new Date(), utcOffset, family })
+      if (!('error' in searched)) {
+        const { text, mentioned, calendarSays } = await answerFromCalendar(sb, resolution.standalone ?? originalText, searched.found, context, cid, thinkingBudget)
+        out.answer = { text, about: null, mentioned, calendarSays }
+      }
     } else if (resolution.act === 'question' && (about || resolution.answerable)) {
       // About one item, or answerable from the next two weeks it's holding: answered from those facts.
       const focus = about ? [about, ...loaded.filter((e) => e !== about)] : [...referents, ...loaded.filter((e) => !referents.includes(e))]
@@ -445,6 +465,26 @@ async function readTurn(
     console.warn(`[ai-assistant][${cid}] turn context skipped: ${error instanceof Error ? error.message : String(error)}`)
     return { ...none, ms: Date.now() - started }
   }
+}
+
+/**
+ * The whole calendar, past and future (Jake, 2026-09-28: "search my whole calendar"): a day, a span, and/or
+ * words that must all appear in the title or place; no dates → two years either way. Used by the full
+ * model's find_events and, when the turn reader says a question needs it, by the server directly.
+ */
+async function searchCalendar(sb: TurnDb, args: Record<string, unknown> | undefined, { now, utcOffset, family }: { now: Date; utcOffset: string; family: Array<{ id: string; name: string }> }): Promise<{ from: string; to: string; found: TurnReferent[]; more: boolean } | { error: string }> {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  const range = findEventsRange(args, today)
+  if (!range) return { error: 'Dates must be YYYY-MM-DD' }
+  const dayAfter = new Date(Date.parse(`${range.to}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10)
+  let q = sb.from('events').select('id').is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
+    .gte('start_time', `${range.from}T00:00:00${utcOffset}`).lt('start_time', `${dayAfter}T00:00:00${utcOffset}`)
+  // Every word must appear, in the title or the place.
+  for (const w of range.words) q = q.or(`title.ilike.%${w}%,location_name.ilike.%${w}%`)
+  const { data, error } = await q.order('start_time').limit(30)
+  if (error) return { error: 'The calendar search failed' }
+  const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
+  return { from: range.from, to: range.to, found: await loadReferents(sb, ids, family), more: ids.length === 30 }
 }
 
 /** The conversation state after an answer: the one item it was about, or the items it named in order. */
@@ -1339,25 +1379,8 @@ Deno.serve(async (req) => {
           result = giftIdeasForViewer(data ?? [], { viewerMemberId: activeMemberId, page: context?.page ?? null, forName: call.args?.for ?? null, family })
         } else if (call.name === 'find_events') {
           // The whole calendar, past and future (Jake, 2026-09-28: "search my whole calendar").
-          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-          const range = findEventsRange(call.args, today)
-          if (!range) {
-            result = { error: 'Dates must be YYYY-MM-DD' }
-          } else {
-            const dayAfter = new Date(Date.parse(`${range.to}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10)
-            let q = sb.from('events').select('id').is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
-              .gte('start_time', `${range.from}T00:00:00${utcOffset}`).lt('start_time', `${dayAfter}T00:00:00${utcOffset}`)
-            // Every word must appear, in the title or the place.
-            for (const w of range.words) q = q.or(`title.ilike.%${w}%,location_name.ilike.%${w}%`)
-            const { data, error } = await q.order('start_time').limit(30)
-            if (error) {
-              result = { error: 'The calendar search failed' }
-            } else {
-              const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
-              const found = await loadReferents(sb, ids, family)
-              result = { from: range.from, to: range.to, events: describeFoundEvents(found, utcOffset), ...(ids.length === 30 ? { more: 'there are more — narrow the dates or words' } : {}) }
-            }
-          }
+          const searched = await searchCalendar(sb, call.args, { now, utcOffset, family })
+          result = 'error' in searched ? { error: searched.error } : { from: searched.from, to: searched.to, events: describeFoundEvents(searched.found, utcOffset), ...(searched.more ? { more: 'there are more — narrow the dates or words' } : {}) }
         } else if (call.name === 'search_family_notes') {
           // The same retrieval the old path loaded on every turn — here only when D asks.
           const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)
@@ -1460,6 +1483,10 @@ Deno.serve(async (req) => {
   if ((planningConversation || stepCard) && turnResolution?.act !== 'confirm_draft' && !turnContext?.cancelledDraft) {
     const planned = await runFullAi(buildDisplayText, false, true)
     if (planned) return { ...planned, payload: { ...planned.payload, layer: 'plan' } }
+  }
+  if (turnContext?.prepCard) {
+    const { tool, args, about } = turnContext.prepCard
+    return { status: 200, payload: { type: 'tool_action', tool, args, display_text: buildDisplayText(tool, args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: 'conversation.prep_item', correlation_id: cid } }
   }
   if (turnContext?.card) {
     const { tool, args, about } = turnContext.card
@@ -6272,6 +6299,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         ...(args.from_event_id ? ['Grows from the one already on your list.'] : []),
       ].join('\n')
     }
+    if (name === 'add_prep_item') return `Add to **${String(args.event_title ?? 'the event')}** · get & pack: ${String(args.label ?? '')}`
     if (name === 'save_address') return `Save **${String(args.name ?? 'their')}**’s address: ${String(args.address ?? '')}`
     if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
@@ -6848,6 +6876,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         day: turnResolution.day ?? null,
         directions_to: turnResolution.directionsTo ?? null,
         address_for: turnResolution.addressFor ?? null,
+        prep: turnResolution.prep ?? null,
+        search: turnResolution.search ?? null,
         ms: turnContext?.ms ?? null,
         rewritten: turnContext?.originalText !== turnResolution.standalone,
       }

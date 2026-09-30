@@ -144,10 +144,10 @@ Then the act — what they want (besides dropping the draft). Decide in this ord
 - "none": nothing else (they only called the draft off).
 - "revise_draft": changes or adds something to the draft above, which stays the same item — give "changes". If they say the draft is about the wrong item, that isn't a revision: it's a "change" (or "add") for the right one.
 - "confirm_draft": says yes / go ahead to the draft and nothing else.
-- "add": asks Casa to put something new on the calendar (an event or a reminder) — give "new_item".
+- "add": asks Casa to put something new on the calendar (an event or a reminder) — give "new_item". Something to get ready for a listed item ("add checking Liv's cleats are dry to tomorrow's game", "for tomorrow's get and pack, add …") is still "add", and also give "prep" for it.
 - "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id" and "changes". (Deleting is "other".) When the person corrects which item they meant, carry over the change they asked for before.
 - "clarify": asks to change something, but more than one calendar item fits what they said (for example several on the day they named, and nothing in the message tells them apart) — give "candidates" (their ids) and "question" (asking which, naming them). Never pick one when it's unclear; "my" or "the" doesn't make it clear.
-- "question": (asking what's on the Coming up list, or about gift ideas, is "other") asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web).
+- "question": (asking what's on the Coming up list, or about gift ideas, is "other") asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web). A question about any or every time something happens or happened, the last or first time, or anything before today — is false: those need the whole calendar, not the weeks listed.
 - "other": deleting things, and anything not about the family's plans — groceries, recipes, contacts, gift ideas, the Coming up list and its rules, general knowledge, small talk.
 Asking whether someone could take, drive, join or move a calendar item is suggesting a change: "change".
 
@@ -161,15 +161,17 @@ Dates: always take them from the Days list. In scheduling, pushing or moving som
 "day": when the latest message is about one calendar day — what's on it, whether anything is happening then, or to see it (a date, a weekday, a holiday, "that day" from the conversation): {"date": "YYYY-MM-DD", "date_basis": as above, "open": true only when they ask to see, open, show or pull up the day itself (on the wall, the screen, the calendar)} — else null (an add or a change, several days, a range, no day).
 "directions_to": when they want directions, a route, to navigate, or a link to go to one person or place — who or where, as they said it ("Alice", "Liv's coach", "Lake Lytal") — else null.
 "address_for": when the latest message gives the address of a person or place ("It's 412 Palm Way, Jupiter" after Casa asked for Mary's address; "Alice lives at 8255 West Lake Drive"): {"who": the person or place, as named in the conversation, "address": the address as said} — else null.
+"search": when the question is about any or every time something happens or happened, the last or first time, anything before today, or asks to find something on the calendar: {"words": one to three key words from it (a name, a thing, a place — "Gilbert", "vet", "yoga"), "from": "YYYY-MM-DD" or null, "to": "YYYY-MM-DD" or null} — dates only when they gave some — else null.
+"prep": when the latest message is something to get ready for an upcoming calendar item — check, dry, find, pack, bring, charge, wash, print, sign ("make sure Liv's cleats are dry", "find Owen's pink kindergarten shirt for the field trip", "don't forget Emme's violin tomorrow") — and one listed item is clearly what it's for (the person, the day, the kind of thing): {"item": a short line to tick off ("Dry Liv's cleats"), "event_id": its id in [brackets]} — else null (unclear which, or no such item: then it's an add).
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null}`
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null}`
 }
 
 const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
 /** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
-export function readTurnResolution(raw, { draft = null, knownIds = [], pendingChange = false } = {}) {
+export function readTurnResolution(raw, { draft = null, knownIds = [], pendingChange = false, today = null } = {}) {
   const r = raw && typeof raw === 'object' ? raw : {}
   let act = ACTS.includes(r.act) ? r.act : 'other'
   const standalone = typeof r.standalone === 'string' && r.standalone.trim() ? r.standalone.trim().slice(0, 600) : null
@@ -200,7 +202,23 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const directionsTo = act !== 'aside' && act !== 'add' && act !== 'change' && typeof r.directions_to === 'string' && r.directions_to.trim() ? r.directions_to.trim().slice(0, 120) : null
   const af = r.address_for && typeof r.address_for === 'object' ? r.address_for : null
   const addressFor = act !== 'aside' && af && typeof af.who === 'string' && af.who.trim() && typeof af.address === 'string' && af.address.trim() ? { who: af.who.trim().slice(0, 120), address: af.address.trim().slice(0, 300) } : null
-  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
+  // A whole-calendar question (any / every / the last time / the past): the server searches, then answers.
+  const sr = ['question', 'other'].includes(act) && r.search && typeof r.search === 'object' ? r.search : null
+  const day10 = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null)
+  // One date alone is an open end, never a single day ("from today" found only today's pill; "up to today"
+  // found nothing — live, 2026-09-30): the other side reaches two years out.
+  const shift = (d, years) => `${Number(d.slice(0, 4)) + years}${d.slice(4)}`
+  // "From today" with no end is the reader's default, not his words ("any appointment mentioning Gilbert"):
+  // the whole calendar, past included.
+  const sFrom = sr && !(today && day10(sr.from) === today && !day10(sr.to)) ? day10(sr.from) : null
+  const sTo = sr ? day10(sr.to) : null
+  const search = sr && typeof sr.words === 'string' && sr.words.trim()
+    ? { query: sr.words.trim().slice(0, 80), from: sFrom ?? (sTo ? shift(sTo, -2) : null), to: sTo ?? (sFrom ? shift(sFrom, 2) : null) }
+    : null
+  // Something to get ready for one listed event (get & pack by voice, 2026-09-30).
+  const pr = act !== 'aside' && r.prep && typeof r.prep === 'object' ? r.prep : null
+  const prep = pr && typeof pr.item === 'string' && pr.item.trim() && (knownIds ?? []).includes(pr.event_id) ? { item: pr.item.trim().slice(0, 160), eventId: pr.event_id } : null
+  return { act, closesDraft, answerable, standalone, search, prep, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
