@@ -1841,6 +1841,18 @@ async function handleGmailScan(req: Request): Promise<Response> {
     }).then(() => {}).catch(() => {})
   }
 
+  // Casa reads the email, phase 1 (2026-09-30): the shadow reader looks at what just came in — it skips
+  // what it has read, and shows nothing — in the background, so this scan answers as before.
+  const readerKey = Deno.env.get('EMAIL_READER_KEY')
+  if (readerKey) {
+    const reading = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-reader`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-casa-email-reader': readerKey },
+      body: JSON.stringify({ since_hours: 2, limit: 20 }),
+    }).catch(() => null)
+    ;(globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(reading)
+  }
+
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })
 }
 

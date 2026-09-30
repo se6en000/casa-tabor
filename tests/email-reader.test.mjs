@@ -62,3 +62,13 @@ test('attachments go to the model as the pages themselves: PDFs and images, up t
   assert.match(parts[3].text, /notes\.docx[\s\S]*Bring a snack/)
   assert.equal(parts.length, 4, 'over 20 MB in all: the rest are left out')
 })
+
+// Phase 1 keeps running on new mail (2026-09-30): each Gmail scan (every 15 minutes) hands what came in to
+// the shadow reader, in the background — so there's a real history to review in phase 2. Still shows nothing.
+test('each Gmail scan hands new mail to the shadow reader, in the background, with its key', async () => {
+  const fs = await import('node:fs')
+  const scan = fs.readFileSync(new URL('../supabase/functions/scan-gmail-inbox/index.ts', import.meta.url), 'utf8')
+  assert.match(scan, /functions\/v1\/email-reader/)
+  assert.match(scan, /'x-casa-email-reader': readerKey/)
+  assert.match(scan, /EdgeRuntime\?\.waitUntil/)
+})
