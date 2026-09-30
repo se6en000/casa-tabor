@@ -41,7 +41,7 @@ test('ai-assistant uses both: every hand-back is checked against the time left, 
   assert.doesNotMatch(run, /if \(handBack\) return null/, 'no hand-back without checking the time left')
   assert.doesNotMatch(run, /if \(!text && handBack\) return null/)
   assert.match(run, /mayHandBack\(remainingRequestBudgetMs\(\)\)/)
-  assert.match(run, /fullAiRequest\(\{ system, contents, tools: fullAiTools\(\{ planning \}\), retryAfterEmpty: retriedEmpty/)
+  assert.match(run, /fullAiRequest\(\{ system, contents, tools: fullAiTools\(\{ planning \}\), retryAfterEmpty: wordsOnlyNext/)
   assert.match(run, /finishReason/, 'the empty report says why Gemini stopped')
 })
 

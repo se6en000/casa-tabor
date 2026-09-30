@@ -170,6 +170,8 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
+import { mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
+import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
@@ -1239,7 +1241,7 @@ Deno.serve(async (req) => {
     const now = new Date(String(context?.currentDate ?? new Date().toISOString()))
     const { from, until } = fullAiWindow(now, utcOffset)
     // Everything D answers from, in its context rather than behind search tools.
-    const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows] = await Promise.all([
+    const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows, memoryRows] = await Promise.all([
       sb.from('family_members').select('id, name, full_name, role, can_drive').order('sort_order'),
       sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
         .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
@@ -1249,7 +1251,10 @@ Deno.serve(async (req) => {
       // Where each person lives, from one place (contact_directory: their address, their main place, or a place confirmed for them).
       sb.from('contact_directory').select('id, name, aliases, relationship, phone, email, address, place_name').eq('confirmed', true).is('dismissed_at', null).order('name').limit(120),
       sb.from('recipes').select('id, name').order('last_used_at', { ascending: false, nullsFirst: false }).limit(60),
+      // Casa's memory (phase 1): the facts and open thoughts, each with where it came from.
+      sb.from('casa_memory').select('id, kind, about_label, about_member_id, text, words, confidence, source, evidence, created_at').eq('status', 'active').order('about_label').order('created_at').limit(300),
     ])
+    const memory = (memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string }>
     const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
     const events = await loadReferents(sb, ((idRows.data ?? []) as Array<{ id: string }>).map((r) => r.id), family)
     const groceries = (groceryRows.data ?? []) as Array<{ id: string; name: string; quantity: string | null; checked: boolean }>
@@ -1298,7 +1303,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
@@ -1319,6 +1324,13 @@ Deno.serve(async (req) => {
     let shownRoute: { name: string; address: string; phone: string | null; maps: string } | null = null
     // The email review (canvas row 14): the screen opens it.
     let emailReview = false
+    // What the memory tools did this turn (dry runs report it; the trace keeps it).
+    const memoryCalls: Array<{ tool: string; args: Record<string, unknown>; result: unknown }> = []
+    let nudgedPromise = false
+    // Only the request right after the promise is sent back must call a tool.
+    let mustActNext = false
+    let wordsOnlyNext = false
+    const roundLog: Array<Record<string, unknown>> = []
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
     const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
     // Up to five rounds: a lookup's answer goes back to the model, which then answers or proposes; the
@@ -1331,12 +1343,16 @@ Deno.serve(async (req) => {
         const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify(fullAiRequest({ system, contents, tools: fullAiTools({ planning }), retryAfterEmpty: retriedEmpty, finalRound: round === FULL_AI_ROUNDS - 1 })),
+          body: JSON.stringify(fullAiRequest({ system, contents, tools: fullAiTools({ planning }), retryAfterEmpty: wordsOnlyNext, finalRound: round === FULL_AI_ROUNDS - 1, mustAct: mustActNext })),
           signal: controller.signal,
         }, { callPurpose: planning ? 'full-ai-plan' : 'full-ai', correlationId: cid, model, callIndex: round + 1 })
+        const forced = mustActNext
+        mustActNext = false
+        wordsOnlyNext = false
         const body = await res.json() as Record<string, unknown>
         const candidate = (body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> }; finishReason?: string }> | undefined)?.[0]
         parts = candidate?.content?.parts ?? []
+        if (dryRun) roundLog.push({ round, model, forced, parts: parts.map((p) => (p.functionCall ? `call:${(p.functionCall as { name: string }).name}` : p.thought ? 'thought' : 'text')), error: (body as { error?: { message?: string } }).error?.message ?? null })
         finishReason = candidate?.finishReason ?? null
       } catch {
         autoBugReport('timeout', `no answer within ${FULL_AI_TIMEOUT_MS / 1000} s`, { round })
@@ -1348,7 +1364,11 @@ Deno.serve(async (req) => {
       // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all: ask once more,
       // for words this time (fullAiRequest's retryAfterEmpty).
       if (!parts.length && !retriedEmpty) {
+        // Once, for words only — and only that one request: left on, words-only turned the tools off for the rest
+        // of the turn, so every later round could only say what it would do (open bug 8f58eddc: "I'll set that up
+        // for you", no card). A retry with the tools on came back empty again (tried 2026-09-30).
         retriedEmpty = true
+        wordsOnlyNext = true
         round -= 1
         continue
       }
@@ -1364,7 +1384,19 @@ Deno.serve(async (req) => {
         continue
       }
       const reads = parts.filter((p) => p.functionCall && READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
-      if (!reads.length) break
+      if (!reads.length) {
+        // Promised, not done (open bug 8f58eddc: "I'll set that up for you", "I'll remember that …" with no tool
+        // called): once, back to the model — call the tool now, or say plainly that nothing was saved.
+        const words = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+        if (!nudgedPromise && !memoryCalls.length && promisesAction(words) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
+          nudgedPromise = true
+          mustActNext = true
+          contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: 'You said you would do that, but you called no tool, so nothing has happened yet. Call the tool for it now.' }] })
+          parts = []
+          continue
+        }
+        break
+      }
       for (const p of reads) { const line = fullAiStatus(p.functionCall); if (line) emitStatus(line) }
       const answers = await Promise.all(reads.map(async (p) => {
         const call = p.functionCall as { name: string; args: Record<string, unknown> }
@@ -1380,6 +1412,29 @@ Deno.serve(async (req) => {
             result = { name: found.name, address: found.address, phone: found.phone, note: 'The route is on the screen.' }
           } else {
             result = found ? { error: `No address saved for ${found.missing}. Ask him for it, then save_address.` } : { error: 'No one and no place by that name in CONTACTS or PLACES.' }
+          }
+        } else if (call.name === 'remember' || call.name === 'forget' || call.name === 'undo_memory') {
+          // Casa's memory (phase 1): saved at once in his words, no card. A dry run saves nothing.
+          const speaker = family.find((m) => m.id === activeMemberId)?.name ?? null
+          if (!mayChangeMemory(activeMemberId, family)) result = { error: 'Only Jake and Kelly change what Casa remembers. Say so kindly.' }
+          else if (call.name === 'remember') {
+            const read = readRemember(call.args, { family, rows: memory })
+            if ('error' in read) result = { error: read.error }
+            else if (dryRun) result = { saved: true, dry_run: true, about: read.about, text: read.text, kind: read.kind, replaces: read.replaces }
+            else {
+              const { data, error } = await sb.rpc('casa_memory_remember', { p_about: read.about, p_member: read.memberId, p_text: read.text, p_kind: read.kind, p_words: read.words, p_replaces: read.replaces, p_said_by: speaker })
+              result = error ? { error: error.message } : { saved: true, id: (data as { id: string }).id, about: read.about, text: read.text, replaced: (data as { replaced?: string | null }).replaced ?? null }
+            }
+          } else {
+            const id = String(call.args?.id ?? '')
+            if (!/^[0-9a-f-]{36}$/.test(id)) result = { error: 'Which one? Use its [id] from WHAT CASA KNOWS.' }
+            else if (dryRun) result = { saved: true, dry_run: true, id }
+            else {
+              const { data, error } = call.name === 'forget'
+                ? await sb.rpc('casa_memory_forget', { p_id: id, p_status: call.args?.done === true ? 'done' : 'forgotten' })
+                : await sb.rpc('casa_memory_undo', { p_id: id })
+              result = error ? { error: error.message } : (data as Record<string, unknown>)
+            }
           }
         } else if (call.name === 'show_day') {
           shownDay = readShowDay(call.args) ?? shownDay
@@ -1405,6 +1460,7 @@ Deno.serve(async (req) => {
         } else {
           result = await runLookup(call.name, call.args ?? {}, lookupDeps).catch(() => ({ error: 'That lookup failed' }))
         }
+        if (['remember', 'forget', 'undo_memory'].includes(call.name)) memoryCalls.push({ tool: call.name, args: call.args ?? {}, result })
         if (result && typeof result === 'object' && 'error' in result) autoBugReport('lookup_failed', `${call.name}: ${String((result as { error: unknown }).error)}`, { tool: call.name, args: call.args })
         return { functionResponse: { name: call.name, response: result ?? { error: 'Unknown lookup' } } }
       }))
@@ -1439,7 +1495,7 @@ Deno.serve(async (req) => {
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), ...(emailReview ? { email_review: true } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), ...(emailReview ? { email_review: true } : {}), ...(memoryCalls.length ? { memory: memoryCalls } : {}), ...(nudgedPromise ? { promise_sent_back: true } : {}), ...(dryRun ? { rounds: roundLog } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
