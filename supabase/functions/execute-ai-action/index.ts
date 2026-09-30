@@ -1567,6 +1567,17 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
       }).catch((err) => console.warn('[execute-ai-action] delete-google-event warning:', err))
 
+      // The event first (its purge date comes from the events_purge_after_default trigger); its details
+      // only once that worked — a rejected delete had already stripped the dentist appointment's people,
+      // checklist and plan (bug report 2026-09-29 10:03 PM).
+      const { error } = await sb.from('events').update({
+        status: 'cancelled',
+        deleted_at: new Date().toISOString(),
+        purge_after: new Date(Date.now() + 30 * 86400000).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', args.id)
+      if (error) throw new Error(error.message)
+
       // Clean up child tables to prevent foreign key issues
       await Promise.allSettled([
         sb.from('event_members').delete().eq('event_id', args.id),
@@ -1577,13 +1588,6 @@ Deno.serve(async (req) => {
         sb.from('event_checklist_items').delete().eq('event_id', args.id),
         sb.from('event_action_items').delete().eq('event_id', args.id),
       ])
-
-      const { error } = await sb.from('events').update({
-        status: 'cancelled',
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq('id', args.id)
-      if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
@@ -1645,6 +1649,7 @@ Deno.serve(async (req) => {
         .update({
           status: 'cancelled',
           deleted_at: new Date().toISOString(),
+          purge_after: new Date(Date.now() + 30 * 86400000).toISOString(),
           updated_at: new Date().toISOString(),
         })
         .in('id', matchedIds)
