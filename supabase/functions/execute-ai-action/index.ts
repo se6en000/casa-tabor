@@ -1740,9 +1740,10 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message)
       const changes = ((data as { calendar?: Array<{ op: string; event_id: string }> } | null)?.calendar ?? [])
       const job = Promise.all(changes.map(async (c) => {
-        if (c.op === 'created') return sb.functions.invoke('create-google-event', { body: { event_id: c.event_id } }).catch(() => null)
         if (c.op === 'deleted') return sb.functions.invoke('delete-google-event', { body: { event_id: c.event_id } }).catch(() => null)
-        const res = await sb.functions.invoke('push-to-google', { body: { event_id: c.event_id } }).catch((e: Error) => ({ data: null, error: e }))
+        // A new event Google refused (Jake's first plan, 2026-09-29: the Google connection had expired)
+        // is queued like a failed push, so it goes through once Google works again.
+        const res = await sb.functions.invoke(c.op === 'created' ? 'create-google-event' : 'push-to-google', { body: { event_id: c.event_id } }).catch((e: Error) => ({ data: null, error: e }))
         const failed = res?.error?.message ?? (res?.data as { error?: string } | null)?.error
         if (failed) await sb.rpc('enqueue_google_sync_job', { p_event_id: c.event_id, p_audit_history_id: null, p_error: String(failed) })
       }))

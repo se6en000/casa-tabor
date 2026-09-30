@@ -137,3 +137,28 @@ test('a conversation that went to the planning model stays there', async () => {
   assert.match(hook, /data\?\.planning === true \? \{ planning: true \} : \{\}/, 'the app remembers it on the message')
   assert.match(hook, /planning: messages\.some\(\(message\) => message\.role === 'assistant' && message\.planning\) \|\| undefined/, 'and sends it with the next turn')
 })
+
+// Jake's first real plan, 2026-09-29: one Sunday build session came out as four dated steps (four
+// all-day calendar entries) plus a timed event, all on Oct 18. One session, one calendar entry.
+test('one session on the calendar once: a timed event covers its day; several steps on one day, only the first is dated', () => {
+  const card = call({ title: 'Jellyfish', items: [
+    { kind: 'project', title: 'Make the jellyfish', steps: [
+      { title: 'Gather supplies', date: '2026-10-11' },
+      { title: 'Decorate the dome', date: '2026-10-18' },
+      { title: 'Attach the tentacles', date: '2026-10-18' },
+      { title: 'Fitting', date: '2026-10-25' },
+      { title: 'Light test', date: '2026-10-25' },
+    ] },
+    { kind: 'event', title: 'Build the jellyfish', start: '2026-10-18T14:00', end: '2026-10-18T16:00' },
+  ] })
+  const steps = card.args.items[0].steps
+  assert.deepEqual(steps.map((s) => s.cal_start ?? null), ['2026-10-11', null, null, '2026-10-25', null])
+})
+
+test('a plan event Google refused is queued for a retry, not dropped', async () => {
+  const fs = await import('node:fs')
+  const exec = fs.readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
+  const part = exec.slice(exec.indexOf("if (tool === 'apply_plan' || tool === 'undo_plan')"), exec.indexOf("if (tool === 'add_gift_idea')"))
+  assert.match(part, /invoke\(c\.op === 'created' \? 'create-google-event' : 'push-to-google'/)
+  assert.doesNotMatch(part, /'create-google-event', \{ body: \{ event_id: c\.event_id \} \}\)\.catch\(\(\) => null\)/)
+})

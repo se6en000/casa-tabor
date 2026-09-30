@@ -142,6 +142,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   talkingRef.current = messages.length > 0
   const asidesRef = useRef(0)
   asidesRef.current = asidesInARow
+  // Planning (a plan on screen, or the planning model answering): the mic keeps listening throughout
+  // (Jake, 2026-09-29: "it should keep listening the whole time").
+  const planningRef = useRef(false)
+  planningRef.current = pending?.toolAction?.tool === 'apply_plan' || messages.some((m) => m.planning)
   // Something is waiting on the person: a card, "which one?", or a question back.
   const waitingOnYou = Boolean(pending) || Boolean(which) || /\?\s*$/.test(answer?.content ?? '')
 
@@ -202,6 +206,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     // yes, it stays on screen — he carries on with the mic or the wake word, or closes it.
     silenceDismissMs: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS,
     onAutoDismiss: () => {
+      if (planningRef.current && !reportingRef.current) { setRelisten((n) => n + 1); return }
       if (pendingRef.current || reportingRef.current || talkingRef.current) return
       onClose()
     },

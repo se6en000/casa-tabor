@@ -575,6 +575,21 @@ test('wall assistant: a plan — the draft beside the conversation, one card wit
   await expect(saved.getByText('Emme — light-up jellyfish is undone')).toBeVisible()
 })
 
+// Jake, 2026-09-29: "it stops listening after the plan is suggested, it should keep listening the whole
+// time". While a plan is on screen, quiet or room noise reopen the mic rather than turning it off.
+test('wall assistant: while a plan is on screen, the mic keeps listening through quiet and noise', async ({ page }) => {
+  await band(page, 'plan')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await expect.poll(() => starts(page)).toBeGreaterThan(0)
+  const before = await starts(page)
+  await mic(page, () => window.__mic.quiet())
+  await expect.poll(() => starts(page)).toBe(before + 1)
+  await expect(section.getByRole('button', { name: 'Stop listening' })).toBeVisible()
+  await mic(page, () => window.__mic.noise())
+  await expect.poll(() => starts(page)).toBe(before + 2)
+})
+
 test('wall assistant: a plan by voice — "yes" opens the Agree card, a second "yes" saves what’s ticked', async ({ page }) => {
   await band(page, 'plan')
   const section = page.getByRole('region', { name: 'Assistant' })

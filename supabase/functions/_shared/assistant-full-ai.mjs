@@ -197,7 +197,7 @@ export const THINK_IT_THROUGH = 'think_it_through'
 const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
 // The planning model sets the whole plan (P3.25 phase 3; canvas 12b): each call replaces it, so a
 // change is just the plan again — the card is revised in place, and nothing saves until he agrees.
-const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). A dated project step goes on the calendar by itself — don\'t add it again as an event.', parameters: { type: 'OBJECT', properties: {
+const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). A dated project step goes on the calendar by itself — don\'t add it again as an event; date a step only when it happens on a set day, and one session is one calendar entry (one event, or date only its first step).', parameters: { type: 'OBJECT', properties: {
   title: { type: 'STRING', description: 'what the plan is for, in a few words' },
   items: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
     kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack'] },
@@ -287,6 +287,17 @@ function planCard(a, { events = [], utcOffset, now, projects = [] }) {
       const target = text(i.for_event)
       if (!label || !target) continue
       kept.push(withWhy({ kind: 'pack', label, for_event: target }))
+    }
+  }
+  // One session, one calendar entry (Jake's first plan put four steps and an event on one Sunday):
+  // a timed event of this plan covers its day, and of several steps on one day only the first is dated.
+  const eventDays = new Set(kept.filter((i) => i.kind === 'event').map((i) => i.start.slice(0, 10)))
+  for (const item of kept) {
+    if (item.kind !== 'project') continue
+    const seen = new Set()
+    for (const st of item.steps) {
+      if (!st.cal_start) continue
+      if (eventDays.has(st.cal_start) || seen.has(st.cal_start)) { delete st.cal_start; delete st.cal_end } else seen.add(st.cal_start)
     }
   }
   // Ids for the ticks, then each pack line pointed at its event (a saved one, or one of this plan).
