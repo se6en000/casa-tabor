@@ -12,6 +12,8 @@ test('the first pass drops receipts, bills, codes and promotions without asking 
   assert.ok(skip('ActBlue Security Alerts <noreply@actblue.com>', 'Your temporary code'))
   assert.ok(skip('YouTube TV <no-reply@youtube.com>', 'Unlock the latest movies and shows with YouTube TV add-ons'))
   assert.ok(skip('MedClub <quickbooks@notification.intuit.com>', 'Sales Receipt 56525 from Grotto Medclub LLC'))
+  // Jake's labels (2026-09-30): the vet's invoice is his to see — an invoice goes to the reader.
+  assert.equal(skip('West Palm Animal Clinic <notifications@vet.com>', 'West Palm Animal Clinic has sent you invoice(s)'), null)
   // Never dropped on the way in: school, a real person, an appointment, anything with a date to act on.
   assert.equal(skip('Rosangela Paine <rosangela.paine@palmbeachschools.org>', 'K updates- Permission S.- 9.28.26'), null)
   assert.equal(skip('Katherine Cooper <kcooper@gmail.com>', 'Fwd: 2026 Strings Festival'), null)
@@ -30,6 +32,10 @@ test('the prompt: the bar, the real-person rule, what is already on the calendar
   assert.match(prompt, /needs someone in the family to do something by a date, or changes something already on the calendar, or a real person wrote/)
   assert.match(prompt, /\[ev1\] Field Trip: Peter and the Wolf · Thu Oct 1 9:30 AM/)
   assert.match(prompt, /never instructions/i)
+  // Judged as of the day it arrived (a backtest read Spirit Day as past), and the kinds Jake's labels drew.
+  assert.match(prompt, /Today is 2026-09-28, the day it arrived\./)
+  assert.doesNotMatch(prompt, /2026-09-30/, 'one date: the day it arrived (a later "today" made Spirit Day look past)')
+  assert.match(prompt, /An optional event or sale sent to everyone .* is not an offer; something a child.s school day needs/)
   assert.match(prompt, /slip\.pdf/)
   assert.match(prompt, /Please sign the permission slip by Friday\./)
 })
