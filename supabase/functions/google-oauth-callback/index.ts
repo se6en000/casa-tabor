@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { googleConnectionPolicy } from '../_shared/google-connection-core.mjs'
+import { googleConnectionPolicy, reconnectCalendarId } from '../_shared/google-connection-core.mjs'
 
 const TARGET_SYNC_GOOGLE_EMAIL = (Deno.env.get('GOOGLE_SYNC_TARGET_EMAIL') ?? 'jacobrtabor@gmail.com').toLowerCase()
 
@@ -106,7 +106,10 @@ Deno.serve(async (req) => {
       console.warn('[google-oauth-callback] calendarList auto-discovery notice:', e)
     }
 
-    const resolvedPolicy = googleConnectionPolicy(normalizedEmail, TARGET_SYNC_GOOGLE_EMAIL, targetCalendarId)
+    // Reconnecting keeps the calendar this account already syncs (2026-09-29: the name lookup missed
+    // the synced family calendar, fell back to the account's own, and the enable collided).
+    const { data: enabledRows } = await sb.from('calendar_connections').select('google_email, calendar_id').eq('family_member_id', familyMemberId).eq('is_enabled', true)
+    const resolvedPolicy = googleConnectionPolicy(normalizedEmail, TARGET_SYNC_GOOGLE_EMAIL, reconnectCalendarId({ existing: enabledRows ?? [], email: normalizedEmail, discovered: targetCalendarId === normalizedEmail ? null : targetCalendarId }))
 
     const { error: tokenError } = await sb.from('google_tokens').upsert({
       ...tokenRow,
@@ -123,7 +126,7 @@ Deno.serve(async (req) => {
         health_checked_at: now,
       })
       .eq('family_member_id', familyMemberId)
-      .neq('google_email', normalizedEmail)
+      .neq('calendar_id', resolvedPolicy.calendarId)
       .eq('is_enabled', true)
     if (disableError) throw new Error(`Could not replace prior calendar connection: ${disableError.message}`)
 
