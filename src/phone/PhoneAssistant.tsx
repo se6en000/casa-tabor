@@ -19,7 +19,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -29,6 +29,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   onOpenEvent: (id: string) => void
   /** A saved plan's line, opened where it lives (board 12d): a project, To do. */
   onOpenPlace?: (open: PlanOpen) => void
+  /** Words said first (a project's "Talk to Casa", P3.25). */
+  opening?: string | null
   /** The conversation and the drive lookup; the screenshot fixture passes canned ones. */
   useTurn?: typeof useAssistantTurn
   lookupDrive?: DriveLookup
@@ -43,6 +45,12 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const [agreeOpen, setAgreeOpen] = useState(false)
   const [savedFor, setSavedFor] = useState<string | null>(null)
   const savedMessage = savedFor ? messages.find((m) => m.id === savedFor) ?? null : null
+  const openedWith = useRef<string | null>(null)
+  useEffect(() => {
+    if (!opening || openedWith.current === opening) return
+    openedWith.current = opening
+    void send(opening)
+  }, [opening]) // eslint-disable-line react-hooks/exhaustive-deps
   const planRef = useRef(false)
   planRef.current = Boolean(plan)
   const askedRef = useRef(turn.agreeAsked ?? 0)

@@ -1059,6 +1059,16 @@ test('wall: a project card swipes through the projects inside it; a tap opens th
   await expect(page.getByRole('region', { name: 'Redo floorboards on the roof patio — project' })).toBeVisible()
 })
 
+// Jake, 2026-09-29: "where is the button to invoke AI on the project screen?" — Talk to Casa about it.
+test('wall: a project page opens Casa talking about that project', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  await page.getByRole('region', { name: 'Projects' }).getByRole('button', { name: 'Open Paint the house' }).click()
+  const paint = page.getByRole('region', { name: 'Paint the house — project' })
+  await paint.getByRole('button', { name: 'Talk to Casa about it' }).click()
+  await expect.poll(() => page.evaluate(() => window.__asked)).toBe('Let’s work on the Paint the house project.')
+})
+
 // Phase 4 (P3.25; Jake: "lets at least make it … so we know its closed/not active"): a project replaced
 // stays in its parent as a closed row, and its own page says so, with Reopen.
 test('wall: a closed project — CLOSED in its parent with the reason, and a banner with Reopen on its page', async ({ page }) => {

@@ -26,9 +26,12 @@ export default function WallFrame() {
   const [listenNonce, setListenNonce] = useState(0)
   const [pointAt, setPointAt] = useState<string | null>(null)
   const [openRequest, setOpenRequest] = useState<{ id?: string; project?: string; todo?: boolean; nonce: number } | null>(null)
-  const ask = useCallback(() => {
+  const [opening, setOpening] = useState<{ text: string; nonce: number } | null>(null)
+  // `say`: opened with words to send first (a project's "Talk to Casa about it", P3.25).
+  const ask = useCallback((say?: string) => {
     setBandOpen(true)
     setListenNonce((n) => n + 1)
+    setOpening(typeof say === 'string' && say ? { text: say, nonce: Date.now() } : null)
   }, [])
   const closeBand = useCallback(() => setBandOpen(false), [])
   const { onBandLed, onOutcome } = useWallLed(bandOpen, now)
@@ -40,8 +43,9 @@ export default function WallFrame() {
   )
   useWakeWord(bandOpen, false, true)
   useEffect(() => {
-    document.addEventListener('open-ai-chat', ask)
-    return () => document.removeEventListener('open-ai-chat', ask)
+    const open = () => ask()
+    document.addEventListener('open-ai-chat', open)
+    return () => document.removeEventListener('open-ai-chat', open)
   }, [ask])
   const band = bandOpen ? (
     <WallAssistantBand
@@ -59,6 +63,7 @@ export default function WallFrame() {
         setBandOpen(false)
         setOpenRequest({ id, nonce: Date.now() })
       }}
+      opening={opening}
       onOpenPlace={(open) => {
         setBandOpen(false)
         if (open.kind === 'event') setOpenRequest({ id: open.id, nonce: Date.now() })

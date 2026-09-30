@@ -70,7 +70,7 @@ export default function PhoneFrame() {
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
       findSimilar={findSimilar}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
-      assistant={({ onClose, onOpenEvent, onOpenPlace }) => <PhoneAssistant events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} />}
+      assistant={({ onClose, onOpenEvent, onOpenPlace, opening }) => <PhoneAssistant opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} />}
       keepFrom={keep}
       setKeptFrom={setKeptFrom}
       contacts={contacts}

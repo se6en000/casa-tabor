@@ -65,9 +65,11 @@ export interface WallAssistantBandProps {
   useSpeech?: typeof useSpeechInput
   /** A saved plan's line, opened where it lives (board 12d): a project, an event, To do. */
   onOpenPlace?: (open: PlanOpen) => void
+  /** Opened with something to say first (a project's "Talk to Casa about it", P3.25). */
+  opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, opening = null }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -242,6 +244,14 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     void speech.start()
   }, [listenNonce]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => void speech.stop(), []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Opened from a project ("Talk to Casa about it"): its words go first; the mic opens after the answer.
+  const openedWith = useRef<number | null>(null)
+  useEffect(() => {
+    if (!opening || openedWith.current === opening.nonce) return
+    openedWith.current = opening.nonce
+    stopRef.current()
+    void send(opening.text)
+  }, [opening]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => onPointAt(pointAt), [pointAt, onPointAt])
   useEffect(() => () => onPointAt(null), [onPointAt])
@@ -415,7 +425,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   return (
     <section
       aria-label="Assistant"
-      className="absolute bottom-0 left-0 z-10 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
+      className="absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()

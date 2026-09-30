@@ -65,7 +65,7 @@ export interface PhoneViewProps {
   /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
-  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void }) => ReactNode
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; opening?: string | null }) => ReactNode
   /** Keep from… (05g): who each event is kept from, and the change. */
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
@@ -76,10 +76,10 @@ export interface PhoneViewProps {
 }
 
 /** A project on the phone, loaded (the hook lives here, so it only runs while one is open). */
-function ProjectOnPhone({ id, todos, today, onBack, onOpenProject }: { id: string; todos: NonNullable<PhoneViewProps['todos']>; today: string; onBack: () => void; onOpenProject: (id: string) => void }) {
+function ProjectOnPhone({ id, todos, today, onBack, onOpenProject, onTalk }: { id: string; todos: NonNullable<PhoneViewProps['todos']>; today: string; onBack: () => void; onOpenProject: (id: string) => void; onTalk?: (say: string) => void }) {
   const { data } = todos.useProject(id)
   if (!data) return null
-  return <PhoneProject detail={data} today={today} onEdit={(op, args) => todos.act({ action: 'project_edit', id, op, args })} onBack={onBack} onOpenProject={onOpenProject} />
+  return <PhoneProject detail={data} today={today} onEdit={(op, args) => todos.act({ action: 'project_edit', id, op, args })} onBack={onBack} onOpenProject={onOpenProject} onTalk={onTalk ? () => onTalk(`Let’s work on the ${data.project.title} project.`) : undefined} />
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -128,6 +128,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
+  // Opened from a project ("Talk to Casa"): its words are said first.
+  const [askOpening, setAskOpening] = useState<string | null>(null)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
@@ -476,7 +478,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         {tab === 'week' && weekScreen}
         {tab === 'more' && moreScreen}
       </main>
-      {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} />}
+      {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />}
       {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
       <nav aria-label="Sections" className="flex shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px]">
         {tabButton(tabs[0])}
@@ -513,7 +515,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
       {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
       {askOpen && assistant?.({
-        onClose: () => setAskOpen(false),
+        onClose: () => { setAskOpen(false); setAskOpening(null) },
+        opening: askOpening,
         onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) },
         // A saved plan's project or To do (P3.25; board 12d).
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },

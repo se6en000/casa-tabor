@@ -446,6 +446,18 @@ test('phone: Week › To do — the projects shelf, Next up with what it takes, 
   await expect(kellys.getByRole('button', { name: 'To do', exact: true })).toHaveCount(0)
 })
 
+// Jake, 2026-09-29: "where is the button to invoke AI on the project screen?"
+test('phone: a project opens Ask Casa talking about it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&ask=empty')
+  const phone = page.getByTestId('phone-fixture')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'To do', exact: true }).click()
+  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
+  await phone.getByRole('region', { name: 'Paint the house — project' }).getByRole('button', { name: 'Talk to Casa' }).click()
+  const ask = phone.getByRole('region', { name: 'Ask Casa' })
+  await expect(ask.getByText('Let’s work on the Paint the house project.')).toBeVisible()
+})
+
 test('phone: a project — Now, Then, the project inside; a step’s details with the phone’s own inputs; ↑ Earlier; add a step; settings', async ({ page }) => {
   const phone = await openTodoPhone(page)
   await phone.getByRole('button', { name: 'Open Paint the house' }).click()

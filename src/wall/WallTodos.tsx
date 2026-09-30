@@ -15,6 +15,8 @@ import WallDatePicker from './WallDatePicker'
 
 export interface WallTodosProps {
   now: Date
+  /** Opens Casa talking about a project ("Talk to Casa about it", P3.25). */
+  onTalkAbout?: (say: string) => void
   list: TodoList
   onAct: (request: TodoAction) => Promise<void>
   onOpen?: (id: string) => void
@@ -136,7 +138,7 @@ function PastStepRow({ step, today, onAct }: { step: PastStep; today: string; on
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, upcoming = [], onStart, initialProject = null, useProject = useTodoProject }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -300,6 +302,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
           onEdit={(op, args) => onAct({ action: 'project_edit', id: projectId, op, args })}
           onBack={() => setProjectId(null)}
           onOpenProject={setProjectId}
+          onTalk={onTalkAbout}
         />
       )}
     </div>

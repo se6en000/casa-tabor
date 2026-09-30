@@ -17,6 +17,8 @@ export interface PhoneProjectProps {
   onEdit: (op: string, args?: Record<string, unknown>) => Promise<unknown>
   onBack: () => void
   onOpenProject: (id: string) => void
+  /** Opens Ask Casa talking about this project (P3.25 phase 4). */
+  onTalk?: () => void
 }
 
 const niceDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -207,7 +209,7 @@ function SettingsSheet({ detail, onEdit, onClose, onDeleted }: { detail: Project
   )
 }
 
-export default function PhoneProject({ detail: incoming, today, onEdit, onBack, onOpenProject }: PhoneProjectProps) {
+export default function PhoneProject({ detail: incoming, today, onEdit, onBack, onOpenProject, onTalk }: PhoneProjectProps) {
   const [pending, setPending] = useState<ProjectDetail | null>(null)
   const [seen, setSeen] = useState(incoming)
   if (seen !== incoming) {
@@ -257,7 +259,10 @@ export default function PhoneProject({ detail: incoming, today, onEdit, onBack, 
     <section aria-label={`${project.title} — project`} className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-phone-ground px-[20px] pb-[30px] pt-[max(18px,calc(env(safe-area-inset-top)+8px))] font-body text-wall-ink">
       <div className="flex items-center justify-between">
         <button type="button" onClick={detail.parent ? () => onOpenProject(detail.parent!.id) : onBack} className="h-[44px] border-0 bg-transparent p-0 text-phone-body font-semibold text-wall-ink">‹ {detail.parent ? detail.parent.title : 'To do'}</button>
-        <Answer label="Settings" onClick={() => setSettings(true)} />
+        <span className="flex gap-[8px]">
+          {onTalk && <Answer label="Talk to Casa" primary onClick={onTalk} />}
+          <Answer label="Settings" onClick={() => setSettings(true)} />
+        </span>
       </div>
       <span className="pt-[4px] text-phone-label font-bold tracking-[0.14em] text-wall-brass-ink">{project.yearly ? 'SEASONAL · EVERY YEAR' : 'PROJECT'}</span>
       <h1 className="m-0 font-display text-phone-title font-bold leading-tight">{project.title}</h1>

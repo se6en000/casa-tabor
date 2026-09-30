@@ -1,3 +1,4 @@
+import { Mic } from 'lucide-react'
 import { useEffect, useEffectEvent, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import WallChooser from './WallChooser'
 import { SEGMENT, type SegmentKind } from './projectStyle'
@@ -23,6 +24,8 @@ export interface WallProjectProps {
   onEdit: (op: string, args?: Record<string, unknown>) => Promise<unknown>
   onBack: () => void
   onOpenProject: (id: string) => void
+  /** Opens Casa talking about this project (P3.25 phase 4). */
+  onTalk?: (say: string) => void
 }
 
 type Typing = { what: StepInput | 'rename' | 'add' | 'child' | 'notes-project'; stepId?: string; at?: DropTarget; value: string } | null
@@ -50,7 +53,7 @@ function Grip({ title, onDown }: { title: string; onDown: (e: ReactPointerEvent<
   )
 }
 
-export default function WallProject({ detail: incoming, now, onEdit, onBack, onOpenProject }: WallProjectProps) {
+export default function WallProject({ detail: incoming, now, onEdit, onBack, onOpenProject, onTalk }: WallProjectProps) {
   // Changes show at once (the same edit applied here); the server's copy replaces it when it lands.
   const [pending, setPending] = useState<ProjectDetail | null>(null)
   const [seen, setSeen] = useState(incoming)
@@ -252,6 +255,8 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
           <button type="button" aria-label="Rename the project" onClick={(e) => { e.stopPropagation(); setTyping({ what: 'rename', value: project.title }) }} className="min-w-0 truncate border-0 bg-transparent p-0 text-left font-display text-wall-move font-semibold leading-none text-wall-ink">{typing?.what === 'rename' ? typing.value || ' ' : project.title}</button>
         </div>
         <div className="flex shrink-0 gap-[12px]">
+          {/* Change it by talking (P3.25 phase 4; Jake: "where is the button to invoke AI on the project screen?"). */}
+          {onTalk && <button type="button" onClick={(e) => { e.stopPropagation(); onTalk(`Let’s work on the ${project.title} project.`) }} className="flex h-[52px] items-center gap-[10px] rounded-full border-0 bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment"><Mic size={20} aria-hidden="true" />Talk to Casa about it</button>}
           <button type="button" onClick={(e) => { e.stopPropagation(); setSettings(true) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Project settings</button>
           {detail.parent && <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(detail.parent!.id) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Back to {detail.parent.title}</button>}
           <button type="button" onClick={(e) => { e.stopPropagation(); onBack() }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Back to the list</button>

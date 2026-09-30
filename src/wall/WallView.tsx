@@ -47,7 +47,8 @@ export interface WallViewProps {
   routines?: FamilyRoutine[]
   dayOffs?: DayOff[]
   /** Opens the assistant band (the mic button beside MT). */
-  onAsk?: () => void
+  /** Opens the assistant; with words, they're said first (a project's "Talk to Casa about it"). */
+  onAsk?: (say?: string) => void
   /** The band, drawn over the wall. */
   overlay?: ReactNode
   /** The item the assistant's answer is about: outlined like a selection. */
@@ -350,6 +351,7 @@ export default function WallView(props: WallViewProps) {
         onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
         week={weekStrip}
         initialProject={todoProject}
+        onTalkAbout={onAsk ? (say) => onAsk(say) : undefined}
         upcoming={comingUp?.items ?? []}
         onStart={comingUp?.start}
         {...(todos.useProject ? { useProject: todos.useProject } : {})}
