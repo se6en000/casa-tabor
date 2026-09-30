@@ -266,6 +266,16 @@ export default function PhoneProject({ detail: incoming, today, onEdit, onBack, 
       </div>
       <span className="pt-[4px] text-phone-label font-bold tracking-[0.14em] text-wall-brass-ink">{project.yearly ? 'SEASONAL · EVERY YEAR' : 'PROJECT'}</span>
       <h1 className="m-0 font-display text-phone-title font-bold leading-tight">{project.title}</h1>
+      {/* A project replaced ("Changed to Chucky", P3.25 phase 4): closed, kept, reopenable — as on the wall. */}
+      {project.status === 'dropped' && (
+        <div className="mt-[8px] flex items-center gap-[10px] rounded-[14px] border-2 border-solid border-wall-rust px-[12px] py-[8px]">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-phone-label font-bold tracking-[0.16em] text-wall-rust">CLOSED</span>
+            <span className="text-phone-detail">{project.closed_reason ? `${project.closed_reason.replace(/[.!]$/, '')}.` : 'This project is closed.'} Nothing here is on your list or calendar.</span>
+          </span>
+          <Answer label="Reopen" onClick={() => edit('reopen', {})} />
+        </div>
+      )}
       <span aria-hidden="true" className="my-[8px] flex h-[8px] gap-[3px]">{bar.map((k, i) => <span key={i} className={`h-[8px] flex-1 rounded-full ${SEGMENT[k]}`} />)}</span>
       <div className="grid grid-cols-2 gap-[8px]">
         {[
@@ -289,12 +299,14 @@ export default function PhoneProject({ detail: incoming, today, onEdit, onBack, 
       {showDone && done.map((s) => (
         <div key={s.id} className="flex min-h-[44px] items-center gap-[8px] text-wall-ink-2">
           <span className="text-phone-detail line-through">{s.child?.title ?? s.title}</span>
+          {s.child?.status === 'dropped' && <span className="text-phone-label font-bold tracking-[0.12em] text-wall-rust">CLOSED{s.child.closed_reason ? ` · ${s.child.closed_reason.toUpperCase()}` : ''}</span>}
+          {s.child && <button type="button" onClick={() => onOpenProject(s.child!.id)} className="ml-auto h-[44px] border-0 bg-transparent text-phone-label underline text-wall-ink-2">Open</button>}
           {!s.child && <button type="button" onClick={() => edit('undo_step', { step_id: s.id })} className="ml-auto h-[44px] border-0 bg-transparent text-phone-label underline text-wall-ink-2">Undo</button>}
         </div>
       ))}
       {groups.map((g, gi) => gi === 0 ? (
         <div key="now" className="mt-[4px] flex flex-col rounded-[16px] bg-wall-ink px-[10px] py-[8px]">
-          <span className="pb-[2px] text-phone-label font-bold tracking-[0.16em] text-wall-night-brass">NOW{project.phone === 'none' ? '' : ' · ON YOUR PHONE'}{g.length > 1 ? ' · SIDE BY SIDE' : ''}</span>
+          <span className="pb-[2px] text-phone-label font-bold tracking-[0.16em] text-wall-night-brass">{project.status === 'dropped' ? 'NOT GOING · CLOSED' : `NOW${project.phone === 'none' ? '' : ' · ON YOUR PHONE'}${g.length > 1 ? ' · SIDE BY SIDE' : ''}`}</span>
           {g.map((s) => row(s, true))}
         </div>
       ) : (

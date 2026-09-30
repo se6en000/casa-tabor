@@ -198,6 +198,11 @@ test('words not said to Casa (someone else in the room, the TV) are an aside: no
   assert.match(prompt, /"aside": the words clearly weren't said to Casa/)
   // Heard in the test runs 2026-09-26: "thanks. oh and we're out of milk btw" came back as an aside.
   assert.match(prompt, /Telling Casa something — a thanks, a fact, a need \("thanks, oh and we're out of milk btw"/)
+  // Overnight queue (4), 2026-09-29: "Owen changed his mind, he wants to be a skeleton now instead of a
+  // ghost" — said right after a card about Emme — was dropped as an aside: a new subject read as "nothing
+  // to do with the conversation". It's who the words are said to, not what they're about.
+  assert.match(prompt, /It's about who the words are said to, not their subject/)
+  assert.doesNotMatch(prompt, /have nothing to do with the conversation with Casa/)
 })
 
 test('a question about the draft on screen is answered with the draft in view ("does that clash with anything that day")', async () => {

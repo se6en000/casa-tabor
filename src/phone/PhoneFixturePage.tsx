@@ -86,7 +86,7 @@ export default function PhoneFixturePage() {
   const now = new Date(params.get('at') ?? '2026-09-25T07:12:00')
   const viewerId = params.get('viewer') ?? 'jake-id'
   // To do on Jake's phone (P3.22 step 7): the same list and projects as the wall's fixture.
-  const { todos } = useFixtureTodos({ stepEvent: params.get('stepEvent') === '1' })
+  const { todos } = useFixtureTodos({ stepEvent: params.get('stepEvent') === '1', closedInside: params.get('closedInside') === '1' })
   const ask = params.get('ask')
   const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})

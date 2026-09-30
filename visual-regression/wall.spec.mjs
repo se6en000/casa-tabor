@@ -683,6 +683,25 @@ test('wall: a gift idea can be corrected on the keyboard, or removed', async ({ 
   await expect(sheet.getByText('A soccer-team sweatshirt and T-shirt')).toHaveCount(0)
 })
 
+// Overnight queue (2), Jake 2026-09-29: "on a desktop, I want to use the native keyboard … not the Casa
+// version". Off the kiosk, a slim bar with a real field takes the typing; Enter is done.
+test('wall: on a desktop, the computer’s keyboard types — a slim bar, not Casa’s keys', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&keyboard=device')
+  await page.getByRole('button', { name: /^Coming up: / }).click()
+  await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
+  const sheet = page.getByRole('region', { name: 'Gift ideas' })
+  await sheet.getByRole('button', { name: 'Change “A fly-fishing reel”' }).click()
+  const keyboard = page.getByRole('region', { name: 'Keyboard' })
+  await expect(keyboard.getByRole('button', { name: 'q', exact: true })).toHaveCount(0)
+  await expect(keyboard.getByRole('textbox', { name: 'Type here' })).toBeFocused()
+  await page.keyboard.press('End')
+  await page.keyboard.type(' (Orvis)')
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-device-keyboard.png')
+  await page.keyboard.press('Enter')
+  await expect(keyboard).toHaveCount(0)
+  await expect(sheet.getByRole('button', { name: 'Change “A fly-fishing reel (Orvis)”' })).toBeVisible()
+})
+
 // Live on the kiosk 2026-09-27: nine items split by count ran the left column under the week strip.
 test('wall: Coming up with a long list — nothing runs under the week strip; "N more" shows the rest (board 07a)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&comingUp=live')

@@ -68,6 +68,9 @@ const IDEAS: GiftIdea[] = [{ id: 'gi-carl', for_name: 'Carl', idea: 'A fly-fishi
 // To do (board 09b), shaped like Jake's sorted list on 2026-09-28.
 const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') === '1'
 
+// The screenshots show Casa's keyboard, as on the kiosk; `?keyboard=device` shows a desktop's.
+Object.assign(window, { __casaKeyboard: new URLSearchParams(window.location.search).get('keyboard') ?? 'screen' })
+
 export default function WallFixturePage() {
   const fontsReady = useFixtureFonts()
   const now = new Date(new URLSearchParams(window.location.search).get('at') ?? '2026-09-25T07:12:00')

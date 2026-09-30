@@ -446,6 +446,25 @@ test('phone: Week › To do — the projects shelf, Next up with what it takes, 
   await expect(kellys.getByRole('button', { name: 'To do', exact: true })).toHaveCount(0)
 })
 
+// Overnight queue (3): a closed project on the phone, as on the wall — CLOSED in its parent, and a banner
+// with Reopen on its own page.
+test('phone: a closed project — CLOSED in its parent, a banner with Reopen on its page', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&closedInside=1')
+  const phone = page.getByTestId('phone-fixture')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'To do', exact: true }).click()
+  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
+  const paint = phone.getByRole('region', { name: 'Paint the house — project' })
+  await paint.getByRole('button', { name: /done$/ }).click()
+  await expect(paint.getByText('CLOSED · MARIO’S DOING IT WITH THE PAINTING')).toBeVisible()
+  await paint.getByRole('button', { name: 'Open', exact: true }).first().click()
+  const stucco = phone.getByRole('region', { name: 'Stucco cracks: seal and patch — project' })
+  await expect(stucco.getByText('CLOSED', { exact: true })).toBeVisible()
+  await expect(stucco.getByRole('button', { name: 'Reopen' })).toBeVisible()
+  await expect(stucco.getByText(/NOT GOING · CLOSED/)).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-project-closed.png')
+})
+
 // Jake, 2026-09-29: "where is the button to invoke AI on the project screen?"
 test('phone: a project opens Ask Casa talking about it', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&ask=empty')
