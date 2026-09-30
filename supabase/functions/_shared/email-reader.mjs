@@ -32,7 +32,8 @@ export function firstPass(email) {
  * @param {{ email: { from_email?: string | null, subject?: string | null, received_at?: string | null, body?: string | null }, family?: Array<{ name: string, role?: string | null }>, upcoming?: Array<{ id: string, title: string, when: string }>, today: string, attachments?: Array<{ filename: string, mimeType: string }>, topics?: string[], matters?: boolean }} input
  */
 export function buildReaderPrompt({ email, family = [], upcoming = [], today, attachments = [], topics = [], matters = false }) {
-  const people = family.map((m) => (m.role ? `${m.name} (${m.role})` : m.name)).join(', ')
+  // With Casa's memory (phase 3), each person comes with what's known about them (school, teacher, team).
+  const people = family.map((m) => m.line ?? (m.role ? `${m.name} (${m.role})` : m.name)).join(family.some((m) => m.line) ? '; ' : ', ')
   const cal = upcoming.map((e) => `- [${e.id}] ${e.title} · ${e.when}`).join('\n') || '- nothing'
   const files = attachments.map((a) => `- ${a.filename} (${a.mimeType})`).join('\n')
   const arrived = String(email.received_at ?? '').slice(0, 10) || today

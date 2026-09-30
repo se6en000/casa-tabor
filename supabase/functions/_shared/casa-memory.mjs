@@ -43,3 +43,38 @@ export function mayChangeMemory(viewerMemberId, family) {
   if (!viewerMemberId) return true
   return (family ?? []).find((m) => m.id === viewerMemberId)?.role === 'parent'
 }
+
+// Phase 3 — using it: whose a flyer, an email or an event is. Only sure facts are used.
+const sureOf = (facts, memberId) => (facts ?? []).filter((f) => f.kind !== 'thought' && f.confidence === 'sure' && f.about_member_id === memberId)
+
+/** "Liv (child) — Goes to Bak …; Plays softball … · words: Bak, Huskies, softball" for a prompt's family list. */
+export function personLine(member, facts) {
+  const mine = sureOf(facts, member.id)
+  const head = member.role ? `${member.name} (${member.role})` : member.name
+  if (!mine.length) return head
+  const words = [...new Set(mine.flatMap((f) => f.words ?? []))]
+  return `${head} — ${mine.map((f) => f.text).join('; ')}${words.length ? ` · words: ${words.join(', ')}` : ''}`
+}
+
+const escape = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The one family member whose sure facts' words appear (whole words) in the text; none or several: null. */
+export function memberFromWords(text, facts, family) {
+  const t = String(text ?? '')
+  if (!t.trim()) return null
+  const hits = (family ?? []).filter((m) => sureOf(facts, m.id).some((f) => (f.words ?? []).some((w) => w && new RegExp(`(^|[^\\p{L}\\p{N}])${escape(w)}($|[^\\p{L}\\p{N}])`, 'iu').test(t))))
+  return hits.length === 1 ? hits[0] : null
+}
+
+/**
+ * Who's going when he didn't say (Jake's bug report 2026-09-30 11:44: "it should assume that Jake is the person
+ * who's going and Jake is the driver … they should never be unassigned"): the one person the title's words point
+ * to, else whoever is speaking, else the admin. A parent going to their own thing drives.
+ */
+export function defaultPeople({ title, people = [], speakerId = null, facts = [], family = [] }) {
+  if (people.length) return { people, driver: null }
+  const pointed = memberFromWords(title, facts, family)
+  const who = pointed ?? family.find((m) => m.id === speakerId) ?? family.find((m) => m.is_admin) ?? null
+  if (!who) return { people: [], driver: null }
+  return { people: [who.name], driver: who.role === 'parent' && who.can_drive !== false ? who.name : null }
+}

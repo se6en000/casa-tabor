@@ -878,6 +878,12 @@ Deno.serve(async (req) => {
         throw new Error(error?.message ?? 'Event create was not confirmed by the database')
       }
       const event = { id: bundle.event_id as string, updated_at: bundle.updated_at as string }
+      // Who drives, when the card said (a parent going to their own thing, 2026-09-30): both legs.
+      if (typeof args.driver_name === 'string' && args.driver_name.trim()) {
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
+        const driver = resolveFamilyMemberByName(family ?? [], args.driver_name.trim())
+        if (driver) await sb.from('event_plan_overrides').upsert({ event_id: event.id, driver_overrides: { 0: driver.id, 1: driver.id }, updated_at: new Date().toISOString() }, { onConflict: 'event_id' })
+      }
 
       if (normalizedEventType !== 'reminder') {
         // Google sync used to be awaited here ("fire-and-forget can be killed before completion in

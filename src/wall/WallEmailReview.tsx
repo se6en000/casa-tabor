@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Mail } from 'lucide-react'
+import { useSwipeDown } from './useSwipeDown'
 import { headline, herEmails, lineDay, offerLines, postedHeader, showSkippedToday, whoAndWhen, type EmailAct, type EmailAnswer, type EmailOffer, type EmailReviewData, type SkippedEmail } from './emailReview'
 
 // Casa reads the email, phase 2 (canvas 14a/14b, approved by Jake 2026-09-30): "What came in by email?" —
@@ -98,7 +99,7 @@ export default function WallEmailReview({ data, act, onClose, computer = false, 
   }
 
   // Closing like the band: Esc; a swipe down on it; a tap outside (its own layer, under the band).
-  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  const swipe = useSwipeDown(onClose)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -112,14 +113,9 @@ export default function WallEmailReview({ data, act, onClose, computer = false, 
       <button type="button" aria-label="Close the email review" onClick={onClose} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
       <section
         aria-label="From email"
-        onPointerDown={(e) => { swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() } }}
-        onPointerUp={(e) => {
-          const s = swipeStart.current
-          swipeStart.current = null
-          if (s && e.clientY - s.y >= 140 && Math.abs(e.clientX - s.x) < (e.clientY - s.y) / 2 && Date.now() - s.t <= 900) onClose()
-        }}
+        {...swipe}
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-0 left-0 z-30 flex min-h-[560px] w-[1920px] gap-[48px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
+        className="absolute bottom-0 left-0 z-30 flex min-h-[560px] w-[1920px] touch-none gap-[48px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       >
         <div className="flex w-[170px] shrink-0 flex-col items-center gap-[14px]">
           <div className="flex h-[120px] w-[120px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass text-wall-night-brass"><Mail size={40} strokeWidth={1.6} /></div>

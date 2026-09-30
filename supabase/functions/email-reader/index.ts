@@ -13,6 +13,7 @@ import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { PLANNING_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { buildReaderPrompt, firstPass, readReaderDecision, readerParts } from '../_shared/email-reader.mjs'
 import { keptPostedBy, postedStatus, statusFor } from '../_shared/email-offers.mjs'
+import { personLine } from '../_shared/casa-memory.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -76,13 +77,16 @@ Deno.serve(async (req) => {
   }
   if (!todo.length) return json({ read: 0, decisions: {} })
 
-  const [{ data: llmRow }, { data: family }, { data: upcoming }, { data: tokens }, { data: kept }] = await Promise.all([
+  const [{ data: llmRow }, { data: familyRows }, { data: upcoming }, { data: tokens }, { data: kept }, { data: facts }] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
     sb.from('events').select('id, title, start_time').is('deleted_at', null).neq('status', 'cancelled').gte('start_time', new Date(Date.now() - 86400e3).toISOString()).lt('start_time', new Date(Date.now() + 45 * 86400e3).toISOString()).order('start_time').limit(250),
     sb.from('google_tokens').select('family_member_id, refresh_token, access_token, expires_at'),
     sb.from('email_keep_posted').select('id, kind, sender, topic, label'),
+    sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
   ])
+  // Casa's memory (phase 3): each person with what's known about them, so the reader can tell whose an email is.
+  const family = (familyRows ?? []).filter((m: { name: string }) => m.name !== 'Tabor Family').map((m: { id: string; name: string; role: string | null }) => ({ ...m, line: personLine(m, facts ?? []) }))
   const rules = (kept ?? []) as Array<{ id: string; kind: string; sender: string | null; topic: string | null; label: string }>
   const topics = rules.filter((r) => r.kind === 'topic' && r.topic).map((r) => r.topic as string)
   const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
@@ -125,7 +129,7 @@ Deno.serve(async (req) => {
       const isDocx = mime.includes('wordprocessingml') || /\.docx$/i.test(a.filename ?? '')
       files.push({ filename: a.filename ?? 'attachment', mimeType: mime, size: a.size ?? 0, ...(isDocx ? { text: docxText(data) ?? undefined } : { data }) })
     }
-    const prompt = buildReaderPrompt({ email, family: family ?? [], upcoming: calendar, today, attachments: files, topics, matters: !!body.matters })
+    const prompt = buildReaderPrompt({ email, family, upcoming: calendar, today, attachments: files, topics, matters: !!body.matters })
     let decision = readReaderDecision(null)
     let failure: string | null = null
     try {

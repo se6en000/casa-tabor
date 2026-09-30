@@ -12,6 +12,7 @@ import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { parseLastJsonObject } from '../_shared/json-output.mjs'
 import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
 import { plausibleDepartureIso, sanitizeStepTimeIso } from '../_shared/event-time-sanity.mjs'
+import { memberFromWords, personLine } from '../_shared/casa-memory.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -77,16 +78,19 @@ Deno.serve(async (req) => {
   const lockedFields = normalizeEnrichmentFieldList(locked_fields)
 
   // Load everything in parallel
-  const [eventRes, llmRes, familyRes, homeRes, placesRes] = await Promise.all([
+  const [eventRes, llmRes, familyRes, homeRes, placesRes, memoryRes] = await Promise.all([
     sb.from('events')
-      .select('id, title, description, start_time, end_time, all_day, location_name, address, lat, lng, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, category_locked, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
+      .select('id, title, description, start_time, end_time, all_day, event_type, location_name, address, lat, lng, source_member_id, leg_type, event_members(family_members(id, name, full_name, role)), event_enrichments(source_hash, category, category_locked, confidence, what_to_bring, outfit_suggestion, parking_notes, contact_name, contact_phone, cost_estimate, dietary_notes, meal_impact, prep_notes, departure_time, drive_time_mins, route_summary, weather_at_event, weather_summary)')
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
-    sb.from('family_members').select('id, name, full_name, role, phone, email, is_admin, show_on_home_sidebar').order('sort_order'),
+    sb.from('family_members').select('id, name, full_name, role, phone, email, is_admin, can_drive, show_on_home_sidebar').order('sort_order'),
     sb.from('settings').select('value').eq('key', 'home_config').single(),
     sb.from('saved_places').select('id, name, aliases, address, city, state, zip, category, notes').order('name'),
+    // Casa's memory (phase 3): who's who, so an event lands with the right person ("Huskies" is Liv's).
+    sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
   ])
+  const memoryFacts = (memoryRes.data ?? []) as Array<{ kind: string; about_member_id: string | null; text: string; words: string[]; confidence: string }>
 
   const event = eventRes.data
   if (eventRes.error || !event) return new Response(JSON.stringify({ error: eventRes.error?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
@@ -98,7 +102,7 @@ Deno.serve(async (req) => {
   }
   if (!llmConfig?.api_key) return new Response(JSON.stringify({ error: 'No LLM API key configured' }), { status: 422, headers: { ...CORS, 'content-type': 'application/json' } })
 
-  const rawFamilyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean; show_on_home_sidebar?: boolean | null }[]
+  const rawFamilyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean; can_drive?: boolean | null; show_on_home_sidebar?: boolean | null }[]
   const familyMembers = rawFamilyMembers.filter((m) => (m.show_on_home_sidebar ?? true) && m.name.toLowerCase() !== 'tabor family')
 
   const homeConfig = homeRes.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
@@ -228,6 +232,7 @@ Deno.serve(async (req) => {
       targetFields,
       lockedFields,
       resolvedDestination,
+      memoryFacts,
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -340,7 +345,9 @@ Deno.serve(async (req) => {
 
   // ── Guaranteed owner: server title detection → AI result → default owner ──
   const resolvedPrimary = serverDetectedPrimary
-    ?? (aiPrimaryRaw && nameToId[aiPrimaryRaw.toLowerCase()] ? aiPrimaryRaw : defaultOwnerName)
+    ?? (aiPrimaryRaw && nameToId[aiPrimaryRaw.toLowerCase()] ? aiPrimaryRaw : null)
+    ?? memberFromWords(`${titleStr} ${event.description ?? ''}`, memoryFacts, familyMembers)?.name
+    ?? defaultOwnerName
 
 
   // Enrichment may infer structured assignments, but the user-authored event title remains authoritative.
@@ -392,6 +399,17 @@ Deno.serve(async (req) => {
   if (memberInserts.length > 0) {
     await sb.from('event_members').delete().eq('event_id', event_id)
     await sb.from('event_members').insert(memberInserts)
+  }
+
+  // A parent going to their own thing drives (Jake's bug report 2026-09-30 11:44: "if Jake or Kelly is the
+  // person going, then Jake or Kelly should be the person driving") — only when no one has set a driver.
+  const primaryMember = familyMembers.find(m => m.id === primaryId) as { id: string; role?: string; can_drive?: boolean | null } | undefined
+  if (primaryMember?.role === 'parent' && primaryMember.can_drive !== false && !event.all_day && event.event_type !== 'reminder' && (event.location_name || event.address)) {
+    const { data: plan } = await sb.from('event_plan_overrides').select('event_id, driver_overrides').eq('event_id', event_id).maybeSingle()
+    const set = plan?.driver_overrides && Object.keys(plan.driver_overrides as Record<string, unknown>).length > 0
+    if (!set) {
+      await sb.from('event_plan_overrides').upsert({ event_id, driver_overrides: { 0: primaryMember.id, 1: primaryMember.id }, updated_at: new Date().toISOString() }, { onConflict: 'event_id' })
+    }
   }
 
   // For trip leg events (flights, hotels), preserve the structured title and existing location
@@ -644,15 +662,18 @@ async function enrichEvent(
   targetFields?: string[],
   lockedFields?: string[],
   resolvedDestination?: ResolvedDestination | null,
+  memoryFacts: Array<{ kind: string; about_member_id: string | null; text: string; words: string[]; confidence: string }> = [],
 ) {
   const start = new Date(event.start_time as string)
   const timeStr = (event.all_day as boolean)
     ? 'all day'
     : start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
 
+  // Each person with what Casa knows for sure about them (their school, team, teacher, the words that point to
+  // them), so the event's words tell whose it is.
   const familyRoster = familyMembers.length > 0
     ? familyMembers.map(m => {
-        const parts = [`${m.name} (${m.role})`]
+        const parts = [personLine(m, memoryFacts)]
         if (m.phone) parts.push(`phone: ${m.phone}`)
         return parts.join(', ')
       }).join('\n  ')

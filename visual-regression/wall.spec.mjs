@@ -910,6 +910,26 @@ test('wall: in a conversation, a tap reaches the wall under Casa, and what it op
   await expect(page.getByText('3 ready now')).toBeHidden()
 })
 
+// Jake, 2026-09-30: "swiping down on the AI drawer doesn't do anything" — on the touchscreen the browser cancels the
+// pointer on a drag, so the swipe is read from touch events (useSwipeDown).
+test('wall: a finger swiping down on the band closes it (touch events, the pointer cancelled as on the kiosk)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await expect(band).toBeVisible()
+  const touchSwipe = (from, to) => page.evaluate(([from, to]) => {
+    const el = document.elementFromPoint(from[0], from[1])
+    const touch = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y })
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: from[0], clientY: from[1], pointerId: 2, pointerType: 'touch' }))
+    el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [touch(from[0], from[1])], changedTouches: [touch(from[0], from[1])] }))
+    el.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 2, pointerType: 'touch' }))
+    el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [touch(to[0], to[1])] }))
+  }, [from, to])
+  await touchSwipe([1400, 700], [1405, 730])
+  await expect(band).toBeVisible()
+  await touchSwipe([1400, 700], [1410, 960])
+  await expect(band).toBeHidden()
+})
+
 test('wall: a swipe down on the band closes it; so does Esc on a computer', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   const band = page.getByRole('region', { name: 'Assistant' })

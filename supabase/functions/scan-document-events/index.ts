@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { personLine } from '../_shared/casa-memory.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -240,6 +241,12 @@ Deno.serve(async (req) => {
     }
 
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+    // Casa's memory (phase 3): what Casa knows for sure about each person, so a "Kindergarten" flyer is Owen's.
+    const [{ data: people }, { data: facts }] = await Promise.all([
+      sb.from('family_members').select('id, name, role').order('sort_order'),
+      sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
+    ])
+    const whoIsWho = (people ?? []).filter((m: { name: string }) => m.name !== 'Tabor Family').map((m: { id: string; name: string; role: string | null }) => `- ${personLine(m, facts ?? [])}`).join('\n')
     const { data: cfgRows, error: cfgError } = await sb.from('settings').select('value').eq('key', 'llm_config').limit(1)
     if (cfgError) throw new Error(cfgError.message)
     const config = resolveBackgroundLlmConfig(cfgRows?.[0]?.value) as LlmConfig
@@ -282,6 +289,8 @@ EXTRACTION RULES:
    - In "raw_text_snippet", quote the exact line/phrase from the paper that produced this item.
 5. HOUSEHOLD MEMBERS:
    - If any member from (${familyMembersList}) is named, assign them in "suggested_member_name".
+   - Otherwise, when what the document says points to one of them (their school, grade, class, teacher, team), assign that one. What Casa knows about each:
+${whoIsWho || '   (nothing yet)'}
 
 RETURN STRICT JSON matching this exact schema:
 {

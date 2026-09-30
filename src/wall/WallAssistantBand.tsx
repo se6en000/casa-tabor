@@ -9,7 +9,8 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, isSwipeDown, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { useSwipeDown } from './useSwipeDown'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -271,7 +272,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const [closeArmedAt, setCloseArmedAt] = useState(0)
   // The pill tapped open (a wake-word open with nothing heard yet).
   const [expanded, setExpanded] = useState(false)
-  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  // A swipe down closes the band (touch and mouse; useSwipeDown).
   const dismiss = (how: 'tap_outside' | 'swipe_down' | 'escape') => {
     const waiting = Boolean(pending?.toolAction)
     if (dismissStep({ how, waiting, armedAt: closeArmedAt, now: Date.now() }) === 'arm') {
@@ -281,6 +282,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     emitAssistantTrace('wall_band_dismissed', voiceTrace.current, { payload: { how, open_ms: Date.now() - openedAt.current, heard_words: messages.some((m) => m.role === 'user'), waiting, via_wake: viaWake } })
     onClose()
   }
+  const swipe = useSwipeDown(() => dismiss('swipe_down'))
   useEffect(() => {
     if (!closeArmedAt) return
     const timer = window.setTimeout(() => setCloseArmedAt(0), 4000)
@@ -502,13 +504,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     {tapOutsideCloses(messages.length) && <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />}
     <section
       aria-label="Assistant"
-      onPointerDown={(e) => { swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() } }}
-      onPointerUp={(e) => {
-        const start = swipeStart.current
-        swipeStart.current = null
-        if (start && isSwipeDown(start, { x: e.clientX, y: e.clientY, t: Date.now() })) dismiss('swipe_down')
-      }}
-      className="absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
+      {...swipe}
+      className="absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()

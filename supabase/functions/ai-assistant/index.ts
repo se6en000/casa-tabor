@@ -170,7 +170,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
+import { defaultPeople, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
@@ -1232,6 +1232,18 @@ Deno.serve(async (req) => {
   // `handBack`: as the hybrid's layer 2, a time-out, an empty answer or a change that fails a hard
   // check returns null, and the turn carries on down the old path as before.
   // `startPlanning`: a plan is on screen (P3.25), so the planning model answers from the start.
+  // A new event with no one on it (Jake's bug report 2026-09-30 11:44: "they should never be unassigned"): whoever
+  // its words point to in Casa's memory, else whoever is speaking, else the admin; a parent going drives.
+  const withWho = async (tool: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    if (tool !== 'create_event' || (Array.isArray(args.members) && args.members.length)) return args
+    const [{ data: fam }, { data: facts }] = await Promise.all([
+      sb.from('family_members').select('id, name, role, can_drive, is_admin').neq('name', 'Tabor Family').order('sort_order'),
+      sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
+    ])
+    const d = defaultPeople({ title: String(args.title ?? ''), people: [], speakerId: activeMemberId, facts: facts ?? [], family: fam ?? [] })
+    const reminder = args.event_type === 'reminder'
+    return { ...args, ...(d.people.length ? { members: d.people } : {}), ...(d.driver && !reminder && args.all_day !== true ? { driver_name: d.driver } : {}) }
+  }
   const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false, startPlanning = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
     const config = await loadLlmConfig(sb)
     const apiKey = String(config?.api_key ?? '')
@@ -1480,9 +1492,10 @@ Deno.serve(async (req) => {
       const cards = changes as Array<{ tool: string; args: Record<string, unknown> }>
       if (cards.length > 1) {
         // Several changes at once (a flyer with three dates): one batch, each still needing a yes.
-        return { status: 200, payload: { type: 'tool_action_batch', actions: cards.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: buildDisplayText(c.tool, c.args) })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
+        const filled = await Promise.all(cards.map(async (c) => ({ tool: c.tool, args: await withWho(c.tool, c.args) })))
+        return { status: 200, payload: { type: 'tool_action_batch', actions: filled.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: buildDisplayText(c.tool, c.args) })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
       }
-      const card = cards[0]
+      const card = { tool: cards[0].tool, args: await withWho(cards[0].tool, cards[0].args) }
       const about = events.find((e) => e.id === card.args.id) ?? null
       // A plan (P3.25 phase 3) comes with what the planning model said about it, shown above the draft.
       const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
@@ -1566,7 +1579,8 @@ Deno.serve(async (req) => {
     return { status: 200, payload: { type: 'tool_action', tool, args, display_text: buildDisplayText(tool, args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: 'conversation.prep_item', correlation_id: cid } }
   }
   if (turnContext?.card) {
-    const { tool, args, about, note } = turnContext.card
+    const { tool, about, note } = turnContext.card
+    const args = await withWho(tool, turnContext.card.args)
     return {
       status: 200,
       payload: {
@@ -6357,7 +6371,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   function buildDisplayText(name: string, args: Record<string, unknown>): string {
     // `context`, not the later `utcOffset` const: this is called before that line runs.
     const utcOffsetForDisplay = (context?.utcOffset as string | undefined) ?? '-04:00'
-    if (name === 'create_event') return `Create: **${args.title}** · ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`
+    if (name === 'create_event') {
+      const who = Array.isArray(args.members) && args.members.length ? ` · for ${(args.members as string[]).join(', ')}` : ''
+      const drives = typeof args.driver_name === 'string' && args.driver_name ? ` · ${args.driver_name} drives` : ''
+      return `Create: **${args.title}** · ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}${who}${drives}`
+    }
     if (name === 'add_to_coming_up') return `Add to Coming up: **${String(args.title ?? '')}** · ${String(args.step ?? '')} · ${Number(args.notice_days)} day${Number(args.notice_days) === 1 ? '' : 's'} ahead`
     if (name === 'add_coming_up_rule') return args.off === true
       ? `Coming up rule: **never flag "${String(args.match ?? '')}"**`
