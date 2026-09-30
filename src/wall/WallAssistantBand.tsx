@@ -9,7 +9,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { answerDay, bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandState, cardText, dismissStep, isSwipeDown, nextStep, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -258,6 +258,37 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }, [opening]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => onPointAt(pointAt), [pointAt, onPointAt])
+  // Dismissing without the small button (Jake, 2026-09-30: "if the AI gets tripped … I need a non voice way to
+  // quickly dismiss it"): a tap outside, a swipe down, Esc. Each is logged — how, how long it was open, whether
+  // any words were heard — so false wake-word trips can be learned from.
+  const openedAt = useRef(Date.now())
+  const [closeArmedAt, setCloseArmedAt] = useState(0)
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  const dismiss = (how: 'tap_outside' | 'swipe_down' | 'escape') => {
+    const waiting = Boolean(pending?.toolAction)
+    if (dismissStep({ how, waiting, armedAt: closeArmedAt, now: Date.now() }) === 'arm') {
+      setCloseArmedAt(Date.now())
+      return
+    }
+    emitAssistantTrace('wall_band_dismissed', voiceTrace.current, { payload: { how, open_ms: Date.now() - openedAt.current, heard_words: messages.some((m) => m.role === 'user'), waiting } })
+    onClose()
+  }
+  useEffect(() => {
+    if (!closeArmedAt) return
+    const timer = window.setTimeout(() => setCloseArmedAt(0), 4000)
+    return () => window.clearTimeout(timer)
+  }, [closeArmedAt])
+  const dismissRef = useRef(dismiss)
+  dismissRef.current = dismiss
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (e.key !== 'Escape' || (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'))) return
+      dismissRef.current('escape')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // The day the answer is about (Jake, 2026-09-29: "Can you open this day for me"): opened when he
   // asked to see it, else offered as a button.
   const day = answerDay(answer, new Date())
@@ -436,14 +467,28 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }
 
   return (
+    <>
+    {/* Anywhere outside the band closes it (a card waiting asks once more first). */}
+    <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
     <section
       aria-label="Assistant"
+      onPointerDown={(e) => { swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() } }}
+      onPointerUp={(e) => {
+        const start = swipeStart.current
+        swipeStart.current = null
+        if (start && isSwipeDown(start, { x: e.clientX, y: e.clientY, t: Date.now() })) dismiss('swipe_down')
+      }}
       className="absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()
       }}
     >
+      {closeArmedAt > 0 && (
+        <div role="status" className="absolute left-1/2 top-[-64px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[24px] py-[10px] text-wall-detail font-semibold text-wall-on-pigment">
+          Tap again to close — the card isn’t saved.
+        </div>
+      )}
       {/* The top edge: always a brass line, so the band never blends into the calendar; it
           breathes while Casa listens and a light sweeps across it while Casa thinks. */}
       <div aria-hidden="true" className="pointer-events-none absolute left-[32px] right-[32px] top-0 h-[6px] overflow-hidden rounded-b-full">
@@ -652,5 +697,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           onUndo={() => void undoPlan?.(savedFor!)} onDone={() => setSavedFor(null)} />
       )}
     </section>
+    </>
   )
 }

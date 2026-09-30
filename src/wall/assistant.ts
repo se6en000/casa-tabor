@@ -176,3 +176,20 @@ export function withoutAsides<T extends Pick<AIMessage, 'role'> & { aside?: bool
   }
   return { messages: kept, asidesInARow }
 }
+
+/**
+ * Dismissing Casa without the small button (Jake, 2026-09-30): a tap outside, a swipe down, Esc. With a card
+ * waiting for a yes, a tap outside first asks ("Tap again to close — the card isn't saved"); a second tap
+ * within 4 seconds closes. A swipe down or Esc is on purpose, and closes.
+ */
+export function dismissStep({ how, waiting, armedAt, now }: { how: 'tap_outside' | 'swipe_down' | 'escape'; waiting: boolean; armedAt: number; now: number }): 'close' | 'arm' {
+  if (how !== 'tap_outside' || !waiting) return 'close'
+  return armedAt > 0 && now - armedAt <= 4000 ? 'close' : 'arm'
+}
+
+/** A swipe down on the band: at least 140 px down, more down than sideways, within 0.9 s. */
+export function isSwipeDown(start: { x: number; y: number; t: number }, end: { x: number; y: number; t: number }): boolean {
+  const dy = end.y - start.y
+  const dx = Math.abs(end.x - start.x)
+  return dy >= 140 && dx < dy / 2 && end.t - start.t <= 900
+}

@@ -878,6 +878,45 @@ test('wall on a computer: directions are a link that opens Google Maps, and Call
   await expect(band.getByRole('img', { name: /QR code/ })).toHaveCount(0)
 })
 
+// Dismissing Casa without the small button (Jake, 2026-09-30: "I can't be forced to only click the small button
+// to close, I need an easier way"): a tap outside, a swipe down, Esc; a card waiting asks once more first.
+test('wall: a tap anywhere outside the band closes it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await expect(band).toBeVisible()
+  await page.mouse.click(960, 150)
+  await expect(band).toBeHidden()
+})
+
+test('wall: with a card waiting, a tap outside asks first; a second tap closes', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=add')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await expect(band).toBeVisible()
+  await page.mouse.click(960, 150)
+  await expect(page.getByRole('status').filter({ hasText: 'Tap again to close — the card isn’t saved.' })).toBeVisible()
+  await expect(band).toBeVisible()
+  await page.mouse.click(960, 150)
+  await expect(band).toBeHidden()
+})
+
+test('wall: a swipe down on the band closes it; so does Esc on a computer', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  const swipe = (from, to) => page.evaluate(([from, to]) => {
+    const el = document.elementFromPoint(from[0], from[1])
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: from[0], clientY: from[1], pointerId: 1 }))
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: to[0], clientY: to[1], pointerId: 1 }))
+  }, [from, to])
+  await swipe([1400, 700], [1410, 720])
+  await expect(band).toBeVisible()
+  await swipe([1400, 700], [1410, 950])
+  await expect(band).toBeHidden()
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeHidden()
+})
+
 test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
