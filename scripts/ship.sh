@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # One-command ship: tests -> gates+build (once) -> commit -> push -> Vercel prod
-# (prebuilt, so Vercel's machine never rebuilds from scratch) -> Pi kiosk refresh.
+# (prebuilt, so Vercel's machine never rebuilds from scratch) -> Pi kiosk refresh
+# -> then the Wall/phone screenshot guard, after it's live.
+#
+# The screenshot guard grew to ~5 minutes and held every deploy behind it (390 s
+# ships, 2026-09-29). It checks looks, not correctness, so it runs after the
+# deploy: live in about a minute, and a changed screenshot is reported (exit 2)
+# to fix or roll back, never silently kept.
 #
 # Usage:
 #   scripts/ship.sh ["commit message"]
@@ -32,40 +38,44 @@ fail() {
 START=$(date +%s)
 PRE_BUILD_SHA=$(git rev-parse HEAD)
 
-step "1-2/6 Tests + gates/build, side by side (tokens/style/certify/types/vite via vercel build)"
+# A test server left on the screenshot port (an interrupted run) makes the guard fail to start.
+if command -v fuser >/dev/null 2>&1 && fuser 4175/tcp >/dev/null 2>&1; then
+  fuser -k 4175/tcp >/dev/null 2>&1 || true
+  printf '  \033[33m! stopped a leftover test server on port 4175\033[0m\n'
+fi
+
+step "1-2/7 Tests + gates/build, side by side (tokens/style/certify/types/vite via vercel build)"
 # Tests don't depend on the build, so they run in the background while the
 # build runs; either failing stops the ship before anything is committed.
 TEST_LOG="$(dirname "$LOG")/tests.log"
 npm test >"$TEST_LOG" 2>&1 &
 TEST_PID=$!
-# Family Wall screenshot guard (P2.6), alongside. Baselines are per platform;
-# on a machine without them (e.g. a Mac) it's skipped with a notice.
+# Family Wall screenshot guard (P2.6): decided here, run after the deploy (step 7).
+# Baselines are per platform; on a machine without them (e.g. a Mac) it's skipped with a notice.
 WALL_LOG="$(dirname "$LOG")/wall-visual.log"
-WALL_PID=""
+WALL_RUN=0
 # Only when this ship touches something that can change how the Wall looks.
 WALL_PATHS='^(src/wall/|src/phone/|src/App\.tsx|visual-regression/phone|src/lib/|src/index\.css|src/design-system/|src/generated/|src/main\.tsx|tests/fixtures/wall|visual-regression/wall|playwright\.wall|package(-lock)?\.json)'
 WALL_TOUCHED=$({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E "$WALL_PATHS" | head -1 || true)
 if [ -z "$WALL_TOUCHED" ]; then
   : # nothing Wall-visible changed
 elif ls visual-regression/wall.spec.mjs-snapshots/*-"$(node -p process.platform)".png >/dev/null 2>&1; then
-  npm run test:visual:wall >"$WALL_LOG" 2>&1 &
-  WALL_PID=$!
+  WALL_RUN=1
 else
   printf '  \033[33m! no Wall screenshot baselines for this platform; guard skipped\033[0m\n'
 fi
 npx vercel link --yes --scope casa-projects --project casa-tabor >>"$LOG" 2>&1 || true
+# What production serves now, for the rollback line if the screenshots come back changed (best effort).
+PREV_DEPLOY_FILE="$(dirname "$LOG")/prev-deploy"
+( npx vercel inspect casa-tabor.vercel.app --scope casa-projects 2>&1 | grep -oE 'dpl_[A-Za-z0-9]+' | head -1 >"$PREV_DEPLOY_FILE" ) &
 if npx vercel build --prod --yes >>"$LOG" 2>&1; then BUILD_RC=0; else BUILD_RC=$?; fi
 if wait "$TEST_PID"; then TEST_RC=0; else TEST_RC=$?; fi
 if [ "$TEST_RC" -ne 0 ]; then LOG="$TEST_LOG"; fail "tests failed"; fi
-if [ -n "$WALL_PID" ] && ! wait "$WALL_PID"; then
-  LOG="$WALL_LOG"
-  fail "Wall screenshots changed — if intended, run npm run test:visual:wall:update, look at the new PNGs, and ship again"
-fi
 cat "$TEST_LOG" >>"$LOG"
 [ "$BUILD_RC" -eq 0 ] || fail "gates or build failed"
 ok "tests pass, gates + build passed"
 
-step "3/6 Commit"
+step "3/7 Commit"
 if [ -n "$(git status --porcelain)" ]; then
   git add -A
   git commit -m "${COMMIT_MSG:-Deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)}" >>"$LOG" 2>&1
@@ -100,7 +110,7 @@ else
   ok "working tree already clean"
 fi
 
-step "4/6 Push"
+step "4/7 Push"
 git push origin HEAD:main >>"$LOG" 2>&1 || fail "push to origin failed"
 if git remote | grep -q '^deploy$'; then
   git push deploy HEAD:main >>"$LOG" 2>&1 || fail "push to deploy remote failed"
@@ -108,7 +118,7 @@ fi
 SHA=$(git rev-parse HEAD)
 ok "pushed $SHA"
 
-step "5/6 Deploy prebuilt bundle to Vercel production"
+step "5/7 Deploy prebuilt bundle to Vercel production"
 # `vercel deploy` prints a single JSON result object to stdout (progress goes to stderr) —
 # parse deployment.readyState/url from it rather than assuming a bare URL on stdout.
 DEPLOY_JSON=$(npx vercel deploy --prebuilt --prod --yes --scope casa-projects 2>>"$LOG")
@@ -137,9 +147,9 @@ else
 fi
 
 if [ "${SKIP_KIOSK:-0}" = "1" ]; then
-  step "6/6 Kiosk refresh skipped (SKIP_KIOSK=1)"
+  step "6/7 Kiosk refresh skipped (SKIP_KIOSK=1)"
 else
-  step "6/6 Refresh Pi kiosk ($PI_HOST)"
+  step "6/7 Refresh Pi kiosk ($PI_HOST)"
   MY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   if [ "$MY_IP" = "$PI_IP" ]; then
     # Running on the kiosk itself: trust our own key/host so SSH-to-self works.
@@ -156,6 +166,26 @@ else
   ok "kiosk refreshed and live"
 fi
 
+LIVE_AT=$(( $(date +%s) - START ))
+printf '\n  \033[1;32m● live\033[0m %s in %ss\n' "$SHA" "$LIVE_AT"
+
+if [ "$WALL_RUN" = "1" ]; then
+  step "7/7 Wall + phone screenshots (after the deploy)"
+  if npm run test:visual:wall >"$WALL_LOG" 2>&1; then
+    ok "screenshots unchanged"
+  else
+    printf '  \033[1;31m✗ screenshots changed — %s is LIVE\033[0m\n' "$SHA"
+    grep -E '^\s+[0-9]+\) |Error:' "$WALL_LOG" | head -20
+    echo "  Look at test-results/. Intended: npm run test:visual:wall:update, look at the PNGs, ship them."
+    PREV_DEPLOY=$(cat "$PREV_DEPLOY_FILE" 2>/dev/null || true)
+    echo "  Not intended: fix and ship, or roll back with: npx vercel rollback ${PREV_DEPLOY:-<previous deployment>} --scope casa-projects --yes"
+    echo "  Full log: $WALL_LOG"
+    exit 2
+  fi
+else
+  step "7/7 Screenshots skipped (nothing the Wall shows changed, or no baselines here)"
+fi
+
 END=$(date +%s)
 echo
-echo "🎉 Shipped $SHA to https://casa-tabor.vercel.app in $((END - START))s"
+echo "🎉 Shipped $SHA to https://casa-tabor.vercel.app — live in ${LIVE_AT}s, checked in $((END - START))s"
