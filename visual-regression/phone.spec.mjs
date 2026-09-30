@@ -359,6 +359,26 @@ test('phone: Ask Casa — a plan: the draft in the conversation, Set it up, unti
   await expect(saved.getByText('Emme — light-up jellyfish is undone')).toBeVisible()
 })
 
+// Jake, 2026-09-29: "on gift ideas, allow me to edit them, some brands don't get translated well."
+test('phone: gift ideas can be corrected by typing; Kelly’s phone never shows hers', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T07:12:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Coming up' }).click()
+  await phone.getByRole('button', { name: 'Gift ideas · 2' }).click()
+  const sheet = phone.getByRole('region', { name: 'Gift ideas' })
+  await sheet.getByRole('textbox', { name: 'Gift idea for Carl' }).fill('An Orvis fly-fishing reel')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(sheet.getByRole('textbox', { name: 'Gift idea for Carl' })).toHaveValue('An Orvis fly-fishing reel')
+  await expect(sheet.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await expect(phone).toHaveScreenshot('phone-gift-ideas.png')
+
+  const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
+  await kellys.getByRole('button', { name: 'Week' }).click()
+  await kellys.getByRole('button', { name: 'Coming up' }).click()
+  await kellys.getByRole('button', { name: 'Gift ideas · 1' }).click()
+  await expect(kellys.getByText('That ceramic class in Delray')).toHaveCount(0)
+})
+
 // Swipe between days on Me and Family (2026-09-28: "it feels natural there").
 const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
   const el = document.elementFromPoint(from[0], from[1])

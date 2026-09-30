@@ -63,7 +63,7 @@ const COMING_UP_LIVE: typeof COMING_UP = [
   { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving Day', nextStep: 'Hosting or going?', inDays: 62, pokeIn: 32, late: false },
   { key: 'cu-veterans', kind: 'no_school', title: 'Veterans Day', nextStep: 'No school? Who’s with the kids', inDays: 47, pokeIn: 33, late: false },
 ]
-const IDEAS: GiftIdea[] = [{ for_name: 'Carl', idea: 'A fly-fishing reel' }, { for_name: 'Jebb', idea: 'A soccer-team sweatshirt and T-shirt' }]
+const IDEAS: GiftIdea[] = [{ id: 'gi-carl', for_name: 'Carl', idea: 'A fly-fishing reel' }, { id: 'gi-jebb', for_name: 'Jebb', idea: 'A soccer-team sweatshirt and T-shirt' }]
 
 // To do (board 09b), shaped like Jake's sorted list on 2026-09-28.
 const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') === '1'
@@ -159,7 +159,9 @@ export default function WallFixturePage() {
     setComingUpItems((list) => list.map((i) => (i.key === key ? { ...i, startable: false, projectId: pid, nextStep: `A project · 0 of ${detail.steps.length}` } : i)))
     return pid
   }
-  const comingUp = { items: comingUpItems, ideas: IDEAS, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)), start }
+  const [ideas, setIdeas] = useState(IDEAS)
+  const comingUp = { items: comingUpItems, ideas, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)), start,
+    editIdea: async (id: string, idea: string | null) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null

@@ -36,5 +36,12 @@ export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' }
     if (error) throw error
     return (data as { project_id?: string | null } | null)?.project_id ?? null
   }, [queryClient, surface])
-  return { data: query.data ?? null, act, start }
+  // A gift idea corrected by hand, or removed (null) — Jake, 2026-09-29: voice mishears brand names.
+  const editIdea = useCallback(async (id: string, idea: string | null) => {
+    queryClient.setQueryData<ComingUpData>(['coming-up'], (old) => (old ? { ...old, ideas: idea == null ? old.ideas.filter((g) => g.id !== id) : old.ideas.map((g) => (g.id === id ? { ...g, idea } : g)) } : old))
+    const { error } = await supabase.functions.invoke('coming-up', { body: { action: idea == null ? 'idea_remove' : 'idea_edit', id, idea, surface } })
+    await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
+    if (error) throw error
+  }, [queryClient, surface])
+  return { data: query.data ?? null, act, start, editIdea }
 }

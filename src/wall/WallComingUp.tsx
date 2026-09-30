@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react'
+import { X } from 'lucide-react'
+import WallKeyboard from './WallKeyboard'
 import { formatWallClock, formatWallDate } from './clock'
 import { comingUpPages, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
 
@@ -19,6 +21,8 @@ export interface WallComingUpProps {
   onOpenProject?: (id: string) => void
   /** A season starts as this year's project, then opens (canvas 11c). */
   onStart?: (key: string) => void
+  /** A gift idea corrected by hand, or removed (null). */
+  onEditIdea?: (id: string, idea: string | null) => Promise<void>
 }
 
 function Answer({ label, primary = false, onClick }: { label: string; primary?: boolean; onClick: () => void }) {
@@ -66,29 +70,52 @@ function Row({ item, today, onAct, onOpenProject, onStart }: { item: ComingUpIte
   )
 }
 
-function IdeasSheet({ ideas, onClose }: { ideas: GiftIdea[]; onClose: () => void }) {
+// Gift ideas, each one correctable by hand (Jake, 2026-09-29: "some brands don't get translated well and
+// I need to correct it, otherwise I will forget what I was talking about"): tap to fix it on the
+// keyboard (with Say it), or take it off.
+function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: () => void; onEdit?: (id: string, idea: string | null) => Promise<void> }) {
   const people = ideasByPerson(ideas)
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const save = () => {
+    if (editing && editing.text.trim()) void onEdit?.(editing.id, editing.text.trim())
+    setEditing(null)
+  }
   return (
-    <div className="absolute inset-0 z-20 flex justify-end bg-wall-ink/30" onClick={(event) => { event.stopPropagation(); onClose() }}>
+    <div className="absolute inset-0 z-20 flex justify-end bg-wall-ink/30" onClick={(event) => { event.stopPropagation(); if (editing) save(); else onClose() }}>
       <section aria-label="Gift ideas" className="flex h-full w-[760px] flex-col gap-[20px] bg-wall-ground p-[44px]" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="font-display text-wall-move font-semibold">Gift ideas</div>
           <Answer label="Close" onClick={onClose} />
         </div>
-        <div className="text-wall-body text-wall-ink-2">Say “gift idea for Kelly: …” any time to add one.</div>
+        <div className="text-wall-body text-wall-ink-2">Say “gift idea for Kelly: …” any time to add one.{onEdit ? ' Tap one to fix its words.' : ''}</div>
         {people.length === 0 && <div className="font-display text-wall-date italic text-wall-ink-2">None saved yet.</div>}
         {people.map((p) => (
           <div key={p.name} className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-rule py-[12px]">
             <span className="font-display text-wall-date font-semibold">{p.name}</span>
-            {p.ideas.map((idea) => <span key={idea} className="text-wall-body">{idea}</span>)}
+            {p.items.map((g) => (editing && editing.id === g.id ? (
+              <div key={g.id} className="flex min-h-[56px] items-center rounded-[12px] border-[3px] border-solid border-wall-brass-ink bg-wall-on-pigment px-[16px] text-wall-body">
+                <span className="min-w-0 break-words">{editing.text}</span>
+                <span aria-hidden="true" className="ml-[3px] inline-block h-[28px] w-[3px] shrink-0 bg-wall-ink" />
+              </div>
+            ) : (
+              <div key={g.id ?? g.idea} className="flex items-center gap-[10px]">
+                <button type="button" aria-label={`Change “${g.idea}”`} disabled={!onEdit || !g.id} onClick={() => { setRemoving(null); setEditing({ id: g.id!, text: g.idea }) }}
+                  className="min-h-[56px] min-w-0 flex-1 border-0 bg-transparent p-0 text-left text-wall-body text-wall-ink">{g.idea}</button>
+                {onEdit && g.id && (removing === g.id
+                  ? <Answer label="Yes, remove it" onClick={() => { setRemoving(null); void onEdit(g.id!, null) }} />
+                  : <button type="button" aria-label={`Remove “${g.idea}”`} onClick={() => setRemoving(g.id!)} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-rule bg-transparent p-0 text-wall-ink-2"><X size={20} /></button>)}
+              </div>
+            )))}
           </div>
         ))}
       </section>
+      {editing && <WallKeyboard showsValue value={editing.text} onChange={(text) => setEditing((e) => e && { ...e, text })} onDone={save} />}
     </div>
   )
 }
 
-export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject, onStart }: WallComingUpProps) {
+export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject, onStart, onEditIdea }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
@@ -147,7 +174,7 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
       </div>
 
       {week}
-      {ideasOpen && <IdeasSheet ideas={ideas} onClose={() => setIdeasOpen(false)} />}
+      {ideasOpen && <IdeasSheet ideas={ideas} onEdit={onEditIdea} onClose={() => setIdeasOpen(false)} />}
     </div>
   )
 }

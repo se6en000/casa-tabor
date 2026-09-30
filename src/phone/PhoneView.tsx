@@ -1,3 +1,4 @@
+import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { stepWithin, type DayStep } from '../lib/daySwipe'
@@ -69,7 +70,7 @@ export interface PhoneViewProps {
   keepFrom?: KeepFrom
   setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
-  comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null> } | null
+  comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; ideas?: GiftIdea[]; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject: (id: string | null) => { data?: TodoProjectDetail | null } } | null
 }
@@ -364,7 +365,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{comingUpSummary(comingUpItems, comingUp.today)}</span>
         <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Coming up</h1>
       </div>
-      <PhoneComingUp items={comingUpItems} today={comingUp.today} onAct={comingUp.act} />
+      {/* Gift ideas, correctable by hand — never the ones for whoever's phone this is. */}
+      <PhoneComingUp items={comingUpItems} today={comingUp.today} onAct={comingUp.act} ideas={(comingUp.ideas ?? []).filter((g) => g.for_member_id !== viewerId)} onEditIdea={comingUp.editIdea} />
     </div>
   ) : (
     <div className="flex flex-col gap-[10px]">

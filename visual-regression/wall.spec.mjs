@@ -646,6 +646,22 @@ test('wall: Coming up — the eighth tile opens it; an answer takes an item off;
   await expect(page.getByText('5 things to plan')).toHaveCount(0)
 })
 
+// Jake, 2026-09-29: "on gift ideas, allow me to edit them, some brands don't get translated well and I
+// need to correct it, otherwise I will forget what I was talking about."
+test('wall: a gift idea can be corrected on the keyboard, or removed', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.getByRole('button', { name: /^Coming up: / }).click()
+  await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
+  const sheet = page.getByRole('region', { name: 'Gift ideas' })
+  await sheet.getByRole('button', { name: 'Change “A fly-fishing reel”' }).click()
+  await typeOnWall(page, ' orvis')
+  await expect(sheet.getByRole('button', { name: 'Change “A fly-fishing reel orvis”' })).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-gift-idea-edit.png')
+  await sheet.getByRole('button', { name: 'Remove “A soccer-team sweatshirt and T-shirt”' }).click()
+  await sheet.getByRole('button', { name: 'Yes, remove it' }).click()
+  await expect(sheet.getByText('A soccer-team sweatshirt and T-shirt')).toHaveCount(0)
+})
+
 // Live on the kiosk 2026-09-27: nine items split by count ran the left column under the week strip.
 test('wall: Coming up with a long list — nothing runs under the week strip; "N more" shows the rest (board 07a)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&comingUp=live')

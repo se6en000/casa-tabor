@@ -49,6 +49,18 @@ Deno.serve(async (req) => {
       if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(log)
     }
 
+    // A gift idea corrected by hand, or removed (Jake, 2026-09-29: voice mishears brand names, and a
+    // wrong one means "I will forget what I was talking about").
+    if (action === 'idea_edit' || action === 'idea_remove') {
+      const id = String((body as { id?: string }).id ?? '').slice(0, 64)
+      const text = String((body as { idea?: string }).idea ?? '').trim().replace(/\s+/g, ' ').slice(0, 1000)
+      if (!id) return json({ error: 'id required' }, 400)
+      if (action === 'idea_edit' && !text) return json({ error: 'An idea needs words' }, 400)
+      const { error } = await sb.from('gift_ideas').update(action === 'idea_edit' ? { idea: text } : { dismissed_at: now.toISOString() }).eq('id', id)
+      if (error) throw new Error(error.message)
+      return json({ ok: true })
+    }
+
     // A season starts as this year's project (P3.23, canvas 11c): from last year's, or Casa's starter plan.
     if (action === 'start') {
       const m = /^season:([a-z_]+):(\d{4})$/.exec(String(body.key ?? ''))
@@ -87,7 +99,7 @@ Deno.serve(async (req) => {
         .gte('start_time', new Date(now.getTime() - 86400e3).toISOString())
         .lt('start_time', new Date(now.getTime() + 110 * 86400e3).toISOString())
         .order('start_time').limit(1000),
-      sb.from('gift_ideas').select('for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at'),
+      sb.from('gift_ideas').select('id, for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at'),
       sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on, custom_step, custom_lead_days'),
       // Newest first: when two rules fit, the newer one wins.
       sb.from('coming_up_rules').select('match, step, lead_days, off').is('removed_at', null).order('created_at', { ascending: false }),

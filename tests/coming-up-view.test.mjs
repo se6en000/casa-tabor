@@ -35,7 +35,10 @@ test('the eighth tile: how many, and how many to start now', () => {
 
 test('gift ideas by person, for the Gift ideas sheet', () => {
   assert.deepEqual(ideasByPerson([{ for_name: 'Jebb', idea: 'sweatshirt' }, { for_name: 'Kelly', idea: 'ceramic class' }, { for_name: 'jebb', idea: 'hat' }]),
-    [{ name: 'Jebb', ideas: ['sweatshirt', 'hat'] }, { name: 'Kelly', ideas: ['ceramic class'] }])
+    [
+      { name: 'Jebb', ideas: ['sweatshirt', 'hat'], items: [{ for_name: 'Jebb', idea: 'sweatshirt' }, { for_name: 'jebb', idea: 'hat' }] },
+      { name: 'Kelly', ideas: ['ceramic class'], items: [{ for_name: 'Kelly', idea: 'ceramic class' }] },
+    ])
 })
 
 // Live on the kiosk 2026-09-27 the list had 9 items: split by count, the left column held five rows

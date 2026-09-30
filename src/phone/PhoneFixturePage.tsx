@@ -94,6 +94,8 @@ export default function PhoneFixturePage() {
   const [evs, setEvs] = useState(events as unknown as WallEvent[])
   const [keep, setKeep] = useState<KeepFrom>({})
   const [comingUp, setComingUp] = useState(COMING_UP)
+  // Gift ideas (one for Kelly: never on her phone), each correctable by hand.
+  const [ideas, setIdeas] = useState([{ id: 'gi-kelly', for_name: 'Kelly', for_member_id: 'kelly', idea: 'That ceramic class in Delray' }, { id: 'gi-carl', for_name: 'Carl', for_member_id: null, idea: 'A fly-fishing reel' }])
   // Only what this phone's person may see, as the live phone does (audience.ts).
   const audience = { kind: 'member' as const, memberId: viewerId }
   const shown = eventsFor(audience, evs, members as WallMember[], keep)
@@ -119,7 +121,8 @@ export default function PhoneFixturePage() {
               week={week}
               events={shown}
               keepFrom={keep}
-              comingUp={{ items: comingUp, today: '2026-09-25', act: async (key) => setComingUp((list) => list.filter((i) => i.key !== key)) }}
+              comingUp={{ items: comingUp, today: '2026-09-25', act: async (key) => setComingUp((list) => list.filter((i) => i.key !== key)), ideas,
+                editIdea: async (id, idea) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               todos={viewerId === 'jake-id' ? todos : null}
               checklist={checklist}

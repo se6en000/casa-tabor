@@ -75,7 +75,7 @@ export default function PhoneFrame() {
       setKeptFrom={setKeptFrom}
       contacts={contacts}
       places={places}
-      comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act, start: comingUp.start } : null}
+      comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act, start: comingUp.start, ideas: comingUp.data.ideas, editIdea: comingUp.editIdea } : null}
       todos={isJake && todos.data ? { list: todos.data, act: todos.act, useProject: useTodoProject } : null}
     />
   )

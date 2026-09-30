@@ -23,7 +23,7 @@ export interface ComingUpItem {
   /** Its plan at a glance, for its dashed card on the To do shelf. */
   plan?: { steps: number; minutes: number; first: string }
 }
-export interface GiftIdea { for_name: string; idea: string }
+export interface GiftIdea { id?: string; for_name: string; for_member_id?: string | null; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'
 
 const plus = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
@@ -54,11 +54,12 @@ export function comingUpTile(items: ComingUpItem[], today: string) {
 
 /** The Gift ideas sheet: ideas grouped by who they're for, in the order first saved. */
 export function ideasByPerson(ideas: GiftIdea[]) {
-  const groups: Array<{ name: string; ideas: string[] }> = []
+  // `items` keep each idea's id, so it can be corrected by hand (Jake, 2026-09-29).
+  const groups: Array<{ name: string; ideas: string[]; items: GiftIdea[] }> = []
   for (const g of ideas) {
     const found = groups.find((x) => x.name.toLowerCase() === g.for_name.toLowerCase())
-    if (found) found.ideas.push(g.idea)
-    else groups.push({ name: g.for_name, ideas: [g.idea] })
+    if (found) { found.ideas.push(g.idea); found.items.push(g) }
+    else groups.push({ name: g.for_name, ideas: [g.idea], items: [g] })
   }
   return groups
 }
