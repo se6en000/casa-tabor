@@ -36,3 +36,14 @@ test('the fallback match handles due-date-less reminders (start_time is a meanin
 test('linking to a fallback-matched event upserts the link row (insert-or-update), not a plain update that would silently no-op for a never-linked event', () => {
   assert.match(migrationSource, /on conflict \(event_id\) do update set/)
 })
+
+// 2026-09-30 (Jake: "I don't see the to-do for email on my active to dos … I think I checked at least one
+// off"): an undated Casa to-do came back from iOS due on its placeholder day and was inserted again (35
+// pairs). Run against the real database in tests/sql/todo-placeholder-relink-scenario.sql (rolled back).
+test('an undated to-do coming back from iOS on its placeholder day is the same to-do, and stays undated', async () => {
+  const { readFileSync } = await import('node:fs')
+  const sql = readFileSync(new URL('../supabase/migrations/20261001140000_todo_reminder_placeholder_relink.sql', import.meta.url), 'utf8')
+  const assert = (await import('node:assert/strict')).default
+  assert.match(sql, /or \(v_has_due_date and not e\.has_due_date\s+and \(p_due_date at time zone 'America\/New_York'\)::date = \(e\.start_time at time zone 'America\/New_York'\)::date\)/)
+  assert.match(sql, /has_due_date = case when v_keep_undated then false else v_has_due_date end/)
+})
