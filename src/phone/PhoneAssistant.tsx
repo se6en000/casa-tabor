@@ -133,6 +133,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
         },
       } : undefined}
       onOpenEvent={pointAt && events.some((e) => e.id === pointAt) ? () => onOpenEvent(pointAt) : undefined}
+      directions={answer?.directions ?? null}
       openDay={day && onOpenDay ? { label: `Open ${day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`, go: () => onOpenDay(day.date) } : null}
       onSend={(text) => {
         setNote(null)

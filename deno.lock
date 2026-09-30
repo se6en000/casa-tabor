@@ -26,6 +26,7 @@
     "npm:idb-keyval@^6.3.0": "6.3.0",
     "npm:lucide-react@^1.16.0": "1.43.0_react@19.3.0",
     "npm:pdfjs-dist@^5.7.284": "5.7.284",
+    "npm:qrcode-generator@^1.5.2": "1.5.2",
     "npm:react-dom@^19.2.6": "19.3.0_react@19.3.0",
     "npm:react-router-dom@^7.15.1": "7.18.3_react@19.3.0_react-dom@19.3.0",
     "npm:react@^19.2.6": "19.3.0",
@@ -1455,6 +1456,9 @@
         "hookified@2.2.0"
       ]
     },
+    "qrcode-generator@1.5.2": {
+      "integrity": "sha512-pItrW0Z9HnDBnFmgiNrY1uxRdri32Uh9EjNYLPVC2zZ3ZRIIEqBoDgm4DkvDwNNDHTK7FNkmr8zAa77BYc9xNw=="
+    },
     "react-dom@19.3.0_react@19.3.0": {
       "integrity": "sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==",
       "dependencies": [
@@ -1710,6 +1714,7 @@
         "npm:idb-keyval@^6.3.0",
         "npm:lucide-react@^1.16.0",
         "npm:pdfjs-dist@^5.7.284",
+        "npm:qrcode-generator@^1.5.2",
         "npm:react-dom@^19.2.6",
         "npm:react-router-dom@^7.15.1",
         "npm:react@^19.2.6",

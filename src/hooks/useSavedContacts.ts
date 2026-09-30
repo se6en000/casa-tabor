@@ -20,3 +20,23 @@ export function useSavedContacts() {
     staleTime: 5 * 60 * 1000,
   })
 }
+
+/**
+ * Contacts with the address wherever it's kept (the contact_directory view: their own address, their main
+ * place, or a place confirmed for them) — what People and directions read (2026-09-30: Alice's saved house
+ * was a confirmed place, and People never found it).
+ */
+export function useContactDirectory() {
+  return useQuery({
+    queryKey: ['contact-directory'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contact_directory')
+        .select('id, name, aliases, relationship, phone, email, address, place_name, confirmed, occurrence_count, dismissed_at')
+        .order('name')
+      if (error) throw error
+      return (data ?? []).map((c) => ({ ...c, primary_place_id: null })) as Array<SavedContact & { place_name: string | null }>
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+}

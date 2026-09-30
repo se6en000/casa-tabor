@@ -7,6 +7,7 @@ import type { AssistantCard } from '../wall/assistantCard'
 import type { WallMember } from '../wall/engine/types'
 import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
 import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
+import { telOf } from '../wall/WallDirections'
 
 // Say it (board 05e): the family's assistant on the phone — the same one the wall's band
 // talks to. Type (or use the keyboard's dictation, or the mic), read the answer, and a
@@ -28,6 +29,8 @@ export interface PhoneAssistantViewProps {
   onOpenEvent?: () => void
   /** The day the answer is about (show_day): "Open Saturday, Oct 17". */
   openDay?: { label: string; go: () => void } | null
+  /** Directions to someone (canvas 13d): Directions opens Google Maps; Call, Text. */
+  directions?: { name: string; address: string; phone: string | null; maps: string } | null
   onSend: (text: string) => void
   onConfirm: () => void
   onCancel: () => void
@@ -49,7 +52,7 @@ export interface PhoneAssistantViewProps {
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -194,6 +197,19 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             )}
             {which && !thinking && <PhoneWhich which={which} members={members} pigmentOf={pigmentOf} onPick={submit} onNeither={() => submit('Never mind')} />}
             {note && <div className="text-phone-body font-semibold text-wall-ink">{note}</div>}
+            {directions && !thinking && (
+              <section aria-label={`Directions to ${directions.name}`} className="flex flex-col gap-[10px] rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment p-[14px]">
+                <div className="flex items-baseline justify-between gap-[10px]"><span className="font-display text-phone-heading font-bold leading-tight">{directions.name}</span><span className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">FROM PEOPLE</span></div>
+                <div className="text-phone-detail text-wall-ink-2">{directions.address}</div>
+                <a href={directions.maps} target="_blank" rel="noreferrer" className="flex h-[48px] items-center justify-center rounded-full bg-wall-ink text-phone-body font-bold text-wall-on-pigment no-underline">Directions — opens Google Maps</a>
+                {telOf(directions.phone) && (
+                  <div className="flex gap-[8px]">
+                    <a href={telOf(directions.phone)!} className="flex h-[44px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 text-phone-body font-semibold text-wall-ink no-underline">Call</a>
+                    <a href={telOf(directions.phone)!.replace('tel:', 'sms:')} className="flex h-[44px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 text-phone-body font-semibold text-wall-ink no-underline">Text</a>
+                  </div>
+                )}
+              </section>
+            )}
             {(offer || onOpenEvent || openDay) && !pending && !thinking && (
               <div className="flex flex-wrap gap-[8px]">
                 {offer && <button type="button" onClick={() => submit(offer.say)} className={dark}>{offer.label}</button>}

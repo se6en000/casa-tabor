@@ -474,6 +474,10 @@
         "reason": "Family Wall: Plan it with Casa (P3.25 phase 3; canvas 12b–12d, approved 2026-09-29) — the plan's Set it up / Keep talking, one tick per thing on the Agree card, Agree, each saved line's Open, Undo — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 48–60px targets."
       },
       {
+        "path": "src/wall/WallDirections.tsx",
+        "reason": "Family Wall: directions to someone (canvas 13c, approved 2026-09-30) — Call / Directions instead on the QR card — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52px targets."
+      },
+      {
         "path": "src/phone/PhonePlan.tsx",
         "reason": "The phone lens: Plan it with Casa (P3.25 phase 3; canvas 12e) — Set it up / See it all, one tick per thing, Agree, Open, Undo — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
       }

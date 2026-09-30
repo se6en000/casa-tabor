@@ -98,7 +98,7 @@ function describeProject(p) {
 
 export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], projects = [], comingUp = [], planning = false }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. ${planning ? THINKING_WITH_HIM(homeCity) : HAND_IT_OVER}Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when. When he asks you to add or set up a big multi-step project ("make a project for painting the house", "add the roof as a project"), it is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first; wanting to do or make something, or planning something together ("let's plan Emme's costume"), without asking for the project itself, is talking it through. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would, from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. The screen shows things for you: directions, a route or a link to go to someone or somewhere ("navigate to Alice's house", "how do I get to…") is show_directions — the route goes on the screen, so never say you can't give directions or a link; an address he tells you for someone is save_address (its card asks his yes — don't ask in words); a day he asks about or asks to see is show_day. ${planning ? THINKING_WITH_HIM(homeCity) : HAND_IT_OVER}Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when. When he asks you to add or set up a big multi-step project ("make a project for painting the house", "add the roof as a project"), it is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first; wanting to do or make something, or planning something together ("let's plan Emme's costume"), without asking for the project itself, is talking it through. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
@@ -124,7 +124,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   }
   if (home) sections.push(`HOME: ${home}`)
   if (places.length) sections.push(`SAVED PLACES:\n${places.map((p) => `- ${p.name}${p.address ? ` · ${p.address}` : ''}${p.phone ? ` · ${p.phone}` : ''}`).join('\n')}`)
-  if (contacts.length) sections.push(`CONTACTS:\n${contacts.map((c) => `- ${[c.name, c.relationship, c.phone, c.email, c.place].filter(Boolean).join(' · ')}`).join('\n')}`)
+  if (contacts.length) sections.push(`CONTACTS:\n${contacts.map((c) => `- ${[c.name, c.relationship, c.phone, c.email, c.address ? `lives at ${c.address}` : c.place].filter(Boolean).join(' · ')}`).join('\n')}`)
   if (recipes.length) sections.push(`RECIPES (open one with get_recipe):\n${recipes.map((r) => `- [${r.id}] ${r.name}`).join('\n')}`)
   if (pending?.tool === 'apply_plan') sections.push(`ON SCREEN, THE PLAN, NOT SAVED YET: ${describePlan(pending.args, utcOffset)}\nA change he asks for: call set_plan again with the whole plan, changed.`)
   else if (pending) sections.push(`ON SCREEN, WAITING FOR A YES: ${describeDraft(pending, utcOffset)} — a follow-up about it changes this same card (call the same tool again with the whole corrected item).`)
@@ -194,6 +194,9 @@ export const FULL_AI_TOOLS = [
   { name: 'get_travel_eta', description: 'Drive time and when to leave (from home unless an origin is given); times are ISO.', parameters: { type: 'OBJECT', properties: { destination: { type: 'STRING' }, origin: { type: 'STRING' }, arrival_time: { type: 'STRING' }, departure_time: { type: 'STRING' } }, required: ['destination'] } },
   { name: 'get_recipe', description: 'Open one saved recipe by its [id]: ingredients and steps.', parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' } }, required: ['id'] } },
   { name: 'search_family_notes', description: "Search the family's emails, notes and remembered facts (a school email, a confirmation, something someone said to remember).", parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+  // Directions (Jake, 2026-09-29: "Navigate to Alice's house" — it couldn't). The route goes on the screen.
+  { name: 'show_directions', description: 'Directions to a person or a place ("navigate to Alice\u2019s house", "directions to Liv\u2019s coach", "how do I get to Lake Lytal"): who or where, as in CONTACTS or PLACES. The screen shows the address and the Google Maps route (a QR code for his phone on the wall, a button on a computer or the phone); then say where it is in a few words — with the drive time from get_travel_eta when it helps. No address saved: ask him for it, then save_address.', parameters: { type: 'OBJECT', properties: { to: { type: 'STRING' } }, required: ['to'] } },
+  { name: 'save_address', description: 'Propose saving an address he told you for someone in CONTACTS ("Alice lives at 8255 West Lake Drive").', parameters: { type: 'OBJECT', properties: { contact: { type: 'STRING' }, address: { type: 'STRING' } }, required: ['contact', 'address'] } },
   // A day on the screen (Jake, 2026-09-29: "Can you open this day for me" — it couldn't). Changes nothing.
   { name: 'show_day', description: 'Put one day on the screen: the wall\u2019s day view (the phone\u2019s Me), with the week around it to swipe through. open true when he asks to open, show or look at a day ("open October 17th", "can you open this day for me", "show me next Saturday"); open false when your answer is about one particular day, so the screen offers a button to open it. Then answer in words as usual.', parameters: { type: 'OBJECT', properties: { date: { type: 'STRING', description: 'YYYY-MM-DD' }, open: { type: 'BOOLEAN' } }, required: ['date'] } },
 ]
@@ -226,7 +229,7 @@ export function fullAiTools({ planning }) {
 
 export const LOOKUP_TOOLS = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 /** Tools that only read; everything else becomes a card that needs a yes. */
-export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events', 'show_day'])
+export const READ_TOOLS = new Set([...LOOKUP_TOOLS, 'get_recipe', 'search_family_notes', 'get_gift_ideas', 'get_coming_up', 'find_events', 'show_day', 'show_directions'])
 
 /** show_day's arguments: a real calendar date (YYYY-MM-DD) and whether to open it now. */
 export function readShowDay(args) {
@@ -374,7 +377,7 @@ const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const noticeDays = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(120, Math.max(1, Math.round(Number(v)))) : null)
 
 /** The model's tool call as the usual card, or { error } when it fails a hard check. */
-export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [], todos = [], projects = [] }) {
+export function fullAiCard(call, { events, utcOffset, now, groceries = [], family = [], todos = [], projects = [], contacts = [] }) {
   const a = call?.args ?? {}
   if (call?.name === 'add_to_coming_up' || call?.name === 'change_coming_up_item') {
     const target = events.find((e) => e.id === a.id)
@@ -417,6 +420,14 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     return { tool: 'plan_project', args: { title, aim_date: aim, from_event_id: from, steps } }
   }
   if (call?.name === 'set_plan') return planCard(a, { events, utcOffset, now, projects })
+  if (call?.name === 'save_address') {
+    const who = text(a.contact)
+    const address = text(a.address)
+    if (!address) return { error: 'I need the address itself.' }
+    const person = contactNamed(who, contacts)
+    if (!person) return { error: `I don’t have ${who || 'that person'} in the contacts.` }
+    return { tool: 'save_address', args: { contact_id: person.id, name: person.name, address } }
+  }
   if (call?.name === 'add_gift_idea') {
     const who = text(a.for)
     const idea = text(a.idea)
@@ -622,6 +633,48 @@ export function fullAiStatus(call) {
     case 'get_gift_ideas': return 'Checking the gift ideas…'
     case 'search_family_notes': return 'Looking through the family notes…'
     case 'show_day': return null
+    case 'show_directions': return null
     default: return 'Looking that up…'
   }
+}
+
+// Directions (canvas 13c/13d): a person or a place, the way he says it — "Alice", "Alice's house",
+// "Coach Mike", "Liv's softball coach", "Lake Lytal".
+const plain = (t) => String(t ?? '').toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ').trim()
+const bare = (t) => plain(t).replace(/^(the|to) /, '').replace(/('s)? (house|home|place)$/, '').replace(/'s$/, '').trim()
+
+function contactNamed(said, contacts = []) {
+  const q = bare(said)
+  if (!q) return null
+  const names = (c) => [c.name, ...(c.aliases ?? [])].map(bare)
+  return contacts.find((c) => names(c).includes(q))
+    ?? contacts.find((c) => bare(c.relationship) === q || bare(c.place) === q)
+    ?? contacts.find((c) => names(c).some((n) => n.split(' ')[0] === q))
+    ?? null
+}
+
+/** Where to drive: { name, address, phone, maps } · { missing: name } (no address saved) · null (no one by that name). */
+export function directionsFor(said, { contacts = [], places = [] } = {}) {
+  const route = (name, address, phone) => ({ name, address, phone: phone ?? null, maps: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` })
+  const person = contactNamed(said, contacts)
+  if (person?.address) return route(person.name, person.address, person.phone)
+  // A contact with no address can share a name with a saved place that has one ("Lake Lytal Park" is both).
+  const q = bare(said)
+  const place = q ? places.find((p) => bare(p.name) === q) ?? places.find((p) => bare(p.name).includes(q)) : null
+  if (place?.address) return route(place.name, place.address, place.phone)
+  return person ? { missing: person.name } : null
+}
+
+/** Casa's own question when a route has no address (the server asks it; see conversation.directions_missing). */
+export const askAddress = (name) => `I don’t have an address saved for ${name}. What is it?`
+
+/**
+ * The answer to Casa's "What is it?" about an address: { who, address } — the person Casa asked about and
+ * the address as said ("It's 412 Palm Way, Jupiter"); null when the reply isn't an address (a number and a word).
+ */
+export function addressReply(askedBefore, said) {
+  const m = /^I don’t have an address saved for (.+)\. What is it\?$/.exec(String(askedBefore ?? '').trim())
+  if (!m) return null
+  const address = String(said ?? '').trim().replace(/^(it[’']?s|it is|that[’']?s|the address is|they[’']?re at|she[’']?s at|he[’']?s at|at|.{1,60}?[’']s address is)\s+/i, '').replace(/[.!]+$/, '').trim()
+  return /\d/.test(address) && /[a-z]{2,}/i.test(address) && address.length <= 200 ? { who: m[1], address } : null
 }

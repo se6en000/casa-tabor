@@ -170,7 +170,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -238,7 +238,7 @@ const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', '
 const TURN_CONTEXT_TIMEOUT_MS = 4500
 // deno-lint-ignore no-explicit-any
 type TurnDb = { from: (table: string) => any }
-const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project'])
+const WRITE_TOOLS = new Set(['create_event', 'update_event', 'bulk_update_events', 'delete_event', 'delete_events_by_title', 'complete_reminder', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'add_gift_idea', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'add_todo', 'plan_project', 'save_address'])
 let llmConfigCache: { at: number; value: Record<string, unknown> | null } | null = null
 async function loadLlmConfig(sb: TurnDb): Promise<Record<string, unknown> | null> {
   if (llmConfigCache && Date.now() - llmConfigCache.at < 60_000) return llmConfigCache.value
@@ -1195,7 +1195,8 @@ Deno.serve(async (req) => {
       sb.from('grocery_items').select('id, name, quantity, checked').is('deleted_at', null).order('checked').order('name').limit(200),
       sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
       sb.from('saved_places').select('name, address, city, phone').eq('confirmed', true).order('name').limit(80),
-      sb.from('saved_contacts').select('name, relationship, phone, email, primary_place:saved_places!saved_contacts_primary_place_id_fkey(name)').eq('confirmed', true).order('name').limit(120),
+      // Where each person lives, from one place (contact_directory: their address, their main place, or a place confirmed for them).
+      sb.from('contact_directory').select('id, name, aliases, relationship, phone, email, address, place_name').eq('confirmed', true).is('dismissed_at', null).order('name').limit(120),
       sb.from('recipes').select('id, name').order('last_used_at', { ascending: false, nullsFirst: false }).limit(60),
     ])
     const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
@@ -1205,8 +1206,8 @@ Deno.serve(async (req) => {
     const home = [homeCfg?.address, homeCfg?.city, homeCfg?.state, homeCfg?.zip].filter(Boolean).join(', ')
     const places = ((placeRows.data ?? []) as Array<{ name: string; address: string | null; city: string | null; phone: string | null }>)
       .map((p) => ({ name: p.name, address: [p.address, p.city].filter(Boolean).join(', ') || null, phone: p.phone }))
-    const contacts = ((contactRows.data ?? []) as Array<{ name: string; relationship: string | null; phone: string | null; email: string | null; primary_place: { name?: string } | null }>)
-      .map((c) => ({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email, place: c.primary_place?.name ?? null }))
+    const contacts = ((contactRows.data ?? []) as Array<{ id: string; name: string; aliases: string[] | null; relationship: string | null; phone: string | null; email: string | null; address: string | null; place_name: string | null }>)
+      .map((c) => ({ id: c.id, name: c.name, aliases: c.aliases ?? [], relationship: c.relationship, phone: c.phone, email: c.email, address: c.address, place: c.place_name }))
     const recipes = (recipeRows.data ?? []) as Array<{ id: string; name: string }>
     // His open to-dos (the "To Do" list on his phone): so a repeat is noticed and a project grows from it.
     const todoRes = await sb.from('events').select('id, title, has_due_date, start_time').eq('event_type', 'reminder').eq('record_kind', 'single')
@@ -1263,6 +1264,8 @@ Deno.serve(async (req) => {
     let finishReason: string | null = null
     // The day the answer is about (show_day): the wall opens it, or offers to.
     let shownDay: { date: string; open: boolean } | null = null
+    // The route the answer carries (show_directions): a QR code on the wall, a button elsewhere.
+    let shownRoute: { name: string; address: string; phone: string | null; maps: string } | null = null
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
     const couldNotAnswer = { status: 200, payload: { type: 'text', text: 'Sorry, I lost my train of thought there. Can you say that again?', semantic_intent: 'full_ai.no_answer', correlation_id: cid } }
     // Up to five rounds: a lookup's answer goes back to the model, which then answers or proposes; the
@@ -1313,7 +1316,15 @@ Deno.serve(async (req) => {
       const answers = await Promise.all(reads.map(async (p) => {
         const call = p.functionCall as { name: string; args: Record<string, unknown> }
         let result: Record<string, unknown> | null = null
-        if (call.name === 'show_day') {
+        if (call.name === 'show_directions') {
+          const found = directionsFor(call.args?.to, { contacts, places })
+          if (found && 'address' in found) {
+            shownRoute = found
+            result = { name: found.name, address: found.address, phone: found.phone, note: 'The route is on the screen.' }
+          } else {
+            result = found ? { error: `No address saved for ${found.missing}. Ask him for it, then save_address.` } : { error: 'No one and no place by that name in CONTACTS or PLACES.' }
+          }
+        } else if (call.name === 'show_day') {
           shownDay = readShowDay(call.args) ?? shownDay
           result = shownDay ? { shown: shownDay.date, note: shownDay.open ? 'It is on the screen now. Say one short line about the day.' : 'The screen offers to open it.' } : { error: 'The date must be YYYY-MM-DD' }
         } else if (call.name === 'get_recipe') {
@@ -1362,7 +1373,7 @@ Deno.serve(async (req) => {
     }
 
     const changes = parts.filter((p) => p.functionCall && !READ_TOOLS.has(String((p.functionCall as { name: string }).name)))
-      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family, todos, projects }))
+      .map((p) => fullAiCard(p.functionCall as { name: string; args: Record<string, unknown> }, { events, utcOffset, now, groceries, family, todos, projects, contacts }))
     if (changes.length) {
       if (changes.some((c) => 'error' in c)) {
         autoBugReport('hard_check', (changes.find((c) => 'error' in c) as { error: string }).error, { proposed: parts.filter((p) => p.functionCall).map((p) => p.functionCall) })
@@ -1388,7 +1399,7 @@ Deno.serve(async (req) => {
     if (!text) autoBugReport('empty', 'no words and no change', { parts: parts.length, finishReason })
     if (!text && handBack) return mayHandBack(remainingRequestBudgetMs()) ? null : couldNotAnswer
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
-    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
+    return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
 
   const runPipeline = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
@@ -1401,6 +1412,39 @@ Deno.serve(async (req) => {
     return {
       status: 200,
       payload: { type: 'text', text: '', aside: true, semantic_intent: 'conversation.aside', conversation_state: incomingConversationState ?? null, correlation_id: cid },
+    }
+  }
+  // Directions (canvas 13c/13d): the reader heard who or where, and the route goes on the screen from here,
+  // every time (the model sometimes answered "would you like the route on the screen?" — live, 2026-09-30).
+  // A name it can't place goes on to the model, which can look a business up.
+  if (turnResolution?.directionsTo && !context?.pendingAction) {
+    const [contactRows, placeRows] = await Promise.all([
+      sb.from('contact_directory').select('id, name, aliases, relationship, phone, address, place_name').eq('confirmed', true).is('dismissed_at', null).limit(300),
+      sb.from('saved_places').select('name, address, city, phone').eq('confirmed', true).is('dismissed_at', null).limit(300),
+    ])
+    const known = ((contactRows.data ?? []) as Array<{ id: string; name: string; aliases: string[] | null; relationship: string | null; phone: string | null; address: string | null; place_name: string | null }>)
+      .map((c) => ({ ...c, aliases: c.aliases ?? [], place: c.place_name }))
+    const spots = ((placeRows.data ?? []) as Array<{ name: string; address: string | null; city: string | null; phone: string | null }>)
+      .map((p) => ({ name: p.name, address: [p.address, p.city].filter(Boolean).join(', ') || null, phone: p.phone }))
+    const found = directionsFor(turnResolution.directionsTo, { contacts: known, places: spots })
+    if (found && 'address' in found) {
+      return { status: 200, payload: { type: 'text', text: `Here’s the way to ${found.name}: ${found.address}.`, directions: found, conversation_state: incomingConversationState ?? null, semantic_intent: 'conversation.directions', correlation_id: cid } }
+    }
+    if (found) {
+      return { status: 200, payload: { type: 'text', text: askAddress(found.missing), conversation_state: incomingConversationState ?? null, semantic_intent: 'conversation.directions_missing', correlation_id: cid } }
+    }
+  }
+  // An address he gives for someone (after "What is it?", or "Alice lives at …"): a card to save it on
+  // them, on his yes (the model once answered "I'll show the route" and did neither — live, 2026-09-30).
+  const lastSaid = [...(Array.isArray(messages) ? messages as Array<{ role?: string; content?: unknown }> : [])].reverse().find((m) => m?.role === 'assistant')?.content
+  const addressGiven = addressReply(lastSaid, turnContext?.originalText ?? latestUserText) ?? turnResolution?.addressFor ?? null
+  if (addressGiven && !context?.pendingAction) {
+    const { data: rows } = await sb.from('contact_directory').select('id, name, aliases, relationship, phone, address, place_name').eq('confirmed', true).is('dismissed_at', null).limit(300)
+    const known = ((rows ?? []) as Array<{ id: string; name: string; aliases: string[] | null; relationship: string | null; phone: string | null; address: string | null; place_name: string | null }>)
+      .map((c) => ({ ...c, aliases: c.aliases ?? [], place: c.place_name }))
+    const card = fullAiCard({ name: 'save_address', args: { contact: addressGiven.who, address: addressGiven.address } }, { events: [], utcOffset: String(context?.utcOffset ?? '-04:00'), now: new Date(), contacts: known }) as { tool?: string; args?: Record<string, unknown> }
+    if (card.tool && card.args) {
+      return { status: 200, payload: { type: 'tool_action', tool: card.tool, args: card.args, display_text: buildDisplayText(card.tool, card.args), conversation_state: incomingConversationState ?? null, semantic_intent: 'conversation.save_address', correlation_id: cid } }
     }
   }
   // A plan on screen (P3.25): "make the build night Friday" is a change to the plan — the planning
@@ -6228,6 +6272,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         ...(args.from_event_id ? ['Grows from the one already on your list.'] : []),
       ].join('\n')
     }
+    if (name === 'save_address') return `Save **${String(args.name ?? 'their')}**’s address: ${String(args.address ?? '')}`
     if (name === 'add_gift_idea') return `Save a gift idea for **${String(args.for_name ?? 'someone')}**: ${String(args.idea ?? '')}`
     if (name === 'create_recipe') {
       const ingredients = Array.isArray(args.ingredients) ? args.ingredients.length : 0
@@ -6800,6 +6845,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         standalone: turnResolution.standalone,
         is_question: turnResolution.isQuestion,
         event_id: turnResolution.eventId,
+        day: turnResolution.day ?? null,
+        directions_to: turnResolution.directionsTo ?? null,
+        address_for: turnResolution.addressFor ?? null,
         ms: turnContext?.ms ?? null,
         rewritten: turnContext?.originalText !== turnResolution.standalone,
       }

@@ -408,6 +408,17 @@ test('phone: Casa opens a far day on Family; its week swipes; a tab comes back t
   await expect(phone.getByText('Friday, September 25')).toBeVisible()
 })
 
+// Directions on the phone (canvas 13d, approved 2026-09-30).
+test('phone: "Navigate to Alice\'s house" — Directions opens Google Maps; Call and Text', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'directions')
+  const card = ask.getByRole('region', { name: 'Directions to Alice' })
+  await expect(card.getByText('8255 West Lake Drive, Lake Clark Shores, FL 33406')).toBeVisible()
+  await expect(card.getByRole('link', { name: 'Directions — opens Google Maps' })).toHaveAttribute('href', /google\.com\/maps\/dir/)
+  await expect(card.getByRole('link', { name: 'Call' })).toHaveAttribute('href', 'tel:+15615550101')
+  await expect(card.getByRole('link', { name: 'Text' })).toHaveAttribute('href', 'sms:+15615550101')
+  await expect(phone).toHaveScreenshot('phone-directions.png')
+})
+
 test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {
   const phone = await open(page)
   await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()

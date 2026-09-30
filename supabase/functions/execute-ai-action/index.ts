@@ -1755,6 +1755,18 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (tool === 'save_address') {
+      // Directions (canvas 13c/13d): an address he told Casa, saved on that person, on a yes.
+      const contactId = normalizeOptionalText(args.contact_id, 80)
+      const address = normalizeOptionalText(args.address, 300)
+      if (!contactId || !address) throw new Error('Saving an address needs the person and the address')
+      const { data, error } = await sb.from('saved_contacts').update({ address, updated_at: new Date().toISOString() }).eq('id', contactId).select('id, name, address').single()
+      if (error) throw new Error(error.message)
+      return new Response(JSON.stringify({ success: true, contact: data, correlation_id: cid }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (tool === 'add_gift_idea') {
       // Gift ideas (P3.19 step 2): saved on a yes; read back only on the asker's phone.
       const forName = normalizeOptionalText(args.for_name, 120)

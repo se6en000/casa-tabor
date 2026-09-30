@@ -20,6 +20,8 @@ export interface AIMessage {
   planning?: boolean
   /** The one day this answer is about (Casa's `show_day`): the wall opens it, or offers to. */
   showDay?: { date: string; open: boolean }
+  /** Directions to a person or place (Casa's show_directions): a QR code on the wall, a button elsewhere. */
+  directions?: { name: string; address: string; phone: string | null; maps: string }
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string

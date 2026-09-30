@@ -855,6 +855,29 @@ test('wall: asked to open a day, Casa opens it straight away', async ({ page }) 
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeHidden()
 })
 
+// Directions to someone (canvas 13c, approved 2026-09-30; Jake: "Navigate to Alice's house" — it couldn't).
+test('wall: "Navigate to Alice\'s house" — a QR code for the route; Call switches it to one that dials', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=directions')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await band.getByRole('button', { name: 'Stop listening' }).click()
+  await expect(band.getByRole('img', { name: 'QR code: directions to Alice in Google Maps' })).toBeVisible()
+  await expect(band.getByText('8255 West Lake Drive, Lake Clark Shores, FL 33406')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('directions-qr.png')
+  await band.getByRole('button', { name: 'Call Alice' }).click()
+  await expect(band.getByRole('img', { name: 'QR code: call Alice' })).toBeVisible()
+  await band.getByRole('button', { name: 'Directions instead' }).click()
+  await expect(band.getByRole('img', { name: 'QR code: directions to Alice in Google Maps' })).toBeVisible()
+})
+
+test('wall on a computer: directions are a link that opens Google Maps, and Call dials', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=directions&keyboard=device')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  await expect(band.getByRole('link', { name: 'Open Google Maps' })).toHaveAttribute('href', /google\.com\/maps\/dir\/\?api=1&destination=8255%20West%20Lake%20Drive/)
+  await expect(band.getByRole('link', { name: 'Call Alice' })).toHaveAttribute('href', 'tel:+15615550101')
+  await expect(band.getByRole('img', { name: /QR code/ })).toHaveCount(0)
+})
+
 test('wall: a swipe is ignored while the assistant band is open', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()

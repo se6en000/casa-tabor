@@ -17,7 +17,10 @@ export interface ContactCard {
   placeName: string | null
 }
 
-type ContactInput = Pick<SavedContact, 'id' | 'name' | 'aliases' | 'relationship' | 'phone' | 'email' | 'address' | 'primary_place_id' | 'confirmed' | 'occurrence_count' | 'dismissed_at'>
+type ContactInput = Pick<SavedContact, 'id' | 'name' | 'aliases' | 'relationship' | 'phone' | 'email' | 'address' | 'primary_place_id' | 'confirmed' | 'occurrence_count' | 'dismissed_at'> & {
+  /** From contact_directory: the name of the place the address came from. */
+  place_name?: string | null
+}
 type PlaceInput = Pick<SavedPlace, 'id' | 'name' | 'address' | 'city' | 'state' | 'zip'>
 
 function dialable(phone: string | null): string | null {
@@ -50,9 +53,9 @@ export function contactCards(contacts: ContactInput[], places: PlaceInput[], que
         tel: dialable(c.phone),
         email: c.email,
         address: c.address?.trim() || placeAddress(place),
-        placeName: place?.name ?? null,
+        placeName: place?.name ?? c.place_name ?? null,
       }
-      const haystack = [c.name, ...(c.aliases ?? []), c.relationship ?? '', place?.name ?? '', c.address ?? ''].join(' ').toLowerCase()
+      const haystack = [c.name, ...(c.aliases ?? []), c.relationship ?? '', place?.name ?? c.place_name ?? '', c.address ?? ''].join(' ').toLowerCase()
       return { card, c, hit: words.every((w) => haystack.includes(w)) }
     })
     .filter((x) => x.hit)

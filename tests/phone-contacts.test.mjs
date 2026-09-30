@@ -30,3 +30,14 @@ test('each card has what the buttons need: a dialable number and where to drive 
   assert.equal(layla.tel, null)
   assert.equal(layla.address, '700 S Rosemary Ave, West Palm Beach, FL')
 })
+
+// Directions to someone (2026-09-30): Alice's house was saved as a place confirmed for her, which People
+// never read ("dude, alice has a saved address"). People now reads contact_directory, which carries the
+// address wherever it's kept, and the place's name.
+test('an address from the directory (a place confirmed for her) is her address, and its place name shows', () => {
+  const alice = { id: 'a', name: 'Alice', aliases: [], relationship: 'contact', phone: null, email: null, address: '8255 West Lake Drive, Lake Clark Shores, FL 33406', primary_place_id: null, place_name: "Alice's House", confirmed: true, occurrence_count: 1, dismissed_at: null }
+  const [card] = contactCards([alice], [], 'alice')
+  assert.equal(card.address, '8255 West Lake Drive, Lake Clark Shores, FL 33406')
+  assert.equal(card.placeName, "Alice's House")
+  assert.equal(contactCards([alice], [], 'house')[0]?.name, 'Alice', 'found by her place too')
+})

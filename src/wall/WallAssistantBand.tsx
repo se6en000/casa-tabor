@@ -4,6 +4,8 @@ import { useProfileSession } from '../contexts/useProfileSession'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
 import WallKeyboard from './WallKeyboard'
+import WallDirections from './WallDirections'
+import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
@@ -559,6 +561,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           {shownQuestion ? `“${shownQuestion}”` : state === 'LISTENING' ? 'Go ahead — I’m listening.' : 'Ask about the day, or ask to add something.'}
         </div>
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
+        {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
 
         {which && (
           <div className="flex flex-col gap-[16px]">

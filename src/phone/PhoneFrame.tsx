@@ -14,7 +14,7 @@ import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wal
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
 import type { FamilyMember } from '../types'
-import { useSavedContacts } from '../hooks/useSavedContacts'
+import { useContactDirectory } from '../hooks/useSavedContacts'
 import { useSavedPlaces } from '../hooks/useSavedPlaces'
 import { scanDocumentFiles, type ScannedItem } from '../utils/documentScanner'
 import { similarEvent } from './scan'
@@ -50,7 +50,7 @@ export default function PhoneFrame() {
     (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
     [members, routines, dayOffs, tripStateFor],
   )
-  const { data: contacts = [] } = useSavedContacts()
+  const { data: contacts = [] } = useContactDirectory()
   const { data: places = [] } = useSavedPlaces()
   const comingUp = useComingUp({ surface: 'phone' })
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.

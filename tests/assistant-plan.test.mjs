@@ -99,7 +99,7 @@ test('the planning model sees the ids it needs: each project and each step', () 
 test('the assistant hands the plan over with its words; the card executor saves and undoes it, and tells Google', async () => {
   const fs = await import('node:fs')
   const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(ai, /\{ events, utcOffset, now, groceries, family, todos, projects \}\)/, 'the checker knows the projects and their steps')
+  assert.match(ai, /\{ events, utcOffset, now, groceries, family, todos, projects, contacts \}\)/, 'the checker knows the projects and their steps (and the contacts, for an address)')
   assert.match(ai, /card\.tool === 'apply_plan' \? \(said \|\|/)
   const exec = fs.readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
   const part = exec.slice(exec.indexOf("if (tool === 'apply_plan' || tool === 'undo_plan')"), exec.indexOf("if (tool === 'add_gift_idea')"))

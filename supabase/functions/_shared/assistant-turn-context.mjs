@@ -159,8 +159,10 @@ Asking whether someone could take, drive, join or move a calendar item is sugges
 Dates: always take them from the Days list. In scheduling, pushing or moving something back (or out) means later; moving it up (or forward, or earlier) means earlier. Times: 24-hour local; read a bare hour as the sensible part of the day for that kind of thing, in the context of any time already set. A new start without an end keeps the length.
 
 "day": when the latest message is about one calendar day — what's on it, whether anything is happening then, or to see it (a date, a weekday, a holiday, "that day" from the conversation): {"date": "YYYY-MM-DD", "date_basis": as above, "open": true only when they ask to see, open, show or pull up the day itself (on the wall, the screen, the calendar)} — else null (an add or a change, several days, a range, no day).
+"directions_to": when they want directions, a route, to navigate, or a link to go to one person or place — who or where, as they said it ("Alice", "Liv's coach", "Lake Lytal") — else null.
+"address_for": when the latest message gives the address of a person or place ("It's 412 Palm Way, Jupiter" after Casa asked for Mary's address; "Alice lives at 8255 West Lake Drive"): {"who": the person or place, as named in the conversation, "address": the address as said} — else null.
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null}`
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null}`
 }
 
 const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
@@ -194,7 +196,11 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const day = ['question', 'other'].includes(act) && r.day && typeof r.day === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(String(r.day.date ?? ''))
     ? { date: String(r.day.date), date_basis: typeof r.day.date_basis === 'string' ? r.day.date_basis : 'date', open: r.day.open === true }
     : null
-  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day }
+  // Directions (canvas 13c/13d): who or where, as said; the server finds the route.
+  const directionsTo = act !== 'aside' && act !== 'add' && act !== 'change' && typeof r.directions_to === 'string' && r.directions_to.trim() ? r.directions_to.trim().slice(0, 120) : null
+  const af = r.address_for && typeof r.address_for === 'object' ? r.address_for : null
+  const addressFor = act !== 'aside' && af && typeof af.who === 'string' && af.who.trim() && typeof af.address === 'string' && af.address.trim() ? { who: af.who.trim().slice(0, 120), address: af.address.trim().slice(0, 300) } : null
+  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none' && act !== 'aside'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question, day, directionsTo, addressFor }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/

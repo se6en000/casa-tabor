@@ -96,6 +96,11 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Can you open October 17th for me'),
     said('Here’s Saturday, October 17.', { showDay: { date: '2026-10-17', open: true } }),
   ],
+  // Directions (canvas 13c/13d): "Navigate to Alice's house" — the route on the screen.
+  directions: () => [
+    user('Navigate to Alice’s house'),
+    said('Alice’s house is 8255 West Lake Drive in Lake Clark Shores — about 12 minutes from here right now.', { directions: { name: 'Alice', address: '8255 West Lake Drive, Lake Clark Shores, FL 33406', phone: '(561) 555-0101', maps: 'https://www.google.com/maps/dir/?api=1&destination=8255%20West%20Lake%20Drive%2C%20Lake%20Clark%20Shores%2C%20FL%2033406' } }),
+  ],
   // 07e: a question still thinking — the tip line shows under it.
   thinking: () => [user('When’s Carl’s birthday again?')],
   // P3.25 phase 1: a longer think, with the live line of what Casa is looking up.
