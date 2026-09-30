@@ -180,3 +180,10 @@ test('the shelf card carries every active project inside, in plan order, for the
   ])
   assert.equal(c.inside.title, 'Emme — jellyfish', 'the first still leads')
 })
+
+test('a closed project inside is never on the card', () => {
+  const closed = { ...PAINT, steps: PAINT.steps.map((st) => (st.id === 'stucco' ? { ...st, done_at: '2026-09-25T12:00:00Z', child: { ...st.child, status: 'dropped', closed_reason: 'Changed' } } : st)) }
+  const c = shelfCard(closed, '2026-09-29')
+  assert.deepEqual(c.insides, [])
+  assert.equal(c.inside, null)
+})

@@ -88,3 +88,46 @@ test('what a revision took off is named, nothing else', () => {
   assert.deepEqual(planChange(before, after).removed, ['Clear dome umbrella', 'Charge the fairy lights'])
   assert.deepEqual(planChange(null, after).removed, [])
 })
+
+// Phase 4 (P3.25): changes to a saved project, and a project replaced ("changed to Chucky").
+const changes = [
+  { id: 'i1', kind: 'close_project', project_id: 'p-scuba', title: 'Liv — scuba diver', reason: 'Changed to Chucky', open_steps: 2 },
+  { id: 'i2', kind: 'project', title: 'Liv — Chucky', part_of: 'Halloween costumes', part_of_project_id: 'p1', steps: [{ title: 'Buy overalls' }] },
+  { id: 'i3', kind: 'edit_step', project_id: 'p-jelly', step_id: 's1', project: 'Emme — jellyfish', title: 'Build night', changes: { cal_start: '2026-10-18', who: 'Kelly' } },
+  { id: 'i4', kind: 'add_step', project_id: 'p-jelly', project: 'Emme — jellyfish', title: 'Paint the tentacles', after: 'Build night', changes: { minutes: 45 } },
+  { id: 'i5', kind: 'remove_step', project_id: 'p-jelly', step_id: 's2', project: 'Emme — jellyfish', title: 'Fitting' },
+]
+
+test('the draft shows what closes, and each change to a saved project in its words', () => {
+  const s = planSections(changes)
+  assert.deepEqual(s.map((x) => x.heading), ['CLOSING', 'STEPS', 'CHANGES TO EMME — JELLYFISH'])
+  assert.deepEqual(s[0].lines.map((l) => [l.text, l.meta, l.struck ?? false]), [['Liv — scuba diver', 'Changed to Chucky · 2 steps not done come off', true]])
+  assert.deepEqual(s[2].lines.map((l) => [l.text, l.meta, l.struck ?? false]), [
+    ['Build night', '→ Sun, Oct 18 · Kelly', false],
+    ['+ Paint the tentacles', 'after Build night · 45 min', false],
+    ['Fitting', 'comes off', true],
+  ])
+})
+
+test('the Agree card takes off first, then adds, then changes — a tick each', () => {
+  const g = agreeGroups(changes)
+  assert.deepEqual(g.map((x) => x.heading), ['TAKING OFF', 'PROJECT · INSIDE HALLOWEEN COSTUMES', 'CHANGES TO EMME — JELLYFISH'])
+  assert.deepEqual(g[0].rows.map((r) => [r.id, r.label, r.meta]), [['i1', 'Close Liv — scuba diver', 'Changed to Chucky']])
+  assert.deepEqual(g[2].rows.map((r) => [r.id, r.label, r.meta]), [
+    ['i3', 'Build night → Sun, Oct 18 · Kelly', ''],
+    ['i4', 'Add “Paint the tentacles”', 'after Build night'],
+    ['i5', 'Remove “Fitting”', ''],
+  ])
+})
+
+test('saved: a closed project and a changed one each open where they live', () => {
+  const { rows } = savedRows(changes, { links: [
+    { id: 'i1', kind: 'close_project', project_id: 'p-scuba' }, { id: 'i2', kind: 'project', project_id: 'p-chucky' },
+    { id: 'i3', kind: 'edit_step', project_id: 'p-jelly' }, { id: 'i4', kind: 'add_step', project_id: 'p-jelly' }, { id: 'i5', kind: 'remove_step', project_id: 'p-jelly' },
+  ] }, [])
+  assert.deepEqual(rows.map((r) => [r.label, r.open?.id ?? null]), [
+    ['Liv — scuba diver closed · Changed to Chucky', 'p-scuba'],
+    ['Liv — Chucky · 1 step, inside Halloween costumes', 'p-chucky'],
+    ['Emme — jellyfish: 3 changes', 'p-jelly'],
+  ])
+})

@@ -107,15 +107,20 @@ const PAINT_TWO: TodoProjectDetail = {
   steps: [...PAINT.steps.slice(0, 5), pstep('st-floor', 4, 'Redo floorboards on the roof patio', { child_project_id: 'pr-floor', child: { id: 'pr-floor', title: 'Redo floorboards on the roof patio', done: 0, total: 3, next: 'Price the boards', status: 'active' } }), ...PAINT.steps.slice(5)],
 }
 
-export function useFixtureTodos({ stepEvent = false, twoInside = false }: { stepEvent?: boolean; twoInside?: boolean } = {}) {
+// `closedInside` (P3.25 phase 4): the stucco replaced ("Mario's doing it with the painting") — closed, kept.
+const CLOSED_REASON = 'Mario’s doing it with the painting'
+const PAINT_CLOSED: TodoProjectDetail = { ...PAINT, steps: PAINT.steps.map((st) => (st.id === 'st-stucco' ? { ...st, done_at: '2026-09-25T12:00:00Z', child: { ...st.child!, status: 'dropped', closed_reason: CLOSED_REASON } } : st)) }
+const STUCCO_CLOSED: TodoProjectDetail = { ...STUCCO, project: { ...STUCCO.project, status: 'dropped', closed_reason: CLOSED_REASON } }
+
+export function useFixtureTodos({ stepEvent = false, twoInside = false, closedInside = false }: { stepEvent?: boolean; twoInside?: boolean; closedInside?: boolean } = {}) {
   const STEP_EVENT = stepEvent
   const [todoList, setTodoList] = useState<TodoList>(() => ({
     ...TODOS,
-    projects: twoInside ? [PAINT_TWO, HALLOWEEN].map(summary) : STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
+    projects: closedInside ? [PAINT_CLOSED, HALLOWEEN, FLOOR].map(summary) : twoInside ? [PAINT_TWO, HALLOWEEN].map(summary) : STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
     // A dated step whose day has passed, asked about.
     pastSteps: STEP_EVENT ? [{ id: 'hw-yard', projectId: 'pr-halloween', project: 'Halloween decorations', title: 'The yard: tombstones and the fog machine', date: '2026-09-24', start: '2026-09-24' }] : [],
   }))
-  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': twoInside ? PAINT_TWO : PAINT, 'pr-stucco': STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
+  const [projects, setProjects] = useState<Record<string, TodoProjectDetail>>({ 'pr-paint': closedInside ? PAINT_CLOSED : twoInside ? PAINT_TWO : PAINT, 'pr-stucco': closedInside ? STUCCO_CLOSED : STUCCO, 'pr-halloween': HALLOWEEN, 'pr-floor': FLOOR })
   const todos = {
     list: todoList,
     useProject: (id: string | null) => ({ data: id ? projects[id] ?? null : null }),

@@ -34,6 +34,19 @@ const jellyfish = (withTryOn: boolean) => ({
   ],
 })
 
+// Phase 4 (P3.25): Liv's scuba diver replaced by Chucky, and a change to Emme's jellyfish.
+const chucky = () => ({
+  id: 'plan',
+  title: 'Liv is Chucky now',
+  items: [
+    { id: 'i1', kind: 'close_project', project_id: 'p-scuba', title: 'Liv — scuba diver', reason: 'Changed to Chucky', open_steps: 2 },
+    { id: 'i2', kind: 'project', title: 'Liv — Chucky', part_of: 'Halloween costumes', part_of_project_id: 'p-costumes', steps: [{ title: 'Buy denim overalls and a striped shirt', cost_cents: 3500 }, { title: 'Red yarn wig', minutes: 45 }, { title: 'Scar makeup test', cal_start: '2026-10-25' }] },
+    { id: 'i3', kind: 'edit_step', project_id: 'p-jelly', step_id: 's-build', project: 'Emme — jellyfish', title: 'Build night', changes: { cal_start: '2026-10-18', who: 'Kelly' } },
+    { id: 'i4', kind: 'add_step', project_id: 'p-jelly', project: 'Emme — jellyfish', title: 'Paint the tentacles', after: 'Build night', changes: { minutes: 45 } },
+    { id: 'i5', kind: 'remove_step', project_id: 'p-jelly', step_id: 's-fit', project: 'Emme — jellyfish', title: 'Fitting' },
+  ],
+})
+
 export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   // 06a: a draft that takes follow-ups, revised in place.
   add: () => [
@@ -78,6 +91,11 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
   thinking: () => [user('When’s Carl’s birthday again?')],
   // P3.25 phase 1: a longer think, with the live line of what Casa is looking up.
   'looking-up': () => [user('Let’s talk about the Halloween decorations this year')],
+  // Phase 4: a saved project replaced, another changed — one plan.
+  'plan-change': () => [
+    user('Liv wants to be Chucky now, not a scuba diver. And move Emme’s build night to Sunday, Kelly’s doing it.'),
+    said('Here’s the swap, and Emme’s change. The mask you already bought stays on her project.', draft('apply_plan', chucky(), 'Here’s the swap.')),
+  ],
   // 12b: the plan beside the conversation, revised in place (the try-on just added).
   plan: () => [
     user('Let’s plan Emme’s Halloween costume.'),

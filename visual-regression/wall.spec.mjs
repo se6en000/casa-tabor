@@ -577,6 +577,27 @@ test('wall assistant: a plan — the draft beside the conversation, one card wit
 
 // Jake, 2026-09-29: "it stops listening after the plan is suggested, it should keep listening the whole
 // time". While a plan is on screen, quiet or room noise reopen the mic rather than turning it off.
+// Phase 4 (P3.25; Jake: "if Olive changes her costume from scuba diver to Chucky, it will need the
+// ability to completely redo the plan" … "mark it … so we know it's closed/not active").
+test('wall assistant: a plan that replaces a saved project and changes another — what closes first, then the changes', async ({ page }) => {
+  await band(page, 'plan-change')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await section.getByRole('button', { name: 'Stop listening' }).click()
+  const draft = section.getByRole('region', { name: 'Liv is Chucky now — the plan' })
+  await expect(draft.getByText('CLOSING')).toBeVisible()
+  await expect(draft.getByText('Changed to Chucky · 2 steps not done come off')).toBeVisible()
+  await expect(draft.getByText('CHANGES TO EMME — JELLYFISH')).toBeVisible()
+  await expect(draft.getByText('→ Sun, Oct 18 · Kelly')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-change-draft.png')
+  await draft.getByRole('button', { name: 'Set it up…' }).click()
+  const agree = page.getByRole('region', { name: 'Set up Liv is Chucky now' })
+  await expect(agree.getByText('TAKING OFF')).toBeVisible()
+  await expect(agree.getByRole('button', { name: /^Close Liv — scuba diver/ })).toBeVisible()
+  await expect(agree.getByRole('button', { name: 'Agree · set up 5 things' })).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-change-agree.png')
+})
+
 test('wall assistant: while a plan is on screen, the mic keeps listening through quiet and noise', async ({ page }) => {
   await band(page, 'plan')
   const section = page.getByRole('region', { name: 'Assistant' })
@@ -1036,6 +1057,27 @@ test('wall: a project card swipes through the projects inside it; a tap opens th
   await expect(inside.getByText('0 of 3')).toBeVisible()
   await inside.click()
   await expect(page.getByRole('region', { name: 'Redo floorboards on the roof patio — project' })).toBeVisible()
+})
+
+// Phase 4 (P3.25; Jake: "lets at least make it … so we know its closed/not active"): a project replaced
+// stays in its parent as a closed row, and its own page says so, with Reopen.
+test('wall: a closed project — CLOSED in its parent with the reason, and a banner with Reopen on its page', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&closedInside=1')
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  const shelf = page.getByRole('region', { name: 'Projects' })
+  await expect(shelf.getByRole('button', { name: /^Inside Paint the house/ })).toHaveCount(0)
+  await shelf.getByRole('button', { name: 'Open Paint the house' }).click()
+  const paint = page.getByRole('region', { name: 'Paint the house — project' })
+  await paint.getByRole('button', { name: /done · show them/ }).click()
+  await expect(paint.getByText('CLOSED · MARIO’S DOING IT WITH THE PAINTING')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('project-closed-row.png')
+  await paint.getByRole('button', { name: 'Open', exact: true }).first().click()
+  const stucco = page.getByRole('region', { name: 'Stucco cracks: seal and patch — project' })
+  await expect(stucco.getByText('CLOSED', { exact: true })).toBeVisible()
+  await expect(stucco.getByText(/Mario’s doing it with the painting/)).toBeVisible()
+  await expect(stucco.getByRole('button', { name: 'Reopen' })).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('project-closed-page.png')
 })
 
 // Board 10a (Jake: "gold for done, brown/black for the current step … the diagonal line for in progress"

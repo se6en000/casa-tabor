@@ -30,7 +30,7 @@ export function WallPlanDraft({ plan, previous, working, onSetUp, onKeepTalking 
       {change.removed.length > 0 && <div className="truncate text-wall-detail text-wall-ink-2">Took off: {change.removed.join(', ')}</div>}
       <div className="grid min-h-0 grid-cols-2 gap-x-[36px] gap-y-[8px]">
         {sections.map((s) => (
-          <div key={s.heading} className={`flex min-w-0 flex-col ${s.heading === 'STEPS' ? 'col-span-2' : ''}`}>
+          <div key={s.heading} className={`flex min-w-0 flex-col ${s.heading === 'STEPS' || s.heading === 'CLOSING' || s.heading.startsWith('CHANGES TO') ? 'col-span-2' : ''}`}>
             <div className={`${eyebrow} mt-[6px] text-wall-brass-ink`}>{s.heading}</div>
             {s.intro && <div className="text-wall-detail text-wall-ink-2">{s.intro}{s.why ? ` · ${s.why}` : ''}</div>}
             {s.lines.map((l) => (
@@ -42,7 +42,7 @@ export function WallPlanDraft({ plan, previous, working, onSetUp, onKeepTalking 
                 )}
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-baseline justify-between gap-[16px]">
-                    <span className={`min-w-0 truncate text-wall-body font-semibold ${l.done ? 'text-wall-ink-2 line-through' : ''}`}>{l.text}</span>
+                    <span className={`min-w-0 truncate text-wall-body font-semibold ${l.done || l.struck ? 'text-wall-ink-2 line-through' : ''}`}>{l.text}</span>
                     {l.meta && <span className="shrink-0 text-wall-detail font-semibold text-wall-ink-2">{l.meta}</span>}
                   </div>
                   {l.why && <span className="text-wall-detail text-wall-ink-2">{l.why}</span>}

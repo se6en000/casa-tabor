@@ -59,6 +59,11 @@ function describePlan(plan, utcOffset) {
     if (i.kind === 'todo') return `to-do “${i.title}”${i.due ? ` by ${shortDay(i.due)}` : ''}`
     if (i.kind === 'shopping') return `shopping “${i.name}”`
     if (i.kind === 'pack') return `pack “${i.label}” for ${i.event_title ?? 'its event'}`
+    const what = (c) => Object.entries(c ?? {}).map(([k, v]) => `${k.replace('cal_start', 'date').replace('cost_cents', 'cost')} ${k === 'cal_start' ? shortDay(v) : k === 'cost_cents' ? `$${Math.round(v / 100)}` : v}`).join(', ')
+    if (i.kind === 'edit_step') return `change “${i.title}” on ${i.project}: ${what(i.changes)}`
+    if (i.kind === 'add_step') return `add “${i.title}” to ${i.project}${i.after ? ` after “${i.after}”` : ''}${i.changes ? ` (${what(i.changes)})` : ''}`
+    if (i.kind === 'remove_step') return `remove “${i.title}” from ${i.project}`
+    if (i.kind === 'close_project') return `close ${i.title} (${i.reason})`
     return i.kind
   }
   return `${plan?.title ?? '(untitled)'}\n${(plan?.items ?? []).map((i) => `- ${line(i)}${i.why ? ` (why: ${i.why})` : ''}`).join('\n')}`
@@ -77,7 +82,7 @@ const effort = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? 
 // A project for the model (P3.25 phase 1): every step, so "what's left on the roof?" or "what should I
 // do Saturday?" is answered from the steps, not a one-line summary.
 function describeProject(p) {
-  const head = `- ${p.id ? `[${p.id}] ` : ''}${p.title}${p.aim_date ? ` · aim ${shortDay(p.aim_date)}` : ''} · ${p.done} of ${p.total} steps done`
+  const head = `- ${p.id ? `[${p.id}] ` : ''}${p.title}${p.parent ? ` (inside ${p.parent})` : ''}${p.aim_date ? ` · aim ${shortDay(p.aim_date)}` : ''} · ${p.done} of ${p.total} steps done`
   if (!Array.isArray(p.steps)) return `${head}${p.next ? ` · next: ${p.next}` : ''}`
   const nowGrp = p.steps.find((st) => !st.done)?.grp
   return [head, ...p.steps.map((st) => {
@@ -108,7 +113,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
     sections.push(`TO-DO LIST (his open to-dos; [id] first — if what he asks to add is already on it, say so instead of adding it again, and a project grows from it with from_id):\n${todos.map((t) => `- [${t.id}] ${t.title}${t.due ? ` · by ${day(t.due)}` : ''}`).join('\n')}`)
   }
   if (projects.length) {
-    sections.push(`PROJECTS (saved, each with its steps in order — done, NOW (side by side when there are several), then the rest; a saved project, its steps, or a saved to-do can't be changed or deleted by voice yet — say he can tap it on the To do screen to change it; a new plan_project card would make a second project):\n${projects.map(describeProject).join('\n')}`)
+    sections.push(`PROJECTS (saved, each with its steps in order — done, NOW (side by side when there are several), then the rest; ${planning ? 'change one with set_plan: edit_step, add_step, remove_step, or close_project to replace it' : 'to change one or its steps, call think_it_through; a saved to-do is changed by tapping it on the To do screen'}; a new plan_project card would make a second project):\n${projects.map(describeProject).join('\n')}`)
   }
   // The whole Coming up list (P3.25 phase 1): "the Halloween decorations" already has a starter plan.
   if (comingUp.length) {
@@ -194,19 +199,21 @@ export const FULL_AI_TOOLS = [
 /** Lookups the server runs for D (the old path's code, `lookups.ts`). */
 // The fast model's way to hand a turn to the planning model (P3.25): not a lookup — it changes who answers.
 export const THINK_IT_THROUGH = 'think_it_through'
-const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
+const THINK_IT_THROUGH_TOOL = { name: THINK_IT_THROUGH, description: 'Call this, and nothing else, when he wants to talk something through rather than a quick fact or a single change: ideas, a theme, a holiday or season, a party, a project, a trip, something he wants to make or do (not a single thing to add), planning something with him ("let’s plan …", "help me plan …"), a change to one of his saved projects or its steps ("move the build night to Saturday", "Kelly\'s doing the tentacles"), whether something is a good idea, or help thinking about anything — or when the conversation is already thinking something through and he\'s carrying it on. A slower, more thoughtful model then answers him.', parameters: { type: 'OBJECT', properties: {} } }
 // The planning model sets the whole plan (P3.25 phase 3; canvas 12b): each call replaces it, so a
 // change is just the plan again — the card is revised in place, and nothing saves until he agrees.
-const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything; keep everything already in it unless he asks to take it off. Anything he wants added while planning (a shopping line, a reminder, a date) goes into the plan. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). A dated project step goes on the calendar by itself — don\'t add it again as an event; date a step only when it happens on a set day, and one session is one calendar entry (one event, or date only its first step).', parameters: { type: 'OBJECT', properties: {
+const SET_PLAN_TOOL = { name: 'set_plan', description: 'Once a direction is settled (he picked an idea, or asks what he needs or when to do it), set the plan: the whole plan every time — a change he asks for is this again with everything; keep everything already in it unless he asks to take it off. Anything he wants added while planning (a shopping line, a reminder, a date) goes into the plan. The fewest things that matter, each with a short why. It shows beside the conversation; nothing is saved until he agrees on its card. Kinds: project (a new one, its steps in order with minutes, cost in dollars, who, date; part_of_project_id puts it inside one of his saved projects — when one covers it, same occasion or job, put it inside that one), tick_step (a saved step this settles: project_id and step_id), event (a timed calendar event: start and end local "YYYY-MM-DDTHH:MM"), todo (title, due), shopping (name), pack (label, for_event: a calendar [id] or the title of an event in this plan). To change one of his saved projects, change it — never rebuild it: edit_step (project_id, step_id, and only what changes: title, who, date, minutes, cost), add_step (project_id, title, after_step_id, and any of who, date, minutes, cost), remove_step (project_id, step_id). When a project is being replaced by a different idea ("she wants to be Chucky now"), close_project it with a short reason and add the new project in its place (the same part_of_project_id); what\'s already done stays. A dated project step goes on the calendar by itself — don\'t add it again as an event; date a step only when it happens on a set day, and one session is one calendar entry (one event, or date only its first step).', parameters: { type: 'OBJECT', properties: {
   title: { type: 'STRING', description: 'what the plan is for, in a few words' },
   items: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-    kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack'] },
+    kind: { type: 'STRING', enum: ['project', 'tick_step', 'event', 'todo', 'shopping', 'pack', 'edit_step', 'add_step', 'remove_step', 'close_project'] },
     title: { type: 'STRING' }, why: { type: 'STRING', description: 'one short reason' },
     part_of_project_id: { type: 'STRING' }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' },
     steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' }, who: { type: 'STRING' }, date: { type: 'STRING', description: 'YYYY-MM-DD' }, end_date: { type: 'STRING', description: 'YYYY-MM-DD' } }, required: ['title'] } },
     project_id: { type: 'STRING' }, step_id: { type: 'STRING' },
     start: { type: 'STRING' }, end: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD' },
     name: { type: 'STRING' }, label: { type: 'STRING' }, for_event: { type: 'STRING' },
+    who: { type: 'STRING' }, date: { type: 'STRING', description: 'YYYY-MM-DD' }, end_date: { type: 'STRING', description: 'YYYY-MM-DD' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' },
+    after_step_id: { type: 'STRING' }, reason: { type: 'STRING', description: 'why a project is closed, in a few words: "Changed to Chucky"' },
   }, required: ['kind'] } },
 }, required: ['title', 'items'] } }
 // While planning, the model only looks things up and changes the plan (Owen's costume, 2026-09-29:
@@ -289,6 +296,38 @@ function planCard(a, { events = [], utcOffset, now, projects = [] }) {
       const target = text(i.for_event)
       if (!label || !target) continue
       kept.push(withWhy({ kind: 'pack', label, for_event: target }))
+    } else if (i?.kind === 'edit_step' || i?.kind === 'add_step' || i?.kind === 'remove_step') {
+      // A change to a saved project (phase 4): the project and step must really be there.
+      const project = projects.find((p) => p.id === i.project_id)
+      if (!project) continue
+      const changes = {}
+      const num = (v, max) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n) : null }
+      if (i.kind === 'edit_step' && text(i.title)) changes.title = text(i.title)
+      if (text(i.who)) changes.who = text(i.who)
+      const start = day(i.date); if (start) changes.cal_start = start
+      const end = day(i.end_date); if (start && end && end > start) changes.cal_end = end
+      const minutes = num(i.minutes, 60 * 24 * 7); if (minutes) changes.minutes = minutes
+      const cost = num(i.cost, 100000); if (cost) changes.cost_cents = cost * 100
+      if (i.kind === 'add_step') {
+        const t = text(i.title)
+        if (!t) continue
+        delete changes.title
+        const after = project.steps?.find((st) => st.id === i.after_step_id)
+        const item = { kind: 'add_step', project_id: project.id, project: project.title, title: t }
+        if (after) { item.after_step_id = after.id; item.after = after.title }
+        if (Object.keys(changes).length) item.changes = changes
+        kept.push(withWhy(item))
+        continue
+      }
+      const step = project.steps?.find((st) => st.id === i.step_id && !st.child)
+      if (!step) continue
+      if (i.kind === 'remove_step') { kept.push(withWhy({ kind: 'remove_step', project_id: project.id, step_id: step.id, project: project.title, title: step.title })); continue }
+      if (!Object.keys(changes).length) continue
+      kept.push(withWhy({ kind: 'edit_step', project_id: project.id, step_id: step.id, project: project.title, title: step.title, changes }))
+    } else if (i?.kind === 'close_project') {
+      const project = projects.find((p) => p.id === i.project_id)
+      if (!project) continue
+      kept.push(withWhy({ kind: 'close_project', project_id: project.id, title: project.title, reason: (text(i.reason) ?? 'Replaced').slice(0, 80), open_steps: (project.steps ?? []).filter((st) => !st.done).length }))
     }
   }
   // One session, one calendar entry (Jake's first plan put four steps and an event on one Sunday):

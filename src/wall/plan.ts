@@ -10,6 +10,12 @@ export type PlanItem =
   | { id: string; kind: 'todo'; title: string; due?: string; why?: string }
   | { id: string; kind: 'shopping'; name: string; why?: string }
   | { id: string; kind: 'pack'; label: string; event_id?: string; event_ref?: string; event_title?: string; why?: string }
+  // Changes to a saved project, and a project replaced (phase 4).
+  | { id: string; kind: 'edit_step'; project_id: string; step_id: string; project: string; title: string; changes: StepChanges; why?: string }
+  | { id: string; kind: 'add_step'; project_id: string; project: string; title: string; after_step_id?: string; after?: string; changes?: StepChanges; why?: string }
+  | { id: string; kind: 'remove_step'; project_id: string; step_id: string; project: string; title: string; why?: string }
+  | { id: string; kind: 'close_project'; project_id: string; title: string; reason: string; open_steps?: number; why?: string }
+export interface StepChanges { title?: string; who?: string; cal_start?: string; cal_end?: string; minutes?: number; cost_cents?: number }
 
 export interface PlanArgs { id: string; title: string; items: PlanItem[]; skip?: string[] }
 export interface PlanLink { id: string; kind: string; project_id?: string; event_id?: string; start?: string }
@@ -34,13 +40,20 @@ const effort = (m: number) => (m < 60 ? `${m} min` : `${Math.round((m / 60) * 10
 const money = (cents: number) => `$${Math.round(cents / 100)}`
 const stepMeta = (st: PlanStep) => [st.cal_start ? dayText(st.cal_start) : null, st.who, st.minutes ? effort(st.minutes) : null, st.cost_cents ? money(st.cost_cents) : null].filter(Boolean).join(' · ')
 const itemName = (i: PlanItem) => (i.kind === 'shopping' ? i.name : i.kind === 'pack' ? i.label : i.title)
+/** "→ Sun, Oct 18 · Kelly" — what a change to a step does, in order: name, day, who, time, cost. */
+const changeText = (c: StepChanges | undefined) => [c?.title ? `“${c.title}”` : null, c?.cal_start ? dayText(c.cal_start) : null, c?.who, c?.minutes ? effort(c.minutes) : null, c?.cost_cents ? money(c.cost_cents) : null].filter(Boolean).join(' · ')
+type Change = Extract<PlanItem, { kind: 'edit_step' | 'add_step' | 'remove_step' }>
+const isChange = (i: PlanItem): i is Change => i.kind === 'edit_step' || i.kind === 'add_step' || i.kind === 'remove_step'
+const changeProjects = (items: PlanItem[]) => [...new Set(items.filter(isChange).map((i) => i.project))]
 
-export interface PlanLine { key: string; text: string; meta: string; why?: string; done?: boolean; number?: number }
+export interface PlanLine { key: string; text: string; meta: string; why?: string; done?: boolean; number?: number; struck?: boolean }
 export interface PlanSection { heading: string; intro?: string; why?: string; lines: PlanLine[] }
 
 /** The draft (board 12b): steps first (ticks, then the new steps in order), then where the rest lands. */
 export function planSections(items: PlanItem[]): PlanSection[] {
   const out: PlanSection[] = []
+  const closing = items.filter((i): i is Extract<PlanItem, { kind: 'close_project' }> => i.kind === 'close_project')
+  if (closing.length) out.push({ heading: 'CLOSING', lines: closing.map((c) => ({ key: `close:${c.title}`, text: c.title, meta: `${c.reason}${c.open_steps ? ` · ${c.open_steps} ${c.open_steps === 1 ? 'step' : 'steps'} not done come${c.open_steps === 1 ? 's' : ''} off` : ''}`, struck: true, why: c.why })) })
   const projects = items.filter((i): i is Extract<PlanItem, { kind: 'project' }> => i.kind === 'project')
   const ticks = items.filter((i): i is Extract<PlanItem, { kind: 'tick_step' }> => i.kind === 'tick_step')
   if (projects.length || ticks.length) {
@@ -54,6 +67,13 @@ export function planSections(items: PlanItem[]): PlanSection[] {
         ...projects.flatMap((p) => p.steps.map((st, n) => ({ key: `step:${st.title}`, text: st.title, meta: stepMeta(st), number: n + 1 }))),
       ],
     })
+  }
+  for (const project of changeProjects(items)) {
+    out.push({ heading: `CHANGES TO ${project.toUpperCase()}`, lines: items.filter(isChange).filter((i) => i.project === project).map((i) => (
+      i.kind === 'edit_step' ? { key: `edit_step:${i.title}`, text: i.title, meta: `→ ${changeText(i.changes)}`, why: i.why }
+        : i.kind === 'add_step' ? { key: `add_step:${i.title}`, text: `+ ${i.title}`, meta: [i.after ? `after ${i.after}` : null, changeText(i.changes) || null].filter(Boolean).join(' · '), why: i.why }
+          : { key: `remove_step:${i.title}`, text: i.title, meta: 'comes off', struck: true, why: i.why }
+    )) })
   }
   const shopping = items.filter((i): i is Extract<PlanItem, { kind: 'shopping' }> => i.kind === 'shopping')
   if (shopping.length) out.push({ heading: 'SHOPPING', lines: shopping.map((i) => ({ key: `shopping:${i.name}`, text: i.name, meta: '', why: i.why })) })
@@ -105,7 +125,7 @@ export function planChange(before: PlanItem[] | null, after: PlanItem[]): { line
 }
 const rank = (p: string) => (p.startsWith('added') ? 1 : p.startsWith('took off') ? 2 : 0)
 
-const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack' }
+const PLACE: Record<PlanItem['kind'], string> = { project: 'project', tick_step: 'project', event: 'calendar', todo: 'todo', shopping: 'shopping', pack: 'pack', edit_step: 'project', add_step: 'project', remove_step: 'project', close_project: 'project' }
 /** "7 things, in 5 places": each line on the card is a thing. */
 export function planCount(items: PlanItem[], skip: string[]): { things: number; label: string } {
   const kept = items.filter((i) => !skip.includes(i.id))
@@ -118,11 +138,19 @@ export interface AgreeRow { id: string; label: string; meta: string }
 export function agreeGroups(items: PlanItem[]): Array<{ heading: string; rows: AgreeRow[] }> {
   const groups: Array<{ heading: string; rows: AgreeRow[] }> = []
   const add = (heading: string, rows: AgreeRow[]) => { if (rows.length) groups.push({ heading, rows }) }
+  add('TAKING OFF', items.filter((i): i is Extract<PlanItem, { kind: 'close_project' }> => i.kind === 'close_project').map((c) => ({ id: c.id, label: `Close ${c.title}`, meta: c.reason })))
   const parent = items.find((i): i is Extract<PlanItem, { kind: 'project' }> => i.kind === 'project' && Boolean(i.part_of))
   add(parent ? `PROJECT · INSIDE ${parent.part_of!.toUpperCase()}` : 'PROJECT', [
     ...items.filter((i) => i.kind === 'project').map((i) => ({ id: i.id, label: itemName(i), meta: `${(i as { steps: PlanStep[] }).steps.length} steps` })),
     ...items.filter((i) => i.kind === 'tick_step').map((i) => ({ id: i.id, label: `Tick off “${itemName(i)}”`, meta: 'done' })),
   ])
+  for (const project of changeProjects(items)) {
+    add(`CHANGES TO ${project.toUpperCase()}`, items.filter(isChange).filter((i) => i.project === project).map((i) => (
+      i.kind === 'edit_step' ? { id: i.id, label: `${i.title} → ${changeText(i.changes)}`, meta: '' }
+        : i.kind === 'add_step' ? { id: i.id, label: `Add “${i.title}”`, meta: i.after ? `after ${i.after}` : '' }
+          : { id: i.id, label: `Remove “${i.title}”`, meta: '' }
+    )))
+  }
   add('CALENDAR · AND GOOGLE', items.filter((i): i is Extract<PlanItem, { kind: 'event' }> => i.kind === 'event').map((e) => ({ id: e.id, label: e.title, meta: `${dayText(e.start)} · ${timeRange(e.start, e.end)}` })))
   add('SHOPPING LIST', items.filter((i) => i.kind === 'shopping').map((i) => ({ id: i.id, label: itemName(i), meta: '' })))
   add('TO DO', items.filter((i): i is Extract<PlanItem, { kind: 'todo' }> => i.kind === 'todo').map((t) => ({ id: t.id, label: t.title, meta: t.due ? `by ${dayText(t.due)}` : '' })))
@@ -138,10 +166,17 @@ export function savedRows(items: PlanItem[], result: PlanResult, skip: string[])
   const rows: Array<{ label: string; open: PlanOpen | null }> = []
   const see = (id: string | undefined, when: string | undefined): PlanOpen | null => (id ? { kind: 'event', id, label: when ? `See ${shortDate(when)}` : 'See it' } : null)
   for (const i of saved) {
+    if (i.kind === 'close_project') rows.push({ label: `${i.title} closed · ${i.reason}`, open: { kind: 'project', id: i.project_id, label: 'Open project' } })
+  }
+  for (const i of saved) {
     if (i.kind === 'project') {
       const id = link(i.id)?.project_id
-      rows.push({ label: `${i.title} · ${i.steps.length} steps${i.part_of ? `, inside ${i.part_of}` : ''}`, open: id ? { kind: 'project', id, label: 'Open project' } : null })
+      rows.push({ label: `${i.title} · ${i.steps.length} ${i.steps.length === 1 ? 'step' : 'steps'}${i.part_of ? `, inside ${i.part_of}` : ''}`, open: id ? { kind: 'project', id, label: 'Open project' } : null })
     }
+  }
+  for (const project of changeProjects(saved)) {
+    const these = saved.filter(isChange).filter((i) => i.project === project)
+    rows.push({ label: `${project}: ${these.length} ${these.length === 1 ? 'change' : 'changes'}`, open: { kind: 'project', id: these[0].project_id, label: 'Open project' } })
   }
   for (const i of saved) if (i.kind === 'tick_step') rows.push({ label: `“${i.title}” ticked off`, open: { kind: 'project', id: i.project_id, label: 'Open project' } })
   for (const i of saved) {

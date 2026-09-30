@@ -1220,14 +1220,17 @@ Deno.serve(async (req) => {
     const allSteps = (stepRes.data ?? []) as StepRow[]
     const stepsOf = (id: string) => allSteps.filter((st) => st.project_id === id).sort((a, b) => (a.grp ?? a.position) - (b.grp ?? b.position) || a.position - b.position)
     const childIds = new Set(allSteps.map((st) => st.child_project_id).filter(Boolean))
-    const projects = ((projRes.data ?? []) as Array<{ id: string; title: string; aim_date: string | null }>).filter((p) => !childIds.has(p.id)).map((p) => {
+    // A project inside another is listed too, with its parent (phase 4: "Kelly's doing the tentacles" on Emme's jellyfish).
+    const parentOf = (id: string) => ((projRes.data ?? []) as Array<{ id: string; title: string }>).find((pp) => allSteps.some((st) => st.project_id === pp.id && st.child_project_id === id)) ?? null
+    const projects = ((projRes.data ?? []) as Array<{ id: string; title: string; aim_date: string | null }>).map((p) => {
       const own = stepsOf(p.id)
       const steps = own.map((st) => {
         const inside = st.child_project_id ? ((projRes.data ?? []) as Array<{ id: string; title: string }>).find((c) => c.id === st.child_project_id) : null
         const kids = st.child_project_id ? stepsOf(st.child_project_id) : []
         return { id: st.id, title: st.title, grp: st.grp ?? st.position, done: Boolean(st.done_at), who: st.who, minutes: st.minutes, cost_cents: st.cost_cents, cal_start: st.cal_start, cal_end: st.cal_end, child: inside ? { title: inside.title, done: kids.filter((k) => k.done_at).length, total: kids.length } : null }
       })
-      return { id: p.id, title: p.title, aim_date: p.aim_date, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null, steps }
+      const parent = childIds.has(p.id) ? parentOf(p.id) : null
+      return { id: p.id, title: p.title, parent: parent?.title ?? null, aim_date: p.aim_date, done: own.filter((st) => st.done_at).length, total: own.length, next: own.find((st) => !st.done_at)?.title ?? null, steps }
     })
     const state = incomingConversationState as Record<string, unknown> | null
     const onScreenIds = [
@@ -1392,7 +1395,11 @@ Deno.serve(async (req) => {
   const planOnScreen = (context?.pendingAction as { tool?: string } | undefined)?.tool === 'apply_plan'
   // …and a conversation that already went to the planning model stays there (the app sends `planning`).
   const planningConversation = planOnScreen || (context as { planning?: boolean } | undefined)?.planning === true
-  if (planningConversation && turnResolution?.act !== 'confirm_draft' && !turnContext?.cancelledDraft) {
+  // A change to a project step's calendar entry ("move Emme's build night to Sunday") is a change to
+  // the step, made through its project — not an edit of the all-day entry (live check, 2026-09-29).
+  const stepEventId = turnContext?.card && ['update_event', 'delete_event'].includes(turnContext.card.tool) ? String((turnContext.card.args as { id?: unknown })?.id ?? turnContext.card.about?.id ?? '') : ''
+  const stepCard = stepEventId ? Boolean((await sb.from('todo_steps').select('id').eq('cal_event_id', stepEventId).limit(1).maybeSingle()).data) : false
+  if ((planningConversation || stepCard) && turnResolution?.act !== 'confirm_draft' && !turnContext?.cancelledDraft) {
     const planned = await runFullAi(buildDisplayText, false, true)
     if (planned) return { ...planned, payload: { ...planned.payload, layer: 'plan' } }
   }

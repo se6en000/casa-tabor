@@ -258,6 +258,14 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
         </div>
       </div>
 
+      {/* A project replaced by another ("Changed to Chucky", P3.25 phase 4): closed, kept, reopenable. */}
+      {project.status === 'dropped' && (
+        <div className="flex shrink-0 items-center gap-[16px] rounded-[16px] border-2 border-solid border-wall-rust px-[20px] py-[12px]">
+          <span className="text-wall-label font-bold tracking-[0.2em] text-wall-rust">CLOSED</span>
+          <span className="min-w-0 flex-1 truncate text-wall-body">{project.closed_reason ? `${project.closed_reason.replace(/[.!]$/, '')}.` : 'This project is closed.'} Nothing here is on your list or calendar.</span>
+          <button type="button" onClick={(e) => { e.stopPropagation(); edit('reopen', {}) }} className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Reopen</button>
+        </div>
+      )}
       <div aria-hidden="true" className="flex h-[12px] shrink-0 gap-[4px]">
         {bar.map((k, i) => <span key={i} className={`h-[12px] flex-1 rounded-full ${SEGMENT[k]}`} />)}
       </div>
@@ -288,6 +296,8 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
               <div key={s.id} className="flex h-[44px] shrink-0 items-center gap-[12px] border-0 border-t border-solid border-wall-rule text-wall-ink-2">
                 <span aria-hidden="true" className="ml-[44px] flex h-[26px] w-[26px] items-center justify-center rounded-full bg-wall-brass text-wall-label font-bold text-wall-on-pigment">✓</span>
                 <span className="min-w-0 flex-1 truncate text-wall-detail line-through">{s.child?.title ?? s.title}</span>
+                {s.child?.status === 'dropped' && <span className="shrink-0 text-wall-label font-bold tracking-[0.15em] text-wall-rust">CLOSED{s.child.closed_reason ? ` · ${s.child.closed_reason.toUpperCase()}` : ''}</span>}
+                {s.child && <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className="h-[44px] shrink-0 border-0 bg-transparent px-[8px] text-wall-label text-wall-ink-2 underline">Open</button>}
                 {!s.child && <button type="button" onClick={(e) => { e.stopPropagation(); edit('undo_step', { step_id: s.id }) }} className="h-[44px] border-0 bg-transparent px-[8px] text-wall-label text-wall-ink-2 underline">Undo</button>}
               </div>
             ))}
@@ -296,7 +306,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
               gi === 0 ? (
                 <div key="now" className="flex shrink-0 flex-col rounded-[18px] bg-wall-ink py-[8px] pl-[8px] pr-[14px]">
                   <span className="flex items-center justify-between pb-[2px] pl-[48px]">
-                    <span className="text-wall-label font-bold tracking-[0.25em] text-wall-night-brass">NOW{project.phone === 'none' ? '' : ' · ON YOUR PHONE'}</span>
+                    <span className="text-wall-label font-bold tracking-[0.25em] text-wall-night-brass">{project.status === 'dropped' ? 'NOT GOING · CLOSED' : `NOW${project.phone === 'none' ? '' : ' · ON YOUR PHONE'}`}</span>
                     {g.length > 1 && sideBySide(true)}
                   </span>
                   {g.map((s) => row(s, true))}

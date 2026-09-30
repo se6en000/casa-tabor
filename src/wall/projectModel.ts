@@ -5,7 +5,7 @@
 // a "Then" line between groups; the first group with anything left is "Now". A project inside another
 // (Stucco cracks inside Paint the house) is a row in the list, with its own progress.
 
-export interface ProjectChild { id: string; title: string; done: number; total: number; next: string | null; status: string }
+export interface ProjectChild { id: string; title: string; done: number; total: number; next: string | null; status: string; closed_reason?: string | null }
 export interface ProjectStep {
   id: string
   position: number
@@ -42,6 +42,8 @@ export interface ProjectInfo {
   season_id: string | null
   status: 'active' | 'paused' | 'done' | 'dropped' | string
   paused_until: string | null
+  /** Closed for a reason ("Changed to Chucky", P3.25 phase 4); the project is dropped but kept. */
+  closed_reason?: string | null
   notes: string | null
   created_at: string
 }
@@ -339,7 +341,8 @@ export function shelfCard(detail: Pick<ProjectDetail, 'project' | 'steps'>, toda
     ? `PAUSED${project.paused_until ? ` UNTIL ${shortDate(project.paused_until).toUpperCase()}` : ''}`
     : project.yearly ? 'SEASONAL · EVERY YEAR' : hired ? 'PROJECT · HIRED HELP' : 'PROJECT'
   const nowSteps = (groups[0] ?? []).filter((s) => !s.child_project_id)
-  const insideStep = detail.steps.find((s) => s.child && !s.done_at) ?? detail.steps.find((s) => s.child)
+  // A closed project inside (replaced, P3.25 phase 4) is never shown as one: it's off the active lists.
+  const insideStep = detail.steps.find((s) => s.child && !s.done_at && s.child.status !== 'dropped') ?? detail.steps.find((s) => s.child && s.child.status !== 'dropped')
   return {
     kind,
     segments,
@@ -353,7 +356,7 @@ export function shelfCard(detail: Pick<ProjectDetail, 'project' | 'steps'>, toda
     // Every active project inside, in plan order, for the card's swipe (Jake, 2026-09-29: Owen's ghost
     // sat beside Emme's jellyfish and only hers showed); the finished one when none are active.
     insides: (() => {
-      const active = detail.steps.filter((s) => s.child && !s.done_at)
+      const active = detail.steps.filter((s) => s.child && !s.done_at && s.child.status !== 'dropped')
       return (active.length ? active : insideStep ? [insideStep] : []).map((s) => ({ id: s.child!.id, title: s.child!.title, done: s.child!.done, total: s.child!.total, next: s.child!.next }))
     })(),
   }

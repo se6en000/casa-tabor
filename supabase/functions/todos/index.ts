@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
       // The project page (P3.23): every step's details, a project inside with its own progress, the
       // project this one sits in, and the other projects (for "Move to…", "a project inside", "Part of").
       const [projRes, stepsRes, othersRes, parentRes] = await Promise.all([
-        sb.from('todo_projects').select('id, title, aim_date, aim_firm, budget_cents, people, phone, yearly, season_id, status, paused_until, notes, created_at').eq('id', id).maybeSingle(),
+        sb.from('todo_projects').select('id, title, aim_date, aim_firm, budget_cents, people, phone, yearly, season_id, status, paused_until, notes, created_at, closed_reason').eq('id', id).maybeSingle(),
         sb.from('todo_steps').select('id, position, grp, title, minutes, cost_cents, done_at, reminder_event_id, who, fits, repeat_minutes, repeat_count, repeat_unit, notes, cal_start, cal_end, shop_item, child_project_id').eq('project_id', id).order('grp').order('position'),
         sb.from('todo_projects').select('id, title').in('status', ['active', 'paused']).neq('id', id).order('title'),
         sb.from('todo_steps').select('project_id').eq('child_project_id', id).limit(1).maybeSingle(),
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
       const steps = stepsRes.data ?? []
       const childIds = steps.map((s) => s.child_project_id).filter(Boolean) as string[]
       const [childRes, childStepsRes, parentProjRes] = await Promise.all([
-        childIds.length ? sb.from('todo_projects').select('id, title, status').in('id', childIds) : Promise.resolve({ data: [], error: null }),
+        childIds.length ? sb.from('todo_projects').select('id, title, status, closed_reason').in('id', childIds) : Promise.resolve({ data: [], error: null }),
         childIds.length ? sb.from('todo_steps').select('project_id, title, done_at, grp, position').in('project_id', childIds).order('grp').order('position') : Promise.resolve({ data: [], error: null }),
         parentRes.data ? sb.from('todo_projects').select('id, title').eq('id', parentRes.data.project_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
       ])
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
         const p = (childRes.data ?? []).find((c) => c.id === cid)
         if (!p) return null
         const own = (childStepsRes.data ?? []).filter((c) => c.project_id === cid)
-        return { id: p.id, title: p.title, status: p.status, done: own.filter((c) => c.done_at).length, total: own.length, next: own.find((c) => !c.done_at)?.title ?? null }
+        return { id: p.id, title: p.title, status: p.status, closed_reason: p.closed_reason ?? null, done: own.filter((c) => c.done_at).length, total: own.length, next: own.find((c) => !c.done_at)?.title ?? null }
       }
       return json({
         project: projRes.data,
@@ -173,7 +173,10 @@ Deno.serve(async (req) => {
     if (action === 'project_edit') {
       if (!id || !b.op) return json({ error: 'id and op required' }, 400)
       // The edit, and the project's steps on the calendar kept in step (P3.23 step 2).
-      const { data, error } = await sb.rpc('todo_project_edit_with_calendar', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
+      // Reopen a closed project (P3.25 phase 4) — active again, its steps back on the calendar.
+      const { data, error } = b.op === 'reopen'
+        ? await sb.rpc('todo_project_reopen', { p_project: id })
+        : await sb.rpc('todo_project_edit_with_calendar', { p_project: id, p_op: b.op, p_args: b.args ?? {} })
       if (error) throw new Error(error.message)
       // Google follows, as it does for the assistant's events: a new one is created, a moved one
       // pushed (queued for a retry if Google fails), a removed one deleted.

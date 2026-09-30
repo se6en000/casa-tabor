@@ -120,7 +120,7 @@ test('with a plan on screen, a follow-up goes straight to the planning model', a
   assert.match(ai, /let system = systemFor\(startPlanning\)/)
   const pipeline = ai.slice(ai.indexOf('const runPipeline = async'))
   const early = pipeline.slice(0, pipeline.indexOf('if (turnContext?.card)'))
-  assert.match(early, /planningConversation && turnResolution\?\.act !== 'confirm_draft' && !turnContext\?\.cancelledDraft/)
+  assert.match(early, /\(planningConversation \|\| stepCard\) && turnResolution\?\.act !== 'confirm_draft' && !turnContext\?\.cancelledDraft/)
   assert.match(early, /runFullAi\(buildDisplayText, false, true\)/)
 })
 
@@ -173,4 +173,64 @@ test('the planning model can look things up and change the plan — nothing else
   for (const write of ['add_grocery_items', 'create_event', 'add_todo', 'plan_project', 'update_event']) assert.equal(names.includes(write), false, write)
   const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
   assert.match(tool.description, /keep everything already in it unless he asks/i, '"Where did the plan steps go?"')
+})
+
+// Phase 4 (P3.25): change a saved project by talking, or replace it. Liv's scuba diver, inside her
+// costumes project; the ids are checked against what's really there.
+const livScuba = {
+  id: 'p-scuba', title: 'Liv — scuba diver', parent: 'Halloween costumes', parent_id: 'p-costumes', done: 1, total: 3,
+  steps: [{ id: 's-mask', title: 'Buy the mask', grp: 1, done: true }, { id: 's-tank', title: 'Build the tank', grp: 2, done: false, cal_start: '2026-10-17' }, { id: 's-fit', title: 'Fitting', grp: 3, done: false }],
+}
+const ctx4 = { events, utcOffset, now, projects: [costumes, livScuba] }
+const call4 = (args) => fullAiCard({ name: 'set_plan', args }, ctx4)
+
+test('a saved step changed, added or removed — checked, with the words the card shows', () => {
+  const card = call4({ title: 'Liv’s costume', items: [
+    { kind: 'edit_step', project_id: 'p-scuba', step_id: 's-tank', date: '2026-10-18', who: 'Kelly' },
+    { kind: 'add_step', project_id: 'p-scuba', title: 'Paint the tank', after_step_id: 's-tank', minutes: 45, cost: 12 },
+    { kind: 'remove_step', project_id: 'p-scuba', step_id: 's-fit' },
+    { kind: 'edit_step', project_id: 'p-scuba', step_id: 's-mask', who: 'Kelly' },
+    { kind: 'edit_step', project_id: 'p-scuba', step_id: 's-nope', who: 'Kelly' },
+    { kind: 'remove_step', project_id: 'p-costumes', step_id: 's-fit' },
+  ] })
+  assert.deepEqual(card.args.items, [
+    { id: 'i1', kind: 'edit_step', project_id: 'p-scuba', step_id: 's-tank', project: 'Liv — scuba diver', title: 'Build the tank', changes: { cal_start: '2026-10-18', who: 'Kelly' } },
+    { id: 'i2', kind: 'add_step', project_id: 'p-scuba', project: 'Liv — scuba diver', title: 'Paint the tank', after_step_id: 's-tank', after: 'Build the tank', changes: { minutes: 45, cost_cents: 1200 } },
+    { id: 'i3', kind: 'remove_step', project_id: 'p-scuba', step_id: 's-fit', project: 'Liv — scuba diver', title: 'Fitting' },
+    { id: 'i4', kind: 'edit_step', project_id: 'p-scuba', step_id: 's-mask', project: 'Liv — scuba diver', title: 'Buy the mask', changes: { who: 'Kelly' } },
+  ], 'a step that isn’t there, or isn’t in that project, is left out')
+})
+
+test('a project replaced: closed with its reason, the new one in the same place', () => {
+  const card = call4({ title: 'Liv is Chucky now', items: [
+    { kind: 'close_project', project_id: 'p-scuba', reason: 'Changed to Chucky' },
+    { kind: 'project', title: 'Liv — Chucky', part_of_project_id: 'p-costumes', steps: [{ title: 'Buy overalls' }] },
+  ] })
+  assert.deepEqual(card.args.items[0], { id: 'i1', kind: 'close_project', project_id: 'p-scuba', title: 'Liv — scuba diver', reason: 'Changed to Chucky', open_steps: 2 })
+  assert.equal(card.args.items[1].part_of, 'Halloween costumes')
+  assert.equal(call4({ title: 'x', items: [{ kind: 'close_project', project_id: 'p-nope' }] }).error, 'There’s nothing in that plan I can save yet.')
+})
+
+test('the planning model is told to change a saved project, never rebuild it; to replace, close it and add the new one in its place', () => {
+  const tool = fullAiTools({ planning: true }).find((t) => t.name === 'set_plan')
+  for (const kind of ['edit_step', 'add_step', 'remove_step', 'close_project']) assert.ok(tool.parameters.properties.items.items.properties.kind.enum.includes(kind), kind)
+  assert.match(tool.description, /never rebuild it/i)
+  assert.match(tool.description, /close_project .* reason/i)
+  const system = buildFullAiSystem({ family: [], events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', projects: [costumes, livScuba] })
+  assert.match(system, /- \[p-scuba\] Liv — scuba diver \(inside Halloween costumes\)/, 'a project inside is listed with its own steps and id')
+  assert.doesNotMatch(system, /can't be changed or deleted by voice yet/)
+  const think = fullAiTools({ planning: false }).find((t) => t.name === 'think_it_through')
+  assert.match(think.description, /a change to one of his saved projects/i)
+})
+
+// Live check, 2026-09-29: "Move Emme's jellyfish build night to Sunday the 18th, and Kelly will do it"
+// became a plain event change on the step's all-day calendar entry. A project step's calendar entry is
+// changed through its project: the planning model, as a change to the step.
+test('a change to a project step’s calendar entry goes to the planning model as a change to the step', async () => {
+  const fs = await import('node:fs')
+  const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
+  const pipeline = ai.slice(ai.indexOf('const runPipeline = async'))
+  const early = pipeline.slice(0, pipeline.indexOf('if (turnContext?.card) {'))
+  assert.match(early, /from\('todo_steps'\)\.select\('id'\)\.eq\('cal_event_id', stepEventId\)/)
+  assert.match(early, /\(planningConversation \|\| stepCard\) && turnResolution\?\.act !== 'confirm_draft'/)
 })

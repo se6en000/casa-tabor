@@ -38,7 +38,7 @@ export function PhonePlanCard({ plan, previous, working, onSetUp }: { plan: Plan
       {all ? rest.map((s) => (
         <div key={s.heading} className="flex flex-col">
           <span className={`${label} text-wall-brass-ink`}>{s.heading}</span>
-          {s.lines.map((l) => <div key={l.key} className={`flex justify-between gap-[8px] px-[6px] py-[3px] text-phone-detail ${change.marked.has(l.key) ? 'rounded-[8px] bg-wall-brass/15' : ''}`}><span>{l.text}</span><span className="shrink-0 text-wall-ink-2">{l.meta}</span></div>)}
+          {s.lines.map((l) => <div key={l.key} className={`flex justify-between gap-[8px] px-[6px] py-[3px] text-phone-detail ${change.marked.has(l.key) ? 'rounded-[8px] bg-wall-brass/15' : ''}`}><span className={l.struck ? 'text-wall-ink-2 line-through' : ''}>{l.text}</span><span className="shrink-0 text-wall-ink-2">{l.meta}</span></div>)}
         </div>
       )) : rest.length > 0 && (
         <span className="text-phone-detail text-wall-ink-2">+ {rest.map((s) => `${s.lines.length} ${s.heading.toLowerCase()}`).join(' · ')}</span>
