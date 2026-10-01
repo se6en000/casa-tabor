@@ -112,7 +112,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
               {prep.decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {prep.decisions.length - 1} more under “to decide”</div>}
             </section>
           )}
-          <GetAndPack packing={prep.packing} lines={3} label="Get & pack today" onToggleItem={prep.onToggleItem} onOpenEvent={prep.onOpenEvent} onSeeAll={prep.onSeeAll} />
+          <GetAndPack packing={prep.packing} lines={3} columns={prep.decisions.length > 0 ? 3 : 4} label="Get & pack today" onToggleItem={prep.onToggleItem} onOpenEvent={prep.onOpenEvent} onSeeAll={prep.onSeeAll} />
         </div>
       )}
       {week}

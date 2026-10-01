@@ -99,3 +99,15 @@ test('today: only the events still ahead keep their list', () => {
   assert.deepEqual(ahead.groups.map((g) => g.eventId), ['baseball', 'softball'])
   assert.deepEqual([ahead.packed, ahead.total], [1, 2])
 })
+
+// Jake, 2026-10-01: "for get and pack on the today page, don't you think you can fit 3 or 4 columns instead of 2?"
+test('today\'s get & pack spreads across 3 columns (4 with no decision beside it); what still doesn\'t fit is counted', async () => {
+  const { fitPackingColumns } = await import('../src/wall/packing.ts')
+  const groups = ['a', 'b', 'c', 'd'].map((id) => ({ eventId: id, heading: id, items: [item(id, 'One'), item(id, 'Two')] }))
+  const three = fitPackingColumns(groups, 3, 3)
+  assert.deepEqual(three.columns.map((c) => c.map((g) => g.eventId)), [['a'], ['b'], ['c']])
+  assert.equal(three.hidden, 2)
+  const four = fitPackingColumns(groups, 3, 4)
+  assert.equal(four.columns.length, 4)
+  assert.equal(four.hidden, 0)
+})

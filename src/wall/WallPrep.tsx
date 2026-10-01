@@ -51,6 +51,8 @@ export interface GetAndPackProps {
   packing: { groups: PackingGroup[]; packed: number; total: number }
   /** Rows per column that fit where it sits. */
   lines: number
+  /** Columns that fit across (2 on the evening face; 3–4 on today's, Jake: "can't you fit 3 or 4 columns?"). */
+  columns?: 2 | 3 | 4
   /** The section's name for screen readers ("Pack tonight", "Get & pack today"). */
   label: string
   onToggleItem?: (item: WallChecklistItem) => void
@@ -58,8 +60,10 @@ export interface GetAndPackProps {
   onSeeAll?: () => void
 }
 
-export function GetAndPack({ packing, lines, label, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
-  const { columns, hidden } = useMemo(() => fitPackingColumns(packing.groups, lines, 2), [packing.groups, lines])
+const GRID = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
+
+export function GetAndPack({ packing, lines, label, columns: across = 2, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
+  const { columns, hidden } = useMemo(() => fitPackingColumns(packing.groups, lines, across), [packing.groups, lines, across])
   return (
     <section aria-label={label} className="flex min-w-0 flex-1 flex-col">
       <div className="flex h-[44px] shrink-0 items-center justify-between gap-[16px]">
@@ -77,7 +81,7 @@ export function GetAndPack({ packing, lines, label, onToggleItem, onOpenEvent, o
           </button>
         )}
       </div>
-      <div className="grid min-h-0 grid-cols-2 gap-x-[32px]">
+      <div className={`grid min-h-0 ${GRID[across]} gap-x-[32px]`}>
         {columns.map((col, i) => (
           <div key={i} className="flex min-w-0 flex-col">
             {col.map((group) => <PackingGroupView key={group.eventId} group={group} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} />)}

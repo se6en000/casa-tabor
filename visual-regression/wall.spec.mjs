@@ -1583,6 +1583,8 @@ test('wall: today with a list to get ready: Next Move up top, compact lanes, dec
   const pack = wall.getByRole('region', { name: 'Get & pack today' })
   await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
   await expect(pack.getByRole('button', { name: 'Water bottle' })).toBeVisible()
+  // Three columns across with a decision beside it (Jake: "can't you fit 3 or 4 columns instead of 2?").
+  await expect(pack.locator('.grid-cols-3')).toHaveCount(1)
   await expect(wall.getByRole('region', { name: 'Needs a decision today' })).toBeVisible()
   await expect(wall.getByRole('region', { name: 'Next seven days' })).toBeVisible()
   await expect(wall).toHaveScreenshot('today-get-and-pack.png')
