@@ -1,10 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FUSE_HELD_MS, FUSE_MS, FUSE_STARTS_MS, amplitude, fuseProgress, inkWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
+import { FUSE_HELD_MS, VOICE_HANGOVER_MS, amplitude, fuseProgress, inkWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
 
-// Canvas row 17: one voice line under the words — you vs the room, the fuse, words in confidence ink.
+// Canvas row 17: one voice line under the words. Jake on the wall, 2026-09-30: "it's still extremely chaotic" — a
+// screen recording showed the fuse filling and restarting with every burst of words while he talked (Deepgram sends
+// words about a second apart, and his voice reads only 1–5 of 100 on the bridge's meter, so it never counted as
+// talking). So: hearing you holds through the gaps; the line only changes on real signals; the fuse is only the
+// real stall (an unfinished sentence held 4.5 s).
 
-const base = { now: 10_000, micOpen: true, bridgeDown: false, thinking: false, needsYes: false, heard: '', level: 4, floor: 4, noisyFor: 0, lastLoudAt: 0, signal: { lastWordAt: 0, heldSince: 0, confidence: null, speechAt: 0 } }
+const base = { now: 10_000, micOpen: true, bridgeDown: false, thinking: false, needsYes: false, heard: '', level: 1, floor: 1, noisyFor: 0, signal: { lastWordAt: 0, heldSince: 0, speechAt: 0 } }
 
 test('the line\'s state: can\'t hear first, then Casa\'s turn, then yours', () => {
   assert.equal(voiceState({ ...base, bridgeDown: true, thinking: true }), 'deaf')
@@ -15,70 +19,51 @@ test('the line\'s state: can\'t hear first, then Casa\'s turn, then yours', () =
   assert.equal(voiceState({ ...base, needsYes: true }), 'yes')
 })
 
-test('you vs the room: words coming = hearing you; loud with no words for a while = room noise', () => {
-  const talking = { ...base, heard: 'add a dentist', level: 40, signal: { lastWordAt: 9_800, heldSince: 0, confidence: 0.93 } }
+test('hearing you starts with Deepgram\'s voice start and holds through the gaps between bursts of words', () => {
+  // A voice started, no words yet (they come a second or more later): hearing you, however quiet the meter reads.
+  assert.equal(voiceState({ ...base, level: 3, signal: { ...base.signal, speechAt: 9_400 } }), 'voice')
+  // Words a second ago, the next burst not here yet: still hearing you — no flip to anything else.
+  const talking = { ...base, heard: 'Alexa, tell me', signal: { lastWordAt: 9_000, heldSince: 0, speechAt: 7_000 } }
   assert.equal(voiceState(talking), 'voice')
-  assert.equal(voiceState({ ...talking, signal: { ...talking.signal, confidence: 0.5 } }), 'unsure')
-  // Between words (Deepgram updates every few hundred ms) the voice still counts while it's loud.
-  assert.equal(voiceState({ ...talking, signal: { ...talking.signal, lastWordAt: 8_600 } }), 'voice')
-  // Planning keeps the mic open while Casa thinks: talking over it shows your voice, not the sweep.
+  // Planning keeps the mic open while Casa thinks: talking over it shows your voice.
   assert.equal(voiceState({ ...talking, thinking: true }), 'voice')
+  // Words on screen and nothing new for a while: a still line while Deepgram decides you're done.
+  assert.equal(voiceState({ ...talking, signal: { ...talking.signal, lastWordAt: 10_000 - VOICE_HANGOVER_MS - 1 } }), 'heard')
+})
+
+test('the fuse is only the real stall: an unfinished sentence held for the rest (4.5 s), with tap to send', () => {
+  const held = { ...base, heard: 'add a dentist for', signal: { lastWordAt: 7_000, heldSince: 8_000, speechAt: 6_000 } }
+  assert.equal(voiceState(held), 'fuse')
+  assert.equal(fuseProgress(held.now, held.signal), 2_000 / FUSE_HELD_MS)
+  assert.equal(fuseProgress(60_000, held.signal), 0.97)
+  // Talking again during the hold is your voice.
+  assert.equal(voiceState({ ...held, signal: { ...held.signal, lastWordAt: 9_800 } }), 'voice')
+})
+
+test('the room: loud with no voice detected for a while; a cough with nothing after it settles back', () => {
   assert.equal(voiceState({ ...base, level: 30, noisyFor: 2_000 }), 'noise')
   assert.equal(voiceState({ ...base, level: 30, noisyFor: 800 }), 'quiet')
+  assert.equal(voiceState({ ...base, signal: { ...base.signal, speechAt: 10_000 - VOICE_HANGOVER_MS - 2_000 } }), 'quiet')
 })
 
-test('the fuse: words heard and you stopped; held for the rest of a sentence, it runs the 4.5 s hold', () => {
-  const stopped = { ...base, heard: 'add a dentist on Friday at 4', level: 5, signal: { lastWordAt: 9_300, heldSince: 0, confidence: 0.9 } }
-  assert.equal(voiceState(stopped), 'fuse')
-  // It starts empty when it appears (600 ms after the last word) and fills over the rest of Casa's wait.
-  assert.equal(fuseProgress(stopped.now, stopped.signal, 0), (700 - FUSE_STARTS_MS) / (FUSE_MS - FUSE_STARTS_MS))
-  const held = { ...stopped, signal: { ...stopped.signal, heldSince: 8_000 } }
-  assert.equal(voiceState(held), 'fuse')
-  assert.equal(fuseProgress(held.now, held.signal, 0), 2_000 / FUSE_HELD_MS)
-  // It never claims to be full before Casa has actually taken the turn.
-  assert.equal(fuseProgress(60_000, stopped.signal, 0), 0.97)
-})
-
-test('the level rises fast and falls slower; the room\'s own level is learned slowly upward, quickly downward', () => {
-  let s = { level: 0, floor: 5 }
-  s = stepLevel(s, 60, 60)
-  assert.ok(s.level > 55, `fast up: ${s.level}`)
+test('the level rises fast and falls slower; the room\'s level is learned; height is scaled to this mic\'s small range', () => {
+  let s = { level: 0, floor: 1 }
+  s = stepLevel(s, 6, 60)
+  assert.ok(s.level > 5.5, `fast up: ${s.level}`)
   const after = stepLevel(s, 0, 100)
-  // Slower down than up (~200 ms), but quick enough that the fuse shows soon after your voice stops.
-  assert.ok(after.level > 25 && after.level < 45, `slower down: ${after.level}`)
-  assert.ok(stepLevel({ level: 5, floor: 5 }, 40, 100).floor < 6, 'a voice barely moves the floor')
-  assert.ok(stepLevel({ level: 5, floor: 20 }, 4, 300).floor < 10, 'a quieter room is learned fast')
-  assert.equal(amplitude(5, 5), 0)
-  assert.equal(amplitude(100, 5), 1)
+  assert.ok(after.level > 2 && after.level < 5, `slower down: ${after.level}`)
+  assert.ok(stepLevel({ level: 1, floor: 1 }, 5, 100).floor < 1.2, 'a voice barely moves the floor')
+  assert.equal(amplitude(1, 1), 0)
+  // A normal voice on the wall reads 3–5 against a room of ~1: most of the height.
+  assert.ok(amplitude(5, 1) >= 0.6)
+  assert.equal(amplitude(40, 1), 1)
 })
 
 test('words in confidence ink: the ones Deepgram isn\'t sure of are faded, matched from the end', () => {
   const ink = inkWords('Add a dentist appointment for live on Friday', [
-    { word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }, { word: 'on', confidence: 0.95 }, { word: 'friday', confidence: 0.52 },
+    { word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }, { word: 'on', confidence: 0.95 }, { word: 'friday', confidence: 0.44 },
   ])
   assert.deepEqual(ink.filter((w) => w.faded).map((w) => w.text), ['live', 'Friday'])
   assert.equal(ink.map((w) => w.text).join(' '), 'Add a dentist appointment for live on Friday')
   assert.deepEqual(inkWords('hello there', []).map((w) => w.faded), [false, false])
-})
-
-// Jake, 2026-09-30, on the wall: "I start talking and it translates the text and sends it before the line even
-// moves." The traces showed why: Deepgram's words came all at once with the end of the sentence, and the line
-// waited for words. Now your voice moves it (loud above the room, with Deepgram's speech start), and the fuse
-// runs from when your voice stops.
-test('your voice moves the line before any words come; the fuse starts when your voice stops', () => {
-  const speaking = { ...base, level: 14, floor: 2, signal: { ...base.signal, speechAt: 9_200 } }
-  assert.equal(voiceState(speaking), 'voice')
-  // The same sound with no voice detected is the room.
-  assert.equal(voiceState({ ...speaking, signal: { ...base.signal }, noisyFor: 2_000 }), 'noise')
-  // Your voice stopped 500 ms ago, no words yet: the fuse, filling from when you stopped.
-  const stopped = { ...base, level: 2, floor: 2, lastLoudAt: 9_500, signal: { ...base.signal, speechAt: 8_000 } }
-  assert.equal(voiceState(stopped), 'fuse')
-  assert.equal(fuseProgress(stopped.now, stopped.signal, stopped.lastLoudAt), (500 - FUSE_STARTS_MS) / (FUSE_MS - FUSE_STARTS_MS))
-  // A voice start with nothing after it (a cough): back to quiet once the wait has passed.
-  assert.equal(voiceState({ ...stopped, lastLoudAt: 7_000 }), 'quiet')
-  // The words arriving after you stopped (as they do on the wall) don't count as talking, and the fuse keeps its
-  // place — it doesn't jump back to the wave and start over.
-  const words = { ...stopped, heard: 'add a dentist', signal: { ...stopped.signal, lastWordAt: 9_900 } }
-  assert.equal(voiceState(words), 'fuse')
-  assert.equal(fuseProgress(words.now, words.signal, words.lastLoudAt), fuseProgress(stopped.now, stopped.signal, stopped.lastLoudAt))
 })

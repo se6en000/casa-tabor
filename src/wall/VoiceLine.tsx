@@ -59,9 +59,10 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
   useEffect(() => {
     let frame = 0
     let last = 0
-    let levels = { level: 0, floor: 6 }
+    let levels = { level: 0, floor: 1 }
     let noisySince = 0
-    let lastLoudAt = 0
+    // The drawn height eases toward the voice (the meter only updates 10 times a second), so it glides, never jumps.
+    let height = 0
     let shown: VoiceLineState = 'off'
     const tick = (ms: number) => {
       frame = requestAnimationFrame(tick)
@@ -69,22 +70,22 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       const dt = last ? ms - last : FRAME_MS
       last = ms
       const now = Date.now()
-      const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, confidence: null }
+      const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, speechAt: 0 }
       levels = stepLevel(levels, s.level ?? 0, dt)
       const loud = levels.level - levels.floor > 6
-      if (loud) lastLoudAt = now
       const voiced = Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 8000
       const wordsLately = s.lastWordAt > 0 && now - s.lastWordAt < 2000
       noisySince = loud && !wordsLately && !voiced ? noisySince || now : 0
-      const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, lastLoudAt, signal: s })
+      const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, signal: s })
       if (next !== shown) {
         shown = next
         setState(next)
       }
       const t = ms / 1000
-      if (path.current && (next === 'voice' || next === 'unsure')) path.current.setAttribute('d', wavePath(width, 3 + 19 * amplitude(levels.level, levels.floor), t))
+      height += ((next === 'voice' ? 5 + 13 * amplitude(levels.level, levels.floor) : 0) - height) * 0.12
+      if (path.current && next === 'voice') path.current.setAttribute('d', wavePath(width, height, t * 0.7))
       else if (path.current && next === 'noise') path.current.setAttribute('d', grainPath(width, 1.5 + 2.5 * amplitude(levels.level, levels.floor), t))
-      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s, voiced ? lastLoudAt : 0) * 100).toFixed(1)}%`
+      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s) * 100).toFixed(1)}%`
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
@@ -100,7 +101,7 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
     }
   }, [state])
 
-  const hint = state === 'fuse' ? 'Sending when the line fills · tap to send now · keep talking to add more'
+  const hint = state === 'fuse' ? 'Waiting for the rest · tap to send now'
     : state === 'noise' ? 'It’s loud in here — I’ll catch you when you start.'
       : state === 'thinking' && slow ? 'Still working on it…'
         : state === 'deaf' ? 'I can’t hear — the microphone isn’t connected. Tap to try again.'
@@ -117,13 +118,15 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       style={{ width }}
     >
       <div className="relative h-[48px] overflow-hidden">
-        {(state === 'voice' || state === 'unsure' || state === 'noise') && (
-          <svg width={width} height={HEIGHT} className={`absolute left-0 top-0 ${state === 'noise' ? 'text-wall-night-ink-2/60' : 'text-wall-night-brass'} ${state === 'unsure' ? 'opacity-50' : ''}`} aria-hidden="true">
+        {(state === 'voice' || state === 'noise') && (
+          <svg width={width} height={HEIGHT} className={`absolute left-0 top-0 ${state === 'noise' ? 'text-wall-night-ink-2/60' : 'text-wall-night-brass'}`} aria-hidden="true">
             <path ref={path} fill="none" stroke="currentColor" strokeWidth={state === 'noise' ? 2 : 3} strokeLinecap="round" />
           </svg>
         )}
         {state === 'quiet' && <div className="absolute left-0 right-0 top-[23px] h-[2px] animate-[wall-line-breathe_4s_ease-in-out_infinite] bg-wall-night-brass" />}
         {state === 'yes' && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-brass/55" />}
+        {/* Your words are in; Deepgram is deciding you're done (Casa sends a moment later): a still line. */}
+        {state === 'heard' && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-brass/80" />}
         {(state === 'fuse' || state === 'thinking') && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-rule" />}
         {state === 'fuse' && <div ref={fill} className="absolute left-0 top-[21px] h-[6px] w-0 rounded-full bg-wall-night-brass" />}
         {state === 'thinking' && <div className="absolute top-[22px] h-[4px] w-[15%] animate-[wall-line-sweep_1.8s_linear_infinite] rounded-full bg-wall-night-brass" />}

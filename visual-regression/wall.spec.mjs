@@ -1513,27 +1513,28 @@ test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the 
 })
 
 // Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
-test('wall: the new listener — one voice line under the words: your voice moves it before any words, the fuse runs when you stop, unsure words faded, a tap sends', async ({ page }) => {
+test('wall: the new listener — calm: your voice from its start, held through the gaps between words, a still line while Deepgram decides, the fuse only for a held sentence', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
   // No rings, no LISTENING word: the line says it.
   await expect(section.getByText('LISTENING', { exact: true })).toHaveCount(0)
   await expect(section.locator('[data-voice-line="quiet"]')).toBeVisible()
-  await expect(section.getByText('Go ahead.', { exact: true })).toBeVisible()
-  // On the wall Deepgram's words often come all at once at the end (Jake, 2026-09-30: "it sends it before the
-  // line even moves"): your voice moves the line while no words are on screen yet.
-  await mic(page, () => window.__mic.speak(20))
+  // Deepgram hears a voice start: your voice, before any words, however low the meter reads on the wall.
+  await mic(page, () => window.__mic.speak(3))
   await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
-  await expect(section.getByText('Go ahead.', { exact: true })).toBeVisible()
-  // You stop: the fuse, before any words.
-  await mic(page, () => window.__mic.level(2))
-  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 2000 })
-  // The words arrive; the one Deepgram isn't sure of is faded; a tap sends now.
-  await mic(page, () => window.__mic.hear('add a dentist appointment for live', [{ word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }], 0.9))
-  await expect(section.locator('span.opacity-40', { hasText: 'live' })).toBeVisible()
-  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 2000 })
-  await expect(section.getByText(/tap to send now/)).toBeVisible()
+  // A burst of words, then a gap: still your voice — no fuse, no hint line (Jake, 2026-09-30: "extremely chaotic").
+  await mic(page, () => window.__mic.hear('Alexa, tell me what is on the', [{ word: 'the', confidence: 0.3 }]))
+  await page.waitForTimeout(900)
+  await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
+  await expect(section.getByText(/tap to send now/)).toHaveCount(0)
+  await expect(section.locator('span.opacity-40', { hasText: 'the' })).toBeVisible()
+  // Nothing new for a while: a still line while Deepgram decides you're done.
+  await expect(section.locator('[data-voice-line="heard"]')).toBeVisible({ timeout: 3000 })
+  // A sentence that sounds unfinished is held for the rest: the fuse, and a tap sends now.
+  await mic(page, () => window.__mic.hold())
+  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible()
+  await expect(section.getByText('Waiting for the rest · tap to send now')).toBeVisible()
   await section.getByRole('button', { name: 'Send now' }).click()
   expect(await page.evaluate(() => window.__mic.finished)).toBe(1)
 })
