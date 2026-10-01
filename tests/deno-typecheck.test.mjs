@@ -53,6 +53,6 @@ test('a mix of blocking and advisory codes in one file is split correctly', () =
   assert.deepEqual(result.advisory, ['TS2339'])
 })
 
-test('BLOCKING_CODES is exactly the undefined-name error class', () => {
-  assert.deepEqual([...BLOCKING_CODES].sort(), ['TS2304', 'TS2552'])
+test('BLOCKING_CODES is exactly the errors that break a function at start: undefined names and names declared twice', () => {
+  assert.deepEqual([...BLOCKING_CODES].sort(), ['TS2300', 'TS2304', 'TS2451', 'TS2552'])
 })

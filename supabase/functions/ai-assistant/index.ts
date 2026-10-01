@@ -172,7 +172,7 @@ import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-cre
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1587,6 +1587,13 @@ Deno.serve(async (req) => {
   if (turnContext?.prepCard) {
     const { tool, args, about } = turnContext.prepCard
     return { status: 200, payload: { type: 'tool_action', tool, args, display_text: buildDisplayText(tool, args), conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: 'conversation.prep_item', correlation_id: cid } }
+  }
+  // Someone going away (design doc "Casa: Travel design"): the full model asks for the flights or the drive and adds
+  // the trip as events the wall reads; the quick reader made a one-day "Work trip to Dallas" and asked nothing.
+  const lastHeard = Array.isArray(messages) ? String((messages as Array<{ role?: string; content?: unknown }>).filter((m) => m?.role === 'user').pop()?.content ?? '') : ''
+  if (turnContext?.card?.tool === 'create_event' && isTripTalk(lastHeard)) {
+    const trip = await runFullAi(buildDisplayText, true)
+    if (trip) return { ...trip, payload: { ...trip.payload, layer: 'trip' } }
   }
   if (turnContext?.card) {
     const { tool, about, note } = turnContext.card

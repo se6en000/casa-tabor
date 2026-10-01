@@ -751,3 +751,18 @@ export function promisesAction(said) {
   if (ASKS_FIRST.test(t) && !/\bcard\b/i.test(t)) return false
   return PROMISE.some((re) => re.test(t))
 }
+
+/**
+ * Someone telling Casa they're going away (design doc "Casa: Travel design"): flying anywhere, a work or business
+ * trip, out of town, or driving somewhere and staying. The full model takes these turns (it asks for the flights or
+ * the drive and adds the trip the wall reads); the quick turn reader made a one-day all-day entry and asked nothing
+ * (live check, 2026-10-01). A drive to a practice or a school is not a trip.
+ */
+export function isTripTalk(text) {
+  const t = String(text ?? '')
+  if (/\b(fly|flying|flies|flew|flight|flights|plane|airport)\b/i.test(t) && /\b(to|from|back|out|home|return|landing|lands)\b/i.test(t)) return true
+  if (/\b(work|business|road)\s+trip\b|\btrip\s+to\b|\bout of town\b|\baway\s+(for|until|through|from)\b|\btraveling\b|\btravelling\b/i.test(t)) return true
+  // Driving somewhere and staying: "driving to Orlando for work on the 13th, back on the 15th".
+  if (/\bdriv(e|ing)\s+(up\s+|down\s+|over\s+)?to\s+[A-Z][\w.-]+/.test(t) && /\b(for work|back|until|through|overnight|staying|stay|hotel|the night|for the (week|weekend)|for \w+ days)\b/i.test(t)) return true
+  return false
+}

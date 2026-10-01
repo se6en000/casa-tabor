@@ -35,7 +35,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const FUNCTIONS_DIR = path.join(ROOT, 'supabase', 'functions')
 
-export const BLOCKING_CODES = new Set(['TS2304', 'TS2552'])
+// TS2451 / TS2300: a name declared twice in one scope — the function fails to start (BOOT_ERROR), as ai-assistant did
+// for ~5 minutes on 2026-10-01 (a second `const lastSaid`).
+export const BLOCKING_CODES = new Set(['TS2304', 'TS2552', 'TS2451', 'TS2300'])
 
 // Only ever called on output from a *failed* deno check invocation (the main
 // loop below `continue`s past successful ones first) -- so no TS#### code

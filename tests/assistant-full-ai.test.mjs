@@ -125,3 +125,25 @@ test('a trip told to Casa: the prompt asks one thing at a time and names the eve
   ], [{ id: 'j', name: 'Jake', role: 'parent', can_drive: true }])
   assert.deepEqual([trip.city, trip.tripEventId, trip.mode], ['Orlando', 'c', 'drive'])
 })
+
+test('trip talk goes to the full model; ordinary drives and adds do not', async () => {
+  const { isTripTalk } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  for (const said of [
+    "I'm flying to Dallas for work next Wednesday, back Thursday",
+    'Kelly flies out to Boston on the 12th',
+    'I have a work trip to Austin the week of the 19th',
+    "I'll be out of town Tuesday through Thursday",
+    "I'm driving to Orlando for work on the 13th, back on the 15th",
+    'Heading to the airport Friday morning, my flight is at 9',
+    'we are traveling to Chicago over thanksgiving',
+    'Jake is away for work from Monday until Wednesday',
+  ]) assert.equal(isTripTalk(said), true, said)
+  for (const said of [
+    'add soccer practice Tuesday at 5',
+    'drive Liv to practice at 4',
+    'Kelly is driving to Bak at 3:15',
+    'add dentist for Owen on the 9th',
+    'move the softball game to 1',
+    'remind me to take the trash out at 8',
+  ]) assert.equal(isTripTalk(said), false, said)
+})
