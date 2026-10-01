@@ -1560,6 +1560,11 @@ test('wall: the new listener is a switch in the MT menu, remembered on the wall;
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
   expect(await page.evaluate(() => localStorage.getItem('casa-wall-listener-v2'))).toBe('1')
+  // Beside it, Flux for the speech to text (remembered the same way).
+  const flux = wall.getByRole('switch', { name: 'Try Flux' })
+  await expect(flux).toHaveAttribute('aria-checked', 'false')
+  await flux.click()
+  expect(await page.evaluate(() => localStorage.getItem('casa-wall-stt-flux'))).toBe('1')
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   await expect(page.getByRole('region', { name: 'Assistant' }).locator('[data-listener]')).toBeVisible()
   await page.evaluate(() => localStorage.removeItem('casa-wall-listener-v2'))

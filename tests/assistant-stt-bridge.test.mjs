@@ -62,3 +62,16 @@ test('legacy dictation protocol retains final messages', () => {
   assert.match(bridge, /_stt_protocol = 'legacy'/)
   assert.match(bridge, /'type': 'final'/)
 })
+
+// Jake, 2026-09-30: measured, nova-3's words come in 1-second steps; Flux sends an update every ~0.25 s of audio.
+test('Flux is the recognizer when the wall asks for it: its turns in the wall\'s own messages, 80 ms chunks, a tap sends', () => {
+  assert.match(bridge, /model=\{FLUX_MODEL\}/)
+  assert.match(bridge, /_stt_provider = 'flux' if msg\.get\('stt_provider'\) == 'flux' else 'nova'/)
+  assert.match(bridge, /FLUX_URL if flux else DG_URL/)
+  assert.match(bridge, /on_message=_on_flux_message if flux else _on_message/)
+  assert.match(bridge, /if event == 'StartOfTurn':[\s\S]{0,260}'type': 'speech_started'/)
+  assert.match(bridge, /if event in \('Update', 'TurnResumed', 'EagerEndOfTurn'\):/)
+  assert.match(bridge, /_emit_turn_candidate\('flux_end_of_turn', conf\)/)
+  assert.match(bridge, /elif cmd == 'finalize' and _stt_provider == 'flux':[\s\S]{0,260}_emit_turn_candidate\('manual_finalize'\)/)
+  assert.match(bridge, /chunk_bytes = \(RATE \* 2 \* 80\) \/\/ 1000/)
+})

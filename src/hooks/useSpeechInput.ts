@@ -6,6 +6,7 @@ import {
   STT_TURN_PROTOCOL,
 } from '../lib/sttTurnProtocol.mjs'
 import type { VoiceSignal } from '../wall/voiceLine'
+import { sttProvider, type SttProvider } from '../lib/sttProvider'
 import { heldFragmentAfterWait, isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript, voiceFinalIntent } from '../lib/voiceTurnTaking.mjs'
 
 
@@ -122,6 +123,8 @@ export function useSpeechInput({
   const signalRef = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 })
   // The mic's levels this turn (the bridge's 0–100), traced with each sentence so the line can be tuned to real voices.
   const levelsRef = useRef<number[]>([])
+  // The model this session asked the bridge for (sttProvider.ts): Flux decides a sentence's end itself.
+  const providerRef = useRef<SttProvider>('nova')
   const volumeSetAtRef = useRef(0)
   const [bridgeDown, setBridgeDown] = useState(false)
   const supported = !IS_SAFE_MODE
@@ -343,7 +346,8 @@ export function useSpeechInput({
     lastInterimRef.current = ''
     lastInterimTimeRef.current = 0
     firstInterimRef.current = false
-    if (isIncompleteVoiceFragment(finalText)) {
+    // The 4.5 s hold for a sentence that sounds unfinished is for nova-3's fixed 1 s pause; Flux judges that itself.
+    if (providerRef.current !== 'flux' && isIncompleteVoiceFragment(finalText)) {
       pendingFragmentRef.current = finalText
       pendingFragmentUtteranceIdRef.current = utteranceIdRef.current
       setPhaseSync('listening')
@@ -424,7 +428,8 @@ export function useSpeechInput({
       endpoint_reason: metadata.endpointReason ?? 'unknown',
       word_count: text.trim().split(/\s+/).length,
     })
-    const graceMs = finalizingRef.current ? 300 : TURN_COMMIT_GRACE_MS
+    // Flux's end of turn is already its judgement that you're done: hardly any grace on top.
+    const graceMs = providerRef.current === 'flux' ? 60 : finalizingRef.current ? 300 : TURN_COMMIT_GRACE_MS
     turnCandidateTimerRef.current = setTimeout(() => {
       turnCandidateTimerRef.current = null
       turnCandidateAtRef.current = 0
@@ -559,8 +564,10 @@ export function useSpeechInput({
 
     ws.onopen = () => {
       setBridgeDown(false)
+      providerRef.current = sttProvider()
       ws.send(JSON.stringify({
         type: 'start',
+        stt_provider: providerRef.current,
         turn_protocol: STT_TURN_PROTOCOL,
         utterance_id: utteranceIdRef.current,
       }))

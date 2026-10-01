@@ -32,6 +32,18 @@ DG_URL = (
     '&vad_events=true'
 )
 
+# Deepgram Flux (conversational: an update every ~0.25 s of audio, and its own end-of-turn), chosen per session by
+# the wall's "Try Flux" switch (Jake, 2026-09-30: words arrive in 1-second steps with nova-3 — measured).
+FLUX_MODEL = 'flux-general-en'
+FLUX_URL = (
+    'wss://api.deepgram.com/v2/listen'
+    f'?model={FLUX_MODEL}'
+    '&encoding=linear16'
+    f'&sample_rate={RATE}'
+    '&eot_threshold=0.7'
+    '&eot_timeout_ms=5000'
+)
+
 WAKE_MODEL    = 'alexa'
 WAKE_SCORE    = 0.12           # Reliable trigger without excessive false positives
 WAKE_COOLDOWN = 2.0
@@ -108,6 +120,8 @@ _stt_lock   = threading.Lock()
 _stt_missing_since = 0.0
 _stt_disconnect_seq = 0
 _stt_protocol = 'legacy'
+_stt_provider = 'nova'       # 'flux' when the wall's switch asks for it
+_flux_last_text = ''
 _turn_id = ''
 _turn_index = 0
 
@@ -153,7 +167,7 @@ def _ws_push_stt(msg: dict):
             _stt_client = None
 
 def _handle_ws_client(ws):
-    global _stt_client, _stt_disconnect_seq, _stt_protocol, _turn_id, _turn_index, _finals, _final_conf, _pending_wake_id
+    global _stt_client, _stt_disconnect_seq, _stt_protocol, _stt_provider, _turn_id, _turn_index, _finals, _final_conf, _pending_wake_id
     with _ws_clients_lock:
         _ws_clients.add(ws)
     log.info('[WS] browser client connected')
@@ -190,6 +204,7 @@ def _handle_ws_client(ws):
                     _stt_client = ws
                     _stt_disconnect_seq += 1
                     _stt_protocol = msg.get('turn_protocol', 'legacy')
+                    _stt_provider = 'flux' if msg.get('stt_provider') == 'flux' else 'nova'
                     _turn_id = str(msg.get('utterance_id', ''))
                     _turn_index = 0
                 started = start_recording(reason='ws_start')
@@ -226,6 +241,12 @@ def _handle_ws_client(ws):
                     'utterance_id': discarded_turn_id,
                     'next_utterance_id': _turn_id,
                 })
+            elif cmd == 'finalize' and _stt_provider == 'flux':
+                # Flux has no Finalize: a tap on the mic sends what it has so far.
+                if _flux_last_text:
+                    _finals = [_flux_last_text]
+                    _final_conf = []
+                    _emit_turn_candidate('manual_finalize')
             elif cmd == 'finalize':
                 current_ws = _ws
                 if current_ws:
@@ -758,6 +779,57 @@ def _on_message(ws_arg, message):
     except Exception as e:
         log.error(f'on_message: {e}')
 
+def _on_flux_message(ws_arg, message):
+    """Deepgram Flux's TurnInfo, in the wall's own messages: StartOfTurn -> speech_started, each Update (the turn so
+    far, every ~0.25 s of audio) -> transcript, EndOfTurn -> the turn to send (turn_candidate)."""
+    global _finals, _final_conf, _last_speech_started_ts, _flux_last_text
+    try:
+        data = json.loads(message)
+        if data.get('type') != 'TurnInfo':
+            if data.get('type') == 'Error':
+                log.error(f"[flux] {data}")
+                _ws_push_stt({'type': 'error', 'msg': str(data.get('description') or data)[:200]})
+            return
+        event = data.get('event', '')
+        raw_text = str(data.get('transcript') or '').strip()
+        words = [{'word': w.get('word', ''), 'confidence': w.get('confidence', 0)} for w in (data.get('words') or [])]
+        conf = (sum(w['confidence'] for w in words) / len(words)) if words else None
+        _timing('flux_' + event.lower(), text=raw_text, audio_end=data.get('audio_window_end'), eot=data.get('end_of_turn_confidence'))
+        if event == 'StartOfTurn':
+            _last_speech_started_ts = time.time()
+            if _stt_protocol == 'candidate-v1':
+                _ws_push_stt({'type': 'speech_started', 'provider_timestamp': data.get('audio_window_start'), 'utterance_id': _turn_id})
+            return
+        text = _strip_wake(raw_text)
+        if event in ('Update', 'TurnResumed', 'EagerEndOfTurn'):
+            _flux_last_text = raw_text
+            if not text:
+                return
+            _set(interim_transcript=text)
+            if _stt_protocol == 'candidate-v1':
+                _ws_push_stt({
+                    'type': 'transcript', 'text': text, 'committed': '', 'interim': text, 'confidence': conf,
+                    'is_final': False, 'speech_final': False, 'words': words, 'utterance_id': _turn_id,
+                })
+            else:
+                _ws_push_stt({'type': 'interim', 'text': text})
+            return
+        if event == 'EndOfTurn':
+            _flux_last_text = ''
+            if not text:
+                return
+            _finals = [raw_text]
+            _final_conf = [conf] if conf is not None else []
+            if _stt_protocol == 'candidate-v1':
+                _ws_push_stt({
+                    'type': 'transcript', 'text': text, 'committed': text, 'interim': '', 'confidence': conf,
+                    'is_final': True, 'speech_final': True, 'words': words, 'utterance_id': _turn_id,
+                })
+                _ws_push_stt({'type': 'segment_final', 'text': text, 'confidence': conf, 'words': words, 'utterance_id': _turn_id})
+            _emit_turn_candidate('flux_end_of_turn', conf)
+    except Exception as e:
+        log.error(f'on_flux_message: {e}')
+
 def _on_error(ws_arg, error):
     global _ws
     if _ws is not ws_arg:
@@ -788,6 +860,8 @@ def _push_slice_level(part):
 
 def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
     chunk_bytes = (RATE // 10) * 2   # 100ms of S16_LE mono
+    if _stt_provider == 'flux':
+        chunk_bytes = (RATE * 2 * 80) // 1000   # Flux: 80 ms chunks, as Deepgram recommends
     warmup = 0
     
     sent_bytes = 0
@@ -914,12 +988,17 @@ def _start_recording_locked(force_restart=False, reason='manual'):
         except: pass
 
     ws_ready = threading.Event()
+    flux = _stt_provider == 'flux'
+    _timing('provider', name='flux' if flux else 'nova')
+    global _flux_last_text
+    _flux_last_text = ''
 
     def _on_open(ws_arg):
         log.info('[WS] connected — starting audio stream')
         _set(recording=True, ready=True)
         if (
             _stt_protocol == 'candidate-v1'
+            and not flux
             and _flux_shadow.start(f'nova-{current_gen}')
             and initial_buffer
         ):
@@ -927,13 +1006,13 @@ def _start_recording_locked(force_restart=False, reason='manual'):
             for offset in range(0, len(initial_buffer), shadow_chunk_bytes):
                 _flux_shadow.offer_audio(initial_buffer[offset:offset + shadow_chunk_bytes])
         ws_ready.set()
-        _ws_push_stt({'type': 'ready', 'model': PRIMARY_STT_MODEL})
+        _ws_push_stt({'type': 'ready', 'model': FLUX_MODEL if flux else PRIMARY_STT_MODEL})
 
     ws = websocket.WebSocketApp(
-        DG_URL,
+        FLUX_URL if flux else DG_URL,
         header={'Authorization': f'Token {DEEPGRAM_KEY}'},
         on_open=_on_open,
-        on_message=_on_message,
+        on_message=_on_flux_message if flux else _on_message,
         on_error=_on_error,
         on_close=_on_close,
     )
