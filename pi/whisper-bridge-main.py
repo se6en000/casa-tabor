@@ -750,6 +750,19 @@ def _on_close(ws_arg, code, msg):
     log.info(f'[DG] ws closed {code}')
     stop_recording()
 
+SLICE_BYTES = (RATE // 50) * 2   # 20 ms of S16_LE mono
+
+
+def _push_slice_level(part):
+    """One 20 ms slice's loudness to the wall: `level` as before (rms/70, 0-100), and `db` for the voice line (canvas row 17) —
+    decibels mapped to 0-100 (30 dB -> 0, 70 dB -> 100), since `level` reads a normal voice as only 1-5; the kitchen's quiet
+    reads ~34 on it, a voice ~45-90."""
+    samples = struct.unpack(f'<{len(part)//2}h', part)
+    rms = math.sqrt(sum(s*s for s in samples) / len(samples))
+    db = 20 * math.log10(max(rms, 1.0))
+    _ws_push_stt({'type': 'volume', 'level': int(min(rms / 70, 100)), 'db': round(max(0.0, min(100.0, (db - 30) * 2.5)), 1)})
+
+
 def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
     chunk_bytes = (RATE // 10) * 2   # 100ms of S16_LE mono
     warmup = 0
@@ -773,7 +786,17 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             # Also check generation — if a new session started, stop streaming old audio
             if _ws_gen != gen:
                 break
-            raw = proc.stdout.read(chunk_bytes)
+            # Read the chunk in 20 ms slices and send each slice's loudness as it arrives: the wall's voice line
+            # follows it 50 times a second (Jake, 2026-09-30: "it's still like 250ms behind what I say … can you
+            # sample it even faster"). Deepgram still gets the same 100 ms chunks.
+            raw = b''
+            while len(raw) < chunk_bytes:
+                part = proc.stdout.read(SLICE_BYTES)
+                if not part:
+                    break
+                raw += part
+                if len(part) == SLICE_BYTES and (initial_buffer or warmup >= WARMUP_CHUNKS):
+                    _push_slice_level(part)
             if not raw or len(raw) < chunk_bytes:
                 short_reads += 1
                 if short_reads <= 5:
@@ -788,10 +811,6 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             rms = math.sqrt(sum(s*s for s in samples) / len(samples))
             vol = int(min(rms / 70, 100))
             _set(volume=vol)
-            # The wall's voice line (canvas row 17) needs finer steps than `level`, which reads a normal voice as 1-5:
-            # loudness in decibels mapped to 0-100 (30 dB -> 0, 70 dB -> 100); the kitchen's quiet reads ~34, a voice ~50-90.
-            db = 20 * math.log10(max(rms, 1.0))
-            _ws_push_stt({'type': 'volume', 'level': vol, 'db': round(max(0.0, min(100.0, (db - 30) * 2.5)), 1)})
             now = time.time()
             if now - last_voice_push >= 0.08:
                 _push_voice_level(vol)

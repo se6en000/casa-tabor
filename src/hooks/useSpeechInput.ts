@@ -122,6 +122,7 @@ export function useSpeechInput({
   const signalRef = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 })
   // The mic's levels this turn (the bridge's 0–100), traced with each sentence so the line can be tuned to real voices.
   const levelsRef = useRef<number[]>([])
+  const volumeSetAtRef = useRef(0)
   const [bridgeDown, setBridgeDown] = useState(false)
   const supported = !IS_SAFE_MODE
 
@@ -586,10 +587,18 @@ export function useSpeechInput({
             setBridgeDown(false)
             break
           case 'volume':
-            setVolume(msg.level ?? 0)
-            // The bridge's finer decibel scale when it sends one (0–100: the room ~34, a voice ~45–90).
-            signalRef.current.level = (msg as { db?: number }).db ?? msg.level ?? 0
-            if (levelsRef.current.length < 600) levelsRef.current.push(signalRef.current.level)
+            // React state only a few times a second (the old drawer's meter); the wall's voice line reads every
+            // sample from the signal ref, without re-rendering the band 20 times a second.
+            if (Date.now() - volumeSetAtRef.current >= 200) {
+              volumeSetAtRef.current = Date.now()
+              setVolume(msg.level ?? 0)
+            }
+            // The bridge's finer decibel scale (0–100: the room ~34, a voice ~45–90), 50 times a second. Its closing
+            // "level 0" (no `db`) isn't the room going silent, so the line doesn't learn it.
+            if (typeof msg.db === 'number') {
+              signalRef.current.level = msg.db
+              if (levelsRef.current.length < 1500) levelsRef.current.push(signalRef.current.level)
+            }
             break
           case 'speech_started':
             if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()

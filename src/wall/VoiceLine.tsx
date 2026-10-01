@@ -91,7 +91,9 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       last = ms
       const now = Date.now()
       const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, speechAt: 0 }
-      levels = stepLevel(levels, s.level ?? 0, dt)
+      // Only learn the room while the mic is open: when it closes (Casa thinking) the level reads 0, and learning
+      // that would make the ordinary room look loud when the mic opens again.
+      if (inputs.current.micOpen) levels = stepLevel(levels, s.level ?? levels.level, dt)
       const voiced = Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 8000
       const wordsLately = s.lastWordAt > 0 && now - s.lastWordAt < 2000
       noisySince = levels.level - levels.floor > 12 && !wordsLately && !voiced ? noisySince || now : 0
@@ -103,8 +105,10 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       const look = LOOK[next]
       const voice = next === 'voice' ? amplitude(levels.level, levels.floor) : 0
       const ease = (from: number, to: number, k: number) => from + (to - from) * k
-      drawn.height = ease(drawn.height, look.height + 14 * voice, 0.14)
-      drawn.pace = ease(drawn.pace, look.pace + 2.2 * voice, 0.1)
+      // Up at once with your voice (a frame or two), down slowly — lively without the jitter, and without lag.
+      const rise = (from: number, to: number, down: number) => ease(from, to, to > from ? 0.6 : down)
+      drawn.height = rise(drawn.height, look.height + 14 * voice, 0.14)
+      drawn.pace = rise(drawn.pace, look.pace + 2.2 * voice, 0.1)
       drawn.ink = ease(drawn.ink, look.ink, 0.12)
       phase += drawn.pace * dt / 1000 * Math.PI * 2
       if (wave.current) {

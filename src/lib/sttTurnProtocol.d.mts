@@ -12,6 +12,8 @@ export interface BridgeTurnMessage {
   endpoint_reason?: string
   provider_timestamp?: number
   level?: number
+  /** Loudness on a decibel scale mapped to 0–100, every 20 ms (the wall's voice line). */
+  db?: number
   msg?: string
   utterance_id?: string
   next_utterance_id?: string
