@@ -45,14 +45,16 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                 <span className="font-display text-wall-heading font-bold lining-nums">{day.dayNumber}</span>
               </div>
               {/* The "?" sits with the dots: with nine tiles, "TOMORROW 26" leaves no room beside it. */}
-              <div aria-hidden="true" className="flex h-[28px] items-center justify-between gap-[6px]">
-                <span className="flex gap-[6px]">
+              {/* Six people and the "?" have to fit inside the tile's own border (on the wall, Oct 1, the "?" ran into
+                  it): 16 px dots, 4 px apart, a 24 px "?". */}
+              <div aria-hidden="true" className="flex h-[28px] items-center justify-between gap-[4px]">
+                <span className="flex gap-[4px]">
                   {day.memberIds.map((id) => (
-                    <span key={id} className={`h-[18px] w-[18px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
+                    <span key={id} className={`h-[16px] w-[16px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
                   ))}
                 </span>
                 {day.decisionCount > 0 && (
-                  <span className="flex h-[28px] min-w-[28px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-brass px-[6px] text-wall-label font-bold text-wall-brass-ink">
+                  <span className="flex h-[24px] min-w-[24px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-brass px-[4px] text-wall-label font-bold text-wall-brass-ink">
                     ?
                   </span>
                 )}

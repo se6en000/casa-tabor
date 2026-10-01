@@ -1461,7 +1461,7 @@ test('wall: Hide routines takes school, work and the runs off the lanes until Sh
   await page.evaluate(() => document.fonts.ready)
   await expect(wall.getByText('Bak Middle School', { exact: true })).toBeVisible()
   await expect(wall.getByText('Work', { exact: true }).first()).toBeVisible()
-  const todayDots = () => wall.getByRole('region', { name: 'Next seven days' }).getByRole('button').first().locator('span.h-\\[18px\\].rounded-full').count()
+  const todayDots = () => wall.getByRole('region', { name: 'Next seven days' }).getByRole('button').first().locator('span.h-\\[16px\\].rounded-full').count()
   const dotsShown = await todayDots()
   await wall.getByRole('button', { name: 'Hide routines' }).click()
   await expect(wall.getByRole('button', { name: 'Routines hidden · Show' })).toBeVisible()
@@ -1645,3 +1645,24 @@ for (const [name, at] of [['today', '2026-09-26T11:30:00'], ['the evening', '202
     expect(m.week - m.lowest, `room above the week: ${m.week - m.lowest}`).toBeGreaterThanOrEqual(16)
   })
 }
+
+// On the wall (Oct 1) six dots and the "?" ran into Today's tile border: everything stays inside every tile.
+test('wall: the week tiles keep their dots and "?" inside their border', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const tiles = page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).getByRole('button')
+  await tiles.first().waitFor()
+  // The case seen on the wall: all six lanes busy and a decision — built from the real tiles' own parts.
+  await tiles.evaluateAll((els) => {
+    const [today, tomorrow] = els
+    const dots = today.querySelector('[aria-hidden="true"] > span')
+    while (dots.children.length < 6) dots.appendChild(dots.firstElementChild.cloneNode(true))
+    const row = today.querySelector('[aria-hidden="true"]')
+    if (row.children.length < 2) row.appendChild(tomorrow.querySelector('[aria-hidden="true"] > span:last-child').cloneNode(true))
+  })
+  const overflow = await tiles.evaluateAll((els) => els.map((tile) => {
+    const box = tile.getBoundingClientRect()
+    const inner = [...tile.querySelectorAll('span')].map((s) => s.getBoundingClientRect())
+    return inner.some((r) => r.width > 0 && (r.right > box.right - 4 || r.left < box.left + 4))
+  }))
+  expect(overflow.filter(Boolean)).toHaveLength(0)
+})
