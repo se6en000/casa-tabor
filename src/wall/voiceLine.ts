@@ -67,7 +67,9 @@ export function voiceState(input: VoiceStateInput): VoiceLineState {
   // Your voice moves it as you speak, before any words come; a short dip between words is still you. Planning keeps
   // the mic open while Casa thinks, so talking over the thinking shows your voice.
   if (input.micOpen && (voiced || hearing) && (loud || now - input.lastLoudAt < FUSE_STARTS_MS)) return ink
-  if (hearing && now - signal.lastWordAt < FUSE_STARTS_MS) return ink
+  // Words are your voice only where there's no voice detection (a browser's own speech, with no levels); on the
+  // wall they arrive after you stopped, and mustn't flip the fuse back to the wave.
+  if (hearing && !voiced && now - signal.lastWordAt < FUSE_STARTS_MS) return ink
   if (input.thinking) return 'thinking'
   if (!input.micOpen) return input.needsYes ? 'yes' : 'off'
   if (signal.heldSince > 0) return 'fuse'
@@ -79,7 +81,8 @@ export function voiceState(input: VoiceStateInput): VoiceLineState {
   return 'quiet'
 }
 
-const voiceEnded = (signal: Pick<VoiceSignal, 'lastWordAt'>, lastLoudAt: number) => Math.max(lastLoudAt, signal.lastWordAt)
+/** When your voice stopped: the last loud moment when there was one, else the last words. */
+const voiceEnded = (signal: Pick<VoiceSignal, 'lastWordAt'>, lastLoudAt: number) => (lastLoudAt > 0 ? lastLoudAt : signal.lastWordAt)
 
 /** How full the fuse is (0–1), from when your voice stopped; it never claims full until Casa has really taken the turn. */
 export function fuseProgress(now: number, signal: Pick<VoiceSignal, 'lastWordAt' | 'heldSince'>, lastLoudAt: number): number {

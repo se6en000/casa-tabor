@@ -76,4 +76,9 @@ test('your voice moves the line before any words come; the fuse starts when your
   assert.equal(fuseProgress(stopped.now, stopped.signal, stopped.lastLoudAt), (500 - FUSE_STARTS_MS) / (FUSE_MS - FUSE_STARTS_MS))
   // A voice start with nothing after it (a cough): back to quiet once the wait has passed.
   assert.equal(voiceState({ ...stopped, lastLoudAt: 7_000 }), 'quiet')
+  // The words arriving after you stopped (as they do on the wall) don't count as talking, and the fuse keeps its
+  // place — it doesn't jump back to the wave and start over.
+  const words = { ...stopped, heard: 'add a dentist', signal: { ...stopped.signal, lastWordAt: 9_900 } }
+  assert.equal(voiceState(words), 'fuse')
+  assert.equal(fuseProgress(words.now, words.signal, words.lastLoudAt), fuseProgress(stopped.now, stopped.signal, stopped.lastLoudAt))
 })

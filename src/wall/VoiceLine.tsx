@@ -84,7 +84,7 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       const t = ms / 1000
       if (path.current && (next === 'voice' || next === 'unsure')) path.current.setAttribute('d', wavePath(width, 3 + 19 * amplitude(levels.level, levels.floor), t))
       else if (path.current && next === 'noise') path.current.setAttribute('d', grainPath(width, 1.5 + 2.5 * amplitude(levels.level, levels.floor), t))
-      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s, lastLoudAt) * 100).toFixed(1)}%`
+      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s, voiced ? lastLoudAt : 0) * 100).toFixed(1)}%`
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
