@@ -22,6 +22,8 @@ export interface ScoreBlock {
   /** Whose color: the lane's person, or the driver for a driving leg. */
   pigmentIndex: number
   placeStatus: PlaceStatus
+  /** Work hours: drawn lighter, with a dashed edge (canvas 16a), so they read as busy rather than out. */
+  work?: boolean
 }
 
 /** A driver's initial on a school bar: drop-off at the start, pickup at the end. */
@@ -134,13 +136,24 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
   return ''
 }
 
-export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Score {
+/**
+ * "Hide routines" (canvas 16b): school, work and the regular runs come off the lanes; a run that needs someone
+ * (no driver) or was changed today (handed off) stays.
+ */
+function shownSegments(segments: LaneSegment[], trips: Trip[], hideRoutines: boolean): LaneSegment[] {
+  if (!hideRoutines) return segments
+  const stays = new Set(trips.filter((t) => t.source === 'routine' && (t.driverId == null || t.driverSource === 'handoff')).map((t) => t.id))
+  return segments.filter((s) => !s.fromRoutine || (s.tripId != null && stays.has(s.tripId)))
+}
+
+export function buildScore(plan: DayPlan, members: WallMember[], now: Date, options: { hideRoutines?: boolean } = {}): Score {
   const pigments = pigmentIndexes(members)
   const pigmentFor = (id: string | null | undefined) => (id != null ? pigments.get(id) ?? null : null)
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
 
   const lanes: ScoreLane[] = selectLaneMembers(members, plan.activeMemberIds).map((member) => {
-    const segments = plan.lanes.get(member.id) ?? []
+    const allSegments = plan.lanes.get(member.id) ?? []
+    const segments = shownSegments(allSegments, plan.trips, options.hideRoutines === true)
     const own = pigmentFor(member.id) ?? 0
     const blocks: ScoreBlock[] = []
     const monograms: ScoreMonogram[] = []
@@ -155,7 +168,7 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
       const key = `${segment.kind}:${segment.sourceId}:${i}`
 
       if (segment.kind === 'at_place') {
-        blocks.push({ key, kind: 'place', sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: segment.placeStatus })
+        blocks.push({ key, kind: 'place', sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: segment.placeStatus, ...(segment.work ? { work: true } : {}) })
         for (const kind of ['dropoff', 'pickup'] as const) {
           const edge = kind === 'dropoff' ? segment.start : segment.end
           const trip = plan.trips.find((x) => x.kind === kind && x.travelerIds.includes(member.id) && x.arriveAt.getTime() === edge.getTime())
@@ -203,7 +216,10 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
     // A pickup note is dropped when something else starts right after it; the initial still shows who.
     const clearNotes = notes.filter((note) => !blocks.some((b) => b.kind !== 'place' && b.x >= note.x - 8 && b.x < note.x + NOTE_WIDTH))
 
-    return { member, pigmentIndex: own, status: laneStatus(member.id, segments, plan.trips, now, nameOf), blocks, monograms, notes: clearNotes }
+    // Places lie under what happens there (a drive in the middle of work hours).
+    blocks.sort((a, b) => Number(b.kind === 'place') - Number(a.kind === 'place'))
+    // The status tells where they are even with routines hidden ("Bak · until 3:30").
+    return { member, pigmentIndex: own, status: laneStatus(member.id, allSegments, plan.trips, now, nameOf), blocks, monograms, notes: clearNotes }
   })
 
   // Everyone home by: the last known return, only when every trip's return is known.

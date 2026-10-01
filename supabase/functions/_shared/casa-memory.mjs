@@ -90,3 +90,12 @@ export function dueThought(rows, now = new Date()) {
     .filter((r) => (r.nudge_count ?? 0) < 3 && t - Date.parse(r.created_at) >= 20 * 3600e3 && (!r.last_nudged_at || t - Date.parse(r.last_nudged_at) >= 7 * DAY))
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))[0] ?? null
 }
+
+// Phase 5 — a person's page (canvas 16c): what Casa knows about them, sure first, each with where it came from.
+const WHERE = { told: 'you said it', old_app: 'your old contacts', learned: 'learned' }
+/** One person's facts for their page: { sure: [{id, text, from}], notSure: [...] }; the privacy switch hides the sensitive ones on the wall. */
+export function aboutPerson(rows, memberId, { hideSensitive = false } = {}) {
+  const mine = (rows ?? []).filter((r) => r.kind !== 'thought' && (r.status ?? 'active') === 'active' && r.about_member_id === memberId && !(hideSensitive && r.sensitive))
+  const line = (r) => ({ id: r.id, text: r.text, from: Array.isArray(r.evidence) && r.evidence.length ? r.evidence.map((e) => e?.what).filter(Boolean).join('; ') : WHERE[r.source] ?? 'learned' })
+  return { sure: mine.filter((r) => r.confidence === 'sure').map(line), notSure: mine.filter((r) => r.confidence !== 'sure').map(line) }
+}

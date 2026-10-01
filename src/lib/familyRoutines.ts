@@ -17,6 +17,8 @@ export interface DayScheduleOverride {
 
 export interface FamilyRoutine {
   id?: string
+  /** Which of the person's routines this is: "main" for the first (older rows have no key), else its own. */
+  key?: string
   memberId: string
   title: string
   routineType?: 'school' | 'work' | 'camp' | 'custom'
@@ -51,6 +53,7 @@ export interface AmbientRoutineStatus {
 
 export interface RoutinePayload {
   type: 'family_routine' | 'school_routine'
+  key?: string
   routineType?: 'school' | 'work' | 'camp' | 'custom'
   title: string
   venueName: string
@@ -694,6 +697,7 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
   const syncMode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
   const payload: RoutinePayload = {
     type: 'family_routine',
+    key: routine.key || MAIN_ROUTINE_KEY,
     routineType: routine.routineType || 'school',
     title: routine.title,
     venueName: routine.venueName,
@@ -732,25 +736,33 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
   })
 }
 
-/**
- * Deserializes member_availability_rules rows for a member into a FamilyRoutine (if found).
- */
-export function deserializeRoutineFromAvailabilityRules(
-  memberId: string,
-  rules: MemberAvailabilityRule[],
-): FamilyRoutine | null {
-  const routineRules = rules.filter((r) => {
-    if (r.member_id !== memberId) return false
-    try {
-      const parsed = JSON.parse(r.reason || '')
-      return parsed.type === 'family_routine' || parsed.type === 'school_routine'
-    } catch {
-      return false
-    }
-  })
+/** The first routine a person has; older rows carry no key and read as this one. */
+export const MAIN_ROUTINE_KEY = 'main'
+/** Plain "Working hours" rows (busy time from the old Settings page), read as a Work routine. */
+export const WORK_HOURS_KEY = 'work-hours'
 
-  if (routineRules.length === 0) return null
+function routinePayloadOf(reason: string | null | undefined): RoutinePayload | null {
+  if (!reason || !reason.trim().startsWith('{')) return null
+  try {
+    const parsed = JSON.parse(reason)
+    return parsed && (parsed.type === 'family_routine' || parsed.type === 'school_routine') ? parsed as RoutinePayload : null
+  } catch {
+    return null
+  }
+}
 
+/** The routine a rule belongs to ("main" for older rows), or null when it isn't a routine's. */
+export function routineKeyOfRule(rule: { reason?: string | null }): string | null {
+  const payload = routinePayloadOf(rule.reason)
+  return payload ? payload.key || MAIN_ROUTINE_KEY : null
+}
+
+/** A plain busy-hours row: unavailable, and not a routine's. */
+function isPlainHours(rule: MemberAvailabilityRule): boolean {
+  return rule.availability_type === 'unavailable' && !routinePayloadOf(rule.reason)
+}
+
+function routineFromRules(memberId: string, routineRules: MemberAvailabilityRule[]): FamilyRoutine {
   const sortedRoutineRules = [...routineRules].sort((a, b) => {
     const aTime = (a.updated_at || a.created_at || '') as string
     const bTime = (b.updated_at || b.created_at || '') as string
@@ -758,7 +770,7 @@ export function deserializeRoutineFromAvailabilityRules(
   })
 
   const first = sortedRoutineRules[0]
-  let payload: RoutinePayload = {
+  const payload: RoutinePayload = routinePayloadOf(first.reason) ?? {
     type: 'family_routine',
     routineType: 'school',
     title: 'Routine',
@@ -770,12 +782,6 @@ export function deserializeRoutineFromAvailabilityRules(
     syncMode: 'exceptions_only',
     syncToGoogle: true,
     enabled: true,
-  }
-
-  try {
-    payload = JSON.parse(first.reason || '{}')
-  } catch {
-    // fallback
   }
 
   const days = Array.from(new Set(routineRules.map((r) => r.day_of_week))).sort()
@@ -796,8 +802,10 @@ export function deserializeRoutineFromAvailabilityRules(
   )
   const baseStart = payload.startLocal || nonOverriddenRule?.start_local || first.start_local
   const baseEnd = payload.endLocal || nonOverriddenRule?.end_local || first.end_local
+  const work = payload.routineType === 'work'
 
   return {
+    key: payload.key || MAIN_ROUTINE_KEY,
     memberId,
     title: payload.title || 'Routine',
     routineType: payload.routineType || 'school',
@@ -810,14 +818,84 @@ export function deserializeRoutineFromAvailabilityRules(
     daysOfWeek: days.length > 0 ? days : [1, 2, 3, 4, 5],
     startLocal: baseStart.slice(0, 5),
     endLocal: baseEnd.slice(0, 5),
-    dropoffDriverName: payload.dropoffDriverName || 'Jake',
+    // Work has no drop-off or pickup; the old defaults (Jake, Kelly) are only for school-like routines.
+    dropoffDriverName: payload.dropoffDriverName || (work ? '' : 'Jake'),
     dropoffDriverId: payload.dropoffDriverId,
-    pickupDriverName: payload.pickupDriverName || 'Kelly',
+    pickupDriverName: payload.pickupDriverName || (work ? '' : 'Kelly'),
     pickupDriverId: payload.pickupDriverId,
     syncMode,
     syncToGoogle: syncMode !== 'none',
     enabled: payload.enabled ?? true,
   }
+}
+
+/** Plain busy hours as a Work routine: the usual hours, and the days that differ as "different on some days". */
+function workFromPlainHours(memberId: string, plain: MemberAvailabilityRule[]): FamilyRoutine {
+  const hours = (r: MemberAvailabilityRule) => `${r.start_local.slice(0, 5)}-${r.end_local.slice(0, 5)}`
+  const counts = new Map<string, number>()
+  for (const r of plain) counts.set(hours(r), (counts.get(hours(r)) ?? 0) + 1)
+  const usual = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+  const [startLocal, endLocal] = usual.split('-')
+  const days = Array.from(new Set(plain.map((r) => r.day_of_week))).sort()
+  const dayOverrides: DayScheduleOverride[] = plain
+    .filter((r) => hours(r) !== usual)
+    .map((r) => ({ dayOfWeek: r.day_of_week, startLocal: r.start_local.slice(0, 5), endLocal: r.end_local.slice(0, 5), enabled: true }))
+  return {
+    key: WORK_HOURS_KEY,
+    memberId,
+    title: 'Work',
+    routineType: 'work',
+    venueName: '',
+    shortVenueName: null,
+    venueAddress: '',
+    daysOfWeek: days,
+    startLocal,
+    endLocal,
+    dayOverrides,
+    startDate: null,
+    endDate: null,
+    dropoffDriverName: '',
+    pickupDriverName: '',
+    syncMode: 'none',
+    syncToGoogle: false,
+    enabled: true,
+  }
+}
+
+/**
+ * All of a person's routines, from their member_availability_rules rows: each keyed routine (older rows are
+ * "main"), then plain working hours as a Work routine when no routine replaced them.
+ */
+export function deserializeRoutinesFromAvailabilityRules(memberId: string, rules: MemberAvailabilityRule[]): FamilyRoutine[] {
+  const mine = rules.filter((r) => r.member_id === memberId)
+  const groups = new Map<string, MemberAvailabilityRule[]>()
+  for (const rule of mine) {
+    const key = routineKeyOfRule(rule)
+    if (key) groups.set(key, [...(groups.get(key) ?? []), rule])
+  }
+  const routines = [...groups.values()].map((group) => routineFromRules(memberId, group))
+  const plain = mine.filter(isPlainHours)
+  if (plain.length > 0 && !groups.has(WORK_HOURS_KEY)) routines.push(workFromPlainHours(memberId, plain))
+  // The main routine first, then the rest in the order they were added.
+  const order = (r: FamilyRoutine) => (r.key === MAIN_ROUTINE_KEY ? 0 : r.key === WORK_HOURS_KEY ? 2 : 1)
+  return routines.sort((a, b) => order(a) - order(b))
+}
+
+/**
+ * Deserializes member_availability_rules rows for a member into their main FamilyRoutine (if found).
+ * The old screens edit only this one; the Family Wall reads them all (deserializeRoutinesFromAvailabilityRules).
+ */
+export function deserializeRoutineFromAvailabilityRules(
+  memberId: string,
+  rules: MemberAvailabilityRule[],
+): FamilyRoutine | null {
+  const routineRules = rules.filter((r) => r.member_id === memberId && routineKeyOfRule(r) === MAIN_ROUTINE_KEY)
+  if (routineRules.length === 0) {
+    // No main routine: the first keyed one, so older screens still see something.
+    const other = rules.filter((r) => r.member_id === memberId && routineKeyOfRule(r))
+    return other.length ? routineFromRules(memberId, other.filter((r) => routineKeyOfRule(r) === routineKeyOfRule(other[0]))) : null
+  }
+  return routineFromRules(memberId, routineRules)
 }
 
 /**

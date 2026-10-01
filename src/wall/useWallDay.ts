@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useRollingEvents, useTodayEvents, useTomorrowEvents, useWeekAroundEvents } from '../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
-import { deserializeRoutineFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
+import { deserializeRoutinesFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
 import { dayState, type WallTripState } from './tripState'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
@@ -51,7 +51,7 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
   const tomorrowShown = useMemo(() => (tomorrowEvents ? shown(tomorrowEvents as unknown as WallEvent[]) : null), [tomorrowEvents, shown])
 
   const routines = useMemo(
-    () => routinesFor(audience, members.map((m) => deserializeRoutineFromAvailabilityRules(m.id, rules)).filter((r): r is FamilyRoutine => Boolean(r)), members),
+    () => routinesFor(audience, members.flatMap((m) => deserializeRoutinesFromAvailabilityRules(m.id, rules)), members),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- audienceKey stands for audience
     [members, rules, audienceKey],
   )

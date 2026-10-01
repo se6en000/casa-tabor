@@ -54,3 +54,8 @@ test('the prompt carries the evidence and what is already known, and asks for un
   assert.match(p, /Not facts: one-time events or appointments/)
   assert.match(p, /Never about Casa itself, testing it, or the app/)
 })
+
+test('the learner keeps hours and drivers out of facts: routines hold them (row 16)', async () => {
+  const { buildLearnerPrompt } = await import('../supabase/functions/_shared/memory-learner.mjs')
+  assert.match(buildLearnerPrompt({ today: '2026-09-30' }), /School and work hours, and who drops off or picks up, are kept as routines/)
+})

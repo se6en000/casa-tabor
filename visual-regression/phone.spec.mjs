@@ -268,7 +268,8 @@ test('phone: Ask Casa — the one draft, revised in place, says what just change
   await expect(card.getByText('Dentist · Liv')).toBeVisible()
   await expect(card.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
   await expect(card.getByText('3:31')).toBeVisible()
-  await expect(card.getByText('Kelly · free')).toBeVisible()
+  // A weekday at 4:00: both parents are at work (their Work routines, canvas 16), and the card says so.
+  await expect(card.getByText('Kelly · busy')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-ask-draft.png')
 })
 
@@ -631,4 +632,26 @@ test('phone: a project — Now, Then, the project inside; a step’s details wit
   await settings.getByRole('button', { name: 'Back to the plan' }).click()
   await project.getByRole('button', { name: '‹ To do' }).click()
   await expect(phone.getByRole('heading', { name: 'To do' })).toBeVisible()
+})
+
+test('phone: People › Family › Owen — his routines and what Casa knows; a parent edits, a child only reads (canvas 16c)', async ({ page }) => {
+  let phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: /People/ }).click()
+  await phone.getByRole('group', { name: 'Family' }).getByRole('button', { name: /Owen/ }).click()
+  const page16 = phone.getByRole('region', { name: 'Owen’s page' })
+  await expect(page16.getByText('School · Palm Beach Public')).toBeVisible()
+  await expect(page16.getByText('His teacher is Mrs. Rosangela (Rose) Paine; the class is K by the Sea')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-person.png')
+  await page16.getByRole('button', { name: 'Edit School · Palm Beach Public' }).click()
+  await expect(page16.getByText('School routine')).toBeVisible()
+  await expect(page16.getByText('Oct 12')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-routine-edit.png')
+
+  phone = await open(page, '2026-09-25T10:00:00', 'liv')
+  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: /People/ }).click()
+  await phone.getByRole('group', { name: 'Family' }).getByRole('button', { name: /Owen/ }).click()
+  await expect(phone.getByRole('region', { name: 'Owen’s page' }).getByText('School · Palm Beach Public')).toBeVisible()
+  await expect(phone.getByRole('region', { name: 'Owen’s page' }).getByRole('button', { name: /^Edit/ })).toHaveCount(0)
 })

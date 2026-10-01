@@ -12,7 +12,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent, WallMember } from '../wall/engine/types'
 import { dayState, withDeparted, withHandOff, withoutDeparted, type WallTripState } from '../wall/tripState'
-import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
+import { members, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from '../wall/routineFixture'
+
+const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
 import PhoneView from './PhoneView'
 import PhoneAssistantView from './PhoneAssistantView'
 import type { PhoneLine } from './assistant'
@@ -90,7 +94,7 @@ const COMING_UP: ComingUpItem[] = [
   { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving Day', nextStep: 'Hosting or going?', date: '2026-11-26', pokeOn: '2026-10-27', daysAway: 62, late: false },
 ]
 
-export default function PhoneFixturePage() {
+function PhoneFixturePageInner() {
   const fontsReady = useFixtureFonts()
   const params = new URLSearchParams(window.location.search)
   const now = new Date(params.get('at') ?? '2026-09-25T07:12:00')
@@ -136,6 +140,8 @@ export default function PhoneFixturePage() {
               now={now}
               viewerId={viewerId}
               members={members as WallMember[]}
+              routines={shownRoutines as unknown as FamilyRoutine[]}
+              dayOffs={FIXTURE_DAY_OFFS}
               week={week}
               events={shown}
               keepFrom={keep}
@@ -209,5 +215,17 @@ export default function PhoneFixturePage() {
         } />
       </Routes>
     </MemoryRouter>
+  )
+}
+
+// No network in the fixture: what Casa knows is seeded (the casa-memory function's answer), saved places load empty.
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
+seedKnown(queryClient)
+
+export default function PhoneFixturePage() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PhoneFixturePageInner />
+    </QueryClientProvider>
   )
 }

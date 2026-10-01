@@ -492,6 +492,22 @@
       {
         "path": "src/phone/PhoneEmailSettings.tsx",
         "reason": "The phone lens: Settings › Email (canvas 15e, approved 2026-09-30) — Keep me posted (add, remove), Bring back, the \"Email text on the wall\" switch, Back — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
+      },
+      {
+        "path": "src/wall/PersonPage.tsx",
+        "reason": "Family Wall: a person's page (canvas 16c/16e), routines with Edit and \"Add a routine\", shared by the wall and the phone; wall-* tokens, finger-sized targets."
+      },
+      {
+        "path": "src/wall/RoutineEditor.tsx",
+        "reason": "Family Wall: the routine editor (canvas 16d) — day chips, hold-to-step hours, driver chips — shared by the wall and the phone; wall-* tokens, finger-sized targets."
+      },
+      {
+        "path": "src/wall/WallPersonSheet.tsx",
+        "reason": "Family Wall: the person sheet beside the day (canvas 16e), part of the Wall's own component set."
+      },
+      {
+        "path": "src/phone/PhonePerson.tsx",
+        "reason": "Phone (Family Wall family): a person's page under People (canvas 16c)."
       }
     ]
   }

@@ -19,6 +19,7 @@ import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
+import WallPersonSheet from './WallPersonSheet'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
@@ -98,6 +99,21 @@ export interface WallViewProps {
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
 }
 
+const HIDE_ROUTINES_KEY = 'casa-wall-hide-routines'
+function readRoutinesHidden(): boolean {
+  try { return localStorage.getItem(HIDE_ROUTINES_KEY) === '1' } catch { return false }
+}
+function writeRoutinesHidden(hidden: boolean) {
+  try {
+    if (hidden) localStorage.setItem(HIDE_ROUTINES_KEY, '1')
+    else localStorage.removeItem(HIDE_ROUTINES_KEY)
+  } catch { /* private mode: for this visit only */ }
+}
+const localYmd = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
 /** A touch on Calm keeps the full day up this long after the last touch. */
 const WAKE_MS = 5 * 60_000
@@ -135,6 +151,10 @@ export default function WallView(props: WallViewProps) {
   const [todoProject, setTodoProject] = useState<string | null>(null)
   // "Later tonight" on a nudge: off the wall for 45 minutes (the watch's reminder is untouched).
   const [nudgeLater, setNudgeLater] = useState<{ id: string; until: number } | null>(null)
+  // "Hide routines" (canvas 16b): remembered on this wall until Show.
+  const [routinesHidden, setRoutinesHidden] = useState(readRoutinesHidden)
+  // A person's page (canvas 16e), from a tap on their name.
+  const [personId, setPersonId] = useState<string | null>(null)
 
   // A far day's week (dayFocus.ts) joins the cache, so its events open like any other.
   const knownEvents = useMemo(() => mergeEvents(allEvents, aroundEvents), [allEvents, aroundEvents])
@@ -147,6 +167,7 @@ export default function WallView(props: WallViewProps) {
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const selected = selectedId ? eventsById.get(selectedId) ?? null : null
+  const person = personId ? members.find((m) => m.id === personId) ?? null : null
   // A project step's calendar event opens with its step (P3.23).
   const selectedStep = selected && todos ? stepForEvent(todos.list, selected.id) : null
 
@@ -272,6 +293,14 @@ export default function WallView(props: WallViewProps) {
       setSelectedForWho(true)
       setSelectedId(id)
     },
+    routines: routines.length > 0 ? {
+      hidden: routinesHidden,
+      onToggle: () => setRoutinesHidden((was) => {
+        writeRoutinesHidden(!was)
+        return !was
+      }),
+    } : undefined,
+    onOpenPerson: setPersonId,
   }
   const openPerson = (memberId: string) => {
     const id = today ? eventForPerson(today, memberId, now, (sourceId) => eventsById.has(sourceId)) : null
@@ -355,7 +384,7 @@ export default function WallView(props: WallViewProps) {
     else if (extras[next - strip.length] === 'coming') openComingUp()
     else openTodo()
   }
-  useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen, minDistance: 200 })
+  useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen && !person, minDistance: 200 })
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = strip.length > 1 ? (
     <WallWeek
@@ -574,6 +603,18 @@ export default function WallView(props: WallViewProps) {
         const packing = plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }
         return <WallPackingSheet groups={packing.groups} packed={packing.packed} total={packing.total} onToggle={toggleChecklist} onClose={() => setPackingOpen(false)} />
       })()}
+      {person && !selected && (
+        <WallPersonSheet
+          key={person.id}
+          member={person}
+          members={members}
+          pigmentIndex={pigments.get(person.id) ?? 0}
+          routines={routines.filter((r) => r.memberId === person.id)}
+          dayOffs={dayOffs.filter((d) => d.member_id === person.id && d.override_type === 'day_off' && d.id).map((d) => ({ id: d.id!, start: localYmd(d.start_at), end: localYmd(d.end_at) }))}
+          now={now}
+          onClose={() => setPersonId(null)}
+        />
+      )}
       {menuOpen && (
         <WallMenu
           onClose={() => setMenuOpen(false)}

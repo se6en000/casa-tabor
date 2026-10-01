@@ -84,7 +84,8 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
     start.setHours(0, 0, 0, 0)
     return start
   }, [now, plan])
-  const score = useMemo(() => (plan ? buildScore(plan, members, asOf) : null), [plan, members, asOf])
+  const hideRoutines = interaction?.routines?.hidden === true
+  const score = useMemo(() => (plan ? buildScore(plan, members, asOf, { hideRoutines }) : null), [plan, members, asOf, hideRoutines])
   const first = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, asOf), members, asOf) : null), [plan, members, asOf])
   const packing = useMemo(() => (plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }), [plan, checklist])
   // Packed things fold into one line; an event moves whole to the next column; the rest is counted.

@@ -23,12 +23,17 @@ import { WallSpeechContext } from './speechContext'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
-import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
+import { members, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import type { FamilyRoutine } from '../lib/familyRoutines'
+import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
+
+// School, and the parents' work hours (canvas 16a).
+const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
 
 const WEATHER = { temp: 84, condition: 'Partly cloudy' }
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
+seedKnown(queryClient)
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
   { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
@@ -103,7 +108,7 @@ export default function WallFixturePage() {
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
   const plan = (date: Date) =>
-    buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: evs, tripState: dayState(tripState, date) })
+    buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date) })
   const tripActions = {
     leaving: (ids: string[]) => setTripState((s) => withDeparted(s, day, ids, now)),
     undoLeaving: (ids: string[]) => setTripState((s) => withoutDeparted(s, day, ids)),
@@ -148,7 +153,7 @@ export default function WallFixturePage() {
         onOpenDay={(date) => { setBandOpen(false); setOpenRequest({ day: date.toISOString(), nonce: Date.now() }) }}
         viaWake={new URLSearchParams(window.location.search).get('wake') === '1'}
         members={members as WallMember[]}
-        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
+        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines, events: list, tripState: dayState(tripState, date) })}
         onDraft={setAssistantDraft}
         useTurn={useTurn}
         useSpeech={useFixtureSpeech}
@@ -194,7 +199,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={FIXTURE_DAY_OFFS} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

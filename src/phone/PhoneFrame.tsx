@@ -61,6 +61,8 @@ export default function PhoneFrame() {
       now={now}
       viewerId={profile?.memberId ?? ''}
       members={members}
+      routines={routines}
+      dayOffs={dayOffs}
       week={week}
       events={allEvents}
       checklist={checklist}

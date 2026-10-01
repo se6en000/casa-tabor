@@ -17,6 +17,13 @@ import { eventView, familyItems, meView, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
+import type { FamilyRoutine } from '../lib/familyRoutines'
+import type { DayOff } from '../wall/engine/dayPlan'
+
+const ymdOf = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 import PhoneEmailSettings from './PhoneEmailSettings'
 import { useEmailSettings } from '../wall/useEmailOffers'
 import PhoneScanSheet from './PhoneScanSheet'
@@ -48,6 +55,9 @@ export interface PhoneViewProps {
   /** Whose phone this is (the profile chosen at "Who is using Casa?"). */
   viewerId: string
   members: WallMember[]
+  /** Everyone's routines and days off, for each person's page under People (canvas 16c). */
+  routines?: FamilyRoutine[]
+  dayOffs?: DayOff[]
   /** Today and the next six days; [0] is today. */
   week: DayPlan[]
   events: WallEvent[]
@@ -125,7 +135,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [] }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -549,7 +559,20 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         />
       )}
 
-      {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
+      {peopleOpen && (
+        <PhonePeople
+          contacts={contacts}
+          places={places}
+          onClose={() => setPeopleOpen(false)}
+          family={{
+            members,
+            routines,
+            dayOffs: dayOffs.filter((d) => d.override_type === 'day_off' && d.id).map((d) => ({ id: d.id!, memberId: d.member_id, start: ymdOf(d.start_at), end: ymdOf(d.end_at) })),
+            now,
+            canEdit: members.find((m) => m.id === viewerId)?.role === 'parent',
+          }}
+        />
+      )}
       {emailSettingsOpen && <PhoneEmailSettings onClose={() => setEmailSettingsOpen(false)} useSettings={useEmailSettingsHook} />}
       {askOpen && assistant?.({
         onClose: () => { setAskOpen(false); setAskOpening(null) },

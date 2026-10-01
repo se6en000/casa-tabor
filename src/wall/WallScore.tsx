@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { formatWallClock } from './clock'
 import { fitLabels } from './labelFit'
 import { pigmentStyleFor } from './lanes'
@@ -62,7 +62,7 @@ function blockClass(block: ScoreBlock): string {
   const pigment = pigmentStyleFor(block.pigmentIndex)
   switch (block.kind) {
     case 'place':
-      return pigment.tint
+      return block.work ? `${pigment.tint} border border-dashed ${pigment.outline}` : pigment.tint
     case 'drive':
       return pigment.hatch
     case 'drive_unassigned':
@@ -96,6 +96,10 @@ export interface ScoreInteraction {
   onOpenDecision?: (decisionKey: string) => void
   /** The "No one yet" row: open the event to say who's on it (board 08a). */
   onAssign?: (sourceId: string) => void
+  /** "Hide routines" (canvas 16a/b): whether they're hidden, and the tap. */
+  routines?: { hidden: boolean; onToggle: () => void }
+  /** Tap a name at the start of a lane: that person's page (canvas 16e). */
+  onOpenPerson?: (memberId: string) => void
 }
 
 export interface WallScoreProps {
@@ -138,6 +142,22 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
 
   return (
     <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}>
+      {interaction?.routines && (
+        // Above the right end of the hours, where every posture leaves room (canvas 16a).
+        <button
+          type="button"
+          aria-pressed={interaction.routines.hidden}
+          onClick={(event) => {
+            event.stopPropagation()
+            interaction.routines?.onToggle()
+          }}
+          className={`absolute bottom-full right-0 mb-[6px] flex h-[44px] items-center gap-[10px] rounded-full px-[18px] text-wall-detail font-semibold ${
+            interaction.routines.hidden ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'
+          }`}
+        >
+          {interaction.routines.hidden ? 'Routines hidden · Show' : <><span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />Hide routines</>}
+        </button>
+      )}
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
           {heading}
@@ -188,7 +208,18 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
         )}
         {lanes.map((lane, laneIndex) => (
           <div key={lane.member.id} className="flex min-h-0 flex-1 border-t border-wall-rule">
-            <div className="flex w-[300px] shrink-0 items-center gap-[14px]">
+            <div
+              className={`flex w-[300px] shrink-0 items-center gap-[14px] ${interaction?.onOpenPerson ? 'cursor-pointer' : ''}`}
+              {...(interaction?.onOpenPerson ? {
+                role: 'button',
+                tabIndex: 0,
+                'aria-label': `${lane.member.name}’s page`,
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  interaction.onOpenPerson?.(lane.member.id)
+                },
+              } : {})}
+            >
               <span
                 aria-hidden="true"
                 className={`flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold text-wall-on-pigment ${pigmentStyleFor(lane.pigmentIndex).solid}`}

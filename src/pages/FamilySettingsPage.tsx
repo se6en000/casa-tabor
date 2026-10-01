@@ -19,6 +19,8 @@ import {
 import {
   deserializeRoutineFromAvailabilityRules,
   serializeRoutineToAvailabilityRules,
+  routineKeyOfRule,
+  MAIN_ROUTINE_KEY,
   formatDisplayVenueName,
   type FamilyRoutine,
   type DayScheduleOverride,
@@ -422,15 +424,9 @@ export default function FamilySettingsPage() {
         .select('id, reason')
         .eq('member_id', memberId)
 
+      // Only this page's routine (the main one); routines added on a person's page stay.
       const existingRoutineRuleIds = (remoteRules || [])
-        .filter((r) => {
-          try {
-            const parsed = JSON.parse(r.reason || '')
-            return parsed.type === 'school_routine' || parsed.type === 'family_routine'
-          } catch {
-            return false
-          }
-        })
+        .filter((r) => routineKeyOfRule(r) === (routine.key ?? MAIN_ROUTINE_KEY))
         .map((r) => r.id)
 
       if (existingRoutineRuleIds.length > 0) {
@@ -458,15 +454,7 @@ export default function FamilySettingsPage() {
     }
 
     qc.setQueryData<MemberAvailabilityRule[]>(['member-availability-rules'], (old = []) => {
-      const filtered = old.filter((r) => {
-        if (r.member_id !== memberId) return true
-        try {
-          const parsed = JSON.parse(r.reason || '')
-          return parsed.type !== 'school_routine' && parsed.type !== 'family_routine'
-        } catch {
-          return true
-        }
-      })
+      const filtered = old.filter((r) => r.member_id !== memberId || routineKeyOfRule(r) !== (routine.key ?? MAIN_ROUTINE_KEY))
       const newRulesWithIds: MemberAvailabilityRule[] = serialized.map((s, i) => ({
         ...s,
         id: `local-rule-${memberId}-${s.day_of_week}-${i}`,

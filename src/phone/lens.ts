@@ -133,7 +133,8 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
   const items = new Map<string, FamilyItem>()
   for (const [memberId, segments] of plan.lanes) {
     for (const s of segments) {
-      if (s.kind === 'drive') continue
+      // Work hours are the wall's (where someone is); on a phone's list they'd be every day's noise.
+      if (s.kind === 'drive' || s.work) continue
       // Children at the same place for the same hours (two school routines) are one line.
       const key = s.kind === 'at_place' ? `place|${s.label}|${s.start.getTime()}|${s.end.getTime()}` : s.sourceId
       const existing = items.get(key)

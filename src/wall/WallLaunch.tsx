@@ -35,7 +35,8 @@ export interface WallLaunchProps {
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
 export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow = null }: WallLaunchProps) {
-  const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
+  const hideRoutines = interaction?.routines?.hidden === true
+  const score = useMemo(() => (plan ? buildScore(plan, members, now, { hideRoutines }) : null), [plan, members, now, hideRoutines])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null

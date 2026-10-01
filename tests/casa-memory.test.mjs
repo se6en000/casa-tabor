@@ -118,3 +118,20 @@ test('the privacy switch: built, off by default; when on, sensitive facts stay o
   const sql = readFileSync(new URL('../supabase/migrations/20261001240000_casa_memory_learner.sql', import.meta.url), 'utf8')
   assert.match(sql, /\('memory_private_on_wall', 'false'::jsonb/)
 })
+
+test('a person\'s page: their facts only, sure first then not sure yet, each with where it came from; the privacy switch hides sensitive ones', async () => {
+  const { aboutPerson } = await import('../supabase/functions/_shared/casa-memory.mjs')
+  const rows = [
+    { id: 'a', kind: 'fact', about_member_id: 'owen', text: 'In kindergarten at Palm Beach Public', confidence: 'sure', source: 'told', evidence: [], status: 'active' },
+    { id: 'b', kind: 'fact', about_member_id: 'owen', text: 'Therapist: Hope Center', confidence: 'sure', source: 'learned', evidence: [{ what: '8 emails' }], status: 'active', sensitive: true },
+    { id: 'c', kind: 'fact', about_member_id: 'owen', text: 'School contact: Preservation Foundation?', confidence: 'not_sure', source: 'old_app', evidence: [], status: 'active' },
+    { id: 'd', kind: 'fact', about_member_id: 'liv', text: 'Goes to Bak', confidence: 'sure', source: 'told', evidence: [], status: 'active' },
+    { id: 'e', kind: 'thought', about_member_id: 'owen', text: 'Look into swim lessons', confidence: 'sure', source: 'told', evidence: [], status: 'active' },
+    { id: 'f', kind: 'fact', about_member_id: 'owen', text: 'Old teacher', confidence: 'sure', source: 'told', evidence: [], status: 'corrected' },
+  ]
+  assert.deepEqual(aboutPerson(rows, 'owen'), {
+    sure: [{ id: 'a', text: 'In kindergarten at Palm Beach Public', from: 'you said it' }, { id: 'b', text: 'Therapist: Hope Center', from: '8 emails' }],
+    notSure: [{ id: 'c', text: 'School contact: Preservation Foundation?', from: 'your old contacts' }],
+  })
+  assert.deepEqual(aboutPerson(rows, 'owen', { hideSensitive: true }).sure.map((f) => f.id), ['a'])
+})

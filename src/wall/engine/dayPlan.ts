@@ -14,6 +14,7 @@ import type {
 } from './types'
 
 export interface DayOff {
+  id?: string
   member_id: string
   override_type: string
   start_at: string
@@ -172,16 +173,23 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   for (const routine of routines) {
     const day = routineForDay(routine, date)
     if (!day || isDayOff(routine.memberId, date, dayOffs)) continue
-    const sourceId = routine.id ?? `routine:${routine.memberId}`
+    // The main routine keeps its older id (hand-offs and decisions are saved against it); others add their key.
+    const sourceId = routine.id ?? (routine.key && routine.key !== 'main' ? `routine:${routine.memberId}:${routine.key}` : `routine:${routine.memberId}`)
     const driveMinutes = getEstimatedDriveMinutes(routine.venueName, routine.venueAddress)
+    const work = routine.routineType === 'work'
     addSegment(routine.memberId, {
       kind: 'at_place',
       start: day.start,
       end: day.end,
-      label: formatDisplayVenueName(routine.venueName, routine.shortVenueName),
-      placeStatus: 'away',
+      label: formatDisplayVenueName(routine.venueName, routine.shortVenueName) || routine.title,
+      // Work with no place recorded may well be at home; it's still their busy time.
+      placeStatus: work && !routine.venueAddress ? 'home' : 'away',
       sourceId,
+      fromRoutine: true,
+      work,
     })
+    // Work is where they are, not a drop-off and pickup.
+    if (work) continue
     for (const kind of ['dropoff', 'pickup'] as const) {
       const arriveAt = kind === 'dropoff' ? day.start : day.end
       const driver = kind === 'dropoff' ? day.dropoff : day.pickup
@@ -226,13 +234,13 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     }
     trips.push(trip)
     if (driverId) {
-      addSegment(driverId, { kind: 'drive', start: leaveAt, end: homeAt, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId })
+      addSegment(driverId, { kind: 'drive', start: leaveAt, end: homeAt, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId, fromRoutine: true })
     } else {
       gaps.push({ kind: 'no_driver', sourceId: run.sourceId, title, at: leaveAt })
     }
     for (const travelerId of run.travelerIds) {
       const [start, end] = run.kind === 'dropoff' ? [leaveAt, run.arriveAt] : [run.arriveAt, homeAt]
-      addSegment(travelerId, { kind: 'drive', start, end, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId })
+      addSegment(travelerId, { kind: 'drive', start, end, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId, fromRoutine: true })
     }
   }
 
@@ -410,6 +418,19 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     }
   }
 
+  // Work hours give way to the person's own drives at either end (dropping a child off on the way in).
+  for (const [memberId, segments] of lanes) {
+    const drives = segments.filter((s) => s.kind === 'drive' && s.driverId === memberId)
+    for (const work of segments.filter((s) => s.work)) {
+      // A drive across either end, or within the hour of it, moves that end; one in the middle is drawn over it.
+      for (const drive of drives) {
+        if (drive.end <= work.start || drive.start >= work.end) continue
+        if (drive.start.getTime() - work.start.getTime() <= 60 * MINUTE) work.start = new Date(Math.max(work.start.getTime(), drive.end.getTime()))
+        else if (work.end.getTime() - drive.end.getTime() <= 60 * MINUTE) work.end = new Date(Math.min(work.end.getTime(), drive.start.getTime()))
+      }
+    }
+    lanes.set(memberId, segments.filter((s) => !s.work || s.end > s.start))
+  }
   for (const segments of lanes.values()) segments.sort((a, b) => a.start.getTime() - b.start.getTime())
   trips.sort((a, b) => (a.leaveAt ?? a.arriveAt).getTime() - (b.leaveAt ?? b.arriveAt).getTime())
 

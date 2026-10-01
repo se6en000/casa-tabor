@@ -97,6 +97,10 @@ export interface LaneSegment {
   /** For drive segments: the trip, and who is driving (for the hatch color). */
   tripId?: string
   driverId?: string | null
+  /** From a routine (school, work, a class): what "Hide routines" tidies away. */
+  fromRoutine?: boolean
+  /** Work hours: their own drives at the edges come off it (Kelly drops Liv at Bak on the way in). */
+  work?: boolean
 }
 
 /** Something the family should fix or decide; feeds "Needs a decision". */
