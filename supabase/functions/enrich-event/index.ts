@@ -13,6 +13,7 @@ import { parseLastJsonObject } from '../_shared/json-output.mjs'
 import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
 import { plausibleDepartureIso, sanitizeStepTimeIso } from '../_shared/event-time-sanity.mjs'
 import { memberFromWords, personLine } from '../_shared/casa-memory.mjs'
+import { bringFromSource, isRoutineRunCopy } from '../_shared/enrich-quiet.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -94,6 +95,14 @@ Deno.serve(async (req) => {
 
   const event = eventRes.data
   if (eventRes.error || !event) return new Response(JSON.stringify({ error: eventRes.error?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
+  // Nothing to add, and only noise to make (Jake, 2026-10-01: "cleanup the enrich event issue"): a school run copied
+  // from its routine (the routine is the source) and a trip's flights and hotel (the trip works out leaving and coming
+  // home) are marked done without an AI call.
+  if (isRoutineRunCopy(event.title) || (event as { leg_type?: string | null }).leg_type) {
+    if ((event as { leg_type?: string | null }).leg_type) await sb.from('event_logistics').delete().eq('event_id', event_id)
+    await sb.from('events').update({ is_enriched: true }).eq('id', event_id)
+    return new Response(JSON.stringify({ ok: true, skipped: isRoutineRunCopy(event.title) ? 'routine_copy' : 'trip_leg' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
 
   const llmConfig = resolveBackgroundLlmConfig(llmRes.data?.value) as {
     provider: string
@@ -272,9 +281,11 @@ Deno.serve(async (req) => {
   const contractFields = Object.fromEntries(
     ENRICHMENT_FIELDS.map((key) => [key, enrichmentFields[key]]),
   ) as Record<EnrichmentField, unknown>
-  const generatedBringList = Array.isArray(contractFields.what_to_bring)
-    ? contractFields.what_to_bring.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
+  // Only what the event's own words mention, each once ("Violin" for violin practice; never a guessed "Insurance card").
+  const generatedBringList = bringFromSource(
+    Array.isArray(contractFields.what_to_bring) ? contractFields.what_to_bring.filter((item): item is string => typeof item === 'string') : [],
+    [event.title, event.description, event.location_name].filter(Boolean).join(' '),
+  ) as string[]
   delete contractFields.what_to_bring
 
   // Prefer an existing confirmed saved_contacts row over the LLM's raw
@@ -414,15 +425,14 @@ Deno.serve(async (req) => {
 
   // For trip leg events (flights, hotels), preserve the structured title and existing location
   const isTripLeg = !!(event.leg_type as string | null)
-  const finalLocationName = isTripLeg
-    ? (event.location_name as string | null)  // never overwrite leg location
-    : (aiLocationName ?? (event.location_name as string | null))
-  const finalAddress = isTripLeg
-    ? (event.address as string | null)
-    : (aiAddress ?? (event.address as string | null))
+  const finalLocationName = (event.location_name as string | null) || (isTripLeg ? null : aiLocationName ?? null)
+  const finalAddress = (event.address as string | null) || (isTripLeg ? null : aiAddress ?? null)
   const eventPatch: Record<string, string> = {}
-  if (!isTripLeg && !targetedMode && aiLocationName) eventPatch.location_name = aiLocationName
-  if (!isTripLeg && !targetedMode && aiAddress) eventPatch.address = aiAddress
+  // A place is filled only where the event has none: the AI never moves one (it named a Dallas flight's place
+  // "Verizon Corporate Office"; Jake, 2026-10-01, "cleanup the enrich event issue").
+  const hasPlace = Boolean(normalizeText(event.location_name) || normalizeText(event.address))
+  if (!isTripLeg && !targetedMode && !hasPlace && aiLocationName) eventPatch.location_name = aiLocationName
+  if (!isTripLeg && !targetedMode && !hasPlace && aiAddress) eventPatch.address = aiAddress
 
   await sb.from('events').update({
     is_enriched: true,
@@ -553,32 +563,33 @@ Times should be in local Eastern time stored as UTC (EDT = UTC-4 in summer, EST 
 
 // Category→field definitions (mirrors categoryFields.ts on the frontend)
 const CATEGORY_FIELDS: Record<string, string[]> = {
-  sports:           ['what_to_bring', 'outfit_suggestion', 'parking_notes', 'contact_name', 'contact_phone', 'prep_notes'],
-  school:           ['what_to_bring', 'contact_name', 'contact_phone', 'parking_notes', 'prep_notes'],
+  sports:           ['what_to_bring', 'contact_name', 'contact_phone', 'prep_notes'],
+  school:           ['what_to_bring', 'contact_name', 'contact_phone', 'prep_notes'],
   medical:          ['contact_name', 'contact_phone', 'cost_estimate', 'what_to_bring', 'dietary_notes', 'prep_notes'],
-  appointment:      ['contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
+  appointment:      ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   child_care:       ['what_to_bring', 'dietary_notes', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
   home_maintenance: ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
-  dining:           ['dietary_notes', 'cost_estimate', 'outfit_suggestion', 'contact_name', 'contact_phone', 'prep_notes'],
-  travel:           ['what_to_bring', 'cost_estimate', 'parking_notes', 'prep_notes'],
-  social:           ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
-  birthday:         ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
-  work:             ['contact_name', 'contact_phone', 'what_to_bring', 'parking_notes', 'prep_notes'],
+  dining:           ['dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
+  travel:           ['what_to_bring', 'cost_estimate', 'prep_notes'],
+  social:           ['what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
+  birthday:         ['what_to_bring', 'dietary_notes', 'cost_estimate', 'contact_name', 'contact_phone', 'prep_notes'],
+  work:             ['contact_name', 'contact_phone', 'what_to_bring', 'prep_notes'],
   errand:           ['contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
-  holiday:          ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'meal_impact', 'prep_notes'],
-  other:            ['outfit_suggestion', 'what_to_bring', 'dietary_notes', 'meal_impact', 'contact_name', 'contact_phone', 'cost_estimate', 'parking_notes', 'prep_notes'],
+  holiday:          ['what_to_bring', 'dietary_notes', 'meal_impact', 'prep_notes'],
+  other:            ['what_to_bring', 'dietary_notes', 'meal_impact', 'contact_name', 'contact_phone', 'cost_estimate', 'prep_notes'],
 }
 
 const FIELD_DESCRIPTIONS: Record<string, string> = {
-  what_to_bring:     'what_to_bring: string[] — items to bring (e.g. ["Water bottle", "Shin guards"]). Fill with at least 1–3 relevant items.',
-  outfit_suggestion: 'outfit_suggestion: string — what to wear (e.g. "Comfortable clothes, sneakers"). Always suggest something appropriate.',
-  parking_notes:     'parking_notes: string — parking tips. Search for real parking info near the venue if possible.',
+  // Only what the event's own text says (2026-10-01: guessed items, outfits and parking tips were noise).
+  what_to_bring:     'what_to_bring: string[] — only items the event\'s own title or description asks for (e.g. "bring your violin"); an empty list when it names none. Never guess.',
+  outfit_suggestion: 'outfit_suggestion: string — only when the event says what to wear (a class shirt, a uniform); otherwise omit.',
+  parking_notes:     'parking_notes: string — only real parking instructions from the event; otherwise omit.',
   contact_name:      'contact_name: string — name of the business, venue, or person to contact. Extract from title/context or search.',
   contact_phone:     'contact_phone: string — phone number. Search Google for the real number if a business name is known.',
-  cost_estimate:     'cost_estimate: string — estimated cost (e.g. "$20–40 per person"). Estimate based on venue type if unknown.',
+  cost_estimate:     'cost_estimate: string — only a cost the event states; otherwise omit.',
   dietary_notes:     'dietary_notes: string — food/dietary notes (e.g. "Bring nut-free snacks", "Venue has menu options").',
   meal_impact:       'meal_impact: string — how this affects meal timing (e.g. "Eat before, event runs through dinner").',
-  prep_notes:        'prep_notes: string — prep reminders or notes (1–3 sentences). Always fill this with something useful.',
+  prep_notes:        'prep_notes: string — only a concrete instruction from the event (a time to arrive early, a form to sign); otherwise omit. Never restate the event.',
 }
 
 type EnrichmentField = (typeof ENRICHMENT_FIELDS)[number]

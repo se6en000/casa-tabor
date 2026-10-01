@@ -97,10 +97,8 @@ export function buildCasaDetailsLines(bundle = {}, eventUrl = '') {
   return compactLines([
     'Casa Tabor details',
     members.length ? `People: ${members.join(', ')}` : '',
-    enrichment.category ? `Category: ${enrichment.category}` : '',
+    // Only what the family wrote or the event said: no category, generated prep or parking text (2026-10-01).
     bring.length ? `Bring: ${bring.join(', ')}` : '',
-    enrichment.prep_notes ? `Prep: ${enrichment.prep_notes}` : '',
-    enrichment.parking_notes ? `Parking: ${enrichment.parking_notes}` : '',
     ...(!locationProjectionBlocked(bundle) ? transportationLines(bundle.transportation_plan) : []),
     ...planningLines(bundle),
     logistics.length ? `Logistics: ${logistics.join('; ')}` : '',
