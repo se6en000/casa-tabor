@@ -4,7 +4,6 @@ import { Check, ChevronLeft, MapPin, Plus, Search, X } from 'lucide-react'
 import { useDeletePlace, useRenamePlace, useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
 import { supabase } from '../lib/supabase'
 import type { SavedPlaceCategory } from '../types'
-import type { FamilyRoutine } from '../lib/familyRoutines'
 import { DEFAULT_HOUSEHOLD_COORDINATES } from '../utils/geoDistance'
 import {
   canClearPlace, consequenceLine, createArgs, NEW_EVENT_ID, dayChips, draftChanges, draftFromEvent, isReminder, isRepeating, previewEvent,
@@ -17,8 +16,8 @@ import { pigmentStyleFor, selectLaneMembers } from './lanes'
 import { driverChoices } from './people'
 import type { WallChecklistItem } from './packing'
 import { SAVE_PLACE_KINDS, placeFromSearch, type PlaceSearchResult } from './places'
-import { guessKind, placeList, placeSuggestions, type PlaceOption } from './placeSuggest'
-import { usePlaceHistory } from './usePlaceHistory'
+import { guessKind, placeList, type PlaceOption } from './placeSuggest'
+import { deviceKeyboardHere } from './keyboardMode'
 import { toggleChecklistItem } from './useWallChecklist'
 import WallKeyboard from './WallKeyboard'
 import { saveDraft } from './saveDraft'
@@ -39,8 +38,6 @@ export interface WallEventSheetProps {
   now: Date
   /** Every cached event, so a preview can rebuild the day with this one changed. */
   allEvents: WallEvent[]
-  /** Everyone's routines: a person's own places (school, work) in the place picker (canvas 23a). */
-  routines?: FamilyRoutine[]
   buildPlanFor: (date: Date, events: WallEvent[]) => DayPlan
   /** Pigment per member id (the Score's colors). */
   pigmentOf: (memberId: string) => number | null
@@ -136,26 +133,18 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const [placeQuery, setPlaceQuery] = useState('')
   const [results, setResults] = useState<PlaceSearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  // A map place picked is kept as one of yours on its own (canvas 23c), with Rename and Undo on the form.
+  // A new place from the map (Jake, 2026-10-01: "offer to save it to my places, or not if it's just a one time
+  // thing"): used at once; the form asks whether to save it. Once saved: Rename and Undo.
+  const [offer, setOffer] = useState<PlaceSearchResult | null>(null)
   const [kept, setKept] = useState<{ id: string; name: string; kind: SavedPlaceCategory } | null>(null)
+  // On a computer the search field takes the computer's own keys (no bar at the foot of the wall).
+  const computer = useMemo(() => deviceKeyboardHere(), [])
   const [keptName, setKeptName] = useState('')
   const [resolving, setResolving] = useState(false)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
   const renamePlace = useRenamePlace()
   const deletePlace = useDeletePlace()
-  // Before typing (canvas 23a): where this event went before, its people's own places, recent ones — over the last
-  // six months (read when the picker opens), not only the week the wall keeps.
-  const history = usePlaceHistory(mode === 'place')
-  const suggestions = useMemo(
-    () => {
-      const seen = new Set(allEvents.map((e) => e.id))
-      const events = [...allEvents, ...history.filter((h) => !seen.has(h.id))]
-      return placeSuggestions({ title: draft.title || event.title, eventId: event.id, memberIds: draft.going, events: events as never, routines: props.routines ?? [], now })
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the day's clock isn't a reason to recount
-    [draft.title, draft.going, allEvents, history, props.routines, event.id],
-  )
   const typedList = placeList(placeQuery, savedPlaces, results, keyboard ? 4 : 6)
 
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
@@ -272,11 +261,18 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     setMode('edit')
   }
 
-  /** A place from the list: yours or a suggestion is used; a map place is kept as one of yours too (no save step). */
+  /** A place from the list: used at once; a new one from the map is offered for saving on the form. */
   const pick = async (option: PlaceOption) => {
     const r = option.result
-    if (!r) return choosePlace({ name: option.name, address: option.address })
     setKept(null)
+    setOffer(r ?? null)
+    if (!r) return choosePlace({ name: option.name, address: option.address })
+    await choosePlace(placeFromSearch(r))
+  }
+  const keepOffered = async () => {
+    const r = offer
+    if (!r) return
+    setOffer(null)
     const kind = guessKind(r)
     try {
       const row = await savePlace.mutateAsync({
@@ -292,9 +288,8 @@ export default function WallEventSheet(props: WallEventSheetProps) {
       })
       setKept({ id: row.id, name: row.name, kind })
     } catch {
-      // Keeping it failed; it's still used for this event.
+      // Saving failed; it's still used for this event.
     }
-    await choosePlace(placeFromSearch(r))
   }
   const renameKept = async () => {
     setKeyboard(null)
@@ -627,10 +622,18 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                       Change
                     </button>
                   </div>
+                  {offer && (
+                    <div className="flex items-center gap-[14px] rounded-[16px] bg-wall-brass/15 px-[18px] py-[12px]">
+                      <MapPin size={20} className="shrink-0 text-wall-brass-ink" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 text-wall-detail">A new place. Save it to your places?</span>
+                      <button type="button" className={pill} onClick={() => void keepOffered()}>Save to my places</button>
+                      <button type="button" className={pill} onClick={() => setOffer(null)}>Just this once</button>
+                    </div>
+                  )}
                   {kept && (
                     <div className="flex items-center gap-[14px] rounded-[16px] bg-wall-brass/15 px-[18px] py-[12px]">
                       <MapPin size={20} className="shrink-0 text-wall-brass-ink" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 text-wall-detail">Kept as one of your places, as <b>{SAVE_PLACE_KINDS.find((k) => k.value === kept.kind)?.label ?? 'Other'}</b>.</span>
+                      <span className="min-w-0 flex-1 text-wall-detail">Saved to your places, as <b>{SAVE_PLACE_KINDS.find((k) => k.value === kept.kind)?.label ?? 'Other'}</b>.</span>
                       <button type="button" className={pill} onClick={() => { setKeptName(kept.name); setKeyboard('keptName') }}>Rename</button>
                       <button type="button" className={pill} onClick={() => { void deletePlace.mutateAsync(kept.id).catch(() => {}); setKept(null) }}>Undo</button>
                     </div>
@@ -759,6 +762,21 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               </button>
               <div className={`${eyebrow} text-wall-brass-ink`}>PLACE FOR {head.trim().toUpperCase()}</div>
             </div>
+            {computer ? (
+              <label className="flex h-[76px] items-center gap-[14px] rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px]">
+                <Search size={24} className="shrink-0 text-wall-ink-2" />
+                <input
+                  autoFocus
+                  aria-label="Search a place or address"
+                  value={placeQuery}
+                  placeholder="Search a place or address"
+                  onChange={(e) => { touch(); setPlaceQuery(e.target.value) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && typedList[0]) { e.preventDefault(); void pick(typedList[0]) } }}
+                  className="min-w-0 flex-1 border-0 bg-transparent font-display text-wall-date font-semibold text-wall-ink outline-none placeholder:text-wall-ink-2"
+                />
+                {searching && <span className="text-wall-label text-wall-ink-2">searching…</span>}
+              </label>
+            ) : (
             <button
               type="button"
               onClick={() => setKeyboard('search')}
@@ -768,33 +786,20 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               <span className="truncate font-display text-wall-date font-semibold text-wall-ink">{placeQuery || 'Search a place or address'}</span>
               {searching && <span className="ml-auto text-wall-label text-wall-ink-2">searching…</span>}
             </button>
+            )}
 
             {placeQuery.trim() ? (
               // Typing (canvas 23b): one list, yours first, the map's below — above the keyboard.
               <div className="flex flex-col">
                 {typedList.map((o, i) => <PlaceRow key={o.key} option={o} first={i === 0} onPick={() => void pick(o)} />)}
                 {typedList.length === 0 && <div className="py-[18px] text-wall-detail text-wall-ink-2">{searching || placeQuery.trim().length < 3 ? 'Keep typing…' : 'Nothing found. Try another name or the street.'}</div>}
-                {typedList.some((o) => o.result) && <div className="pt-[12px] text-wall-label text-wall-ink-2">Tap one to use it. A new one is kept as one of your places on its own.</div>}
+                {typedList.some((o) => o.result) && <div className="pt-[12px] text-wall-label text-wall-ink-2">Nearest first. Tap one to use it.</div>}
               </div>
             ) : (
-              // Before typing (canvas 23a): one tap for where it usually is.
-              <div className="flex flex-col gap-[6px]">
-                {([
-                  [`WHERE ${(head.trim() || 'IT').toUpperCase()} WENT BEFORE`, suggestions.before],
-                  [`${draft.going.map((id) => nameOf(id)).filter(Boolean).join(' & ').toUpperCase()}’S PLACES`, suggestions.theirs],
-                  ['RECENT', suggestions.recent],
-                ] as Array<[string, PlaceOption[]]>).filter(([, list]) => list.length > 0).map(([label, list], g) => (
-                  <div key={label} className="flex flex-col">
-                    <div className={`${eyebrow} mb-[4px] mt-[8px] text-wall-ink-2`}>{label}</div>
-                    {list.map((o, i) => <PlaceRow key={o.key} option={o} first={i === 0} big={g === 0 && i === 0 && label.startsWith('WHERE')} onPick={() => void pick(o)} />)}
-                  </div>
-                ))}
-                {suggestions.before.length + suggestions.theirs.length + suggestions.recent.length === 0 && placeList('', savedPlaces, [], 5).length > 0 && (
-                  <div className="flex flex-col">
-                    <div className={`${eyebrow} mb-[4px] mt-[8px] text-wall-ink-2`}>YOUR PLACES</div>
-                    {placeList('', savedPlaces, [], 5).map((o, i) => <PlaceRow key={o.key} option={{ ...o, tag: undefined }} first={i === 0} onPick={() => void pick(o)} />)}
-                  </div>
-                )}
+              // Before typing: your places, the most used first — the first place to look (Jake, 2026-10-01).
+              <div className="flex flex-col">
+                {placeList('', savedPlaces, [], 6).length > 0 && <div className={`${eyebrow} mb-[4px] mt-[8px] text-wall-ink-2`}>YOUR PLACES</div>}
+                {placeList('', savedPlaces, [], 6).map((o, i) => <PlaceRow key={o.key} option={{ ...o, tag: undefined }} first={i === 0} onPick={() => void pick(o)} />)}
               </div>
             )}
 
@@ -885,7 +890,7 @@ function PlaceRow({ option, first, big = false, onPick }: { option: PlaceOption;
       <MapPin size={20} className="shrink-0 text-wall-brass-ink" aria-hidden="true" />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-display text-wall-heading font-bold">{option.name}</span>
-        {option.address && <span className="truncate text-wall-label text-wall-ink-2">{option.address}</span>}
+        {option.address && <span className="truncate text-wall-label text-wall-ink-2">{[option.address, option.miles != null ? `${option.miles} mi` : null].filter(Boolean).join(' · ')}</span>}
       </span>
       {option.tag && <span className="shrink-0 rounded-full border border-solid border-wall-brass px-[10px] py-[3px] text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{option.tag}</span>}
     </button>

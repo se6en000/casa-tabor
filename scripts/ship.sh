@@ -11,6 +11,7 @@
 # Usage:
 #   scripts/ship.sh ["commit message"]
 #   SKIP_KIOSK=1 scripts/ship.sh        # web-only deploy, don't touch the Pi
+#   SKIP_SCREENSHOTS=1 scripts/ship.sh  # skip the full Wall/phone screenshot guard (run the changed part's tests first)
 #   PI_HOST=jake@1.2.3.4 scripts/ship.sh  # override kiosk host
 #
 # Safe to run from any machine with this repo cloned and `vercel`/`git` auth
@@ -57,7 +58,9 @@ WALL_RUN=0
 # Only when this ship touches something that can change how the Wall looks.
 WALL_PATHS='^(src/wall/|src/phone/|src/App\.tsx|visual-regression/phone|src/lib/|src/index\.css|src/design-system/|src/generated/|src/main\.tsx|tests/fixtures/wall|visual-regression/wall|playwright\.wall|package(-lock)?\.json)'
 WALL_TOUCHED=$({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E "$WALL_PATHS" | head -1 || true)
-if [ -z "$WALL_TOUCHED" ]; then
+if [ "${SKIP_SCREENSHOTS:-0}" = "1" ]; then
+  : # SKIP_SCREENSHOTS=1: the change's own screenshot tests were run by hand; skip the full guard (Jake, 2026-10-01)
+elif [ -z "$WALL_TOUCHED" ]; then
   : # nothing Wall-visible changed
 elif ls visual-regression/wall.spec.mjs-snapshots/*-"$(node -p process.platform)".png >/dev/null 2>&1; then
   WALL_RUN=1

@@ -635,7 +635,6 @@ export default function WallView(props: WallViewProps) {
           members={members}
           now={now}
           allEvents={allEvents}
-          routines={routines}
           buildPlanFor={buildPlanFor}
           pigmentOf={(id) => pigments.get(id) ?? null}
           checklist={checklist}
@@ -661,7 +660,6 @@ export default function WallView(props: WallViewProps) {
           members={members}
           now={now}
           allEvents={allEvents}
-          routines={routines}
           buildPlanFor={buildPlanFor}
           pigmentOf={(id) => pigments.get(id) ?? null}
           checklist={checklist}

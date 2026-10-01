@@ -2026,8 +2026,8 @@ const SAVED = [
 ]
 const MAP = [
   { place_id: 'g1', name: 'Royal Palm Beach Commons Park', address: '11600 Poinciana Blvd, Royal Palm Beach, FL 33411', lat: 26.7, lng: -80.2 },
-  { place_id: 'g2', name: 'Royal Palm Beach Cultural Center', address: '151 Civic Center Way, Royal Palm Beach, FL 33411', street: '151 Civic Center Way', city: 'Royal Palm Beach', state: 'FL', zip: '33411', lat: 26.7, lng: -80.2, primary_type: 'community_center' },
-  { place_id: 'g3', name: 'Royal Palm Beach High School', address: '10600 Okeechobee Blvd, Royal Palm Beach, FL 33411', lat: 26.7, lng: -80.2, primary_type: 'school' },
+  { place_id: 'g2', name: 'Royal Palm Beach Cultural Center', address: '151 Civic Center Way, Royal Palm Beach, FL 33411', street: '151 Civic Center Way', city: 'Royal Palm Beach', state: 'FL', zip: '33411', lat: 26.7, lng: -80.2, primary_type: 'community_center', miles: 13 },
+  { place_id: 'g3', name: 'Royal Palm Beach High School', address: '10600 Okeechobee Blvd, Royal Palm Beach, FL 33411', lat: 26.7, lng: -80.2, primary_type: 'school', miles: 14 },
 ]
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }
 async function cannedPlaces(page) {
@@ -2050,7 +2050,7 @@ async function cannedPlaces(page) {
   return inserted
 }
 
-test('wall: a place in fewer taps — suggestions first, one list as you type, a new place kept on its own', async ({ page }) => {
+test('wall: a place in fewer taps — your places first, then the map’s nearest first; a new one offered for saving', async ({ page }) => {
   const inserted = await cannedPlaces(page)
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00&keyboard=device&places=1')
   const wall = page.getByTestId('wall-fixture')
@@ -2060,25 +2060,36 @@ test('wall: a place in fewer taps — suggestions first, one list as you type, a
   await sheet.getByRole('button', { name: 'Edit' }).click()
   await sheet.getByRole('button', { name: 'Change' }).click()
   await expect(sheet.getByText('PLACE FOR SOFTBALL')).toBeVisible()
-  await expect(sheet.getByText('WHERE SOFTBALL WENT BEFORE')).toBeVisible()
-  await expect(sheet.getByRole('button', { name: /^Seminole Palms Park.*2 TIMES$/ })).toBeVisible()
-  await expect(sheet.getByText('RECENT')).toBeVisible()
+  await expect(sheet.getByText('YOUR PLACES')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Commons Park/ })).toBeVisible()
+  // On a computer the search field itself takes the keys — no bar at the foot of the wall.
+  const search = sheet.getByRole('textbox', { name: 'Search a place or address' })
+  await expect(search).toBeFocused()
   await expect(wall).toHaveScreenshot('place-before.png')
 
-  await sheet.getByRole('button', { name: /Search a place/ }).click()
   await page.keyboard.insertText('royal pa')
+  await expect(wall.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
   await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Commons Park.*YOURS$/ })).toBeVisible()
-  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Cultural Center/ })).toBeVisible()
-  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Commons Park/ })).toHaveCount(1)
+  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Cultural Center.*13 mi/ })).toBeVisible()
   await expect(wall).toHaveScreenshot('place-typing.png')
 
+  // A new one from the map: used at once, and the form asks whether to save it.
   await sheet.getByRole('button', { name: /^Royal Palm Beach Cultural Center/ }).click()
-  await expect(sheet.getByText('Kept as one of your places, as')).toBeVisible()
   await expect(sheet.getByText('Royal Palm Beach Cultural Center', { exact: true })).toBeVisible()
+  await expect(sheet.getByText('A new place. Save it to your places?')).toBeVisible()
+  expect(inserted).toHaveLength(0)
+  await expect(wall).toHaveScreenshot('place-offer.png')
+  await sheet.getByRole('button', { name: 'Save to my places' }).click()
+  await expect(sheet.getByText('Saved to your places, as')).toBeVisible()
   expect(inserted).toHaveLength(1)
   expect(inserted[0]).toMatchObject({ name: 'Royal Palm Beach Cultural Center', address: '151 Civic Center Way', category: 'other' })
-  await expect(wall).toHaveScreenshot('place-kept.png')
-  await sheet.getByRole('button', { name: 'Undo' }).click()
-  await expect(sheet.getByText('Kept as one of your places, as')).toHaveCount(0)
-  await expect(sheet.getByText('Royal Palm Beach Cultural Center', { exact: true })).toBeVisible()
+
+  // Just this once: used, not saved.
+  await sheet.getByRole('button', { name: 'Change' }).click()
+  await page.keyboard.insertText('royal pa')
+  await sheet.getByRole('button', { name: /^Royal Palm Beach High School/ }).click()
+  await sheet.getByRole('button', { name: 'Just this once' }).click()
+  await expect(sheet.getByText('A new place. Save it to your places?')).toHaveCount(0)
+  await expect(sheet.getByText('Royal Palm Beach High School', { exact: true })).toBeVisible()
+  expect(inserted).toHaveLength(1)
 })

@@ -16,6 +16,8 @@ export interface PlaceSearchResult {
   lng: number | null
   phone?: string | null
   primary_type?: string | null
+  /** Miles from home (place-search sorts nearest first). */
+  miles?: number | null
 }
 
 type PlaceRow = Pick<SavedPlace, 'name' | 'aliases' | 'address' | 'city' | 'state' | 'zip' | 'occurrence_count' | 'dismissed_at'>

@@ -1,5 +1,6 @@
 import { createTrackedMapsFetch } from '../_shared/provider-call-ledger.mjs'
 import { parseGoogleAddressComponents } from '../_shared/google-address-components.mjs'
+import { boxAround, nearestFirst } from '../_shared/place-nearby.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -38,16 +39,13 @@ Deno.serve(async (req) => {
   const buildPayload = (useRestriction: boolean): Record<string, unknown> => {
     const payload: Record<string, unknown> = {
       textQuery,
-      maxResultCount: 6,
+      maxResultCount: 8,
     }
     if (hasCoords) {
       if (useRestriction) {
-        payload.locationRestriction = {
-          circle: {
-            center: { latitude: lat, longitude: lng },
-            radius: searchRadius,
-          },
-        }
+        // A rectangle: Places text search refuses a circle here, which fell back to the weak bias below and gave
+        // chains across the country (Jake, 2026-10-01: Planet Fitness in Colorado, Nevada, Texas).
+        payload.locationRestriction = boxAround(lat as number, lng as number, searchRadius / 1000)
       } else {
         payload.locationBias = {
           circle: {
@@ -120,7 +118,9 @@ Deno.serve(async (req) => {
     }
   })
 
-  return new Response(JSON.stringify({ places }), {
+  // Nearest first, each with its miles from home.
+  const ordered = hasCoords ? nearestFirst(places, { lat: lat as number, lng: lng as number }) : places
+  return new Response(JSON.stringify({ places: ordered }), {
     headers: { ...CORS, 'content-type': 'application/json' },
   })
 })

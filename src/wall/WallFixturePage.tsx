@@ -125,12 +125,6 @@ export default function WallFixturePage() {
     ...(events as unknown as WallEvent[]),
     ...(TRIP ? (tripEvents as unknown as WallEvent[]) : []),
     ...(DRIVE ? (driveEvents as unknown as WallEvent[]) : []),
-    // `?places=1` (canvas row 23): where softball went before, and a dentist visit, for the place picker.
-    ...(new URLSearchParams(window.location.search).get('places') ? [
-      { id: 'sb-12', title: 'Softball: Huskies vs Jupiter', start_time: new Date(2026, 8, 12, 10, 0).toISOString(), end_time: new Date(2026, 8, 12, 12, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Seminole Palms Park', address: '35 Cypress Ln, Royal Palm Beach, FL 33411', members: [{ family_member_id: 'liv', role: 'primary' }] },
-      { id: 'sb-19', title: 'Softball: Huskies @ Wellington', start_time: new Date(2026, 8, 19, 10, 0).toISOString(), end_time: new Date(2026, 8, 19, 12, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Seminole Palms Park', address: '35 Cypress Ln, Royal Palm Beach, FL 33411', members: [{ family_member_id: 'liv', role: 'primary' }] },
-      { id: 'dent-22', title: 'Dentist · Liv', start_time: new Date(2026, 8, 22, 15, 30).toISOString(), end_time: new Date(2026, 8, 22, 16, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Palm Beach Pediatric Dentistry', address: '1411 N Flagler Dr, West Palm Beach, FL', members: [{ family_member_id: 'liv', role: 'primary' }] },
-    ] as unknown as WallEvent[] : []),
     ...(new URLSearchParams(window.location.search).get('nobody') ? [{
       id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
       all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
