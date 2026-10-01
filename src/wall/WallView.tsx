@@ -37,6 +37,9 @@ import WallMenu, { AddButton, MenuButton, MicButton } from './WallMenu'
 import WallWeek from './WallWeek'
 import { weekDays } from './week'
 import { dayHeading, mergeEvents, needsAroundFetch, stripDates } from './dayFocus'
+import { casaTopic, pushMessage, pushNow, snoozeUntil, type TalkAnswer } from './casaTalk'
+import type { CasaTalkProps } from './useCasaTalk'
+import WallCasaTalk, { CasaCalling } from './WallCasaTalk'
 import type { ScoreInteraction } from './WallScore'
 
 export interface WallViewProps {
@@ -60,6 +63,8 @@ export interface WallViewProps {
   /** A conversation with Casa (or the email review) is going: the idle timers hold — a project page or
    * To do stays up, and Calm doesn't come back (Jake, 2026-09-30). */
   busy?: boolean
+  /** "Casa wants to talk to you" (canvas row 21): what it was asked to hold, and the phone notice. */
+  casaTalk?: CasaTalkProps | null
   /** The item the assistant's answer is about: outlined like a selection. */
   pointAt?: string | null
   /** The assistant's draft or change waiting for a yes: previewed on the Score, on its day. */
@@ -138,7 +143,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -300,6 +305,30 @@ export default function WallView(props: WallViewProps) {
     if (selectedId && !eventsById.has(selectedId)) setSelectedId(null)
   }, [selectedId, eventsById])
 
+  const weekDecisions: DatedDecision[] = useMemo(
+    () =>
+      week
+        .flatMap((plan) =>
+          decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date })),
+        )
+        .sort((a, b) => a.at.getTime() - b.at.getTime()),
+    [week, members, now, tripStateFor],
+  )
+  // The one thing Casa raises (canvas row 21): within the next day, from this week's decisions.
+  const [talkOpen, setTalkOpen] = useState(false)
+  const topic = useMemo(
+    () => (casaTalk ? casaTopic(weekDecisions, (date) => week.find((p) => p.date.toDateString() === date.toDateString()) ?? null, members, now, casaTalk.state) : null),
+    [casaTalk, weekDecisions, week, members, now],
+  )
+  // The phones hear once (21c), sent by the wall alone, and only once the saved value has loaded.
+  // (Sent ones are held here too: the saved value lags a render behind.)
+  const pushedHere = useRef(new Set<string>())
+  useEffect(() => {
+    if (!topic || !casaTalk?.push || !casaTalk.ready || pushedHere.current.has(topic.key) || !pushNow(topic, casaTalk.state, now)) return
+    pushedHere.current.add(topic.key)
+    const message = pushMessage(topic)
+    void casaTalk.save({ pushed: { [topic.key]: now.toISOString() } }).then(() => casaTalk.push!(message)).catch(() => {})
+  }, [topic, casaTalk, now])
   // A trip's chip, flights or time away open the trip sheet, not the flight's own event (canvas 19d).
   const tripFor = (sourceId: string): TravelTrip | null =>
     (planFor(dayOnShow)?.travel ?? []).map((t) => t.trip).find((t) =>
@@ -319,6 +348,8 @@ export default function WallView(props: WallViewProps) {
     selectable: (id) => eventsById.has(id) || Boolean(saveTravel && tripFor(id)) || Boolean(saveChore && id.startsWith('chore:')),
     highlight: selectedId
       ? { sourceId: selectedId, draft: Boolean(draftPreview) }
+      : talkOpen && topic
+        ? { sourceId: topic.decision.sourceIds[0], draft: false }
       : assistantDraft
         ? { sourceId: assistantDraft.id, draft: true }
         : pointAt
@@ -345,15 +376,6 @@ export default function WallView(props: WallViewProps) {
     return Boolean(id)
   }
 
-  const weekDecisions: DatedDecision[] = useMemo(
-    () =>
-      week
-        .flatMap((plan) =>
-          decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date })),
-        )
-        .sort((a, b) => a.at.getTime() - b.at.getTime()),
-    [week, members, now, tripStateFor],
-  )
   // The strip's decisions: this week's, or a far week's while it's on show (the TO DECIDE count stays this week's).
   const stripDecisions: DatedDecision[] = useMemo(
     () =>
@@ -383,6 +405,13 @@ export default function WallView(props: WallViewProps) {
     }
   }
 
+  const answerTalk = async (a: TalkAnswer) => {
+    if (!topic) return
+    if (a.action.type === 'snooze') await casaTalk?.save({ snoozed: { [topic.key]: snoozeUntil(topic.at, now).toISOString() } })
+    else await answer(topic.decision, a.action)
+    setTalkOpen(false)
+  }
+
   const move = shownToday ? selectNextMove(shownToday, now) : null
   const moveView = describeNextMove(move, members, now)
   const moveActions = tripActions && moveView && move
@@ -394,6 +423,12 @@ export default function WallView(props: WallViewProps) {
     : undefined
 
   const openMenu = () => setMenuOpen(true)
+  const openTalk = () => {
+    if (!topic) return
+    setTalkOpen(true)
+    showDay(topic.decision.date)
+  }
+  const calling = topic && !overlay && !talkOpen ? { topic, onOpen: openTalk } : null
   const decisionsOn = (date: Date) => stripDecisions.filter((d) => sameDay(d.date, date))
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
@@ -532,6 +567,7 @@ export default function WallView(props: WallViewProps) {
         currentWeather={currentWeather}
         onOpenMenu={openMenu}
         onAsk={onAsk}
+        calling={calling}
         onAdd={createEvent ? () => setAdding(blankEvent(dayOnShow, now, 'event')) : undefined}
         interaction={{ ...interaction, marks: marksFor(shownToday?.date) }}
         moveActions={moveActions}
@@ -568,7 +604,8 @@ export default function WallView(props: WallViewProps) {
     >
       {face}
       {!onLaunchFace && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
-      {!onLaunchFace && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
+      {!onLaunchFace && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
+      {!onLaunchFace && calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
       {!onLaunchFace && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
       {!selected && overlay && (
         // Over the night face the band is raised and the calendar steps back a little, so the
@@ -577,6 +614,14 @@ export default function WallView(props: WallViewProps) {
           {nightFace && <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-wall-night-ground/40" />}
           {overlay}
         </div>
+      )}
+      {talkOpen && topic && !overlay && !selected && !handOff && (
+        <WallCasaTalk
+          topic={topic}
+          onAnswer={answerTalk}
+          onTalk={() => { setTalkOpen(false); onAsk?.() }}
+          onClose={() => setTalkOpen(false)}
+        />
       )}
       {shown.preview && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">

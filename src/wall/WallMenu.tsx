@@ -33,7 +33,17 @@ export function MenuButton({ onOpen, className = '' }: { onOpen: () => void; cla
 
 /** The mic: dark, beside the MT monogram on every face (board 03b). */
 /** `small` sits in a 44px row beside the MT monogram (the launch header), where the full size would squeeze the clock column. */
-export function MicButton({ onAsk, className = '', small = false }: { onAsk: () => void; className?: string; small?: boolean }) {
+export function MicButton({ onAsk, className = '', small = false, calling = false }: { onAsk: () => void; className?: string; small?: boolean; calling?: boolean }) {
+  // Casa has something to say (canvas 21a): a slow brass glow around the mic, fading only, so the Pi runs it smoothly.
+  if (calling) {
+    return (
+      <span className={`relative inline-flex shrink-0 ${className}`}>
+        <span aria-hidden="true" className="pointer-events-none absolute -inset-[24px] animate-[wall-edge-breathe_3.2s_ease-in-out_infinite] rounded-full bg-wall-brass/15" />
+        <span aria-hidden="true" className="pointer-events-none absolute -inset-[12px] animate-[wall-edge-breathe_3.2s_ease-in-out_infinite] rounded-full bg-wall-brass/35" />
+        <MicButton onAsk={onAsk} small={small} className="relative" />
+      </span>
+    )
+  }
   return (
     <button
       type="button"

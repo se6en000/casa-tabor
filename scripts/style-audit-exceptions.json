@@ -520,6 +520,14 @@
       {
         "path": "src/wall/ChoreEditor.tsx",
         "reason": "Family Wall: the chore sheet (canvas 20b) — who does it, how often, the day chips, the time steppers, Cancel/Delete/Save, part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallCasaTalk.tsx",
+        "reason": "Family Wall: \"Casa wants to talk to you\" (canvas 21a-b) — the quiet line, the band's mic and its answers, part of the Wall's own component set."
+      },
+      {
+        "path": "src/phone/PhoneCasaTalk.tsx",
+        "reason": "Phone: \"Casa wants to talk to you\" (canvas 21c) — the same answers as the Wall's band, drawn with the Wall's component set like the rest of the phone lens."
       }
     ]
   }

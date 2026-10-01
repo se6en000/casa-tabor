@@ -38,6 +38,8 @@ import type { ScanPlanItem } from './scan'
 import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
 import { keepFromSuggestion, keptFrom as keptFromOf, type KeepFrom } from '../wall/audience'
+import { snoozeUntil, type CasaTopic, type TalkAnswer } from '../wall/casaTalk'
+import PhoneCasaTalk from './PhoneCasaTalk'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -48,6 +50,7 @@ export interface PhoneTripActions {
   leaving: (tripIds: string[]) => void
   undoLeaving: (tripIds: string[]) => void
   handOff: (trip: Trip, driverId: string, date?: Date) => Promise<void>
+  dismiss?: (date: Date, key: string) => Promise<void>
 }
 
 export interface PhoneViewProps {
@@ -63,6 +66,8 @@ export interface PhoneViewProps {
   events: WallEvent[]
   checklist: WallChecklistItem[]
   tripActions?: PhoneTripActions
+  /** "Casa wants to talk to you" (canvas 21c): the one thing Casa raises, on top of Me when it's for this person. */
+  casaTalk?: { topic: CasaTopic | null; snooze: (key: string, until: Date) => Promise<void> } | null
   onToggleItem?: (item: WallChecklistItem) => void
   onAddItem?: (eventId: string, label: string) => Promise<void>
   useEventItems?: (eventId: string) => WallChecklistItem[]
@@ -135,7 +140,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [] }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -201,6 +206,25 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     if (plan) setHandOff({ trip, plan })
   }
   const itemOf = (id: string) => checklist.find((i) => i.id === id)
+  const talkTopic = casaTalk?.topic && (!casaTalk.topic.forId || casaTalk.topic.forId === viewerId) ? casaTalk.topic : null
+  const answerTalk = async (a: TalkAnswer) => {
+    if (!talkTopic) return
+    const d = talkTopic.decision
+    const action = a.action
+    if (action.type === 'snooze') return casaTalk?.snooze(talkTopic.key, snoozeUntil(talkTopic.at, now))
+    if (action.type === 'dismiss') return tripActions?.dismiss?.(d.date, d.key)
+    const plan = week.find((p) => p.date.toDateString() === d.date.toDateString())
+    if (!plan) return
+    if (action.type === 'pick') {
+      const trip = plan.trips.find((t) => t.id === action.tripIds[0])
+      if (trip) setHandOff({ trip, plan })
+      return
+    }
+    for (const id of action.tripIds) {
+      const trip = plan.trips.find((t) => t.id === id)
+      if (trip) await tripActions?.handOff(trip, action.driverId, d.date)
+    }
+  }
 
   const meScreen = (
     <div className="flex flex-col gap-[18px]">
@@ -215,6 +239,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         </div>
         {viewer && <Disc id={viewer.id} members={members} pigments={pigments} size="h-[40px] w-[40px] text-phone-heading" />}
       </div>
+
+      {talkTopic && <PhoneCasaTalk topic={talkTopic} onAnswer={answerTalk} onTalk={assistant ? () => { setAskOpening(null); setAskOpen(true) } : undefined} />}
 
       {me.next ? (
         <section aria-label="Your next move" className="flex flex-col gap-[6px] rounded-[20px] bg-wall-ink p-[18px] text-wall-on-pigment">

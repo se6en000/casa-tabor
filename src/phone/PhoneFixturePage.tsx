@@ -11,7 +11,7 @@ import { useFixtureFonts } from '../wall/fixtureFonts'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent, WallMember } from '../wall/engine/types'
-import { dayState, withDeparted, withHandOff, withoutDeparted, type WallTripState } from '../wall/tripState'
+import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from '../wall/tripState'
 import { members, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from '../wall/routineFixture'
@@ -24,6 +24,10 @@ import { previewEvent, withDriver } from '../wall/editing'
 import { eventsFor, routinesFor, withKeptFrom, type KeepFrom } from '../wall/audience'
 import type { ComingUpItem } from '../wall/comingUp'
 import { useFixtureTodos } from '../wall/todoFixture'
+import { tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
+import { buildTrips } from '../wall/engine/travel'
+import { decisionsFor } from '../wall/decisions'
+import { casaTopic, type CasaTalkState } from '../wall/casaTalk'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -112,7 +116,11 @@ function PhoneFixturePageInner() {
       { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }, { family_member_id: 'emme', role: 'attendee' }] },
       { id: 'far-market', title: 'Green Market', start_time: new Date(2026, 9, 18, 9, 0).toISOString(), end_time: new Date(2026, 9, 18, 11, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
     ] as unknown as WallEvent[] : []),
+    // `?trip=1` (canvas 19, 21c): Jake's Dallas trip, Oct 7–8.
+    ...(params.get('trip') ? tripEvents as unknown as WallEvent[] : []),
   ])
+  // "Casa wants to talk to you" (21c), in memory here.
+  const [talkState, setTalkState] = useState<CasaTalkState>({})
   const [keep, setKeep] = useState<KeepFrom>({})
   const [comingUp, setComingUp] = useState(COMING_UP)
   // Gift ideas (one for Kelly: never on her phone), each correctable by hand.
@@ -121,12 +129,20 @@ function PhoneFixturePageInner() {
   const audience = { kind: 'member' as const, memberId: viewerId }
   const shown = eventsFor(audience, evs, members as WallMember[], keep)
   const shownRoutines = routinesFor(audience, routines as unknown as Array<{ memberId: string }>, members as WallMember[])
+  const travel = params.get('trip') ? buildTrips(shown, members as WallMember[], { 'jake-id': { airportMinutes: 60, way: 'uber' } }) : []
   const week = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(now)
     date.setHours(0, 0, 0, 0)
     date.setDate(date.getDate() + i)
-    return buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: shown, tripState: dayState(tripState, date) })
+    return buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: shown, tripState: dayState(tripState, date), ...(travel.length ? { travel } : {}) })
   })
+  const topic = params.get('talk') ? casaTopic(
+    week.flatMap((plan) => decisionsFor(plan, members as WallMember[], now, new Set(Object.keys(dayState(tripState, plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date }))),
+    (date) => week.find((p) => p.date.toDateString() === date.toDateString()) ?? null,
+    members as WallMember[],
+    now,
+    talkState,
+  ) : null
   const day = week[0].date
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null
@@ -184,7 +200,9 @@ function PhoneFixturePageInner() {
               )}
               contacts={CONTACTS as never}
               places={PLACES as never}
+              casaTalk={{ topic, snooze: async (key, until) => setTalkState((was) => ({ ...was, snoozed: { ...was.snoozed, [key]: until.toISOString() } })) }}
               tripActions={{
+                dismiss: async (date, key) => setTripState((s) => withDismissed(s, date, key)),
                 leaving: (ids) => setTripState((s) => withDeparted(s, day, ids, now)),
                 undoLeaving: (ids) => setTripState((s) => withoutDeparted(s, day, ids)),
                 // Events: the driver goes on the trip plan, as the real save does; school runs: a day hand-off.

@@ -12,6 +12,8 @@ import { DecisionCount, EmailCount, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
 import type { PackingGroup, WallChecklistItem } from './packing'
 import { PrepRail } from './WallPrep'
+import { CasaCalling } from './WallCasaTalk'
+import type { CasaTopic } from './casaTalk'
 
 export interface WallLaunchProps {
   now: Date
@@ -21,6 +23,8 @@ export interface WallLaunchProps {
   currentWeather?: { temp: number; condition: string } | null
   onOpenMenu?: () => void
   onAsk?: () => void
+  /** Casa has something to say (canvas 21a): the mic glows and the quiet line takes the name's place. */
+  calling?: { topic: CasaTopic; onOpen: () => void } | null
   /** The + beside the mic: adding by touch. */
   onAdd?: () => void
   interaction?: ScoreInteraction
@@ -50,7 +54,7 @@ export interface WallLaunchProps {
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow: tomorrowNote = null, prep = null }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, calling = null, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow: tomorrowNote = null, prep = null }: WallLaunchProps) {
   const prepping = Boolean(prep && prep.packing.total > 0)
   // Today's list takes the room the TOMORROW note would use; tomorrow's own list is on the evening face.
   const tomorrow = prepping ? null : tomorrowNote
@@ -73,12 +77,19 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[10px]">
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
-            {onAsk && <MicButton onAsk={onAsk} small className="ml-[4px]" />}
+            {onAsk && <MicButton onAsk={calling ? calling.onOpen : onAsk} calling={Boolean(calling)} small className="ml-[4px]" />}
             {onAdd && <AddButton onAdd={onAdd} />}
-            {/* The row fits the name or the email count, not both beside TO DECIDE: the count ran into the ring (2026-09-30). */}
-            {!(onOpenEmail && emailCount > 0) && <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">MAISON TABOR</span>}
-            {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
-            {onOpenEmail && <EmailCount count={emailCount} onOpen={onOpenEmail} />}
+            {calling ? (
+              // The one thing Casa has to say takes the row (it is among the decisions, so the count waits).
+              <CasaCalling topic={calling.topic} onOpen={calling.onOpen} className="ml-[10px]" />
+            ) : (
+              <>
+                {/* The row fits the name or the email count, not both beside TO DECIDE: the count ran into the ring (2026-09-30). */}
+                {!(onOpenEmail && emailCount > 0) && <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">MAISON TABOR</span>}
+                {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
+                {onOpenEmail && <EmailCount count={emailCount} onOpen={onOpenEmail} />}
+              </>
+            )}
           </div>
           <div className="mt-[2px] flex items-baseline gap-[10px]">
             <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>

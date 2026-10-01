@@ -27,6 +27,7 @@ import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members as baseMembers, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import { driveEvents, tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
+import type { CasaTalkState } from './casaTalk'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 
@@ -132,6 +133,14 @@ export default function WallFixturePage() {
     } as unknown as WallEvent] : []),
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
+  // `?talk=1` (canvas row 21): "Casa wants to talk to you", its state in memory; what reaches the phones is recorded.
+  const [talkState, setTalkState] = useState<CasaTalkState>({})
+  const casaTalk = new URLSearchParams(window.location.search).get('talk') === '1' ? {
+    state: talkState,
+    ready: true,
+    save: async (change: CasaTalkState) => setTalkState((was) => ({ snoozed: { ...was.snoozed, ...change.snoozed }, pushed: { ...was.pushed, ...change.pushed } })),
+    push: async (message: { title: string; body: string }) => { (window as unknown as { __casaPushed?: unknown[] }).__casaPushed = [...((window as unknown as { __casaPushed?: unknown[] }).__casaPushed ?? []), message] },
+  } : null
   const plan = (date: Date) =>
     buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date), travelSettings, chores: CHORES })
   const tripActions = {
@@ -230,7 +239,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} />
     </div>
     </WallSpeechContext.Provider>
     } />

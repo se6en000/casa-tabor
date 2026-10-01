@@ -655,3 +655,22 @@ test('phone: People › Family › Owen — his routines and what Casa knows; a 
   await expect(phone.getByRole('region', { name: 'Owen’s page' }).getByText('School · Palm Beach Public')).toBeVisible()
   await expect(phone.getByRole('region', { name: 'Owen’s page' }).getByRole('button', { name: /^Edit/ })).toHaveCount(0)
 })
+
+// Canvas 21c (Jake, 2026-10-01, approved): the notice's "Talk it through" lands on Me — the same few sentences and
+// answers as the wall's band, on the phone of the person it's for (Jake in Dallas, Thursday's 7:35 open).
+test('phone: Casa wants to talk — on top of Me for Jake, not for Kelly; an answer settles it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-10-07T15:05:00&viewer=jake-id&trip=1&talk=1')
+  const phone = page.getByTestId('phone-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const talk = phone.getByRole('region', { name: 'Casa has something for you' })
+  await expect(talk.getByText('JAKE, ABOUT TOMORROW MORNING')).toBeVisible()
+  await expect(talk.getByText(/^You’re in Dallas tomorrow, and nobody’s taking Emme and Owen to .+ at 7:35\.$/)).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-talk.png')
+  await talk.getByRole('button', { name: 'Giselle will' }).click()
+  await expect(talk).toHaveCount(0)
+
+  await page.goto('/__phone-fixture?at=2026-10-07T15:05:00&viewer=kelly&trip=1&talk=1')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(phone.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(phone.getByRole('region', { name: 'Casa has something for you' })).toHaveCount(0)
+})

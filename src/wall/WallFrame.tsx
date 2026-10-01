@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent } from './engine/types'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -19,6 +19,7 @@ import { useTodos } from './useTodos'
 import { useEmailOffers } from './useEmailOffers'
 import WallEmailReview from './WallEmailReview'
 import { deviceKeyboardHere } from './keyboardMode'
+import { useCasaTalk } from './useCasaTalk'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
@@ -104,5 +105,14 @@ export default function WallFrame() {
   const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const review = emailOpen && email.data ? <WallEmailReview data={email.data} act={email.act} onClose={() => setEmailOpen(false)} computer={deviceKeyboardHere()} today={localDay} /> : null
   const todos = useTodos()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} />
+  // "Casa wants to talk to you" (canvas row 21): the wall alone sends the phone notice.
+  const talk = useCasaTalk()
+  const casaTalk = useMemo(() => ({
+    ...talk,
+    push: async (message: { title: string; body: string; tag: string; url: string }) => {
+      const { error } = await supabase.functions.invoke('send-push-notification', { body: { ...message, data: { url: message.url } } })
+      if (error) throw error
+    },
+  }), [talk])
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} />
 }

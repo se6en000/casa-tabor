@@ -1899,3 +1899,41 @@ test('wall: chores on a person’s page — edit, add on the keyboard, and open 
   await wall.getByRole('button', { name: 'Open Give Liv her meds' }).click()
   await expect(wall.getByRole('region', { name: 'Give Liv her meds' })).toBeVisible()
 })
+
+// Canvas row 21 (Jake, 2026-10-01: "approved on row 21 boards"): "Casa wants to talk to you". Wednesday 3:05 PM, Jake
+// in Dallas, nobody on Thursday's 7:35 drop-off: the mic glows, the quiet line names him, the phones hear once; a tap
+// opens the band on Thursday with the run outlined, said in two sentences, with the answers.
+test('wall: Casa wants to talk — the glow and the line, the band, an answer settles it', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&talk=1&at=2026-10-07T15:05:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const line = wall.getByRole('button', { name: 'Casa has something for you · Jake' })
+  await expect(line).toBeVisible()
+  const pushed = await page.evaluate(() => window.__casaPushed)
+  expect(pushed).toHaveLength(1)
+  expect(pushed[0].title).toBe('Something for you, Jake')
+  await expect(wall).toHaveScreenshot('talk-calling.png', { animations: 'disabled' })
+
+  await line.click()
+  const band = wall.getByRole('region', { name: 'Casa has something for you' })
+  await expect(band.getByText('JAKE, ABOUT TOMORROW MORNING')).toBeVisible()
+  await expect(band.getByText(/^You’re in Dallas tomorrow, and nobody’s taking Emme and Owen to .+ at 7:35\.$/)).toBeVisible()
+  await expect(band.getByText('Giselle’s free then.')).toBeVisible()
+  await expect(band.getByText('It’s 16 hours away, and nobody has it.')).toBeVisible()
+  await expect(wall).toHaveScreenshot('talk-band.png', { animations: 'disabled' })
+
+  await band.getByRole('button', { name: 'Giselle will' }).click()
+  await expect(band).toHaveCount(0)
+  await expect(line).toHaveCount(0)
+  expect(await page.evaluate(() => window.__casaPushed.length)).toBe(1)
+})
+
+test('wall: Casa wants to talk — "Not now" puts it away until the evening; the mic opens it too', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&talk=1&at=2026-10-07T15:05:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Talk to Casa' }).first().click()
+  const band = wall.getByRole('region', { name: 'Casa has something for you' })
+  await band.getByRole('button', { name: 'Not now' }).click()
+  await expect(band).toHaveCount(0)
+  await expect(wall.getByRole('button', { name: 'Casa has something for you · Jake' })).toHaveCount(0)
+})

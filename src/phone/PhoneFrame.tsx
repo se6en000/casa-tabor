@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent } from '../wall/engine/types'
 import { useProfileSession } from '../contexts/useProfileSession'
@@ -18,6 +18,9 @@ import { useContactDirectory } from '../hooks/useSavedContacts'
 import { useSavedPlaces } from '../hooks/useSavedPlaces'
 import { scanDocumentFiles, type ScannedItem } from '../utils/documentScanner'
 import { similarEvent } from './scan'
+import { decisionsFor } from '../wall/decisions'
+import { casaTopic } from '../wall/casaTalk'
+import { useCasaTalk } from '../wall/useCasaTalk'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 /** What's already on the calendar on the scanned days: one read for the whole span, matched in the app. */
@@ -56,6 +59,15 @@ export default function PhoneFrame() {
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
   const isJake = members.find((m) => m.id === profile?.memberId)?.name === 'Jake'
   const todos = useTodos({ enabled: isJake, surface: 'phone' })
+  // "Casa wants to talk to you" (canvas 21c): the same one thing as the wall's band, from this week's decisions.
+  const talk = useCasaTalk()
+  const topic = useMemo(() => casaTopic(
+    week.flatMap((plan) => decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date }))),
+    (date) => week.find((p) => p.date.toDateString() === date.toDateString()) ?? null,
+    members,
+    now,
+    talk.state,
+  ), [week, members, now, tripStateFor, talk.state])
   return (
     <PhoneView
       now={now}
@@ -67,6 +79,7 @@ export default function PhoneFrame() {
       events={allEvents}
       checklist={checklist}
       tripActions={tripActions}
+      casaTalk={{ topic, snooze: (key, until) => talk.save({ snoozed: { [key]: until.toISOString() } }) }}
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
       onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
       useEventItems={useEventChecklist}
