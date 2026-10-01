@@ -1513,7 +1513,7 @@ test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the 
 })
 
 // Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
-test('wall: the new listener — one voice line under the words: quiet, the room, your voice, unsure words faded, the fuse sends on a tap', async ({ page }) => {
+test('wall: the new listener — one voice line under the words: your voice moves it before any words, the fuse runs when you stop, unsure words faded, a tap sends', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
@@ -1521,20 +1521,30 @@ test('wall: the new listener — one voice line under the words: quiet, the room
   await expect(section.getByText('LISTENING', { exact: true })).toHaveCount(0)
   await expect(section.locator('[data-voice-line="quiet"]')).toBeVisible()
   await expect(section.getByText('Go ahead.', { exact: true })).toBeVisible()
-  // Loud with no words, for a while: the room, not you.
-  await mic(page, () => window.__mic.level(45))
-  await expect(section.locator('[data-voice-line="noise"]')).toBeVisible({ timeout: 4000 })
-  await expect(section.getByText('It’s loud in here — I’ll catch you when you start.')).toBeVisible()
-  // Words: your voice, and the word Deepgram isn't sure of is faded.
-  await mic(page, () => window.__mic.hear('add a dentist appointment for live', [{ word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }], 0.9))
+  // On the wall Deepgram's words often come all at once at the end (Jake, 2026-09-30: "it sends it before the
+  // line even moves"): your voice moves the line while no words are on screen yet.
+  await mic(page, () => window.__mic.speak(20))
   await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
-  await expect(section.locator('span.opacity-40', { hasText: 'live' })).toBeVisible()
-  // You stop: the fuse, and a tap sends now.
+  await expect(section.getByText('Go ahead.', { exact: true })).toBeVisible()
+  // You stop: the fuse, before any words.
   await mic(page, () => window.__mic.level(2))
-  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 4000 })
+  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 2000 })
+  // The words arrive; the one Deepgram isn't sure of is faded; a tap sends now.
+  await mic(page, () => window.__mic.hear('add a dentist appointment for live', [{ word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }], 0.9))
+  await expect(section.locator('span.opacity-40', { hasText: 'live' })).toBeVisible()
+  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 2000 })
   await expect(section.getByText(/tap to send now/)).toBeVisible()
   await section.getByRole('button', { name: 'Send now' }).click()
   expect(await page.evaluate(() => window.__mic.finished)).toBe(1)
+})
+
+test('wall: the new listener — loud with no voice detected is the room, not you', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect.poll(() => starts(page)).toBeGreaterThan(0)
+  await mic(page, () => window.__mic.level(30))
+  await expect(section.locator('[data-voice-line="noise"]')).toBeVisible({ timeout: 4000 })
+  await expect(section.getByText('It’s loud in here — I’ll catch you when you start.')).toBeVisible()
 })
 
 test('wall: the new listener is a switch in the MT menu, remembered on the wall; off, the band is as before', async ({ page }) => {

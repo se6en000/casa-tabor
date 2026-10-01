@@ -202,7 +202,7 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   useEffect(() => { latest.current = options })
   const mic = (window as unknown as { __mic?: Record<string, unknown> }).__mic ??= { starts: 0 }
   // What the voice line reads (canvas row 17): the room's level, when words last came, a held sentence.
-  const signal = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] })
+  const signal = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 })
   mic.say = (text: string) => { latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
   // Words heard so far, mid-sentence (what shows live while he speaks), with Deepgram's per-word confidence if given.
   mic.hear = (text: string, words?: Array<{ word: string; confidence: number }>, confidence?: number) => {
@@ -210,6 +210,8 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
     latest.current.onInterim(text)
   }
   mic.level = (level: number) => { signal.current.level = level }
+  // A voice starting (Deepgram's speech start) at this level, before any words.
+  mic.speak = (level: number) => { Object.assign(signal.current, { level, speechAt: Date.now() }) }
   mic.hold = () => { signal.current.heldSince = Date.now() }
   mic.quiet = () => { setListening(false); latest.current.onAutoDismiss?.('wake_silence') }
   mic.noise = () => { setListening(false); latest.current.onAutoDismiss?.('speech_without_transcript') }

@@ -61,6 +61,7 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
     let last = 0
     let levels = { level: 0, floor: 6 }
     let noisySince = 0
+    let lastLoudAt = 0
     let shown: VoiceLineState = 'off'
     const tick = (ms: number) => {
       frame = requestAnimationFrame(tick)
@@ -70,18 +71,20 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       const now = Date.now()
       const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, confidence: null }
       levels = stepLevel(levels, s.level ?? 0, dt)
-      const loud = levels.level - levels.floor > 12
+      const loud = levels.level - levels.floor > 6
+      if (loud) lastLoudAt = now
+      const voiced = Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 8000
       const wordsLately = s.lastWordAt > 0 && now - s.lastWordAt < 2000
-      noisySince = loud && !wordsLately ? noisySince || now : 0
-      const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, signal: s })
+      noisySince = loud && !wordsLately && !voiced ? noisySince || now : 0
+      const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, lastLoudAt, signal: s })
       if (next !== shown) {
         shown = next
         setState(next)
       }
       const t = ms / 1000
-      if (path.current && (next === 'voice' || next === 'unsure')) path.current.setAttribute('d', wavePath(width, 4 + 18 * amplitude(levels.level, levels.floor), t))
+      if (path.current && (next === 'voice' || next === 'unsure')) path.current.setAttribute('d', wavePath(width, 3 + 19 * amplitude(levels.level, levels.floor), t))
       else if (path.current && next === 'noise') path.current.setAttribute('d', grainPath(width, 1.5 + 2.5 * amplitude(levels.level, levels.floor), t))
-      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s) * 100).toFixed(1)}%`
+      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s, lastLoudAt) * 100).toFixed(1)}%`
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)

@@ -119,7 +119,9 @@ export function useSpeechInput({
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
   // The voice line (canvas row 17) reads these every frame; kept in a ref so the band isn't re-rendered for them.
-  const signalRef = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] })
+  const signalRef = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 })
+  // The mic's levels this turn (the bridge's 0–100), traced with each sentence so the line can be tuned to real voices.
+  const levelsRef = useRef<number[]>([])
   const [bridgeDown, setBridgeDown] = useState(false)
   const supported = !IS_SAFE_MODE
 
@@ -206,7 +208,8 @@ export function useSpeechInput({
     stopWS()
     setPhaseSync('idle')
     setVolume(0)
-    signalRef.current = { level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] }
+    signalRef.current = { level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 }
+    levelsRef.current = []
     onInterimRef.current('')
     onTraceRef.current?.('voice_session_auto_dismissed', {
       reason,
@@ -356,6 +359,19 @@ export function useSpeechInput({
         utterance_id: completedUtteranceId,
         next_utterance_id: nextUtteranceId,
       }))
+    }
+    const levels = [...levelsRef.current].sort((a, b) => a - b)
+    levelsRef.current = []
+    signalRef.current.speechAt = 0
+    if (levels.length) {
+      onTraceRef.current?.('asr_level_stats', {
+        utterance_id: completedUtteranceId,
+        samples: levels.length,
+        low: levels[Math.floor(levels.length * 0.1)],
+        median: levels[Math.floor(levels.length / 2)],
+        high: levels[Math.floor(levels.length * 0.9)],
+        max: levels[levels.length - 1],
+      })
     }
     onTraceRef.current?.('asr_final', {
       utterance_id: completedUtteranceId,
@@ -572,9 +588,11 @@ export function useSpeechInput({
           case 'volume':
             setVolume(msg.level ?? 0)
             signalRef.current.level = msg.level ?? 0
+            if (levelsRef.current.length < 600) levelsRef.current.push(msg.level ?? 0)
             break
           case 'speech_started':
             if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()
+            signalRef.current.speechAt = Date.now()
             stopWakeSilenceTimer()
             scheduleSpeechWithoutTranscriptTimeout()
             if (pendingFragmentRef.current) scheduleFragmentTimeout()
