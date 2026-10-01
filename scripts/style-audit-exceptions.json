@@ -302,10 +302,6 @@
       {
         "path": "src/phone/PhoneAssistantCard.tsx",
         "reason": "Phone (Family Wall family): the assistant card's lane preview (board 06e) positions the person's day and the draft on a timeline from event times at runtime."
-      },
-      {
-        "path": "src/wall/VoiceLine.tsx",
-        "reason": "Family Wall: the voice line (canvas row 17) is as wide as the words column it sits under (the band's main column or the card column), passed in at runtime."
       }
     ],
     "nativeControlRecreations": [

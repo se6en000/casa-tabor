@@ -1,5 +1,5 @@
-// The voice line under your words (canvas row 17): one indicator that tells you from the room, shows Casa's wait
-// as a fuse, and fades the words it isn't sure of. Pure, so it's tested without a microphone; VoiceLine.tsx draws it.
+// The listener (canvas row 17): tells your voice from the room, shows the real stall (a held sentence) as a fuse, and
+// fades the words Deepgram isn't sure of. Pure, so it's tested without a microphone; VoiceHalo.tsx draws it in the mic.
 
 export type VoiceLineState = 'off' | 'quiet' | 'noise' | 'voice' | 'heard' | 'fuse' | 'thinking' | 'yes' | 'deaf'
 
@@ -83,33 +83,6 @@ export function stepLevel(prev: { level: number; floor: number }, raw: number, d
 /** How tall the voice is (0–1) above the room: the room itself is nothing, a syllable most of it, a shout all of it. */
 export function envelope(level: number, floor: number): number {
   return Math.max(0, Math.min(1, (level - floor - 4) / 14))
-}
-
-/** Radians per history sample: about five samples per ripple. */
-const CARRIER = 1.25
-
-/**
- * The wave is the voice: `history` is the envelope per frame, newest first; the newest sits in the middle and older
- * samples travel out to both edges, each riding a ripple (its phase fixed to the sample, so a syllable keeps its
- * shape as it travels). `count` is how many samples have been pushed, for the ripple's phase.
- */
-export function waveformPoints(history: number[], count: number, width: number, height: number, every = 3): Array<{ x: number; y: number }> {
-  const mid = height / 2
-  const half = width / 2
-  const reach = Math.max(1, history.length - 1)
-  const room = height / 2 - 2
-  const points: Array<{ x: number; y: number }> = []
-  for (let x = 0; x <= width + 0.001; x += every) {
-    const d = Math.abs(x - half)
-    const s = (d / half) * reach
-    const i = Math.floor(s)
-    const f = s - i
-    const a = (history[i] ?? 0) * (1 - f) + (history[i + 1] ?? 0) * f
-    const fade = Math.max(0, Math.min(1, (half - d) / (width * 0.08)))
-    const y = a === 0 || fade === 0 ? mid : mid - a * room * fade * Math.sin((count - s) * CARRIER)
-    points.push({ x, y })
-  }
-  return points
 }
 
 const bare = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')

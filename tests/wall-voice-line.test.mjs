@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FUSE_HELD_MS, QUIET_AFTER_MS, envelope, fuseProgress, inkWords, shownWords, stepLevel, voiceState, waveformPoints } from '../src/wall/voiceLine.ts'
+import { FUSE_HELD_MS, QUIET_AFTER_MS, envelope, fuseProgress, inkWords, shownWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
 
 // Canvas row 17: one voice line under the words. Jake on the wall, 2026-09-30, fifth try: "it's slow to start vibing
 // and slow to stop at the end … it's like the same wave, there's no real dynamism … it seems to just be on and waving
@@ -57,27 +57,6 @@ test('the envelope: nothing for the room, a syllable most of the height, a shout
   assert.equal(envelope(37, 34), 0)
   assert.ok(envelope(50, 34) >= 0.6)
   assert.equal(envelope(90, 34), 1)
-})
-
-test('the wave is the voice: flat when quiet; the newest loudness in the middle, older out to both sides', () => {
-  const quiet = waveformPoints(new Array(60).fill(0), 0, 600, 40)
-  assert.ok(quiet.every((p) => p.y === 20), 'flat when quiet')
-  // A syllable just now: tall in the middle, flat at the edges, the same on both sides.
-  const hist = new Array(60).fill(0)
-  hist[0] = 1; hist[1] = 0.9
-  const pts = waveformPoints(hist, 7, 600, 40)
-  const mid = pts.reduce((m, p) => Math.max(m, Math.abs(p.y - 20) * (Math.abs(p.x - 300) < 20 ? 1 : 0)), 0)
-  assert.ok(mid > 8, `tall in the middle: ${mid}`)
-  assert.ok(Math.abs(pts[0].y - 20) < 0.5 && Math.abs(pts.at(-1).y - 20) < 0.5, 'flat at the edges')
-  const left = pts.find((p) => Math.abs(p.x - 290) < 2)
-  const right = pts.find((p) => Math.abs(p.x - 310) < 2)
-  assert.ok(Math.abs((left.y - 20) - (right.y - 20)) < 0.01, 'mirrored')
-  // The same syllable a second ago has travelled out from the middle.
-  const older = new Array(60).fill(0)
-  older[30] = 1
-  const out = waveformPoints(older, 37, 600, 40)
-  assert.ok(Math.abs(out.find((p) => Math.abs(p.x - 300) < 2).y - 20) < 0.5, 'the middle is flat again')
-  assert.ok(out.some((p) => Math.abs(p.y - 20) > 5 && Math.abs(p.x - 300) > 100), 'the bump is further out')
 })
 
 test('words in confidence ink: the ones Deepgram isn\'t sure of are faded, matched from the end', () => {

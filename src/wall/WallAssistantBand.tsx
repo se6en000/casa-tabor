@@ -10,8 +10,8 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
 import { useSwipeDown } from './useSwipeDown'
-import VoiceLine from './VoiceLine'
-import { inkWords, shownWords } from './voiceLine'
+import VoiceHalo from './VoiceHalo'
+import { inkWords, shownWords, type VoiceLineState } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
 import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
@@ -367,19 +367,25 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const quote = (text: string) => (liveWords
     ? <>“{liveWords.map((w, i) => <span key={i} className={w.faded ? 'opacity-40' : undefined}>{i > 0 ? ' ' : ''}{w.text}</span>)}”</>
     : `“${text}”`)
-  const voiceLine = (width: number) => listenerV2 && (micOpen || loading || speech.bridgeDown) ? (
-    <VoiceLine
+  // Take two of row 17 (Jake: "too busy … do something similar with something smaller, like the mic"): a halo
+  // behind the mic that swells with your voice; a few states leave a short note under it.
+  const [haloState, setHaloState] = useState<VoiceLineState>('off')
+  const voiceHalo = listenerV2 ? (
+    <VoiceHalo
       signal={speech.signal}
       micOpen={micOpen}
       bridgeDown={Boolean(speech.bridgeDown)}
       thinking={loading}
       needsYes={state === 'NEEDS A YES'}
       heard={speech.listening ? liveText : ''}
-      width={width}
-      onSendNow={() => speech.finish()}
-      onRetry={() => { captured.current = ''; void speech.start() }}
+      onState={setHaloState}
     />
   ) : null
+  const haloNote = !listenerV2 ? null
+    : haloState === 'fuse' ? 'Waiting for the rest —\ntap the mic to send'
+      : haloState === 'noise' ? 'It’s loud in here'
+        : haloState === 'deaf' ? 'Can’t hear the mic —\ntap to try again'
+          : ''
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content) : ''), [answer?.content])
   const pill = 'h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment'
   const lightPill = 'h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink'
@@ -555,7 +561,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             : <div className="h-[3px] w-full bg-wall-night-brass/70" />}
       </div>
       <div className="flex w-[200px] shrink-0 flex-col items-center gap-[16px]">
-        <div className="relative flex h-[132px] w-[132px] items-center justify-center">
+        <div data-listener={listenerV2 ? haloState : undefined} className="relative flex h-[132px] w-[132px] items-center justify-center">
+          {/* The new listener: a halo behind the mic that swells with your voice (canvas row 17, take two). */}
+          {voiceHalo}
           {/* Listening: your turn — a solid brass mic with rings pulsing out. */}
           {state === 'LISTENING' && !listenerV2 && (
             <>
@@ -564,19 +572,19 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             </>
           )}
           {/* Thinking: Casa's turn — an open ring with a brass arc going round it. */}
-          {state === 'THINKING' && !listenerV2 && (
+          {state === 'THINKING' && (
             <span aria-hidden="true" className="absolute -inset-[14px] animate-[wall-think-spin_1.2s_linear_infinite] rounded-full border-[4px] border-solid border-transparent border-t-wall-night-brass border-r-wall-night-brass" />
           )}
           <button
             type="button"
             aria-label={speech.listening ? 'Stop listening' : 'Talk'}
             onClick={() => { if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
-            className={`relative flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass p-0 ${state === 'LISTENING' ? 'bg-wall-night-brass text-wall-ink' : 'bg-transparent text-wall-night-brass'}`}
+            className={`relative flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid p-0 ${haloState === 'deaf' ? 'border-wall-night-rust bg-transparent text-wall-night-rust' : state === 'LISTENING' ? 'border-wall-night-brass bg-wall-night-brass text-wall-ink' : 'border-wall-night-brass bg-transparent text-wall-night-brass'}`}
           >
             <Mic size={44} strokeWidth={state === 'LISTENING' ? 2 : 1.6} />
           </button>
         </div>
-        {!(listenerV2 && (state === 'LISTENING' || state === 'THINKING')) && (
+        {!(listenerV2 && state === 'LISTENING') && (
           <div className={`font-bold tracking-[0.2em] text-wall-night-brass ${state === 'LISTENING' || state === 'THINKING' ? 'text-wall-heading' : 'text-wall-label'}`}>{state}</div>
         )}
         <div className="whitespace-pre-line text-center text-wall-label text-wall-night-ink-2">
@@ -584,8 +592,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             ? 'Say yes, or change\nanything on it'
             : state === 'THINKING'
               ? '' // the ring and THINKING say it (Jake, 2026-09-29: "way redundant")
-              : state === 'LISTENING' && listenerV2
-                ? '' // the voice line says it (canvas row 17)
+              : state === 'LISTENING' && haloNote != null
+                ? haloNote // the halo says the rest (canvas row 17)
               : state === 'LISTENING' && question
                 ? 'Keep talking, or\nsay “that’s all”'
                 : state === 'LISTENING'
@@ -612,7 +620,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             <>
               {!(listenerV2 && !shownQuestion) && <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>}
               {shownQuestion && <div className="font-display text-wall-quote font-medium italic">{listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`}</div>}
-              {voiceLine(500)}
               {answerText && <div className="text-wall-body text-wall-night-ink-2">{answerText}</div>}
             </>
           )}
@@ -663,7 +670,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <div className="font-display text-wall-quote font-medium italic">
           {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : 'Ask about the day, or ask to add something.'}
         </div>
-        {voiceLine(1100)}
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
         {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
 
