@@ -78,6 +78,9 @@ function blockClass(block: ScoreBlock): string {
       return `${pigment.tint} border border-solid ${pigment.outline}`
     case 'away':
       return 'overflow-visible bg-transparent'
+    // A chore (Jake: "reminders for that day … on the score"): dashed brass, so it never reads as an outing.
+    case 'chore':
+      return 'border-2 border-dashed border-wall-brass bg-wall-brass/15'
   }
 }
 
@@ -270,7 +273,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                 <div data-home-mark className="pointer-events-none absolute inset-y-[6px] z-10" style={{ left: lane.home.x }}>
                   <span aria-hidden="true" className="absolute inset-y-0 left-[-1px] w-[2px] bg-wall-brass" />
                   <span className="absolute left-[8px] top-1/2 flex -translate-y-1/2 items-center gap-[6px] whitespace-nowrap bg-wall-ground pr-[4px] text-wall-detail font-bold text-wall-brass-ink">
-                    <House size={16} strokeWidth={2.2} aria-hidden="true" />
+                    <House size={16} strokeWidth={2.2} aria-label={lane.home.label ? undefined : 'Home'} />
                     {lane.home.label}
                   </span>
                 </div>

@@ -1821,3 +1821,14 @@ test('wall: a trip’s coverage — in Coming up a week ahead, covered from the 
   await sheet.getByRole('button', { name: 'Done' }).click()
   await expect(wall.getByText('Covered: Giselle drops off Emme & Owen Thu 7:35')).toBeVisible()
 })
+
+// Jake, 2026-10-01: "a recurring reminder for chores (Trash to street Monday/Thursday, landscaping to street
+// Tuesdays), Give Liv her meds at 7PM M-F … to see on the wall as reminders for that day … on the score."
+test('wall: chores on the Score — trash night on Jake’s lane, Liv’s meds on hers', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&chores=1&at=2026-10-07T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByText('Trash to the street')).toBeVisible()
+  await expect(wall.getByText('Give Liv her meds')).toBeVisible()
+  await expect(wall).toHaveScreenshot('chores-thursday.png')
+})

@@ -79,6 +79,14 @@ const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') 
 // `?trip=1` (canvas 19): Jake's Dallas trip, Oct 7–8, his flights as the work email brought them in; he takes an hour
 // at the airport and an Uber (his page's travel settings).
 const TRIP = new URLSearchParams(window.location.search).get('trip') === '1'
+// `?chores=1`: the household chores as Jake listed them on Oct 1 (chores.ts).
+const CHORES = new URLSearchParams(window.location.search).get('chores') === '1'
+  ? [
+    { id: 'trash', title: 'Trash to the street', member_id: 'jake-id', for_member_id: null, days_of_week: [1, 4], time_local: '20:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
+    { id: 'yard', title: 'Landscaping to the street', member_id: 'jake-id', for_member_id: null, days_of_week: [2], time_local: '20:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
+    { id: 'meds', title: 'Give Liv her meds', member_id: null, for_member_id: 'liv', days_of_week: [1, 2, 3, 4, 5], time_local: '19:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
+  ]
+  : []
 // `?drive=1`: a work trip by car, Oct 13–15 (Orlando).
 const DRIVE = new URLSearchParams(window.location.search).get('drive') === '1'
 const members = TRIP
@@ -122,7 +130,7 @@ export default function WallFixturePage() {
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
   const plan = (date: Date) =>
-    buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date), travelSettings })
+    buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date), travelSettings, chores: CHORES })
   const tripActions = {
     leaving: (ids: string[]) => setTripState((s) => withDeparted(s, day, ids, now)),
     undoLeaving: (ids: string[]) => setTripState((s) => withoutDeparted(s, day, ids)),
@@ -167,7 +175,7 @@ export default function WallFixturePage() {
         onOpenDay={(date) => { setBandOpen(false); setOpenRequest({ day: date.toISOString(), nonce: Date.now() }) }}
         viaWake={new URLSearchParams(window.location.search).get('wake') === '1'}
         members={members as WallMember[]}
-        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines, events: list, tripState: dayState(tripState, date), travelSettings })}
+        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines, events: list, tripState: dayState(tripState, date), travelSettings, chores: CHORES })}
         onDraft={setAssistantDraft}
         useTurn={useTurn}
         useSpeech={useFixtureSpeech}
@@ -219,7 +227,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
     </div>
     </WallSpeechContext.Provider>
     } />

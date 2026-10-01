@@ -44,11 +44,11 @@ export default function PhoneFrame() {
   // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
   const [aroundDay, setAroundDay] = useState<Date | null>(null)
   const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
-  const { now, members, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' }, aroundDay)
+  const { now, members, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom, chores } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' }, aroundDay)
   // The assistant's card is told from the same engine as the wall's (board 06e).
   const planDay = useCallback(
-    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
-    [members, routines, dayOffs, tripStateFor],
+    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date), chores }),
+    [members, routines, dayOffs, tripStateFor, chores],
   )
   const { data: contacts = [] } = useContactDirectory()
   const { data: places = [] } = useSavedPlaces()

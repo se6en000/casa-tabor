@@ -8,7 +8,7 @@ import { TIMELINE_WIDTH, isOnTimeline, xForTime } from './timeline.ts'
 // "everyone home by" marker. Pure, so it's tested without rendering.
 
 /** `flight`, `wait` and `away` are a trip's parts (canvas 19): the flight, the airport, and the dashed time away. */
-export type ScoreBlockKind = 'place' | 'activity' | 'drive' | 'drive_unassigned' | 'flight' | 'wait' | 'away'
+export type ScoreBlockKind = 'place' | 'activity' | 'drive' | 'drive_unassigned' | 'flight' | 'wait' | 'away' | 'chore'
 
 /** Blocks whose words sit inside the bar rather than above it. */
 export const LABEL_INSIDE: ReadonlySet<ScoreBlockKind> = new Set(['place', 'flight', 'wait', 'away'])
@@ -76,6 +76,8 @@ const MIN_LABEL_WIDTH = 72
 const LABEL_GAP = 16
 // Room a pickup note ("Giselle · 3:30") needs to the right of the pickup initial.
 const NOTE_WIDTH = 170
+// Room "Home ~7:19" needs beside its line.
+const HOME_MARK_WIDTH = 150
 // Room "Everyone home by 9:00" needs beside its line.
 const HOME_LABEL_WIDTH = 320
 
@@ -214,6 +216,12 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
         return
       }
 
+      // A household chore (chores.ts): a small mark at its time, its words above.
+      if (segment.chore) {
+        blocks.push({ key, kind: 'chore', sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: 'home' })
+        return
+      }
+
       if (segment.kind === 'activity') {
         blocks.push({ key, kind: 'activity', sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: segment.placeStatus })
         return
@@ -254,7 +262,11 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
     blocks.sort((a, b) => Number(b.kind === 'place') - Number(a.kind === 'place'))
     // Home from a trip: the time the family asks about, marked on their lane.
     const homeTrip = plan.trips.find((x) => x.travel?.direction === 'home' && x.travelerIds.includes(member.id) && x.homeAt && isOnTimeline(x.homeAt))
-    const home = homeTrip?.homeAt ? { x: xForTime(homeTrip.homeAt), label: `Home ~${clockTime(homeTrip.homeAt)}` } : null
+    // Something labelled right after it (trash night at 8): the mark keeps its line and house, not its words (the
+    // lane's status still says "home ~7:19").
+    const homeX = homeTrip?.homeAt ? xForTime(homeTrip.homeAt) : null
+    const crowded = homeX != null && blocks.some((b) => b.label && !LABEL_INSIDE.has(b.kind) && b.x > homeX && b.x < homeX + HOME_MARK_WIDTH)
+    const home = homeTrip?.homeAt ? { x: homeX!, label: crowded ? '' : `Home ~${clockTime(homeTrip.homeAt)}` } : null
     // The status tells where they are even with routines hidden ("Bak · until 3:30").
     return { member, pigmentIndex: own, status: laneStatus(member.id, allSegments, plan.trips, now, nameOf, plan.travel), blocks, monograms, notes: clearNotes, home }
   })

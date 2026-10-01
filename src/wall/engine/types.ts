@@ -120,6 +120,8 @@ export interface LaneSegment {
   work?: boolean
   /** Part of a trip away (canvas 19): the ride, the wait at the airport, the flight, or the time away. */
   travel?: 'drive' | 'wait' | 'flight' | 'away'
+  /** A household chore (chores.ts): a small mark at its time. */
+  chore?: boolean
 }
 
 /** Something the family should fix or decide; feeds "Needs a decision". */
@@ -130,6 +132,20 @@ export interface DayGap {
   at: Date
   /** The usual driver is away on a trip (travel.ts): who, and where. */
   away?: { memberId: string; city: string }
+}
+
+/** A chore on this day: who usually does it, who has it today, and why it's open if it is. */
+export interface DayChore {
+  /** What a hand-off is saved against (`chore:<id>`). */
+  key: string
+  choreId: string
+  title: string
+  at: Date
+  doerId: string | null
+  usualDoerId: string | null
+  forMemberId: string | null
+  /** The usual doer is away on a trip then. */
+  usualAway?: { memberId: string; city: string }
 }
 
 /** Someone's trip away, as it stands on this day (travel.ts). */
@@ -170,6 +186,8 @@ export interface DayPlan {
   allDay: Array<{ sourceId: string; title: string; memberIds: string[]; trip?: { city: string; dayIndex: number; dayCount: number; mode?: 'fly' | 'drive' } }>
   /** Who is away on a trip this day (travel.ts). */
   travel: DayTravel[]
+  /** The day's household chores (chores.ts), and who has each. */
+  chores: DayChore[]
   gaps: DayGap[]
   sharedDestinations: SharedDestination[]
 }

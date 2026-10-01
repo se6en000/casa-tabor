@@ -41,6 +41,11 @@ export function tripCoverage(trip: TravelTrip, planDay: (date: Date) => DayPlan 
       if (!t.usualDriverAway || !trip.memberIds.includes(t.usualDriverAway.memberId)) continue
       runs.push({ date: new Date(d), tripId: t.id, title: t.title, time: formatWallClock(t.arriveAt).time, driverId: t.driverId, source: t.source, sourceId: t.sourceId })
     }
+    // Their chores that day (trash night, the debris): handed off like a run.
+    for (const c of plan?.chores ?? []) {
+      if (!c.usualAway || !trip.memberIds.includes(c.usualAway.memberId)) continue
+      runs.push({ date: new Date(d), tripId: c.key, title: c.title, time: formatWallClock(c.at).time, driverId: c.doerId, source: 'routine', sourceId: c.key })
+    }
   }
   return runs
 }

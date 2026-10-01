@@ -2,7 +2,9 @@ import type { FamilyRoutine } from '../../lib/familyRoutines'
 import { applyTimeToDate, formatDisplayVenueName, getEstimatedDriveMinutes } from '../../lib/familyRoutines.ts'
 import { isEventAtHome } from '../../lib/driverConflictEngine.ts'
 import { buildTrips, tripDay, type TravelPrefs, type TravelSettings, type TravelTrip } from './travel.ts'
+import { choreAt, choreOnDay, type WallChore } from './chores.ts'
 import type {
+  DayChore,
   DayGap,
   DayTravel,
   DayPlan,
@@ -39,6 +41,8 @@ export interface BuildDayPlanInput {
   travelPrefs?: Record<string, TravelPrefs>
   /** The trip sheets' choices (settings `wall_travel`), when `travel` is built here. */
   travelSettings?: Record<string, TravelSettings>
+  /** Household chores (chores.ts). */
+  chores?: WallChore[]
 }
 
 const durationWords = (minutes: number) => (minutes % 60 === 0 ? `${minutes / 60} hr` : minutes > 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60}` : `${minutes} min`)
@@ -493,6 +497,23 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     }
   }
 
+  // Household chores (chores.ts): a small mark at its time on the doer's lane (or on who it's for, if nobody does it
+  // yet); when the doer is away on a trip it needs someone, unless someone took it today.
+  const choreList: DayChore[] = []
+  for (const chore of input.chores ?? []) {
+    if (!choreOnDay(chore, date)) continue
+    const at = choreAt(chore, date)
+    const end = addMinutes(at, Math.max(5, chore.minutes || 10))
+    const key = `chore:${chore.id}`
+    const handedOff = Object.prototype.hasOwnProperty.call(tripState.drivers, key)
+    const usualAway = awayDuring(chore.member_id, at, end)
+    const doerId = handedOff ? tripState.drivers[key] : usualAway ? null : chore.member_id
+    choreList.push({ key, choreId: chore.id, title: chore.title, at, doerId, usualDoerId: chore.member_id, forMemberId: chore.for_member_id, ...(usualAway ? { usualAway: { memberId: usualAway.memberId, city: usualAway.city } } : {}) })
+    const lane = doerId ?? chore.for_member_id
+    if (lane) addSegment(lane, { kind: 'activity', start: at, end, label: chore.title, placeStatus: 'home', sourceId: key, fromRoutine: true, chore: true })
+    else nobody.push({ sourceId: key, title: chore.title, start: at, end })
+  }
+
   // A pickup that goes straight on to the next place is one trip (school → CityPlace):
   // same driver, a picked-up child is going there, and that trip would otherwise have
   // to leave home before the pickup is back. The drive from school is estimated with
@@ -572,5 +593,5 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     t.travelerIds.forEach((id) => activeMemberIds.add(id))
   }
 
-  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations, travel }
+  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations, travel, chores: choreList }
 }

@@ -16,6 +16,7 @@ import WallPackingSheet from './WallPackingSheet'
 import WallTripSheet from './WallTripSheet'
 import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
+import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
 import { eveningFocus, selectPosture, tomorrowLine, type Posture } from './posture'
 import { formatWallDate } from './clock'
@@ -94,6 +95,8 @@ export interface WallViewProps {
   saveTravel?: (key: string, change: TravelSettings) => Promise<void>
   /** Every trip we know of, up to four months out (coverage.ts plans each from the day it lands). */
   travelTrips?: TravelTrip[]
+  /** Household chores (chores.ts). */
+  chores?: WallChore[]
   /** Add a line to an event's get & pack list (from its details). */
   addChecklist?: (eventId: string, label: string) => Promise<void>
   /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
@@ -133,7 +136,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -168,9 +171,9 @@ export default function WallView(props: WallViewProps) {
   // Covering each trip (coverage.ts): its runs while the traveller is gone, from the day the trip lands in Casa.
   const tripCoverageByKey = useMemo(() => new Map(travelTrips
     .filter((t) => (t.homeAt ?? t.leaveHomeAt ?? new Date(0)).getTime() > now.getTime() - 3_600_000)
-    .map((t) => [t.key, tripCoverage(t, (date) => buildDayPlan({ date, members, routines, events: allEvents, dayOffs, tripState: tripStateFor?.(date), travel: travelTrips }))] as const)),
+    .map((t) => [t.key, tripCoverage(t, (date) => buildDayPlan({ date, members, routines, events: allEvents, dayOffs, tripState: tripStateFor?.(date), travel: travelTrips, chores }))] as const)),
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the minute clock isn't a reason to replan; the day is
-  [travelTrips, members, routines, allEvents, dayOffs, tripStateFor, now.toDateString()])
+  [travelTrips, members, routines, allEvents, dayOffs, tripStateFor, chores, now.toDateString()])
   const comingUpItems = useMemo(() => comingUp ? [
     ...travelTrips.filter((t) => tripCoverageByKey.has(t.key)).map((t) => coverageComingUp(t, tripCoverageByKey.get(t.key)!, members, comingUp.today)),
     ...comingUp.items,
@@ -181,8 +184,8 @@ export default function WallView(props: WallViewProps) {
   // Surprise-safe: a celebration's prep (the gift, the card) never reaches the wall, where the honoree can see it.
   const checklist = useMemo(() => surpriseSafeChecklist(allChecklist, allEvents, members), [allChecklist, allEvents, members])
   const buildPlanFor = useCallback(
-    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
-    [members, routines, dayOffs, tripStateFor],
+    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date), chores, ...(travelTrips.length ? { travel: travelTrips } : {}) }),
+    [members, routines, dayOffs, tripStateFor, chores, travelTrips],
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const selected = selectedId ? eventsById.get(selectedId) ?? null : null
