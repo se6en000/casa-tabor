@@ -1572,3 +1572,37 @@ test('wall: the new listener is a switch in the MT menu, remembered on the wall;
   await expect(page.getByRole('region', { name: 'Assistant' }).getByText('LISTENING', { exact: true }).first()).toBeVisible()
   await expect(page.locator('[data-listener]')).toHaveCount(0)
 })
+
+// Jake, 2026-10-01: "today should show the get and pack section … able to see what was checked off" — the evening's
+// layout with the Next Move kept up top — and "like the strip to be in the same place across all dates".
+test('wall: today with a list to get ready: Next Move up top, compact lanes, decisions and get & pack; "N packed" opens every tick', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-26T11:30:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByRole('region', { name: 'Next move' })).toBeVisible()
+  const pack = wall.getByRole('region', { name: 'Get & pack today' })
+  await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
+  await expect(pack.getByRole('button', { name: 'Water bottle' })).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Needs a decision today' })).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Next seven days' })).toBeVisible()
+  await expect(wall).toHaveScreenshot('today-get-and-pack.png')
+  await pack.getByRole('button', { name: 'See all' }).click()
+  const all = wall.getByRole('region', { name: 'Everything to pack' })
+  await expect(all.getByRole('button', { name: 'Glove' }).last()).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', async ({ page }) => {
+  const stripTop = async (url) => {
+    await page.goto(url)
+    await page.evaluate(() => document.fonts.ready)
+    const box = await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).boundingBox()
+    return Math.round(box.y)
+  }
+  const today = await stripTop('/__wall-fixture?at=2026-09-25T07:12:00')
+  expect(await stripTop('/__wall-fixture?at=2026-09-26T11:30:00')).toBe(today)
+  expect(await stripTop('/__wall-fixture?at=2026-09-25T20:15:00')).toBe(today)
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).getByRole('button', { name: /mon/i }).first().click()
+  const other = await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).boundingBox()
+  expect(Math.round(other.y)).toBe(today)
+})

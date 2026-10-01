@@ -503,6 +503,14 @@ export default function WallView(props: WallViewProps) {
         onOpenEmail={onOpenEmail}
         tomorrow={tomorrowNote}
         week={weekStrip}
+        prep={shownToday && toggleChecklist ? {
+          packing: packingGroups(shownToday, checklist, { from: now }),
+          decisions: decisionsOn(shownToday.date),
+          onAnswer: tripActions ? answer : undefined,
+          onToggleItem: toggleChecklist,
+          onOpenEvent: (id) => eventsById.has(id) && setSelectedId(id),
+          onSeeAll: () => setPackingOpen(true),
+        } : null}
       />
     )
   }

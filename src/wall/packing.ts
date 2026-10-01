@@ -45,9 +45,11 @@ export function packingEventIds(plan: DayPlan): string[] {
   return dayEvents(plan).map((e) => e.id)
 }
 
-export function packingGroups(plan: DayPlan, items: WallChecklistItem[]): { groups: PackingGroup[]; packed: number; total: number } {
+/** `from`: on today's face, only the events that haven't started yet (one under way has nothing left to pack). */
+export function packingGroups(plan: DayPlan, items: WallChecklistItem[], options: { from?: Date } = {}): { groups: PackingGroup[]; packed: number; total: number } {
   const groups: PackingGroup[] = []
   for (const event of dayEvents(plan)) {
+    if (options.from && event.at.getTime() < options.from.getTime()) continue
     const own = items.filter((i) => i.event_id === event.id).sort((a, b) => a.sort_order - b.sort_order)
     if (own.length === 0) continue
     groups.push({ eventId: event.id, heading: `${event.title.split(':')[0].trim()} · ${clockTime(event.at)}`, items: own })

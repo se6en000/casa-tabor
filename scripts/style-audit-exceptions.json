@@ -508,6 +508,10 @@
       {
         "path": "src/phone/PhonePerson.tsx",
         "reason": "Phone (Family Wall family): a person's page under People (canvas 16c)."
+      },
+      {
+        "path": "src/wall/WallPrep.tsx",
+        "reason": "Family Wall: get & pack (boards 04b, row 18) — each event heading opens it, each item ticks, \"N packed\" and See all open every tick; shared by the evening and today, part of the Wall's own component set."
       }
     ]
   }

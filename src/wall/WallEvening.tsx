@@ -1,14 +1,13 @@
 import { useMemo, type ReactNode } from 'react'
-import { Check } from 'lucide-react'
 import { formatWallClock, formatWallDate } from './clock'
 import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
 import { describeNextMove } from './header'
-import { fitPackingColumns, packingGroups, type FittedPackingGroup, type WallChecklistItem } from './packing'
+import { packingGroups, type WallChecklistItem } from './packing'
 import { forecastLine } from './posture'
 import { DecisionRow, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
-import { PackingItem } from './WallPackingSheet'
+import { GetAndPack } from './WallPrep'
 import { buildScore } from './score'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
@@ -42,34 +41,8 @@ export interface WallEveningProps {
   tonight?: ReactNode
 }
 
-/** Rows per packing column, and columns, that fit beside the decision and the first departure. */
+/** Rows per packing column that fit beside the decision and the first departure. */
 const PACKING_LINES = 4
-const PACKING_COLUMNS = 2
-
-function PackingGroupView({ group, onToggleItem, onOpenEvent }: { group: FittedPackingGroup; onToggleItem?: (item: WallChecklistItem) => void; onOpenEvent?: (eventId: string) => void }) {
-  return (
-    <div className="flex min-w-0 flex-col">
-      <button
-        type="button"
-        disabled={!onOpenEvent}
-        onClick={(event) => {
-          event.stopPropagation()
-          onOpenEvent?.(group.eventId)
-        }}
-        className="h-[44px] w-full truncate whitespace-nowrap border-0 border-t border-solid border-wall-rule bg-transparent p-0 pt-[6px] text-left font-display text-wall-heading font-bold text-wall-ink"
-      >
-        {group.heading}
-      </button>
-      {group.items.map((item) => <PackingItem key={item.id} item={item} onToggle={onToggleItem} />)}
-      {group.showPacked && (
-        <div className="flex h-[44px] items-center gap-[10px] pl-[4px] text-wall-detail text-wall-ink-2">
-          <Check size={18} strokeWidth={2.5} aria-hidden="true" />
-          {group.packed} packed
-        </div>
-      )}
-    </div>
-  )
-}
 
 /**
  * The day-ahead face (boards 02c and 04b): a day's Score from its start, what needs
@@ -88,8 +61,6 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
   const score = useMemo(() => (plan ? buildScore(plan, members, asOf, { hideRoutines }) : null), [plan, members, asOf, hideRoutines])
   const first = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, asOf), members, asOf) : null), [plan, members, asOf])
   const packing = useMemo(() => (plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }), [plan, checklist])
-  // Packed things fold into one line; an event moves whole to the next column; the rest is counted.
-  const { columns, hidden } = useMemo(() => fitPackingColumns(packing.groups, PACKING_LINES, PACKING_COLUMNS), [packing.groups])
   const forecast = forecastLine(plan)
   const clock = formatWallClock(now)
   const weekday = asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
@@ -149,30 +120,7 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
         </section>
 
         {packing.total > 0 && (
-          <section aria-label="Pack tonight" className="flex min-w-0 flex-1 flex-col">
-            <div className="flex h-[44px] shrink-0 items-center justify-between gap-[16px]">
-              <span className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">GET &amp; PACK · {packing.packed} OF {packing.total} DONE</span>
-              {onSeeAllPacking && (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSeeAllPacking()
-                  }}
-                  className="h-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-wall-detail font-semibold text-wall-ink"
-                >
-                  {hidden > 0 ? `See all · ${hidden} more` : 'See all'}
-                </button>
-              )}
-            </div>
-            <div className="grid min-h-0 grid-cols-2 gap-x-[32px]">
-              {columns.map((col, i) => (
-                <div key={i} className="flex min-w-0 flex-col">
-                  {col.map((group) => <PackingGroupView key={group.eventId} group={group} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} />)}
-                </div>
-              ))}
-            </div>
-          </section>
+          <GetAndPack packing={packing} lines={PACKING_LINES} label="Pack tonight" onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />
         )}
 
         <section aria-label="First departure" className="flex w-[440px] shrink-0 flex-col gap-[8px] self-start rounded-[18px] border border-wall-rule px-[26px] py-[22px]">

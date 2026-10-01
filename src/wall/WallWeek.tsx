@@ -22,7 +22,9 @@ export interface WallWeekProps {
 export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null, todo = null }: WallWeekProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ''
   return (
-    <section aria-label="Next seven days" className="flex shrink-0 flex-col">
+    // Pinned to the bottom of every face, so it never moves as the days are swiped (Jake, 2026-10-01: "like the strip
+    // to be in the same place across all dates").
+    <section aria-label="Next seven days" className="mt-auto flex shrink-0 flex-col">
       <div className="flex gap-[12px]">
         {days.map((day) => {
           const selected = day.key === shownKey

@@ -86,3 +86,16 @@ test('an event too long for any column starts one and is cut there', () => {
   assert.deepEqual(fit.columns[0][0].items.map((i) => i.label), ['1', '2', '3'])
   assert.equal(fit.hidden, 2)
 })
+
+// Jake, 2026-10-01: "the home page/today should show the get and pack section so I can check off the things I need …
+// like Owen's pink shirt before I leave for school … able to see what was checked off." On today's face only what's
+// still ahead counts: an event already under way has nothing left to pack for.
+test('today: only the events still ahead keep their list', () => {
+  const items = [item('birthday', 'Card'), item('baseball', 'Glove', true), item('softball', 'Cleats')]
+  const all = packingGroups(saturday, items)
+  assert.deepEqual(all.groups.map((g) => g.eventId), ['birthday', 'baseball', 'softball'])
+  // At 10:00 on Saturday the 9:00 birthday has started; the 12:30 games are still ahead.
+  const ahead = packingGroups(saturday, items, { from: new Date(2026, 8, 26, 10, 0) })
+  assert.deepEqual(ahead.groups.map((g) => g.eventId), ['baseball', 'softball'])
+  assert.deepEqual([ahead.packed, ahead.total], [1, 2])
+})
