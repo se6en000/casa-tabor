@@ -65,7 +65,7 @@ export interface Score {
    */
   everyoneHomeBy: { x: number; label: string; flip: boolean; laneIndex: number } | null
   /** All-day items (a birthday, "no school"): context for the day, drawn as one row under the hours, not in time. */
-  allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }>; trip?: { city: string; dayIndex: number; dayCount: number } }>
+  allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }>; trip?: { city: string; dayIndex: number; dayCount: number; mode?: 'fly' | 'drive' } }>
   /** Timed items with nobody on them, placed in time on the "No one yet" row (board 08a). */
   nobody: Array<{ sourceId: string; title: string; x: number; width: number }>
 }

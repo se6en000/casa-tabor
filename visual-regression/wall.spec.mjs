@@ -1785,3 +1785,18 @@ test('wall: the trip sheet — going and coming home in one; someone drives, mor
   await expect(move.getByText('Kelly → DJT airport')).toBeVisible()
   await expect(move.getByText('NEXT MOVE · LEAVE BY 12:43')).toBeVisible()
 })
+
+// A work trip by car (Jake: "driving for a work trip is good too since I do that"): the long drive out on his lane,
+// "Away · Orlando", a tiny car on the tiles, and the Next Move in the family's words.
+test('wall: a driving trip — the drive out, away, a car on the tiles', async ({ page }) => {
+  await page.goto('/__wall-fixture?drive=1&at=2026-10-13T06:05:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const move = wall.getByRole('region', { name: 'Next move' })
+  await expect(move.getByText('Jake → Orlando')).toBeVisible()
+  await expect(move.getByText('Drive · 3 hr 15 · In Orlando by 9:45')).toBeVisible()
+  await expect(wall.getByText('Jake in Orlando · day 1 of 3')).toBeVisible()
+  await expect(wall.getByText('Away · Orlando')).toBeVisible()
+  await expect(wall.getByText('Away 6:30 · back Thu ~7:15')).toBeVisible()
+  await expect(wall).toHaveScreenshot('trip-driving.png')
+})

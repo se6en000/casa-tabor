@@ -103,3 +103,25 @@ test('a flub is noticed from the conversation: a correction, or the same request
   assert.equal(flubSignal(convo('no thanks')), null, 'a first "no" is not a correction')
   assert.equal(flubSignal(convo('add milk', 'no, make it two')), null, 'revising a request is normal')
 })
+
+// Travel (design doc "Casa: Travel design"; Jake: "maybe I just use AI for that and AI guide me how to get the info it
+// needs and it handles putting it in the calendar"): Casa asks for what's missing and adds a trip as events whose
+// titles the wall reads as one trip (wall/engine/travel.ts) — the prompt's titles and the wall's reading must agree.
+test('a trip told to Casa: the prompt asks one thing at a time and names the events the wall reads as a trip', async () => {
+  const { parseFlight, parseDrive, buildTrips } = await import('../src/wall/engine/travel.ts')
+  const system = buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach' })
+  const [intro] = system.split('\n\n')
+  assert.match(intro, /is a trip: ask for what's missing, one short question at a time/)
+  const flight = /titled "(Flight <number> <FROM>→<TO>)"/.exec(intro)[1].replace('<number>', '1419').replace('<FROM>', 'DJT').replace('<TO>', 'DFW')
+  assert.deepEqual(parseFlight({ title: flight }), { number: '1419', from: 'DJT', to: 'DFW' })
+  const [out, back] = [...intro.matchAll(/"(Drive (?:to|home from) <City>)"/g)].map((m) => m[1].replace('<City>', 'Orlando'))
+  assert.deepEqual([parseDrive({ title: out }), parseDrive({ title: back })], [{ direction: 'out', city: 'Orlando' }, { direction: 'home', city: 'Orlando' }])
+  const tripTitle = /one all-day "(Trip <City>)"/.exec(intro)[1].replace('<City>', 'Orlando')
+  const jake = [{ family_member_id: 'j', role: 'primary' }]
+  const [trip] = buildTrips([
+    { id: 'a', title: out, start_time: '2026-10-13T10:30:00Z', end_time: '2026-10-13T13:45:00Z', all_day: false, location_name: null, address: null, members: jake },
+    { id: 'b', title: back, start_time: '2026-10-15T20:00:00Z', end_time: '2026-10-15T23:15:00Z', all_day: false, location_name: null, address: null, members: jake },
+    { id: 'c', title: tripTitle, start_time: '2026-10-13T00:00:00Z', end_time: '2026-10-15T23:59:00Z', all_day: true, location_name: 'Hyatt', address: null, members: jake },
+  ], [{ id: 'j', name: 'Jake', role: 'parent', can_drive: true }])
+  assert.deepEqual([trip.city, trip.tripEventId, trip.mode], ['Orlando', 'c', 'drive'])
+})

@@ -29,3 +29,10 @@ export const tripEvents = [
 ]
 
 export const travelPrefs = { 'jake-id': { airportMinutes: 60, way: 'uber' }, kelly: { airportMinutes: 120 } }
+
+// A work trip by car (Jake: "driving for a work trip is good too since I do that"), as Casa adds it from a conversation.
+export const driveEvents = [
+  { id: 'd-out', title: 'Drive to Orlando', event_type: 'event', all_day: false, start_time: local(10, 13, 6, 30), end_time: local(10, 13, 9, 45), location_name: null, address: null, members: jake },
+  { id: 'd-home', title: 'Drive home from Orlando', event_type: 'event', all_day: false, start_time: local(10, 15, 16, 0), end_time: local(10, 15, 19, 15), location_name: null, address: null, members: jake },
+  { id: 'd-trip', title: 'Trip Orlando', event_type: 'event', all_day: true, start_time: local(10, 13, 0, 0), end_time: local(10, 15, 23, 59), location_name: 'Hyatt Regency Orlando', address: null, members: jake },
+]

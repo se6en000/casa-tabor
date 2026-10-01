@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
-import { Eye, EyeOff, House, Plane } from 'lucide-react'
+import { Car, Eye, EyeOff, House, Plane } from 'lucide-react'
 import { formatWallClock } from './clock'
 import { fitLabels } from './labelFit'
 import { pigmentStyleFor } from './lanes'
@@ -216,7 +216,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                     className={`flex h-[32px] min-w-0 shrink items-center gap-[8px] rounded-full border border-solid ${item.trip ? 'border-wall-brass bg-wall-brass/10 pl-[12px] text-wall-brass-ink' : 'border-wall-rule bg-transparent pl-[4px] text-wall-ink'} pr-[14px] ${item.people.length === 0 && !item.trip ? 'pl-[14px]' : ''}${ringFor(item.sourceId)}`}
                   >
                     {/* A trip away (canvas 19): who, where, and how far into it. */}
-                    {item.trip && <Plane size={16} strokeWidth={2.2} aria-hidden="true" className="shrink-0" />}
+                    {item.trip && (item.trip.mode === 'drive' ? <Car size={16} strokeWidth={2.2} aria-hidden="true" className="shrink-0" /> : <Plane size={16} strokeWidth={2.2} aria-hidden="true" className="shrink-0" />)}
                     {!item.trip && item.people.map((p) => (
                       <span key={p.id} aria-hidden="true" className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full text-wall-label font-bold text-wall-on-pigment ${pigmentStyleFor(p.pigmentIndex ?? 0).solid}`}>{p.initial}</span>
                     ))}

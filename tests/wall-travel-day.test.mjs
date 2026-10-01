@@ -106,3 +106,28 @@ test('the trip sheet: Kelly drives him to the airport — the run is on her lane
   const open = buildDayPlan({ date: WEDNESDAY, members, routines, events: tripEvents, travelPrefs, travelSettings: { f1419: { wayOut: 'someone' } } })
   assert.equal(open.gaps.some((g) => g.kind === 'no_driver' && g.sourceId === 'f1419'), true)
 })
+
+test('a driving trip on the lane: the long drive out, away, the drive home and Home ~', async () => {
+  const { buildScore } = await import('../src/wall/score.ts')
+  const local = (d, h, m) => new Date(2026, 9, d, h, m).toISOString()
+  const jake = [{ family_member_id: 'jake-id', role: 'primary' }]
+  const drives = [
+    { id: 'd1', title: 'Drive to Orlando', all_day: false, start_time: local(13, 6, 30), end_time: local(13, 9, 45), location_name: null, address: null, members: jake },
+    { id: 'd2', title: 'Drive home from Orlando', all_day: false, start_time: local(15, 16, 0), end_time: local(15, 19, 15), location_name: null, address: null, members: jake },
+  ]
+  const day = (d) => buildDayPlan({ date: new Date(2026, 9, d), members, routines, events: drives, travelPrefs })
+  assert.deepEqual(parts(day(13)), [['drive', 'Drive to Orlando', '06:30', '09:45'], ['away', 'Away · Orlando', '09:45', '23:59']])
+  assert.deepEqual(parts(day(15)), [['away', 'Away · Orlando', '00:00', '16:00'], ['drive', 'Drive home', '16:00', '19:15']])
+  const lane = buildScore(day(15), members, new Date(2026, 9, 15, 9, 0)).lanes.find((l) => l.member.id === 'jake-id')
+  assert.equal(lane.home.label, 'Home ~7:15')
+  // His Tuesday drop-off (day 14, in Orlando) needs someone.
+  assert.equal(day(14).trips.find((t) => t.kind === 'dropoff' && t.travelerIds.includes('owen')).driverId, null)
+})
+
+test('a trip’s own ride is never "busy" against the time away it starts', async () => {
+  const { decisionsFor } = await import('../src/wall/decisions.ts')
+  const { driveEvents } = await import('./fixtures/wall-trip-2026-10-07.mjs')
+  const tue = buildDayPlan({ date: new Date(2026, 9, 13), members, routines, events: driveEvents })
+  const found = decisionsFor(tue, members, new Date(2026, 9, 13, 6, 5))
+  assert.deepEqual(found.map((d) => d.kind), ['no_driver', 'no_driver'])
+})

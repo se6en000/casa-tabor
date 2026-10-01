@@ -77,7 +77,10 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     .join(' · ')
   // A pickup that goes straight on: "Pick up Liv, then on to CityPlace", and any lateness there.
   // A trip's ride (canvas 19): what it's for is the flight, not "Jake to DJT".
-  const summary = trip.travel?.direction === 'out'
+  const byCar = trip.travel?.mode === 'drive'
+  const summary = byCar
+    ? trip.travel!.direction === 'out' ? `In ${trip.travel!.city} by ${clockTime(trip.arriveAt)}` : `Home about ${clockTime(trip.arriveAt)}`
+    : trip.travel?.direction === 'out'
     ? `Flight ${trip.travel.flight.number ? `${trip.travel.flight.number} ` : ''}to ${trip.travel.city} at ${clockTime(trip.travel.flight.departAt)}`
     : trip.travel?.direction === 'home'
       ? `Lands ${clockTime(trip.travel.flight.landAt)}`
@@ -86,7 +89,9 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
   // A ride to the airport (canvas 19a): "Uber · 15 min · at the airport by 1:13 · Flight 1419 to Dallas at 2:13".
   const flight = trip.travel?.flight
   const way = trip.travel ? ({ uber: 'Uber', drive_park: 'Drive & park', someone: 'Ride' } as const)[trip.travel.way] : null
-  const detail = trip.travel?.direction === 'out' && flight
+  const detail = byCar
+    ? `Drive · ${trip.driveMinutes != null ? `${trip.driveMinutes >= 60 ? `${Math.floor(trip.driveMinutes / 60)} hr${trip.driveMinutes % 60 ? ` ${trip.driveMinutes % 60}` : ''}` : `${trip.driveMinutes} min`} · ` : ''}${summary}`
+    : trip.travel?.direction === 'out' && flight
     ? [way, trip.driveMinutes != null ? `${trip.driveMinutes} min` : null, `at the airport by ${clockTime(trip.arriveAt)}`, `Flight ${flight.number ?? ''} to ${trip.travel.city} at ${clockTime(flight.departAt)}`.replace('Flight  ', 'Flight ')].filter(Boolean).join(' · ')
     : trip.travel?.direction === 'home' && flight
       ? `Lands ${flight.to} ${clockTime(flight.landAt)} · ${way} home · about ${clockTime(trip.arriveAt)}`

@@ -28,6 +28,8 @@ export interface TravelSettings {
 
 export interface FlightLeg {
   eventId: string
+  /** A flight, or a drive there or back (a work trip by car: "Drive to Orlando"). */
+  mode: 'fly' | 'drive'
   number: string | null
   from: string
   to: string
@@ -37,6 +39,8 @@ export interface FlightLeg {
 
 export interface TravelTrip {
   id: string
+  /** Flying, or driving there (no airport, no plane). */
+  mode: 'fly' | 'drive'
   /** What its settings are kept under: the flight out (or the flight home when that's all there is). */
   key: string
   memberIds: string[]
@@ -118,6 +122,22 @@ export function parseFlight(event: Pick<WallEvent, 'title'>): { number: string |
   return { number, from: route[1], to: route[2] }
 }
 
+/** Not an airport: the drive legs' end at home. */
+const HOME = 'HOME'
+
+/** "Drive to Orlando", "Jake | Drive home from Orlando", or a leg typed by Casa or the importer. */
+export function parseDrive(event: Pick<WallEvent, 'title' | 'leg_type' | 'location_name'>): { direction: 'out' | 'home'; city: string | null } | null {
+  const title = (event.title ?? '').replace(/^.*\|\s*/, '').trim()
+  const place = (event.location_name ?? '').split(',')[0].trim() || null
+  if (event.leg_type === 'drive_outbound') return { direction: 'out', city: place ?? /drive\s+to\s+(.+)$/i.exec(title)?.[1]?.trim() ?? null }
+  if (event.leg_type === 'drive_return') return { direction: 'home', city: /from\s+(.+)$/i.exec(title)?.[1]?.trim() ?? null }
+  const out = /^drive\s+to\s+(.+)$/i.exec(title)
+  if (out && !/^home\b/i.test(out[1])) return { direction: 'out', city: out[1].trim() }
+  const home = /^drive\s+(?:home|back)(?:\s+from\s+(.+))?$/i.exec(title)
+  if (home) return { direction: 'home', city: home[1]?.trim() ?? null }
+  return null
+}
+
 function memberIdsOf(event: WallEvent): string[] {
   return [...new Set((event.members ?? [])
     .filter((m) => m.role !== 'driver')
@@ -155,12 +175,20 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
   const legs = events
     .filter((e) => e.status !== 'cancelled' && !e.all_day)
     .flatMap((e) => {
+      const at = { departAt: new Date(e.start_time), landAt: new Date(e.end_time) }
       const f = parseFlight(e)
-      if (f) flightEvents.set(e.id, e)
-      return f ? [{ event: e, memberIds: memberIdsOf(e), leg: { eventId: e.id, number: f.number, from: f.from, to: f.to, departAt: new Date(e.start_time), landAt: new Date(e.end_time) } as FlightLeg }] : []
+      if (f) {
+        flightEvents.set(e.id, e)
+        return [{ event: e, memberIds: memberIdsOf(e), leg: { eventId: e.id, mode: 'fly', number: f.number, from: f.from, to: f.to, ...at } as FlightLeg }]
+      }
+      const d = parseDrive(e)
+      if (!d) return []
+      flightEvents.set(e.id, e)
+      const city = d.city ?? ''
+      return [{ event: e, memberIds: memberIdsOf(e), leg: { eventId: e.id, mode: 'drive', number: null, from: d.direction === 'out' ? HOME : city, to: d.direction === 'out' ? city : HOME, ...at } as FlightLeg }]
     })
     .sort((a, b) => a.leg.departAt.getTime() - b.leg.departAt.getTime())
-  const isHome = (code: string) => code in HOME_AIRPORTS
+  const isHome = (code: string) => code === HOME || code in HOME_AIRPORTS
   const used = new Set<string>()
   const trips: TravelTrip[] = []
   const tripEvents = events.filter((e) => e.all_day && /\btrip\b/i.test(e.title ?? ''))
@@ -182,9 +210,34 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
   }
   return trips
 
+  /** A trip by car: gone from the drive out's start to the drive home's end. */
+  /** The all-day "Trip …" event over the same days with the same people (it names the trip and the hotel). */
+  function tripEventFor(memberIds: string[], first: Date, last: Date) {
+    return tripEvents.find((e) =>
+      memberIdsOf(e).some((id) => memberIds.includes(id))
+      && new Date(e.start_time) <= addMinutes(last, 24 * 60) && new Date(e.end_time) >= addMinutes(first, -24 * 60))
+  }
+
+  function driving(outbound: FlightLeg | null, inbound: FlightLeg | null, memberIds: string[], key: string): TravelTrip {
+    const tripEvent = tripEventFor(memberIds, (outbound ?? inbound)!.departAt, (inbound ?? outbound)!.landAt)
+    const city = (outbound?.to || inbound?.from || '').trim() || (tripEvent && cityFromTitle(tripEvent.title)) || 'away'
+    return {
+      id: `travel:${outbound?.eventId ?? 'none'}:${inbound?.eventId ?? 'none'}`,
+      key, mode: 'drive', memberIds, city,
+      tripEventId: tripEvent?.id ?? null, legEventIds: [], hotel: tripEvent?.location_name?.trim() || null,
+      outbound, inbound,
+      way: 'drive_park', wayOut: 'drive_park', wayHome: 'drive_park', driverOutId: null, driverHomeId: null, carWarning: null,
+      airportMinutes: 0, deplaneMinutes: 0, atAirportAt: null,
+      leaveHomeAt: outbound?.departAt ?? null, driveOutMinutes: 0,
+      offPlaneAt: null, homeAt: inbound?.landAt ?? null, driveHomeMinutes: 0,
+    }
+  }
+
   function assemble(outbound: FlightLeg | null, inbound: FlightLeg | null, memberIds: string[]): TravelTrip {
     const key = outbound?.eventId ?? inbound!.eventId
     const set = settings[key] ?? {}
+    const mode = (outbound ?? inbound)!.mode
+    if (mode === 'drive') return driving(outbound, inbound, memberIds, key)
     const people = memberIds.map((id) => prefsFor(members.find((m) => m.id === id), prefs))
     const airportMinutes = set.airportMinutes ?? Math.max(...people.map((p) => p.airportMinutes), 0)
     const deplaneMinutes = set.deplaneMinutes ?? Math.max(...people.map((p) => p.deplaneMinutes), 0)
@@ -196,9 +249,7 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
     const offPlaneAt = inbound ? addMinutes(inbound.landAt, deplaneMinutes) : null
     const first = outbound?.departAt ?? inbound!.departAt
     const last = inbound?.landAt ?? outbound!.landAt
-    const tripEvent = tripEvents.find((e) =>
-      memberIdsOf(e).some((id) => memberIds.includes(id))
-      && new Date(e.start_time) <= addMinutes(last, 24 * 60) && new Date(e.end_time) >= addMinutes(first, -24 * 60))
+    const tripEvent = tripEventFor(memberIds, first, last)
     const awayCode = outbound?.to ?? inbound!.from
     const tripIds = new Set([outbound, inbound].map((l) => (l ? flightEvents.get(l.eventId)?.trip_id : null)).filter(Boolean))
     const otherLegs = events.filter((e) => e.trip_id && tripIds.has(e.trip_id) && !flightEvents.has(e.id))
@@ -207,6 +258,7 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
     return {
       id: `travel:${outbound?.eventId ?? 'none'}:${inbound?.eventId ?? 'none'}`,
       key,
+      mode: 'fly',
       memberIds,
       city: (tripEvent && cityFromTitle(tripEvent.title)) || CITY_BY_AIRPORT[awayCode] || awayCode,
       tripEventId: tripEvent?.id ?? null,

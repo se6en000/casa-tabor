@@ -6,3 +6,4 @@ export declare const FRIDAY: Date
 export declare function on(day: number, hour: number, minute: number): Date
 export declare const tripEvents: Array<Record<string, unknown>>
 export declare const travelPrefs: Record<string, { airportMinutes?: number; way?: 'uber' | 'someone' | 'drive_park' }>
+export declare const driveEvents: Array<Record<string, unknown>>

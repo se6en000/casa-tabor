@@ -112,3 +112,20 @@ test('the importer’s other legs of the trip (its hotel) belong to the trip, an
   assert.deepEqual(trip.legEventIds, ['h1'])
   assert.equal(trip.hotel, 'Courtyard Allen')
 })
+
+// Jake, 2026-10-01: "driving for a work trip is good too since I do that." The same trip without the airport: he leaves
+// when the drive starts and is home when the drive home ends.
+test('a driving trip: “Drive to Orlando” and “Drive home from Orlando” are one trip; no airport, no plane', () => {
+  const there = ev('d1', 'Drive to Orlando', '2026-10-13T10:30:00Z', '2026-10-13T13:45:00Z', ['jake'])
+  const home = ev('d2', 'Jake | Drive home from Orlando', '2026-10-15T20:00:00Z', '2026-10-15T23:15:00Z', ['jake'])
+  const [trip] = buildTrips([home, there], members, prefs)
+  assert.equal(trip.mode, 'drive')
+  assert.equal(trip.city, 'Orlando')
+  assert.equal(trip.leaveHomeAt.toISOString(), '2026-10-13T10:30:00.000Z')
+  assert.equal(trip.homeAt.toISOString(), '2026-10-15T23:15:00.000Z')
+  assert.equal(trip.atAirportAt, null)
+  assert.deepEqual([tripDay(trip, new Date(2026, 9, 14)).phase, tripDay(trip, new Date(2026, 9, 14)).dayCount], ['away', 3])
+  // The importer's (or Casa's) leg types say it too, whatever the title.
+  const [typed] = buildTrips([{ ...there, title: 'Orlando', leg_type: 'drive_outbound', location_name: 'Orlando' }, { ...home, title: 'Back', leg_type: 'drive_return' }], members, prefs)
+  assert.deepEqual([typed.mode, typed.city], ['drive', 'Orlando'])
+})

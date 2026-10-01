@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Minus, Plane, Plus, X } from 'lucide-react'
+import { Car, Minus, Plane, Plus, X } from 'lucide-react'
 import { formatWallClock } from './clock'
 import type { WallMember } from './engine/types'
 import type { TravelSettings, TravelTrip, TravelWay } from './engine/travel'
@@ -94,7 +94,7 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
       >
         <div className="flex items-start justify-between">
           <div className="flex flex-col gap-[8px]">
-            <span className="flex items-center gap-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink"><Plane size={18} aria-hidden="true" />{eyebrow}</span>
+            <span className="flex items-center gap-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{trip.mode === 'fly' ? <Plane size={18} aria-hidden="true" /> : <Car size={18} aria-hidden="true" />}{eyebrow}</span>
             <span className="font-display text-wall-move font-semibold">{who} in {trip.city}</span>
             {trip.hotel && <span className="text-wall-detail text-wall-ink-2">Staying at {trip.hotel}</span>}
           </div>
@@ -103,6 +103,19 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
           </button>
         </div>
 
+        {trip.mode === 'drive' ? (
+          // A trip by car: when the drive out starts and the drive home ends is all there is to set.
+          <div className="mt-[24px] grid min-h-0 flex-1 grid-cols-2 content-start gap-x-[48px]">
+            {([['GOING', trip.outbound, trip.outbound ? `Leave home ${clock(trip.outbound.departAt)}` : null, trip.outbound ? `In ${trip.city} by ${clock(trip.outbound.landAt)}` : 'No drive out in the calendar.'],
+              ['COMING HOME', trip.inbound, trip.inbound ? `Leave ${trip.city} ${clock(trip.inbound.departAt)}` : null, trip.inbound ? `Home about ${clock(trip.inbound.landAt)}` : 'No drive home in the calendar yet.']] as const).map(([label, leg, line, result]) => (
+              <div key={label} className="flex min-w-0 flex-col gap-[12px]">
+                <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{label}{leg ? ` · ${weekdayDate(leg.departAt)}` : ''}</span>
+                {line && <span className="text-wall-body">{line}</span>}
+                <div className="border-0 border-t border-solid border-wall-rule pt-[18px] font-display text-wall-date font-semibold">{result}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="mt-[24px] grid min-h-0 flex-1 grid-cols-2 content-start gap-x-[48px]">
           <div className="flex min-w-0 flex-col">
             <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">GOING{trip.outbound ? ` · ${weekdayDate(trip.outbound.departAt)}` : ''}</span>
@@ -138,6 +151,7 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
             ) : <span className="mt-[8px] text-wall-body text-wall-ink-2">No flight home in the calendar yet.</span>}
           </div>
         </div>
+        )}
 
         <div className="flex items-center justify-between border-0 border-t border-solid border-wall-rule pt-[18px]">
           <span className="text-wall-detail text-wall-ink-2">

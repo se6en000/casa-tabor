@@ -1,4 +1,4 @@
-import { Plane } from 'lucide-react'
+import { Car, Plane } from 'lucide-react'
 import type { WallMember } from './engine/types'
 import { pigmentStyleFor } from './lanes'
 import type { WeekDay } from './week'
@@ -52,7 +52,9 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                 <span className="flex gap-[4px]">
                   {day.memberIds.map((id) => (day.awayIds.includes(id)
                     // Away on a trip: their dot becomes a tiny plane in their colour (Jake, canvas 19a).
-                    ? <Plane key={id} data-away={id} size={17} strokeWidth={2.6} className={pigmentStyleFor(pigmentOf(id) ?? 0).text} />
+                    ? (day.drivingIds.includes(id)
+                      ? <Car key={id} data-away={id} size={17} strokeWidth={2.6} className={pigmentStyleFor(pigmentOf(id) ?? 0).text} />
+                      : <Plane key={id} data-away={id} size={17} strokeWidth={2.6} className={pigmentStyleFor(pigmentOf(id) ?? 0).text} />)
                     : <span key={id} className={`h-[16px] w-[16px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />))}
                 </span>
                 {day.decisionCount > 0 && (

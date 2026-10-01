@@ -87,6 +87,8 @@ export function decisionsFor(plan: DayPlan, members: WallMember[], now: Date, di
       found.push({ key, kind: 'no_driver', at: trip.arriveAt, text, tripIds: [trip.id], sourceIds: [trip.sourceId], answers: answers.slice(0, 2) })
       continue
     }
+    // A trip's own ride (canvas 19) is the traveller going away, never a clash with their time away.
+    if (trip.travel) continue
     // A driver with something else on at the same time (one car to one place isn't a clash).
     const key = `driver_busy:${trip.id}:${trip.driverId}`
     if (dismissed.has(key)) continue

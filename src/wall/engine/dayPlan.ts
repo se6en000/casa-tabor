@@ -415,7 +415,33 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const returning = phase === 'returning' || phase === 'day'
     const out = trip.outbound
     const back = trip.inbound
-    if (leaving && out && trip.leaveHomeAt && trip.atAirportAt) {
+    // A trip by car (Jake: "driving for a work trip is good too"): the long drive out and back, no airport.
+    if (trip.mode === 'drive') {
+      if (leaving && out) {
+        const ride: Trip = {
+          id: `${trip.id}:out`, kind: 'outing', sourceId: out.eventId, source: 'event', title: `${who} to ${trip.city}`,
+          travelerIds: travellers, driverId: selfDriver, driverSource: selfDriver ? 'self' : null,
+          destination: { name: trip.city, address: null },
+          leaveAt: out.departAt, arriveAt: out.landAt, homeAt: null, driveMinutes: Math.round((out.landAt.getTime() - out.departAt.getTime()) / MINUTE),
+          departedAt: departedAt(`${trip.id}:out`),
+          travel: { direction: 'out', way: 'drive_park', city: trip.city, mode: 'drive', flight: flightOf(out) },
+        }
+        trips.push(ride)
+        add('drive', 'drive', out.departAt, out.landAt, `Drive to ${trip.city}`, out.eventId, { tripId: ride.id, driverId: selfDriver })
+      }
+      add('away', 'at_place', leaving && out ? out.landAt : dayStart, returning && back ? back.departAt : dayEnd, `Away · ${trip.city}`, trip.tripEventId ?? trip.id)
+      if (returning && back) {
+        const ride: Trip = {
+          id: `${trip.id}:home`, kind: 'outing', sourceId: back.eventId, source: 'event', title: `${who} home from ${trip.city}`,
+          travelerIds: travellers, driverId: selfDriver, driverSource: selfDriver ? 'self' : null,
+          destination: { name: 'Home', address: null },
+          leaveAt: back.departAt, arriveAt: back.landAt, homeAt: back.landAt, driveMinutes: Math.round((back.landAt.getTime() - back.departAt.getTime()) / MINUTE),
+          travel: { direction: 'home', way: 'drive_park', city: trip.city, mode: 'drive', flight: flightOf(back) },
+        }
+        trips.push(ride)
+        add('drive', 'drive', back.departAt, back.landAt, 'Drive home', back.eventId, { tripId: ride.id, driverId: selfDriver })
+      }
+    } else if (leaving && out && trip.leaveHomeAt && trip.atAirportAt) {
       // Their own way (Uber, their car) or someone driving them — who comes home again afterwards.
       const driver = ownCar(trip.wayOut) ? selfDriver : trip.driverOutId
       const driverBack = !ownCar(trip.wayOut) && driver ? new Date(trip.atAirportAt.getTime() + trip.driveOutMinutes * MINUTE) : null
@@ -425,7 +451,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
         destination: { name: `${out.from} airport`, address: null },
         leaveAt: trip.leaveHomeAt, arriveAt: trip.atAirportAt, homeAt: driverBack, driveMinutes: trip.driveOutMinutes,
         departedAt: departedAt(`${trip.id}:out`),
-        travel: { direction: 'out', way: trip.wayOut, city: trip.city, flight: flightOf(out) },
+        travel: { direction: 'out', way: trip.wayOut, city: trip.city, mode: 'fly', flight: flightOf(out) },
       }
       trips.push(ride)
       const label = ownCar(trip.wayOut) ? `${WAY_WORD[trip.wayOut]} to ${out.from}` : `Drive ${who} to ${out.from}`
@@ -435,10 +461,10 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       add('wait', 'at_place', trip.atAirportAt, out.departAt, `At ${out.from} · ${durationWords(trip.airportMinutes)}`, out.eventId)
       add('flight', 'activity', out.departAt, out.landAt, `${out.number ?? 'Flight'} → ${out.to}`, out.eventId)
     }
-    const awayFrom = leaving && out ? out.landAt : dayStart
-    const awayTo = returning && back ? back.departAt : dayEnd
-    add('away', 'at_place', awayFrom, awayTo, `Away · ${trip.city}`, trip.tripEventId ?? trip.id)
-    if (returning && back && trip.offPlaneAt && trip.homeAt) {
+    if (trip.mode === 'fly') {
+      add('away', 'at_place', leaving && out ? out.landAt : dayStart, returning && back ? back.departAt : dayEnd, `Away · ${trip.city}`, trip.tripEventId ?? trip.id)
+    }
+    if (trip.mode === 'fly' && returning && back && trip.offPlaneAt && trip.homeAt) {
       add('flight', 'activity', back.departAt, back.landAt, `${back.number ?? 'Flight'} → ${back.to}`, back.eventId)
       add('wait', 'at_place', back.landAt, trip.offPlaneAt, 'Off the plane', back.eventId)
       const driver = ownCar(trip.wayHome) ? selfDriver : trip.driverHomeId
@@ -452,7 +478,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
         leaveAt: ownCar(trip.wayHome) ? trip.offPlaneAt : pickupLeaves,
         arriveAt: ownCar(trip.wayHome) ? trip.homeAt : trip.offPlaneAt,
         homeAt: trip.homeAt, driveMinutes: trip.driveHomeMinutes,
-        travel: { direction: 'home', way: trip.wayHome, city: trip.city, flight: flightOf(back) },
+        travel: { direction: 'home', way: trip.wayHome, city: trip.city, mode: 'fly', flight: flightOf(back) },
       }
       trips.push(ride)
       const label = ownCar(trip.wayHome) ? `${WAY_WORD[trip.wayHome]} home` : `Pick up ${who} at ${back.to}`
@@ -460,9 +486,9 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       if (driver && !travellers.includes(driver)) addFor([driver], 'drive', 'drive', pickupLeaves, trip.homeAt, label, back.eventId, { tripId: ride.id, driverId: driver })
       if (!driver) gaps.push({ kind: 'no_driver', sourceId: back.eventId, title: label, at: pickupLeaves })
     }
-    allDay.push({ sourceId: trip.tripEventId ?? trip.id, title: `${who} in ${trip.city}`, memberIds: travellers, trip: { city: trip.city, dayIndex, dayCount } })
+    allDay.push({ sourceId: trip.tripEventId ?? trip.id, title: `${who} in ${trip.city}`, memberIds: travellers, trip: { city: trip.city, dayIndex, dayCount, mode: trip.mode } })
     for (const memberId of travellers) {
-      travel.push({ memberId, tripId: trip.id, city: trip.city, phase, dayIndex, dayCount, leaveHomeAt: trip.leaveHomeAt, homeAt: trip.homeAt, trip })
+      travel.push({ memberId, tripId: trip.id, city: trip.city, phase, mode: trip.mode, dayIndex, dayCount, leaveHomeAt: trip.leaveHomeAt, homeAt: trip.homeAt, trip })
     }
   }
 

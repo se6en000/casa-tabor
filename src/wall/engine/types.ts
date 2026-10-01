@@ -93,6 +93,8 @@ export interface Trip {
     direction: 'out' | 'home'
     way: 'uber' | 'someone' | 'drive_park'
     city: string
+    /** A flight, or a trip by car (the "flight" is then the drive). */
+    mode: 'fly' | 'drive'
     flight: { number: string | null; from: string; to: string; departAt: Date; landAt: Date }
   }
   /** Minutes after the start the travelers get there, when a chain makes them late (estimated). */
@@ -136,6 +138,7 @@ export interface DayTravel {
   tripId: string
   city: string
   phase: 'leaving' | 'away' | 'returning' | 'day'
+  mode: 'fly' | 'drive'
   /** "day 1 of 2" */
   dayIndex: number
   dayCount: number
@@ -164,7 +167,7 @@ export interface DayPlan {
   /** Timed items with nobody on them — the "No one yet" row (board 08a), so nothing goes missing. */
   nobody: Array<{ sourceId: string; title: string; start: Date; end: Date }>
   /** All-day items (birthdays, spirit days) shown as notes, not lane blocks; a trip away is one too, with its day count. */
-  allDay: Array<{ sourceId: string; title: string; memberIds: string[]; trip?: { city: string; dayIndex: number; dayCount: number } }>
+  allDay: Array<{ sourceId: string; title: string; memberIds: string[]; trip?: { city: string; dayIndex: number; dayCount: number; mode?: 'fly' | 'drive' } }>
   /** Who is away on a trip this day (travel.ts). */
   travel: DayTravel[]
   gaps: DayGap[]
