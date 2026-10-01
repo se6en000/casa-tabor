@@ -76,9 +76,21 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     .filter(Boolean)
     .join(' · ')
   // A pickup that goes straight on: "Pick up Liv, then on to CityPlace", and any lateness there.
-  const summary = trip.onward ? `${trip.title}, then on to ${trip.onward.place}` : trip.title
+  // A trip's ride (canvas 19): what it's for is the flight, not "Jake to DJT".
+  const summary = trip.travel?.direction === 'out'
+    ? `Flight ${trip.travel.flight.number ? `${trip.travel.flight.number} ` : ''}to ${trip.travel.city} at ${clockTime(trip.travel.flight.departAt)}`
+    : trip.travel?.direction === 'home'
+      ? `Lands ${clockTime(trip.travel.flight.landAt)}`
+      : trip.onward ? `${trip.title}, then on to ${trip.onward.place}` : trip.title
   const late = trip.onward && trip.onward.lateBy > 0 ? `about ${trip.onward.lateBy} min late at ${trip.onward.place}` : null
-  const detail = [summary, timing, late].filter(Boolean).join(' · ')
+  // A ride to the airport (canvas 19a): "Uber · 15 min · at the airport by 1:13 · Flight 1419 to Dallas at 2:13".
+  const flight = trip.travel?.flight
+  const way = trip.travel ? ({ uber: 'Uber', drive_park: 'Drive & park', someone: 'Ride' } as const)[trip.travel.way] : null
+  const detail = trip.travel?.direction === 'out' && flight
+    ? [way, trip.driveMinutes != null ? `${trip.driveMinutes} min` : null, `at the airport by ${clockTime(trip.arriveAt)}`, `Flight ${flight.number ?? ''} to ${trip.travel.city} at ${clockTime(flight.departAt)}`.replace('Flight  ', 'Flight ')].filter(Boolean).join(' · ')
+    : trip.travel?.direction === 'home' && flight
+      ? `Lands ${flight.to} ${clockTime(flight.landAt)} · ${way} home · about ${clockTime(trip.arriveAt)}`
+      : [summary, timing, late].filter(Boolean).join(' · ')
   const sameDriver = move.trips.filter((t) => t.driverId === trip.driverId)
   const base = {
     tripIds: sameDriver.map((t) => t.id),

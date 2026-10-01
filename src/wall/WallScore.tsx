@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, House, Plane } from 'lucide-react'
 import { formatWallClock } from './clock'
 import { fitLabels } from './labelFit'
 import { pigmentStyleFor } from './lanes'
-import type { Score, ScoreBlock } from './score'
+import { LABEL_INSIDE, type Score, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
 
 // Stage geometry (px on the fixed 1920x1080 stage).
@@ -71,6 +71,13 @@ function blockClass(block: ScoreBlock): string {
     case 'activity':
       // No place recorded: an outline, so it never reads as a confirmed outing.
       return block.placeStatus === 'unknown' ? `border-2 border-dashed ${pigment.outline}` : pigment.strong
+    // A trip away (canvas 19): the flight solid, the airport a quiet box, the time away a dashed line.
+    case 'flight':
+      return `${pigment.strong} text-wall-on-pigment`
+    case 'wait':
+      return `${pigment.tint} border border-solid ${pigment.outline}`
+    case 'away':
+      return 'overflow-visible bg-transparent'
   }
 }
 
@@ -206,12 +213,14 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                       event.stopPropagation()
                       interaction?.onSelect(item.sourceId)
                     }}
-                    className={`flex h-[32px] min-w-0 shrink items-center gap-[8px] rounded-full border border-solid border-wall-rule bg-transparent pl-[4px] pr-[14px] text-wall-ink ${item.people.length === 0 ? 'pl-[14px]' : ''}${ringFor(item.sourceId)}`}
+                    className={`flex h-[32px] min-w-0 shrink items-center gap-[8px] rounded-full border border-solid ${item.trip ? 'border-wall-brass bg-wall-brass/10 pl-[12px] text-wall-brass-ink' : 'border-wall-rule bg-transparent pl-[4px] text-wall-ink'} pr-[14px] ${item.people.length === 0 && !item.trip ? 'pl-[14px]' : ''}${ringFor(item.sourceId)}`}
                   >
-                    {item.people.map((p) => (
+                    {/* A trip away (canvas 19): who, where, and how far into it. */}
+                    {item.trip && <Plane size={16} strokeWidth={2.2} aria-hidden="true" className="shrink-0" />}
+                    {!item.trip && item.people.map((p) => (
                       <span key={p.id} aria-hidden="true" className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full text-wall-label font-bold text-wall-on-pigment ${pigmentStyleFor(p.pigmentIndex ?? 0).solid}`}>{p.initial}</span>
                     ))}
-                    <span className="truncate whitespace-nowrap text-wall-detail font-semibold">{item.title}</span>
+                    <span className="truncate whitespace-nowrap text-wall-detail font-semibold">{item.trip && item.trip.dayCount > 1 ? `${item.title} · day ${item.trip.dayIndex} of ${item.trip.dayCount}` : item.title}</span>
                   </button>
                 )
               })}
@@ -256,9 +265,19 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                   {score.everyoneHomeBy.label}
                 </div>
               )}
+              {lane.home && (
+                // Home from a trip (canvas 19b): the time the family asks about.
+                <div data-home-mark className="pointer-events-none absolute inset-y-[6px] z-10" style={{ left: lane.home.x }}>
+                  <span aria-hidden="true" className="absolute inset-y-0 left-[-1px] w-[2px] bg-wall-brass" />
+                  <span className="absolute left-[8px] top-1/2 flex -translate-y-1/2 items-center gap-[6px] whitespace-nowrap bg-wall-ground pr-[4px] text-wall-detail font-bold text-wall-brass-ink">
+                    <House size={16} strokeWidth={2.2} aria-hidden="true" />
+                    {lane.home.label}
+                  </span>
+                </div>
+              )}
               {lane.blocks.map((block) => (
                 <div key={block.key}>
-                  {block.label && block.kind !== 'place' && (
+                  {block.label && !LABEL_INSIDE.has(block.kind) && (
                     <div
                       data-block-label={laneKey(lane.member.id, block)}
                       className={`absolute ${at.label} truncate whitespace-nowrap text-wall-detail font-semibold`}
@@ -274,6 +293,22 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                   >
                     {block.kind === 'place' && (
                       <span className="truncate whitespace-nowrap pl-[26px] pr-[10px] text-wall-label font-medium">{block.label}</span>
+                    )}
+                    {block.kind === 'flight' && (
+                      <span className="flex min-w-0 items-center gap-[8px] whitespace-nowrap px-[12px] text-wall-label font-semibold">
+                        <Plane size={18} strokeWidth={2.2} aria-hidden="true" className="shrink-0" />
+                        <span className="truncate">{block.label}</span>
+                      </span>
+                    )}
+                    {/* Too short to read (30 min off the plane): the "Home ~" mark beside it says it. */}
+                    {block.kind === 'wait' && block.width >= 90 && (
+                      <span className="truncate whitespace-nowrap px-[10px] text-wall-label text-wall-ink-2">{block.label}</span>
+                    )}
+                    {block.kind === 'away' && (
+                      <>
+                        <span aria-hidden="true" className={`absolute inset-x-0 top-1/2 border-0 border-t-[3px] border-dashed ${pigmentStyleFor(block.pigmentIndex).outline}`} />
+                        <span className="relative truncate whitespace-nowrap bg-wall-ground px-[10px] font-display text-wall-detail font-semibold italic text-wall-ink-2">{block.label}</span>
+                      </>
                     )}
                   </div>
                 </div>

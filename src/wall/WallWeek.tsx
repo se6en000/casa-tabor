@@ -1,3 +1,4 @@
+import { Plane } from 'lucide-react'
 import type { WallMember } from './engine/types'
 import { pigmentStyleFor } from './lanes'
 import type { WeekDay } from './week'
@@ -49,9 +50,10 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                   it): 16 px dots, 4 px apart, a 24 px "?". */}
               <div aria-hidden="true" className="flex h-[28px] items-center justify-between gap-[4px]">
                 <span className="flex gap-[4px]">
-                  {day.memberIds.map((id) => (
-                    <span key={id} className={`h-[16px] w-[16px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />
-                  ))}
+                  {day.memberIds.map((id) => (day.awayIds.includes(id)
+                    // Away on a trip: their dot becomes a tiny plane in their colour (Jake, canvas 19a).
+                    ? <Plane key={id} data-away={id} size={17} strokeWidth={2.6} className={pigmentStyleFor(pigmentOf(id) ?? 0).text} />
+                    : <span key={id} className={`h-[16px] w-[16px] rounded-full ${pigmentStyleFor(pigmentOf(id) ?? 0).solid}`} />))}
                 </span>
                 {day.decisionCount > 0 && (
                   <span className="flex h-[24px] min-w-[24px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-brass px-[4px] text-wall-label font-bold text-wall-brass-ink">

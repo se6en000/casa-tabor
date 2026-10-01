@@ -15,6 +15,8 @@ export interface WallMember {
   can_drive: boolean
   show_on_home_sidebar?: boolean | null
   sort_order?: number | null
+  /** How they travel (canvas 19): time at the airport, off the plane, and the usual way there. */
+  travel_prefs?: { airport_minutes?: number | null; deplane_minutes?: number | null; way?: 'uber' | 'someone' | 'drive_park' | null } | null
 }
 
 /** A leg from a saved transportation plan (event_plan_overrides.transportation_plan). */
@@ -80,6 +82,15 @@ export interface Trip {
   onward?: { place: string; lateBy: number }
   /** A trip that starts where a pickup left off (not from home): the pickup's id. */
   chainedFrom?: string
+  /** The usual driver is away on a trip (travel.ts), so this run needs someone: who, and where they are. */
+  usualDriverAway?: { memberId: string; city: string }
+  /** The ride to or from the airport on a trip away (travel.ts). */
+  travel?: {
+    direction: 'out' | 'home'
+    way: 'uber' | 'someone' | 'drive_park'
+    city: string
+    flight: { number: string | null; from: string; to: string; departAt: Date; landAt: Date }
+  }
   /** Minutes after the start the travelers get there, when a chain makes them late (estimated). */
   arrivesLateBy?: number
 }
@@ -101,6 +112,8 @@ export interface LaneSegment {
   fromRoutine?: boolean
   /** Work hours: their own drives at the edges come off it (Kelly drops Liv at Bak on the way in). */
   work?: boolean
+  /** Part of a trip away (canvas 19): the ride, the wait at the airport, the flight, or the time away. */
+  travel?: 'drive' | 'wait' | 'flight' | 'away'
 }
 
 /** Something the family should fix or decide; feeds "Needs a decision". */
@@ -109,6 +122,21 @@ export interface DayGap {
   sourceId: string
   title: string
   at: Date
+  /** The usual driver is away on a trip (travel.ts): who, and where. */
+  away?: { memberId: string; city: string }
+}
+
+/** Someone's trip away, as it stands on this day (travel.ts). */
+export interface DayTravel {
+  memberId: string
+  tripId: string
+  city: string
+  phase: 'leaving' | 'away' | 'returning' | 'day'
+  /** "day 1 of 2" */
+  dayIndex: number
+  dayCount: number
+  leaveHomeAt: Date | null
+  homeAt: Date | null
 }
 
 /** Separate trips that go to the same place at about the same time (one car could do both). */
@@ -129,8 +157,10 @@ export interface DayPlan {
   unplaced: Array<{ sourceId: string; title: string; at: Date; memberIds: string[] }>
   /** Timed items with nobody on them — the "No one yet" row (board 08a), so nothing goes missing. */
   nobody: Array<{ sourceId: string; title: string; start: Date; end: Date }>
-  /** All-day items (birthdays, spirit days) shown as notes, not lane blocks. */
-  allDay: Array<{ sourceId: string; title: string; memberIds: string[] }>
+  /** All-day items (birthdays, spirit days) shown as notes, not lane blocks; a trip away is one too, with its day count. */
+  allDay: Array<{ sourceId: string; title: string; memberIds: string[]; trip?: { city: string; dayIndex: number; dayCount: number } }>
+  /** Who is away on a trip this day (travel.ts). */
+  travel: DayTravel[]
   gaps: DayGap[]
   sharedDestinations: SharedDestination[]
 }

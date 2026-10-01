@@ -15,6 +15,8 @@ export interface WeekDay {
   isToday: boolean
   /** Who has something that day, in lane order. */
   memberIds: string[]
+  /** Who is away on a trip that day: their dot is a tiny plane in their colour (Jake's note on canvas 19a). */
+  awayIds: string[]
   /** "First out 7:50", or "Nothing planned". */
   firstOut: string
   decisionCount: number
@@ -56,7 +58,8 @@ export function weekDays(week: DayPlan[], members: WallMember[], decisions: Arra
       weekday: isToday ? 'Today' : isTomorrow ? 'Tomorrow' : plan.date.toLocaleDateString('en-US', { weekday: 'short' }),
       dayNumber: plan.date.getDate(),
       isToday,
-      memberIds,
+      memberIds: [...new Set([...memberIds, ...members.filter((m) => plan.travel?.some((t) => t.memberId === m.id)).map((m) => m.id)])],
+      awayIds: [...new Set((plan.travel ?? []).map((t) => t.memberId))],
       firstOut: firstLeave ? `First out ${formatWallClock(firstLeave).time}` : memberIds.length ? 'No trips' : 'Nothing planned',
       decisionCount: decisions.filter((d) => dayKey(d.date) === dayKey(plan.date)).length,
       toDo: packingGroups(plan, checklist).groups

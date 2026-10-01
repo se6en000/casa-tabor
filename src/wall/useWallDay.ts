@@ -4,6 +4,7 @@ import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutinesFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
+import { buildTrips } from './engine/travel'
 import { dayState, type WallTripState } from './tripState'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { eventsFor, routinesFor, type Audience, type KeepFrom } from './audience'
@@ -55,31 +56,37 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
     // eslint-disable-next-line react-hooks/exhaustive-deps -- audienceKey stands for audience
     [members, rules, audienceKey],
   )
+  // Trips away, from every event we hold (a day needs the flight out or home on another day).
+  const travel = useMemo(() => {
+    const byId = new Map<string, WallEvent>()
+    for (const list of [allEvents, todayShown ?? [], tomorrowShown ?? []]) for (const e of list) byId.set(e.id, e)
+    return buildTrips([...byId.values()], members)
+  }, [allEvents, todayShown, tomorrowShown, members])
   // Wait for routines too, so school runs don't pop in after the rest of the day.
   const ready = Boolean(familyMembers) && !availabilityLoading
 
   const today = useMemo(() => {
     if (!ready || !todayShown) return null
     const date = new Date(dayKey)
-    return buildDayPlan({ date, members, routines, events: todayShown, dayOffs: exceptions, tripState: dayState(tripState, date) })
-  }, [ready, dayKey, members, routines, exceptions, todayShown, tripState])
+    return buildDayPlan({ date, members, routines, events: todayShown, dayOffs: exceptions, tripState: dayState(tripState, date), travel })
+  }, [ready, dayKey, members, routines, exceptions, todayShown, tripState, travel])
 
   const tomorrow = useMemo(() => {
     if (!ready || !tomorrowShown) return null
     const date = new Date(dayKey)
     date.setDate(date.getDate() + 1)
-    return buildDayPlan({ date, members, routines, events: tomorrowShown, dayOffs: exceptions, tripState: dayState(tripState, date) })
-  }, [ready, dayKey, members, routines, exceptions, tomorrowShown, tripState])
+    return buildDayPlan({ date, members, routines, events: tomorrowShown, dayOffs: exceptions, tripState: dayState(tripState, date), travel })
+  }, [ready, dayKey, members, routines, exceptions, tomorrowShown, tripState, travel])
 
   const week = useMemo(() => {
     if (!ready || !today || !tomorrow) return []
     const later = [2, 3, 4, 5, 6].map((offset) => {
       const date = new Date(dayKey)
       date.setDate(date.getDate() + offset)
-      return buildDayPlan({ date, members, routines, events: allEvents, dayOffs: exceptions, tripState: dayState(tripState, date) })
+      return buildDayPlan({ date, members, routines, events: allEvents, dayOffs: exceptions, tripState: dayState(tripState, date), travel })
     })
     return [today, tomorrow, ...later]
-  }, [ready, today, tomorrow, dayKey, members, routines, allEvents, exceptions, tripState])
+  }, [ready, today, tomorrow, dayKey, members, routines, allEvents, exceptions, tripState, travel])
 
   return { members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs: exceptions as DayOff[] }
 }

@@ -79,7 +79,12 @@ export function decisionsFor(plan: DayPlan, members: WallMember[], now: Date, di
       const free = driverChoices(plan, members, trip, trip.sourceId).filter((c) => c.note === 'free').slice(0, 2)
       const answers: Decision['answers'] = free.map((c) => ({ label: c.name, action: { type: 'drive', driverId: c.memberId, tripIds: [trip.id] } }))
       if (answers.length < 2) answers.push({ label: 'Choose a driver', action: { type: 'pick', tripIds: [trip.id] } })
-      found.push({ key, kind: 'no_driver', at: trip.arriveAt, text: `${shortTitle(trip.title)} at ${clockTime(trip.arriveAt)} needs a driver.`, tripIds: [trip.id], sourceIds: [trip.sourceId], answers: answers.slice(0, 2) })
+      // The usual driver is away (canvas 19b): "Jake's in Dallas. Who drops off Emme & Owen at 7:35?"
+      const away = trip.usualDriverAway
+      const text = away
+        ? `${nameOf(away.memberId)}’s in ${away.city}. Who ${trip.title.replace(/^Drop off /, 'drops off ').replace(/^Pick up /, 'picks up ')} at ${clockTime(trip.arriveAt)}?`
+        : `${shortTitle(trip.title)} at ${clockTime(trip.arriveAt)} needs a driver.`
+      found.push({ key, kind: 'no_driver', at: trip.arriveAt, text, tripIds: [trip.id], sourceIds: [trip.sourceId], answers: answers.slice(0, 2) })
       continue
     }
     // A driver with something else on at the same time (one car to one place isn't a clash).

@@ -1,5 +1,5 @@
 import { formatWallClock } from './clock.ts'
-import type { DayPlan, LaneSegment, PlaceStatus, Trip, WallMember } from './engine/types'
+import type { DayPlan, DayTravel, LaneSegment, PlaceStatus, Trip, WallMember } from './engine/types'
 import { selectLaneMembers } from './lanes.ts'
 import { TIMELINE_WIDTH, isOnTimeline, xForTime } from './timeline.ts'
 
@@ -7,7 +7,11 @@ import { TIMELINE_WIDTH, isOnTimeline, xForTime } from './timeline.ts'
 // on the 7 AM–9 PM timeline, driver initials on school bars, and the
 // "everyone home by" marker. Pure, so it's tested without rendering.
 
-export type ScoreBlockKind = 'place' | 'activity' | 'drive' | 'drive_unassigned'
+/** `flight`, `wait` and `away` are a trip's parts (canvas 19): the flight, the airport, and the dashed time away. */
+export type ScoreBlockKind = 'place' | 'activity' | 'drive' | 'drive_unassigned' | 'flight' | 'wait' | 'away'
+
+/** Blocks whose words sit inside the bar rather than above it. */
+export const LABEL_INSIDE: ReadonlySet<ScoreBlockKind> = new Set(['place', 'flight', 'wait', 'away'])
 
 export interface ScoreBlock {
   key: string
@@ -48,6 +52,8 @@ export interface ScoreLane {
   blocks: ScoreBlock[]
   monograms: ScoreMonogram[]
   notes: ScoreNote[]
+  /** Coming home from a trip: the brass "Home ~7:19" mark on their lane (canvas 19b). */
+  home?: { x: number; label: string } | null
 }
 
 export interface Score {
@@ -59,7 +65,7 @@ export interface Score {
    */
   everyoneHomeBy: { x: number; label: string; flip: boolean; laneIndex: number } | null
   /** All-day items (a birthday, "no school"): context for the day, drawn as one row under the hours, not in time. */
-  allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }> }>
+  allDay: Array<{ sourceId: string; title: string; people: Array<{ id: string; initial: string; pigmentIndex: number | null }>; trip?: { city: string; dayIndex: number; dayCount: number } }>
   /** Timed items with nobody on them, placed in time on the "No one yet" row (board 08a). */
   nobody: Array<{ sourceId: string; title: string; x: number; width: number }>
 }
@@ -91,7 +97,24 @@ export function pigmentIndexes(members: WallMember[]): Map<string, number> {
   return new Map(ordered.map((m, i) => [m.id, i]))
 }
 
-function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], now: Date, nameOf: (id: string | null) => string | null): string {
+/**
+ * Away on a trip (canvas 19), short enough for the lane's 300 px: "Away 12:58 · back Thu ~7:19", then
+ * "In Dallas · home ~7:19" (how many days is on the trip chip).
+ */
+function travelStatus(away: DayTravel, now: Date): string | null {
+  const t = now.getTime()
+  if (away.homeAt && t >= away.homeAt.getTime()) return null
+  const back = away.homeAt
+    ? `${away.homeAt.toDateString() === now.toDateString() ? '' : `${away.homeAt.toLocaleDateString('en-US', { weekday: 'short' })} `}~${clockTime(away.homeAt)}`
+    : null
+  if (away.leaveHomeAt && t < away.leaveHomeAt.getTime()) return back ? `Away ${clockTime(away.leaveHomeAt)} · back ${back}` : `Away from ${clockTime(away.leaveHomeAt)}`
+  return back ? `In ${away.city} · home ${back}` : `In ${away.city}`
+}
+
+function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], now: Date, nameOf: (id: string | null) => string | null, travel: DayTravel[] = []): string {
+  const away = travel.find((x) => x.memberId === memberId)
+  const travelling = away ? travelStatus(away, now) : null
+  if (travelling) return travelling
   const t = now.getTime()
   const current = segments.filter((s) => s.start.getTime() <= t && t < s.end.getTime())
   const drive = current.find((s) => s.kind === 'drive')
@@ -173,6 +196,11 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
       if (!at) return
       const key = `${segment.kind}:${segment.sourceId}:${i}`
 
+      if (segment.travel === 'away' || segment.travel === 'wait' || segment.travel === 'flight') {
+        blocks.push({ key, kind: segment.travel, sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: 'away' })
+        return
+      }
+
       if (segment.kind === 'at_place') {
         blocks.push({ key, kind: 'place', sourceId: segment.sourceId, ...at, label: segment.label, labelMaxWidth: null, pigmentIndex: own, placeStatus: segment.placeStatus, ...(segment.work ? { work: true } : {}) })
         for (const kind of ['dropoff', 'pickup'] as const) {
@@ -207,7 +235,7 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
     // there), and a label starting too close to the previous one is dropped.
     let previous: ScoreBlock | null = null
     for (const block of [...blocks].sort((a, b) => a.x - b.x)) {
-      if (block.kind === 'place' || !block.label) continue
+      if (LABEL_INSIDE.has(block.kind) || !block.label) continue
       if (previous) {
         const room = block.x - previous.x - LABEL_GAP
         if (room < MIN_LABEL_WIDTH) {
@@ -224,8 +252,11 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
 
     // Places lie under what happens there (a drive in the middle of work hours).
     blocks.sort((a, b) => Number(b.kind === 'place') - Number(a.kind === 'place'))
+    // Home from a trip: the time the family asks about, marked on their lane.
+    const homeTrip = plan.trips.find((x) => x.travel?.direction === 'home' && x.travelerIds.includes(member.id) && x.homeAt && isOnTimeline(x.homeAt))
+    const home = homeTrip?.homeAt ? { x: xForTime(homeTrip.homeAt), label: `Home ~${clockTime(homeTrip.homeAt)}` } : null
     // The status tells where they are even with routines hidden ("Bak · until 3:30").
-    return { member, pigmentIndex: own, status: laneStatus(member.id, allSegments, plan.trips, now, nameOf), blocks, monograms, notes: clearNotes }
+    return { member, pigmentIndex: own, status: laneStatus(member.id, allSegments, plan.trips, now, nameOf, plan.travel), blocks, monograms, notes: clearNotes, home }
   })
 
   // Everyone home by: the last known return, only when every trip's return is known.
@@ -251,6 +282,7 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
     people: [...new Set(item.memberIds)]
       .sort((a, b) => order.indexOf(a) - order.indexOf(b))
       .map((id) => ({ id, initial: nameOf(id)?.charAt(0) ?? '?', pigmentIndex: pigmentFor(id) })),
+    ...(item.trip ? { trip: item.trip } : {}),
   }))
 
   const nobody = plan.nobody.flatMap((item) => {

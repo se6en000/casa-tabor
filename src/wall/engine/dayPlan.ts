@@ -1,8 +1,10 @@
 import type { FamilyRoutine } from '../../lib/familyRoutines'
 import { applyTimeToDate, formatDisplayVenueName, getEstimatedDriveMinutes } from '../../lib/familyRoutines.ts'
 import { isEventAtHome } from '../../lib/driverConflictEngine.ts'
+import { buildTrips, tripDay, type TravelPrefs, type TravelTrip } from './travel.ts'
 import type {
   DayGap,
+  DayTravel,
   DayPlan,
   LaneSegment,
   PlaceStatus,
@@ -31,7 +33,14 @@ export interface BuildDayPlanInput {
   homeAddress?: string | null
   /** Decisions made on the wall for this day: hand-offs of routine runs, and "Leaving now". */
   tripState?: { drivers: Record<string, string | null>; departed: Record<string, string> }
+  /** The family's trips away (travel.ts), built once from all events so a day knows the flight back on another. */
+  travel?: TravelTrip[]
+  /** Each person's travel settings (family_members.travel_prefs), when `travel` is built here from `events`. */
+  travelPrefs?: Record<string, TravelPrefs>
 }
+
+const durationWords = (minutes: number) => (minutes % 60 === 0 ? `${minutes / 60} hr` : minutes > 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60}` : `${minutes} min`)
+const WAY_WORD = { uber: 'Uber', drive_park: 'Drive', someone: 'Ride' } as const
 
 const MINUTE = 60_000
 const SHARED_ARRIVAL_WINDOW_MIN = 30
@@ -158,6 +167,18 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   const allDay: DayPlan['allDay'] = []
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
 
+  // Trips away (canvas 19): who is gone, from leaving the house to being home again.
+  const travelTrips = input.travel ?? buildTrips(events, members, input.travelPrefs ?? {})
+  const travelDays = travelTrips.flatMap((t) => tripDay(t, date) ?? [])
+  const travelEventIds = new Set(travelTrips.flatMap((t) => [t.outbound?.eventId, t.inbound?.eventId, t.tripEventId].filter((id): id is string => Boolean(id))))
+  const awayWindows = travelDays.flatMap(({ trip }) => trip.memberIds.map((memberId) => ({
+    memberId, city: trip.city,
+    start: trip.leaveHomeAt ?? dayStart,
+    end: trip.homeAt ?? dayEnd,
+  })))
+  const awayDuring = (memberId: string | null, start: Date, end: Date) =>
+    memberId ? awayWindows.find((w) => w.memberId === memberId && w.start < end && w.end > start) ?? null : null
+
   // School and other routines: time at the place, plus shared drop-off/pickup runs.
   interface Run {
     kind: 'dropoff' | 'pickup'
@@ -177,6 +198,10 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const sourceId = routine.id ?? (routine.key && routine.key !== 'main' ? `routine:${routine.memberId}:${routine.key}` : `routine:${routine.memberId}`)
     const driveMinutes = getEstimatedDriveMinutes(routine.venueName, routine.venueAddress)
     const work = routine.routineType === 'work'
+    // Away on a trip: no school or work while gone (the part of the day before they leave stays).
+    const gone = awayDuring(routine.memberId, day.start, day.end)
+    if (gone && gone.start <= day.start) continue
+    if (gone) day.end = new Date(Math.min(day.end.getTime(), gone.start.getTime()))
     addSegment(routine.memberId, {
       kind: 'at_place',
       start: day.start,
@@ -210,12 +235,14 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const tripId = `routine:${run.kind}:${normalizePlace(run.venueName)}:${run.arriveAt.getTime()}`
     // A hand-off made on the wall for today replaces the routine's driver.
     const handedOff = Object.prototype.hasOwnProperty.call(tripState.drivers, tripId)
-    const driverId = handedOff ? tripState.drivers[tripId] : run.driverId
     const names = run.travelerIds.map(nameOf).join(' & ')
     const title = `${run.kind === 'dropoff' ? 'Drop off' : 'Pick up'} ${names}`
     const departed = departedAt(tripId)
     const leaveAt = departed && departed < run.arriveAt ? departed : addMinutes(run.arriveAt, -run.driveMinutes)
     const homeAt = addMinutes(run.arriveAt, run.driveMinutes)
+    // The usual driver is away on a trip: nobody yet, and the question says why (a hand-off made today still wins).
+    const usualAway = handedOff ? null : awayDuring(run.driverId, leaveAt, homeAt)
+    const driverId = handedOff ? tripState.drivers[tripId] : usualAway ? null : run.driverId
     const trip: Trip = {
       id: tripId,
       kind: run.kind,
@@ -231,12 +258,13 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       arriveAt: run.arriveAt,
       homeAt,
       driveMinutes: run.driveMinutes,
+      ...(usualAway ? { usualDriverAway: { memberId: usualAway.memberId, city: usualAway.city } } : {}),
     }
     trips.push(trip)
     if (driverId) {
       addSegment(driverId, { kind: 'drive', start: leaveAt, end: homeAt, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId, fromRoutine: true })
     } else {
-      gaps.push({ kind: 'no_driver', sourceId: run.sourceId, title, at: leaveAt })
+      gaps.push({ kind: 'no_driver', sourceId: run.sourceId, title, at: leaveAt, ...(usualAway ? { away: { memberId: usualAway.memberId, city: usualAway.city } } : {}) })
     }
     for (const travelerId of run.travelerIds) {
       const [start, end] = run.kind === 'dropoff' ? [leaveAt, run.arriveAt] : [run.arriveAt, homeAt]
@@ -263,6 +291,8 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     if (!(start < dayEnd && end > dayStart)) continue
     if (event.status === 'cancelled') continue
     if (isRoutineMirror(event, start)) continue
+    // A flight or a trip's all-day event is drawn as the trip (below), not as an outing of its own.
+    if (travelEventIds.has(event.id)) continue
 
     const refs = (event.members ?? [])
       .map((m) => ({ id: m.family_member_id ?? m.family_member?.id ?? null, role: m.role ?? null }))
@@ -362,6 +392,62 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     if (participants.length === 0) gaps.push({ kind: 'no_person', sourceId: event.id, title: event.title, at: arriveAt })
   }
 
+  // Trips away: the ride, the airport, the flight and the time away on each traveller's lane (canvas 19a–c).
+  const travel: DayTravel[] = []
+  for (const { trip, phase, dayIndex, dayCount } of travelDays) {
+    const travellers = trip.memberIds
+    const who = travellers.map(nameOf).join(' & ')
+    const self = trip.way === 'someone' ? null : travellers.find((id) => members.find((m) => m.id === id)?.can_drive) ?? travellers[0] ?? null
+    // To a minute before midnight: midnight itself reads as the start of the timeline, not its end.
+    const clip = (d: Date) => new Date(Math.min(Math.max(d.getTime(), dayStart.getTime()), dayEnd.getTime() - MINUTE))
+    const add = (travelPart: NonNullable<LaneSegment['travel']>, kind: LaneSegment['kind'], start: Date, end: Date, label: string, sourceId: string, extra: Partial<LaneSegment> = {}) => {
+      const [s0, e0] = [clip(start), clip(end)]
+      if (e0 <= s0) return
+      for (const id of travellers) addSegment(id, { kind, start: s0, end: e0, label, placeStatus: 'away', sourceId, travel: travelPart, ...extra })
+    }
+    const flightOf = (leg: NonNullable<TravelTrip['outbound']>) => ({ number: leg.number, from: leg.from, to: leg.to, departAt: leg.departAt, landAt: leg.landAt })
+    const leaving = phase === 'leaving' || phase === 'day'
+    const returning = phase === 'returning' || phase === 'day'
+    const out = trip.outbound
+    const back = trip.inbound
+    if (leaving && out && trip.leaveHomeAt && trip.atAirportAt) {
+      const ride: Trip = {
+        id: `${trip.id}:out`, kind: 'outing', sourceId: out.eventId, source: 'event', title: `${who} to ${out.from}`,
+        travelerIds: travellers, driverId: self, driverSource: self ? 'self' : null,
+        destination: { name: `${out.from} airport`, address: null },
+        leaveAt: trip.leaveHomeAt, arriveAt: trip.atAirportAt, homeAt: null, driveMinutes: trip.driveOutMinutes,
+        departedAt: departedAt(`${trip.id}:out`),
+        travel: { direction: 'out', way: trip.way, city: trip.city, flight: flightOf(out) },
+      }
+      trips.push(ride)
+      add('drive', 'drive', trip.leaveHomeAt, trip.atAirportAt, `${WAY_WORD[trip.way]} to ${out.from}`, out.eventId, { tripId: ride.id, driverId: self })
+      if (!self) gaps.push({ kind: 'no_driver', sourceId: out.eventId, title: `Drive ${who} to ${out.from}`, at: trip.leaveHomeAt })
+      add('wait', 'at_place', trip.atAirportAt, out.departAt, `At ${out.from} · ${durationWords(trip.airportMinutes)}`, out.eventId)
+      add('flight', 'activity', out.departAt, out.landAt, `${out.number ?? 'Flight'} → ${out.to}`, out.eventId)
+    }
+    const awayFrom = leaving && out ? out.landAt : dayStart
+    const awayTo = returning && back ? back.departAt : dayEnd
+    add('away', 'at_place', awayFrom, awayTo, `Away · ${trip.city}`, trip.tripEventId ?? trip.id)
+    if (returning && back && trip.offPlaneAt && trip.homeAt) {
+      add('flight', 'activity', back.departAt, back.landAt, `${back.number ?? 'Flight'} → ${back.to}`, back.eventId)
+      add('wait', 'at_place', back.landAt, trip.offPlaneAt, 'Off the plane', back.eventId)
+      const ride: Trip = {
+        id: `${trip.id}:home`, kind: 'outing', sourceId: back.eventId, source: 'event', title: `${who} home from ${back.to}`,
+        travelerIds: travellers, driverId: self, driverSource: self ? 'self' : null,
+        destination: { name: 'Home', address: null },
+        leaveAt: trip.offPlaneAt, arriveAt: trip.homeAt, homeAt: trip.homeAt, driveMinutes: trip.driveHomeMinutes,
+        travel: { direction: 'home', way: trip.way, city: trip.city, flight: flightOf(back) },
+      }
+      trips.push(ride)
+      add('drive', 'drive', trip.offPlaneAt, trip.homeAt, `${WAY_WORD[trip.way]} home`, back.eventId, { tripId: ride.id, driverId: self })
+      if (!self) gaps.push({ kind: 'no_driver', sourceId: back.eventId, title: `Pick up ${who} at ${back.to}`, at: trip.offPlaneAt })
+    }
+    allDay.push({ sourceId: trip.tripEventId ?? trip.id, title: `${who} in ${trip.city}`, memberIds: travellers, trip: { city: trip.city, dayIndex, dayCount } })
+    for (const memberId of travellers) {
+      travel.push({ memberId, tripId: trip.id, city: trip.city, phase, dayIndex, dayCount, leaveHomeAt: trip.leaveHomeAt, homeAt: trip.homeAt })
+    }
+  }
+
   // A pickup that goes straight on to the next place is one trip (school → CityPlace):
   // same driver, a picked-up child is going there, and that trip would otherwise have
   // to leave home before the pickup is back. The drive from school is estimated with
@@ -441,5 +527,5 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     t.travelerIds.forEach((id) => activeMemberIds.add(id))
   }
 
-  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations }
+  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations, travel }
 }

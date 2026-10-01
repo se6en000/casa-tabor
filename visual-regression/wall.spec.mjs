@@ -1731,3 +1731,33 @@ test('wall: the week tiles keep their dots and "?" inside their border', async (
   }))
   expect(overflow.filter(Boolean)).toHaveLength(0)
 })
+
+// Canvas row 19, design doc "Casa: Travel design" (Jake, 2026-10-01): his real Dallas trip, Oct 7–8. The flights the
+// work email brought in become one trip: the Next Move is the Uber to the airport (his hour there, the 15 min ride),
+// his lane shows the ride, the airport, the flight and "Away · Dallas", the trip chip counts the days, his dot on the
+// week tiles is a tiny plane, and the evening before he flies home his usual drop-off asks who takes it.
+test('wall: a trip away — leave by, the lane, the trip chip, the plane on the tiles, and who covers his run', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&at=2026-10-07T12:30:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const move = wall.getByRole('region', { name: 'Next move' })
+  await expect(move.getByText('Jake → DJT airport')).toBeVisible()
+  await expect(move.getByText('Uber · 15 min · at the airport by 1:13 · Flight 1419 to Dallas at 2:13')).toBeVisible()
+  await expect(move.getByText('NEXT MOVE · LEAVE BY 12:58')).toBeVisible()
+  await expect(wall.getByText('Jake in Dallas · day 1 of 2')).toBeVisible()
+  await expect(wall.getByText('1419 → DFW')).toBeVisible()
+  await expect(wall.getByText('Away · Dallas')).toBeVisible()
+  await expect(wall.getByText('Away 12:58 · back Thu ~7:19')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Next seven days' }).locator('[data-away]')).toHaveCount(2)
+  await expect(wall).toHaveScreenshot('trip-leaving.png')
+
+  await page.goto('/__wall-fixture?trip=1&at=2026-10-07T20:15:00')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByText('Jake’s in Dallas. Who drops off Emme & Owen at 7:35?')).toBeVisible()
+  await expect(wall.getByText('Home ~7:19', { exact: true })).toBeVisible()
+  await expect(wall.getByText('2640 → DJT')).toBeVisible()
+  await expect(wall).toHaveScreenshot('trip-coming-home.png')
+  // Giselle takes it: the run is hers, the question is gone.
+  await wall.getByRole('button', { name: 'Giselle', exact: true }).click()
+  await expect(wall.getByText('Jake’s in Dallas. Who drops off Emme & Owen at 7:35?')).toHaveCount(0)
+})

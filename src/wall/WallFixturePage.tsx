@@ -23,7 +23,8 @@ import { WallSpeechContext } from './speechContext'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
-import { members, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
+import { members as baseMembers, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
+import { tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 
@@ -74,6 +75,12 @@ const IDEAS: GiftIdea[] = [{ id: 'gi-carl', for_name: 'Carl', idea: 'A fly-fishi
 
 // To do (board 09b), shaped like Jake's sorted list on 2026-09-28.
 const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') === '1'
+// `?trip=1` (canvas 19): Jake's Dallas trip, Oct 7–8, his flights as the work email brought them in; he takes an hour
+// at the airport and an Uber (his page's travel settings).
+const TRIP = new URLSearchParams(window.location.search).get('trip') === '1'
+const members = TRIP
+  ? baseMembers.map((m) => (m.id === 'jake-id' ? { ...m, travel_prefs: { airport_minutes: 60, way: 'uber' } } : m))
+  : baseMembers
 
 // The screenshots show Casa's keyboard, as on the kiosk; `?keyboard=device` shows a desktop's.
 Object.assign(window, { __casaKeyboard: new URLSearchParams(window.location.search).get('keyboard') ?? 'screen' })
@@ -90,6 +97,7 @@ export default function WallFixturePage() {
   // `?nobody=1` (board 08a): Jake's portfolio review with nobody on it, as on 2026-09-28.
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
+    ...(TRIP ? (tripEvents as unknown as WallEvent[]) : []),
     ...(new URLSearchParams(window.location.search).get('nobody') ? [{
       id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
       all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
