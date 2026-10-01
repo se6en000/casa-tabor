@@ -1568,11 +1568,8 @@ test('wall: the new listener is a switch in the MT menu, remembered on the wall;
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
   expect(await page.evaluate(() => localStorage.getItem('casa-wall-listener-v2'))).toBe('1')
-  // Beside it, Flux for the speech to text (remembered the same way).
-  const flux = wall.getByRole('switch', { name: 'Try Flux' })
-  await expect(flux).toHaveAttribute('aria-checked', 'false')
-  await flux.click()
-  expect(await page.evaluate(() => localStorage.getItem('casa-wall-stt-flux'))).toBe('1')
+  // Flux is the speech to text now (Jake, Oct 1): its "Try Flux" switch is gone.
+  await expect(wall.getByRole('switch', { name: 'Try Flux' })).toHaveCount(0)
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   await expect(page.getByRole('region', { name: 'Assistant' }).locator('[data-listener]')).toBeVisible()
   await page.evaluate(() => localStorage.removeItem('casa-wall-listener-v2'))
@@ -1831,4 +1828,74 @@ test('wall: chores on the Score — trash night on Jake’s lane, Liv’s meds o
   await expect(wall.getByText('Trash to the street')).toBeVisible()
   await expect(wall.getByText('Give Liv her meds')).toBeVisible()
   await expect(wall).toHaveScreenshot('chores-thursday.png')
+})
+
+// Designer polish, approved Oct 1: today's header is one height whether or not there's a list (the screen doesn't jump
+// when the list is done), and "Hide routines" sits on the Next Move's action line instead of floating above the hours.
+test('wall: today’s header keeps its height; Hide routines on the Leaving now line', async ({ page }) => {
+  const measure = async (at) => {
+    await page.goto(`/__wall-fixture?at=${at}`)
+    await page.getByRole('region', { name: 'Next move' }).waitFor()
+    await page.evaluate(() => document.fonts.ready)
+    return page.evaluate(() => {
+      const header = document.querySelector('[data-testid="wall-fixture"] header').getBoundingClientRect()
+      const pill = [...document.querySelectorAll('button')].find((b) => /Hide routines|Routines hidden/.test(b.textContent)).getBoundingClientRect()
+      const leaving = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Leaving now').getBoundingClientRect()
+      return { header: Math.round(header.height), pillMid: Math.round(pill.top + pill.height / 2), leavingMid: Math.round(leaving.top + leaving.height / 2) }
+    })
+  }
+  const plain = await measure('2026-09-25T07:12:00')
+  const withList = await measure('2026-09-26T11:30:00')
+  expect(plain.header).toBe(withList.header)
+  expect(Math.abs(plain.pillMid - plain.leavingMid)).toBeLessThanOrEqual(1)
+})
+
+test('wall: Hide routines ends at the wall’s right edge, with the hours', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.getByRole('region', { name: 'Next move' }).waitFor()
+  await page.evaluate(() => document.fonts.ready)
+  const right = await page.evaluate(() => {
+    const pill = [...document.querySelectorAll('button')].find((b) => /Hide routines/.test(b.textContent)).getBoundingClientRect().right
+    const hours = document.querySelector('section[aria-label^="TODAY"] .w-\\[1512px\\]').getBoundingClientRect().right
+    return { pill: Math.round(pill), hours: Math.round(hours) }
+  })
+  expect(Math.abs(right.pill - right.hours)).toBeLessThanOrEqual(2)
+})
+
+// Canvas 20a/20b (Jake, 2026-10-01: "need to edit chores", "kids chores as well, like change the cat litter every 4
+// weeks"): a person's page lists their chores; a chore's sheet changes who, how often, which days and when; a new one
+// is typed on the wall keyboard; a tap on a chore's mark on the Score opens it.
+test('wall: chores on a person’s page — edit, add on the keyboard, and open one from the Score', async ({ page }) => {
+  await page.goto('/__wall-fixture?chores=1&at=2026-10-05T13:45:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await wall.getByRole('button', { name: 'Jake’s page' }).click()
+  const sheet = wall.getByRole('region', { name: 'Jake’s page' })
+  const chores = sheet.getByRole('region', { name: 'Chores' })
+  await expect(chores.getByText('Mon & Thu 8:00 PM · next Mon, Oct 5')).toBeVisible()
+  await chores.getByRole('button', { name: 'Edit Trash to the street' }).click()
+  await sheet.getByRole('button', { name: 'Earlier' }).click()
+  await sheet.getByRole('button', { name: 'Every 2 weeks' }).click()
+  await expect(wall).toHaveScreenshot('chore-edit.png')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(chores.getByText('Every 2 weeks · Mon & Thu 7:45 PM · next Mon, Oct 5')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Close' }).click()
+
+  // Owen's first chore, the litter every 4 weeks on Sunday (counted from this week: next Sun, Oct 11).
+  await wall.getByRole('button', { name: 'Owen’s page' }).click()
+  const owen = wall.getByRole('region', { name: 'Owen’s page' })
+  await owen.getByRole('button', { name: 'Add a chore' }).click()
+  const keyboard = wall.getByRole('region', { name: 'Keyboard' })
+  for (const key of 'litter') await keyboard.getByRole('button', { name: new RegExp(`^${key}$`, 'i') }).click()
+  await keyboard.getByRole('button', { name: 'Done', exact: true }).click()
+  await owen.getByRole('button', { name: 'Every 4 weeks' }).click()
+  await owen.getByRole('button', { name: 'Monday' }).click()
+  await owen.getByRole('button', { name: 'Sunday' }).click()
+  await owen.getByRole('button', { name: 'Save' }).click()
+  await expect(owen.getByRole('region', { name: 'Chores' }).getByText('Every 4 weeks · Sun 8:00 PM · next Sun, Oct 11')).toBeVisible()
+  await owen.getByRole('button', { name: 'Close' }).click()
+
+  // A tap on Liv's meds on the Score opens its sheet on Liv's page.
+  await wall.getByRole('button', { name: 'Open Give Liv her meds' }).click()
+  await expect(wall.getByRole('region', { name: 'Give Liv her meds' })).toBeVisible()
 })

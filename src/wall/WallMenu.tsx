@@ -2,7 +2,6 @@ import { Mic, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
 import { setListenerV2, useListenerV2 } from './listenerSwitch'
-import { setSttFlux, useSttFlux } from '../lib/sttProvider'
 
 // The MT monogram opens the rest of the app. On the kiosk, each page's Home
 // button — and a few idle minutes — bring it back to the Wall (kioskHome.ts).
@@ -91,29 +90,6 @@ function ListenerSwitch() {
   )
 }
 
-/** Try Deepgram Flux for the wall's speech to text: words every ~0.25 s, and its own end of a sentence. */
-function FluxSwitch() {
-  const on = useSttFlux()
-  return (
-    <div className="mt-[10px] flex items-center gap-[16px]">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-wall-detail font-semibold">Try Flux</span>
-        <span className="text-wall-label text-wall-ink-2">Faster words as you speak</span>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-label="Try Flux"
-        onClick={() => setSttFlux(!on)}
-        className={`h-[52px] shrink-0 rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
-      >
-        {on ? 'On' : 'Off'}
-      </button>
-    </div>
-  )
-}
-
 const PREVIEWS: Array<{ posture: Posture; label: string }> = [
   { posture: 'launch', label: 'Full day' },
   { posture: 'calm', label: 'Calm' },
@@ -164,7 +140,6 @@ export default function WallMenu({ onClose, onPreview }: { onClose: () => void; 
           </div>
         )}
         <ListenerSwitch />
-        <FluxSwitch />
         <button
           type="button"
           onClick={onClose}

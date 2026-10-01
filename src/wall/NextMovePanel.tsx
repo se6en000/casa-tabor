@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { NextMoveView } from './header'
 import { pigmentStyleFor } from './lanes'
 
@@ -12,7 +13,7 @@ export interface NextMoveActions {
 }
 
 /** The header's one instruction: who leaves for where, and a countdown ring to the leave time. */
-export default function NextMovePanel({ view, pigmentIndex, actions }: { view: NextMoveView | null; pigmentIndex: number | null; actions?: NextMoveActions }) {
+export default function NextMovePanel({ view, pigmentIndex, actions, trailing = null }: { view: NextMoveView | null; pigmentIndex: number | null; actions?: NextMoveActions; trailing?: ReactNode }) {
   if (!view) {
     return (
       <section aria-label="Next move" className="flex min-w-0 flex-1 flex-col justify-center gap-[10px]">
@@ -48,7 +49,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions }: { view: N
           </div>
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-[10px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[10px]">
         <div className={`text-wall-label font-bold tracking-[0.2em] ${accent}`}>{view.eyebrow}</div>
         <div className="flex min-w-0 items-center gap-[16px]">
           <span
@@ -66,7 +67,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions }: { view: N
         <div className="truncate text-wall-body text-wall-ink">{view.detail}</div>
         {view.also && !actions && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
         {actions && (
-          <div className="mt-[2px] flex gap-[12px]">
+          <div className="mt-[2px] flex items-center gap-[12px]">
             {view.status === 'upcoming' && view.driverId && (
               <button type="button" className="h-[48px] rounded-full border-0 bg-wall-ink px-[24px] text-wall-detail font-semibold text-wall-on-pigment" onClick={(e) => { e.stopPropagation(); actions.onLeaving() }}>
                 Leaving now
@@ -82,6 +83,8 @@ export default function NextMovePanel({ view, pigmentIndex, actions }: { view: N
                 {view.driverId ? 'Hand off' : 'Choose a driver'}
               </button>
             )}
+            {/* A quiet link on the same line as the actions ("Hide routines"), at its right end. */}
+            {trailing && <div className="ml-auto">{trailing}</div>}
           </div>
         )}
       </div>

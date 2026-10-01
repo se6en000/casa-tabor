@@ -516,6 +516,10 @@
       {
         "path": "src/wall/WallTripSheet.tsx",
         "reason": "Family Wall: the trip sheet (canvas 19d) — the ways there and home, who drives, the time steppers, close and Done, part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/ChoreEditor.tsx",
+        "reason": "Family Wall: the chore sheet (canvas 20b) — who does it, how often, the day chips, the time steppers, Cancel/Delete/Save, part of the Wall's own component set."
       }
     ]
   }

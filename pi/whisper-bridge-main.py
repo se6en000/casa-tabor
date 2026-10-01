@@ -122,7 +122,7 @@ _stt_lock   = threading.Lock()
 _stt_missing_since = 0.0
 _stt_disconnect_seq = 0
 _stt_protocol = 'legacy'
-_stt_provider = 'nova'       # 'flux' when the wall's switch asks for it
+_stt_provider = 'flux'       # Flux by default (Jake, 2026-10-01: made the default); 'nova' only if a session asks
 _flux_last_text = ''
 _turn_id = ''
 _turn_index = 0
@@ -210,7 +210,7 @@ def _handle_ws_client(ws):
                     _stt_client = ws
                     _stt_disconnect_seq += 1
                     _stt_protocol = msg.get('turn_protocol', 'legacy')
-                    _stt_provider = 'flux' if msg.get('stt_provider') == 'flux' else 'nova'
+                    _stt_provider = 'nova' if msg.get('stt_provider') == 'nova' else 'flux'
                     _turn_id = str(msg.get('utterance_id', ''))
                     _turn_index = 0
                 started = start_recording(reason='ws_start')

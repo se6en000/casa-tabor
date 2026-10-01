@@ -60,13 +60,16 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null
   const weather = weatherLine(currentWeather, plan, now)
+  // With a Next Move and its actions (and no TOMORROW note, which has its own row), the pill sits on the actions' line.
+  const pillInHeader = Boolean(nextMove && moveActions && !tomorrow)
 
   return (
     // With a list to get ready, the evening face's layout (Jake: "why can't it have the same layout as the night /
     // tomorrow mode?"): a shorter header that keeps the Next Move, compact lanes, decisions and get & pack beneath,
     // and the week strip.
-    <div className={`flex h-full w-full flex-col ${prepping ? 'gap-[22px]' : 'gap-[28px]'} bg-wall-ground p-[44px] font-body text-wall-ink`}>
-      <header className={`flex ${prepping ? 'h-[184px]' : 'h-[220px]'} shrink-0 items-stretch gap-[48px]`}>
+    // One header height whether or not there's a list, so the screen never jumps when the list is done (polish, Oct 1).
+    <div className="flex h-full w-full flex-col gap-[22px] bg-wall-ground p-[44px] font-body text-wall-ink">
+      <header className="flex h-[184px] shrink-0 items-stretch gap-[48px]">
         <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[10px]">
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
@@ -83,14 +86,19 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
           </div>
           <div className="truncate font-display text-wall-date font-semibold">
             {formatWallDate(now)}
-            {prepping && weather && <span className="font-body text-wall-detail font-normal text-wall-ink-2"> · {weather}</span>}
+            {weather && <span className="font-body text-wall-detail font-normal text-wall-ink-2"> · {weather}</span>}
           </div>
-          {!prepping && weather && <div className="truncate text-wall-detail text-wall-ink-2">{weather}</div>}
         </div>
 
         <div className="w-px shrink-0 bg-wall-rule" />
 
-        <NextMovePanel view={nextMove} pigmentIndex={driverPigment} actions={moveActions} />
+        <NextMovePanel
+          view={nextMove}
+          pigmentIndex={driverPigment}
+          actions={moveActions}
+          // "Hide routines" on the Next Move's button line, not floating above the hours (polish, Oct 1).
+          trailing={pillInHeader && interaction?.routines ? <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} /> : null}
+        />
       </header>
 
       {tomorrow && interaction?.routines ? (
@@ -100,7 +108,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
           <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} />
         </div>
       ) : tomorrow && <WallTomorrowNote note={tomorrow} />}
-      <WallScore score={score} now={now} compact={prepping} interaction={tomorrow && interaction?.routines ? { ...interaction, routines: { ...interaction.routines, elsewhere: true } } : interaction} />
+      <WallScore score={score} now={now} compact={prepping} interaction={(tomorrow || pillInHeader) && interaction?.routines ? { ...interaction, routines: { ...interaction.routines, elsewhere: true } } : interaction} />
       {prep && prepping && (
         <PrepRail
           decisions={prep.decisions}

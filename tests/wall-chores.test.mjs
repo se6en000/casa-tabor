@@ -62,3 +62,9 @@ test('a chore right after "Home ~" keeps its words; the home mark keeps its line
   assert.equal(lane.home.label, '')
   assert.equal(lane.blocks.find((b) => b.kind === 'chore').label, 'Trash to the street')
 })
+
+test('every 4 weeks counts from its first time: started on a Monday for Sundays, the first is that Sunday', () => {
+  const litter = chore('x', 'Change the cat litter', 'owen', [0], '10:00:00', { every_weeks: 4, starts_on: '2026-10-05' })
+  const on = (m, d) => choreOnDay(litter, new Date(2026, m, d))
+  assert.deepEqual([on(9, 4), on(9, 11), on(9, 18), on(10, 8)], [false, true, false, true])
+})

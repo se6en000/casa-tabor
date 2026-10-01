@@ -95,8 +95,10 @@ export interface WallViewProps {
   saveTravel?: (key: string, change: TravelSettings) => Promise<void>
   /** Every trip we know of, up to four months out (coverage.ts plans each from the day it lands). */
   travelTrips?: TravelTrip[]
-  /** Household chores (chores.ts). */
+  /** Household chores (chores.ts), and saving them from a person's page (canvas 20). */
   chores?: WallChore[]
+  saveChore?: (chore: WallChore) => Promise<void>
+  deleteChore?: (id: string) => Promise<void>
   /** Add a line to an event's get & pack list (from its details). */
   addChecklist?: (eventId: string, label: string) => Promise<void>
   /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
@@ -136,7 +138,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -167,6 +169,8 @@ export default function WallView(props: WallViewProps) {
   const [routinesHidden, setRoutinesHidden] = useState(readRoutinesHidden)
   // A person's page (canvas 16e), from a tap on their name.
   const [personId, setPersonId] = useState<string | null>(null)
+  // A tap on a chore's mark on the Score (canvas 20b): the person's page, opened straight into that chore.
+  const [openChoreId, setOpenChoreId] = useState<string | null>(null)
 
   // Covering each trip (coverage.ts): its runs while the traveller is gone, from the day the trip lands in Casa.
   const tripCoverageByKey = useMemo(() => new Map(travelTrips
@@ -304,10 +308,15 @@ export default function WallView(props: WallViewProps) {
     onSelect: (id) => {
       const trip = saveTravel ? tripFor(id) : null
       if (trip) return setTripKey(trip.key)
+      const chore = saveChore && id.startsWith('chore:') ? chores.find((c) => `chore:${c.id}` === id) : null
+      if (chore) {
+        setOpenChoreId(chore.id)
+        return setPersonId(chore.member_id ?? chore.for_member_id)
+      }
       setSelectedForWho(false)
       setSelectedId(id)
     },
-    selectable: (id) => eventsById.has(id) || Boolean(saveTravel && tripFor(id)),
+    selectable: (id) => eventsById.has(id) || Boolean(saveTravel && tripFor(id)) || Boolean(saveChore && id.startsWith('chore:')),
     highlight: selectedId
       ? { sourceId: selectedId, draft: Boolean(draftPreview) }
       : assistantDraft
@@ -664,7 +673,12 @@ export default function WallView(props: WallViewProps) {
           routines={routines.filter((r) => r.memberId === person.id)}
           dayOffs={dayOffs.filter((d) => d.member_id === person.id && d.override_type === 'day_off' && d.id).map((d) => ({ id: d.id!, start: localYmd(d.start_at), end: localYmd(d.end_at) }))}
           now={now}
-          onClose={() => setPersonId(null)}
+          onClose={() => { setPersonId(null); setOpenChoreId(null) }}
+          chores={saveChore ? chores : undefined}
+          saveChore={saveChore}
+          deleteChore={deleteChore}
+          pigmentOf={(id) => pigments.get(id) ?? 0}
+          openChoreId={openChoreId}
         />
       )}
       {menuOpen && (

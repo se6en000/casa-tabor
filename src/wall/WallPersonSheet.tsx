@@ -10,6 +10,9 @@ import { newRoutine, type RoutineKind } from './routines'
 import { addDayOff, removeDayOff, removeRoutine, saveRoutine } from './saveRoutine'
 import { OUTLINE } from './surface'
 import { usePersonKnown } from './usePersonKnown'
+import ChoreEditor from './ChoreEditor'
+import type { WallChore } from './engine/chores'
+import { newChore } from './choreText'
 
 // A person's page on the wall (canvas 16e): tap a name at the start of a lane and it slides in beside the day.
 // Walk away and it closes: 2 minutes on the page, 5 while editing (unsaved changes are dropped).
@@ -25,20 +28,31 @@ export interface WallPersonSheetProps {
   dayOffs: DayOffRow[]
   now: Date
   onClose: () => void
+  /** Their chores (canvas 20a), saved and removed by the wall (chores.ts). */
+  chores?: WallChore[]
+  saveChore?: (chore: WallChore) => Promise<void>
+  deleteChore?: (id: string) => Promise<void>
+  pigmentOf?: (memberId: string) => number
+  /** Opened from a chore's mark on the Score: straight into its sheet. */
+  openChoreId?: string | null
 }
 
-export default function WallPersonSheet({ member, members, pigmentIndex, routines, dayOffs, now, onClose }: WallPersonSheetProps) {
+export default function WallPersonSheet({ member, members, pigmentIndex, routines, dayOffs, now, onClose, chores, saveChore, deleteChore, pigmentOf = () => 0, openChoreId = null }: WallPersonSheetProps) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<{ routine: FamilyRoutine; isNew: boolean } | null>(null)
+  const [choreEditing, setChoreEditing] = useState<{ chore: WallChore; isNew: boolean } | null>(() => {
+    const open = openChoreId ? chores?.find((c) => c.id === openChoreId) : null
+    return open ? { chore: open, isNew: false } : null
+  })
   const known = usePersonKnown(member.id, 'wall')
   const lastTouch = useRef(0)
   useEffect(() => {
     lastTouch.current = Date.now()
     const timer = window.setInterval(() => {
-      if (Date.now() - lastTouch.current > (editing ? EDIT_IDLE_MS : PAGE_IDLE_MS)) onClose()
+      if (Date.now() - lastTouch.current > (editing || choreEditing ? EDIT_IDLE_MS : PAGE_IDLE_MS)) onClose()
     }, 10_000)
     return () => window.clearInterval(timer)
-  }, [editing, onClose])
+  }, [editing, choreEditing, onClose])
   const drivers = members.filter((m) => m.can_drive).map((m) => ({ id: m.id, name: m.name }))
   const asFamily = members as unknown as FamilyMember[]
 
@@ -46,15 +60,33 @@ export default function WallPersonSheet({ member, members, pigmentIndex, routine
     <div
       className="absolute inset-0 z-30 flex justify-end bg-wall-ink/20"
       onPointerDownCapture={() => { lastTouch.current = Date.now() }}
-      onClick={(e) => { e.stopPropagation(); if (!editing) onClose() }}
+      onClick={(e) => { e.stopPropagation(); if (!editing && !choreEditing) onClose() }}
     >
       <section
         aria-label={`${member.name}’s page`}
         // Not positioned, so the wall keyboard spans the whole stage, not just this panel.
-        className={`flex h-[1080px] ${editing ? 'w-[760px]' : 'w-[640px]'} flex-col gap-[20px] overflow-y-auto overscroll-contain rounded-l-[28px] bg-wall-on-pigment px-[44px] pb-[480px] pt-[40px] font-body text-wall-ink`}
+        className={`flex h-[1080px] ${editing || choreEditing ? 'w-[760px]' : 'w-[640px]'} flex-col gap-[20px] overflow-y-auto overscroll-contain rounded-l-[28px] bg-wall-on-pigment px-[44px] pb-[480px] pt-[40px] font-body text-wall-ink`}
         onClick={(e) => e.stopPropagation()}
       >
-        {editing ? (
+        {choreEditing && saveChore ? (
+          <ChoreEditor
+            surface="wall"
+            chore={choreEditing.chore}
+            isNew={choreEditing.isNew}
+            members={members}
+            pigmentOf={pigmentOf}
+            now={now}
+            onCancel={() => setChoreEditing(null)}
+            onSave={async (chore) => {
+              await saveChore(chore)
+              setChoreEditing(null)
+            }}
+            onRemove={deleteChore ? async () => {
+              await deleteChore(choreEditing.chore.id)
+              setChoreEditing(null)
+            } : undefined}
+          />
+        ) : editing ? (
           <RoutineEditor
             surface="wall"
             personName={member.name}
@@ -89,6 +121,10 @@ export default function WallPersonSheet({ member, members, pigmentIndex, routine
               known={known}
               onEdit={(routine) => setEditing({ routine, isNew: false })}
               onAdd={(kind: RoutineKind) => setEditing({ routine: newRoutine(kind, member.id, routines), isNew: true })}
+              chores={chores && saveChore ? chores.filter((c) => c.member_id === member.id || (!c.member_id && c.for_member_id === member.id)) : undefined}
+              onEditChore={(chore) => setChoreEditing({ chore, isNew: false })}
+              onAddChore={() => setChoreEditing({ chore: newChore(member.id, now), isNew: true })}
+              now={now}
             />
           </>
         )}

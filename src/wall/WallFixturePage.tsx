@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import { buildTrips, type TravelSettings } from './engine/travel'
+import type { WallChore } from './engine/chores'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
@@ -80,7 +81,7 @@ const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') 
 // at the airport and an Uber (his page's travel settings).
 const TRIP = new URLSearchParams(window.location.search).get('trip') === '1'
 // `?chores=1`: the household chores as Jake listed them on Oct 1 (chores.ts).
-const CHORES = new URLSearchParams(window.location.search).get('chores') === '1'
+const CHORE_LIST = new URLSearchParams(window.location.search).get('chores') === '1'
   ? [
     { id: 'trash', title: 'Trash to the street', member_id: 'jake-id', for_member_id: null, days_of_week: [1, 4], time_local: '20:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
     { id: 'yard', title: 'Landscaping to the street', member_id: 'jake-id', for_member_id: null, days_of_week: [2], time_local: '20:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
@@ -107,6 +108,8 @@ export default function WallFixturePage() {
   const [tripState, setTripState] = useState<WallTripState>({})
   // The trip sheets' choices (canvas 19d), in memory here (the real wall keeps them in settings).
   const [travelSettings, setTravelSettings] = useState<Record<string, TravelSettings>>({})
+  // Chores (canvas 20), saved in memory here.
+  const [CHORES, setChores] = useState<WallChore[]>(CHORE_LIST as WallChore[])
   // `?nobody=1` (board 08a): Jake's portfolio review with nobody on it, as on 2026-09-28.
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
@@ -227,7 +230,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
     </div>
     </WallSpeechContext.Provider>
     } />

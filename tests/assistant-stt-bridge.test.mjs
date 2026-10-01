@@ -64,9 +64,11 @@ test('legacy dictation protocol retains final messages', () => {
 })
 
 // Jake, 2026-09-30: measured, nova-3's words come in 1-second steps; Flux sends an update every ~0.25 s of audio.
-test('Flux is the recognizer when the wall asks for it: its turns in the wall\'s own messages, 80 ms chunks, a tap sends', () => {
+// Then (Oct 1) Jake made Flux the default: nova only when a session asks for it.
+test('Flux is the recognizer by default: its turns in the wall\'s own messages, 80 ms chunks, a tap sends', () => {
   assert.match(bridge, /model=\{FLUX_MODEL\}/)
-  assert.match(bridge, /_stt_provider = 'flux' if msg\.get\('stt_provider'\) == 'flux' else 'nova'/)
+  assert.match(bridge, /^_stt_provider = 'flux'/m)
+  assert.match(bridge, /_stt_provider = 'nova' if msg\.get\('stt_provider'\) == 'nova' else 'flux'/)
   assert.match(bridge, /FLUX_URL if flux else DG_URL/)
   assert.match(bridge, /on_message=_on_flux_message if flux else _on_message/)
   assert.match(bridge, /if event == 'StartOfTurn':[\s\S]{0,260}'type': 'speech_started'/)

@@ -35,7 +35,11 @@ export function choreOnDay(chore: WallChore, date: Date): boolean {
   const start = new Date(y, m - 1, d)
   const day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   if (day < start) return false
-  const weeks = Math.round((sundayOf(day).getTime() - sundayOf(start).getTime()) / WEEK)
+  // Weeks count from its first time (the first chosen day on or after the start): started on a Monday for Sundays,
+  // the first is that coming Sunday, not four weeks later.
+  const first = new Date(start)
+  while (!chore.days_of_week.includes(first.getDay())) first.setDate(first.getDate() + 1)
+  const weeks = Math.round((sundayOf(day).getTime() - sundayOf(first).getTime()) / WEEK)
   return weeks % Math.max(1, chore.every_weeks || 1) === 0
 }
 
