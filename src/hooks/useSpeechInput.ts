@@ -126,6 +126,15 @@ export function useSpeechInput({
   const [bridgeDown, setBridgeDown] = useState(false)
   const supported = !IS_SAFE_MODE
 
+  // Speech-to-text timing (2026-09-30): tell the bridge when words arrive and when they're on screen, so its log
+  // (~/stt-timing.log on the Pi, one clock) can take the delay apart.
+  const mark = useCallback((what: string, text = '') => {
+    const ws = wsRef.current
+    if (ws?.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ type: 'client_timing', what, text: text.slice(0, 200), at: Date.now() })) } catch { /* timing only */ }
+    }
+  }, [])
+
   // ── Stable callback refs — always current, never stale inside setInterval ──
   // This is the core pattern for voice agents: the polling loop runs continuously
   // but React re-creates callbacks whenever state changes (e.g. hasPendingAction).
@@ -645,6 +654,7 @@ export function useSpeechInput({
                   utterance_id: utteranceIdRef.current,
                 })
               }
+              mark('received', display)
               lastInterimRef.current = display
               lastInterimTimeRef.current = now
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
@@ -897,6 +907,7 @@ export function useSpeechInput({
     phase,
     volume,
     signal: signalRef,
+    mark,
     supported,
     bridgeDown,
     start,

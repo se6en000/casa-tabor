@@ -363,6 +363,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const listenerV2 = useListenerV2()
   const liveText = listenerV2 && interim ? shownWords(interim) : interim
   const shownQuestion = speech.listening && liveText ? liveText : question
+  // Timing: when the words are on screen (the bridge logs it beside Deepgram's own times).
+  useEffect(() => {
+    if (!interim) return
+    const frame = requestAnimationFrame(() => speech.mark?.('shown', interim))
+    return () => cancelAnimationFrame(frame)
+  }, [interim]) // eslint-disable-line react-hooks/exhaustive-deps
   const liveWords = listenerV2 && speech.listening && liveText ? inkWords(liveText, speech.signal?.current.words ?? []) : null
   const quote = (text: string) => (liveWords
     ? <>“{liveWords.map((w, i) => <span key={i} className={w.faded ? 'opacity-40' : undefined}>{i > 0 ? ' ' : ''}{w.text}</span>)}”</>

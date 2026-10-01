@@ -122,6 +122,23 @@ def _ws_push_all(msg: dict):
                 dead.add(c)
         _ws_clients.difference_update(dead)
 
+# Speech-to-text timing (Jake, 2026-09-30: "start with very smooth speech to text first"): one JSON line per audio
+# chunk sent, Deepgram message received, and wall receive/display, all on this machine's clock, so the delay from
+# speaking to words on the wall can be taken apart. Kept small: cut back when it passes 20 MB.
+TIMING_LOG = os.path.expanduser('~/stt-timing.log')
+_timing_lock = threading.Lock()
+
+def _timing(kind, **fields):
+    try:
+        line = json.dumps({'t': round(time.time(), 4), 'kind': kind, **fields})
+        with _timing_lock:
+            if os.path.exists(TIMING_LOG) and os.path.getsize(TIMING_LOG) > 20_000_000:
+                os.replace(TIMING_LOG, TIMING_LOG + '.1')
+            with open(TIMING_LOG, 'a') as f:
+                f.write(line + '\n')
+    except Exception:
+        pass
+
 def _ws_push_stt(msg: dict):
     global _stt_client
     with _stt_lock:
@@ -147,6 +164,9 @@ def _handle_ws_client(ws):
             except Exception:
                 continue
             cmd = msg.get('type', '')
+            if cmd == 'client_timing':
+                _timing('wall_' + str(msg.get('what', ''))[:24], text=str(msg.get('text', ''))[:200], at=msg.get('at'))
+                continue
             if cmd == 'accept_wake':
                 wake_id = str(msg.get('wake_id', ''))
                 with _wake_lock:
@@ -652,6 +672,7 @@ def _on_message(ws_arg, message):
         msg_type = data.get('type', '')
 
         if msg_type == 'SpeechStarted':
+            _timing('dg_speech_started', audio_at=data.get('timestamp'))
             _last_speech_started_ts = time.time()
             log.info('[DG] SpeechStarted')
             if _stt_protocol == 'candidate-v1':
@@ -663,6 +684,7 @@ def _on_message(ws_arg, message):
             return
 
         if msg_type == 'UtteranceEnd':
+            _timing('dg_utterance_end', last_word_end=data.get('last_word_end'))
             full = _turn_text()
             if full and data.get('last_word_end') != -1:
                 log.info(f'[DG] UtteranceEnd -> "{full}"')
@@ -679,6 +701,7 @@ def _on_message(ws_arg, message):
         spch_final = data.get('speech_final', False)
         from_finalize = data.get('from_finalize', False)
         words      = alt.get('words', [])
+        _timing('dg_result', text=text, is_final=bool(is_final), speech_final=bool(spch_final), start=data.get('start'), duration=data.get('duration'))
 
         if is_final or spch_final:
             if text:
@@ -767,11 +790,14 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
     chunk_bytes = (RATE // 10) * 2   # 100ms of S16_LE mono
     warmup = 0
     
+    sent_bytes = 0
+    _timing('stream_start', initial_buffer_s=round(len(initial_buffer or b'') / (RATE * 2), 3))
     # Send initial buffer if available (pre-wake audio)
     if initial_buffer:
         try:
             log.info(f'[stream_audio] sending initial buffer ({len(initial_buffer)} bytes)')
             ws_arg.send(initial_buffer, websocket.ABNF.OPCODE_BINARY)
+            sent_bytes += len(initial_buffer)
         except Exception as e:
             log.error(f'send initial buffer failed: {e}')
     
@@ -817,6 +843,8 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
                 last_voice_push = now
             try:
                 ws_arg.send(raw, websocket.ABNF.OPCODE_BINARY)
+                sent_bytes += len(raw)
+                _timing('audio_sent', audio_s=round(sent_bytes / (RATE * 2), 3))
             except Exception as e:
                 log.error(f'send_binary failed: {e}')
                 break
