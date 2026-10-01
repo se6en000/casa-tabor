@@ -13,7 +13,7 @@ import { useSwipeDown } from './useSwipeDown'
 import VoiceHalo from './VoiceHalo'
 import { inkWords, shownWords, type VoiceLineState } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, historyView, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -46,6 +46,29 @@ const WAITING_SILENCE_MS = 45_000
 const shortTitle = (title: string) => {
   const head = title.split(/[:·(—-]/)[0].trim()
   return head.length <= 24 ? head : head.split(' ').slice(0, 3).join(' ')
+}
+
+/** Older lines in the conversation column fade (canvas 24c): the newest full, then a step fainter each. */
+const FADE = ['opacity-100', 'opacity-90', 'opacity-80', 'opacity-70', 'opacity-60', 'opacity-50']
+
+/** A long answer scrolls in place (canvas 24c), so the buttons and the typing line stay put. */
+function ScrollingAnswer({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4)
+    check()
+    el.addEventListener('scroll', check)
+    return () => el.removeEventListener('scroll', check)
+  }, [text])
+  return (
+    <div className="flex flex-col gap-[6px]">
+      <div ref={box} className="max-h-[240px] max-w-[1180px] touch-pan-y overflow-y-auto text-wall-answer">{text}</div>
+      {more && <div className="text-wall-label text-wall-night-ink-2">↓ Scroll for the rest</div>}
+    </div>
+  )
 }
 
 /** Room under the conversation for the typing line, by its height (whole classes, so the styles are built). */
@@ -121,7 +144,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   useEffect(() => () => onDraft(null), [onDraft])
   const which = pending ? null : whichOne(answer, events as never)
   const offer = pending || which ? null : nextStep(answer?.streaming ? null : answer)
-  const thread = threadTurns(messages)
+  // The whole conversation, as said (canvas 24c–d); the column shows the latest few until "↑ N earlier".
+  const thread = threadTurns(messages, 60, 1200)
+  const [earlierOpen, setEarlierOpen] = useState(false)
+  useEffect(() => setEarlierOpen(false), [thread.length])
+  const history = historyView(thread, earlierOpen)
   // Plan it with Casa (P3.25; boards 12b–12d): the plan on screen, its Agree card, and what it saved.
   const planAction = pending?.toolAction?.tool === 'apply_plan' ? pending.toolAction : null
   const plan = planAction ? (planAction.args as unknown as PlanArgs) : null
@@ -424,7 +451,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       : haloState === 'noise' ? 'It’s loud in here'
         : haloState === 'deaf' ? 'Can’t hear the mic —\ntap to try again'
           : ''
-  const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content) : ''), [answer?.content])
+  const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content, 1500) : ''), [answer?.content])
   const pill = 'h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment'
   const lightPill = 'h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink'
 
@@ -650,11 +677,18 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <Bug size={22} />
       </button>
       {(thread.length > 0 || card || plan) && (
-        <div className="flex w-[520px] shrink-0 flex-col gap-[14px]">
+        // On the right, read last (canvas 24b; Jake, 2026-10-01: "like reading a book"): what was said before, the
+        // newest at the bottom, older lines fading; "↑ N earlier" brings back the rest.
+        <div className="order-last flex w-[520px] shrink-0 flex-col gap-[14px]">
           <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">THIS CONVERSATION</div>
-          <div className="flex flex-col gap-[12px] text-wall-detail leading-[1.35]">
-            {thread.map((t, i) => (
-              <div key={i} className={t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}>
+          {(history.earlier > 0 || earlierOpen) && (
+            <button type="button" onClick={() => setEarlierOpen((o) => !o)} className="flex h-[48px] items-center gap-[8px] self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-wall-detail font-semibold text-wall-on-pigment">
+              {earlierOpen ? '↓ Back to the latest' : `↑ ${history.earlier} earlier`}
+            </button>
+          )}
+          <div className={`flex flex-col gap-[12px] text-wall-detail leading-[1.35] ${earlierOpen ? 'max-h-[440px] touch-pan-y overflow-y-auto border-0 border-l-2 border-solid border-wall-ink-2 pl-[16px]' : ''}`}>
+            {history.shown.map(({ turn: t, fade }, i) => (
+              <div key={i} className={`${FADE[Math.min(fade, FADE.length - 1)]} ${t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}`}>
                 {t.images && t.images.length > 0 && (
                   <span className="mb-[8px] flex gap-[8px]">
                     {t.images.map((src, j) => <img key={j} src={src} alt="" className="h-[40px] w-[56px] rounded-[6px] object-cover" />)}
@@ -718,7 +752,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <div className="font-display text-wall-quote font-medium italic">
           {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : !micOn ? 'Type below, or paste a message or pictures.' : 'Ask about the day, or ask to add something.'}
         </div>
-        {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
+        {answerText && <ScrollingAnswer text={answerText} />}
         {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
 
         {which && (

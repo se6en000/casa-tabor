@@ -89,6 +89,21 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Could Kelly take it instead?'),
     said('Kelly’s free then. Want me to make her the driver for softball? Jake would be off the hook.', { conversationState: { activeEntityType: 'event', activeEventId: 'softball', expectedFollowUp: 'event_follow_up', establishedAt: '' } }),
   ],
+  // Canvas 24c–d: a longer conversation — the latest six turns on the right, the rest behind "↑ 4 earlier".
+  long: () => [
+    user('What’s on tomorrow?'),
+    said('Tomorrow, Saturday: Baseball and Softball at Ferrin Park at 12:30, and Kelly’s birthday.'),
+    user('who’s driving Liv?'),
+    said('Jake drives both games, leaving at 11:56.'),
+    user('ok and Sunday?'),
+    said('Nothing planned on Sunday.'),
+    user('yea I gotta do that. what else?'),
+    said('Today, Friday, September 25, Kelly has Work until 6:30 PM.'),
+    user('is anything pressing?'),
+    said('Yes, Giselle picks up Emme and Owen at 2:00.'),
+    user('nothing on todos or reminders?'),
+    said('Two reminders today: Jake has "Pick up Photobook for Liv", and the trash goes out to the street at 8:00. On your to-do list: renew the car registration (due Oct 5), book Owen’s haircut, and three steps on the Halloween project — buy the scuba fins, finish Emme’s jellyfish tentacles, and order the ghost sheet. Kelly’s birthday is tomorrow, so the card and the cake are on the list too, and the photobook pickup closes at 6.'),
+  ],
   // Any day (Jake, 2026-09-29): an answer about one far day offers to open it; asked to open it, it opens.
   'open-day': () => [
     user('Show me the events on October 17th'),

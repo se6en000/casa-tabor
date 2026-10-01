@@ -94,14 +94,14 @@ export function cardText(displayText: string): string {
   return displayText.replace(/\*\*|__|`/g, '')
 }
 
-/** The turns before the latest question (board 06a's thread), so nobody wonders what it remembers. */
-export function threadTurns(messages: AIMessage[], max = 4): Array<{ role: 'user' | 'assistant'; text: string; images?: string[] }> {
+/** The turns before the latest question (board 06a's thread), so nobody wonders what it remembers: the conversation before the latest question; Casa's lines as said (up to `chars`), for the band's right column. */
+export function threadTurns(messages: AIMessage[], max = 4, chars = 160): Array<{ role: 'user' | 'assistant'; text: string; images?: string[] }> {
   const lastUser = messages.map((m) => m.role).lastIndexOf('user')
   return messages
     .slice(0, Math.max(0, lastUser))
     .filter((m) => m.content.trim())
     .slice(-max)
-    .map((m) => ({ role: m.role, text: m.role === 'assistant' ? bandAnswer(m.content, 160) : m.content.trim(), ...(m.imageDataUrls?.length ? { images: m.imageDataUrls } : {}) }))
+    .map((m) => ({ role: m.role, text: m.role === 'assistant' ? bandAnswer(m.content, chars) : m.content.trim(), ...(m.imageDataUrls?.length ? { images: m.imageDataUrls } : {}) }))
 }
 
 interface ChoiceEvent {
@@ -220,4 +220,13 @@ export function firstTime(key: string): boolean {
   if (actedOn.has(key)) return false
   actedOn.add(key)
   return true
+}
+
+/** The conversation column (canvas 24c–d): the latest few turns, newest last, older ones fading; the rest behind "↑ N earlier". */
+export const HISTORY_SHOWN = 6
+export function historyView<T>(turns: T[], open: boolean): { shown: Array<{ turn: T; fade: number }>; earlier: number } {
+  if (open) return { shown: turns.map((turn) => ({ turn, fade: 0 })), earlier: 0 }
+  const shown = turns.slice(-HISTORY_SHOWN)
+  // 0 = full strength (the newest) … 5 = the faintest.
+  return { shown: shown.map((turn, i) => ({ turn, fade: shown.length - 1 - i })), earlier: turns.length - shown.length }
 }

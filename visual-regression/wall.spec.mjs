@@ -2093,3 +2093,22 @@ test('wall: a place in fewer taps — your places first, then the map’s neares
   await expect(sheet.getByText('Royal Palm Beach High School', { exact: true })).toBeVisible()
   expect(inserted).toHaveLength(1)
 })
+
+// Canvas 24b–d (Jake, 2026-10-01, approved: "like reading a book"): the answer by the mic on the left, what was said
+// before on the right — the latest six, newest at the bottom, older ones fading — and "↑ 2 earlier" for the rest.
+test('wall assistant: a longer conversation — the answer on the left, what was said on the right, earlier turns behind a tap', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=long')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const band = wall.getByRole('region', { name: 'Assistant' })
+  await expect(band.getByText('“nothing on todos or reminders?”')).toBeVisible()
+  await expect(band.getByRole('button', { name: '↑ 4 earlier' })).toBeVisible()
+  await expect(band.getByText('What’s on tomorrow?')).toHaveCount(0)
+  await expect(band.getByText('is anything pressing?')).toBeVisible()
+  await expect(wall).toHaveScreenshot('conversation-long.png')
+  await band.getByRole('button', { name: '↑ 4 earlier' }).click()
+  await expect(band.getByText('What’s on tomorrow?')).toBeVisible()
+  await expect(wall).toHaveScreenshot('conversation-earlier.png')
+  await band.getByRole('button', { name: '↓ Back to the latest' }).click()
+  await expect(band.getByText('What’s on tomorrow?')).toHaveCount(0)
+})
