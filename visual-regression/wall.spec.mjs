@@ -304,7 +304,7 @@ test('wall: Edit with nothing changed shows Done, and one tap closes the whole s
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
 
-test('wall: pack tonight — a tap checks a line off (it folds away), See all opens everything, a heading opens its event', async ({ page }) => {
+test('wall: pack tonight — a tap checks a line off (it folds away), "N packed" opens everything, a heading opens its event', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
   const pack = wall.getByRole('region', { name: 'Pack tonight' })
@@ -316,7 +316,9 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await expect(wall.getByText(/Previewing/)).toHaveCount(0) // a tap on a line isn't a tap on the wall
   await expect(wall).toHaveScreenshot('pack-tonight.png')
 
-  await pack.getByRole('button', { name: 'See all' }).click()
+  // Everything fits, so no See all; "2 packed" opens the whole list.
+  await expect(pack.getByRole('button', { name: /^See all/ })).toHaveCount(0)
+  await pack.getByRole('button', { name: '2 packed — see what was checked' }).click()
   const sheet = wall.getByRole('region', { name: 'Everything to pack' })
   await sheet.getByRole('button', { name: 'Water bottle' }).click() // untick it again
   await expect(sheet.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
@@ -1586,8 +1588,12 @@ test('wall: today with a list to get ready: Next Move up top, compact lanes, dec
   await page.evaluate(() => document.fonts.ready)
   await expect(wall.getByRole('region', { name: 'Next move' })).toBeVisible()
   const pack = wall.getByRole('region', { name: 'Get & pack today' })
+  // As many rows as reach the week (Jake, 2026-10-01: "only use 'see all' when the things truly won't fit"): here the
+  // lanes leave three, so everything still to pack shows and only softball's "1 packed" line is cut, and See all
+  // stands in for it.
   await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
-  await expect(pack.getByRole('button', { name: 'Water bottle' })).toBeVisible()
+  for (const name of ['Water bottle', 'Cleats']) await expect(pack.getByRole('button', { name }).first()).toBeVisible()
+  await expect(pack.getByRole('button', { name: 'See all' })).toBeVisible()
   // Three columns across with a decision beside it (Jake: "can't you fit 3 or 4 columns instead of 2?").
   await expect(pack.locator('.grid-cols-3')).toHaveCount(1)
   await expect(wall.getByRole('region', { name: 'Needs a decision today' })).toBeVisible()
@@ -1597,6 +1603,22 @@ test('wall: today with a list to get ready: Next Move up top, compact lanes, dec
   const all = wall.getByRole('region', { name: 'Everything to pack' })
   await expect(all.getByRole('button', { name: 'Glove' }).last()).toHaveAttribute('aria-pressed', 'true')
 })
+
+// Jake, 2026-10-01: "use that area to show as much as possible on the screen … only use 'see all' when the things truly
+// won't fit". Get & pack takes the room down to the week: no line is ever cut in half by it.
+for (const at of ['2026-09-26T11:30:00', '2026-09-25T20:15:00']) {
+  test(`wall: get & pack fills its room and never cuts a line (${at})`, async ({ page }) => {
+    await page.goto(`/__wall-fixture?at=${at}`)
+    await page.getByRole('region', { name: 'Next seven days' }).waitFor()
+    await page.evaluate(() => document.fonts.ready)
+    const cut = await page.evaluate(() => {
+      const list = document.querySelector('section[aria-label="Get & pack today"], section[aria-label="Pack tonight"]').querySelector('.grid')
+      const bottom = list.getBoundingClientRect().bottom
+      return [...list.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().bottom > bottom + 0.5).map((b) => b.textContent)
+    })
+    expect(cut).toEqual([])
+  })
+}
 
 test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', async ({ page }) => {
   const stripTop = async (url) => {

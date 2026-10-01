@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { fitPackingColumns, type FittedPackingGroup, type PackingGroup, type WallChecklistItem } from './packing'
 import { PackingItem } from './WallPackingSheet'
@@ -64,8 +64,10 @@ function PackingGroupView({ group, onToggleItem, onOpenEvent, onSeeAll }: {
 
 export interface GetAndPackProps {
   packing: { groups: PackingGroup[]; packed: number; total: number }
-  /** Rows per column that fit where it sits. */
+  /** Rows per column that fit where it sits (with `fill`, only until it has measured). */
   lines: number
+  /** Take the height it's given and fill it: as many rows as fit before anything goes under See all. */
+  fill?: boolean
   /** Columns that fit across (2 on the evening face; 3–4 on today's, Jake: "can't you fit 3 or 4 columns?"). */
   columns?: 2 | 3 | 4
   /** The section's name for screen readers ("Pack tonight", "Get & pack today"). */
@@ -77,12 +79,32 @@ export interface GetAndPackProps {
 
 const GRID = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
 
-export function GetAndPack({ packing, lines, label, columns: across = 2, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
+const ROW_PX = 44
+
+export function GetAndPack({ packing, lines: least, label, columns: across = 2, fill = false, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
+  // Jake, 2026-10-01: "use that area to show as much as possible on the screen … only use 'see all' when the things
+  // truly won't fit." Every line is a 44 px row, so the rows are the list's height over 44.
+  const list = useRef<HTMLDivElement>(null)
+  const [measured, setMeasured] = useState(0)
+  useEffect(() => {
+    const el = list.current
+    if (!fill || !el) return
+    const measure = () => setMeasured(Math.floor(el.clientHeight / ROW_PX))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fill])
+  // Measured, the room decides, up or down (a guess too high cut the last line in half on the evening face).
+  const lines = fill && measured > 0 ? measured : least
   const { columns, hidden } = useMemo(() => fitPackingColumns(packing.groups, lines, across), [packing.groups, lines, across])
+  // A packed line that didn't fit is the only way to the ticks gone too: See all stands in for it.
+  const cut = hidden > 0 || columns.some((col) => col.some((g) => g.packed > 0 && !g.showPacked))
   return (
-    <section aria-label={label} className="flex min-w-0 flex-1 flex-col">
+    <section aria-label={label} className={`flex min-w-0 flex-1 flex-col ${fill ? 'min-h-0' : ''}`}>
       <SectionHeading
-        action={onSeeAll && (
+        // Only when something truly doesn't fit (Jake, 2026-10-01); "N packed" still opens every tick.
+        action={onSeeAll && cut && (
           <button
             type="button"
             onClick={(event) => {
@@ -99,7 +121,7 @@ export function GetAndPack({ packing, lines, label, columns: across = 2, onToggl
       >
         GET &amp; PACK · {packing.packed} OF {packing.total} DONE
       </SectionHeading>
-      <div className={`grid min-h-0 ${GRID[across]} gap-x-[32px]`}>
+      <div ref={list} className={`grid min-h-0 ${GRID[across]} gap-x-[32px] ${fill ? 'flex-1 content-start overflow-hidden' : ''}`}>
         {columns.map((col, i) => (
           <div key={i} className="flex min-w-0 flex-col">
             {col.map((group) => <PackingGroupView key={group.eventId} group={group} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} />)}

@@ -17,6 +17,8 @@ export interface PackingGroup {
   /** "Softball · 12:30" */
   heading: string
   items: WallChecklistItem[]
+  /** On today's face: the event is already under way (its list stays, but it's the first to give up its place). */
+  started?: boolean
 }
 
 interface EventMoment {
@@ -45,14 +47,13 @@ export function packingEventIds(plan: DayPlan): string[] {
   return dayEvents(plan).map((e) => e.id)
 }
 
-/** `from`: on today's face, only the events that haven't started yet (one under way has nothing left to pack). */
+/** `from`: on today's face, now; the events that have started are marked so (their lists stay, to see what wasn't ticked). */
 export function packingGroups(plan: DayPlan, items: WallChecklistItem[], options: { from?: Date } = {}): { groups: PackingGroup[]; packed: number; total: number } {
   const groups: PackingGroup[] = []
   for (const event of dayEvents(plan)) {
-    if (options.from && event.at.getTime() < options.from.getTime()) continue
     const own = items.filter((i) => i.event_id === event.id).sort((a, b) => a.sort_order - b.sort_order)
     if (own.length === 0) continue
-    groups.push({ eventId: event.id, heading: `${event.title.split(':')[0].trim()} · ${clockTime(event.at)}`, items: own })
+    groups.push({ eventId: event.id, heading: `${event.title.split(':')[0].trim()} · ${clockTime(event.at)}`, items: own, ...(options.from && event.at.getTime() < options.from.getTime() ? { started: true } : {}) })
   }
   const all = groups.flatMap((g) => g.items)
   return { groups, packed: all.filter((i) => i.checked).length, total: all.length }
@@ -101,11 +102,21 @@ export function fitPackingColumns(groups: PackingGroup[], lines: number, columns
     const open = g.items.filter((i) => !i.checked).length
     return 1 + open + (open < g.items.length ? 1 : 0)
   }
+  let hidden = 0
+  // More events than columns: the ones already under way step aside first (counted), the latest-started last.
+  let shown = groups
+  for (let extra = groups.length - columns; extra > 0; extra--) {
+    const i = shown.findIndex((g) => g.started)
+    if (i < 0) break
+    hidden += shown[i].items.filter((item) => !item.checked).length
+    shown = shown.filter((_, j) => j !== i)
+  }
   const cols: FittedPackingGroup[][] = [[]]
   let left = lines
-  let hidden = 0
-  for (const group of groups) {
-    if (need(group) > left && cols[cols.length - 1].length > 0 && cols.length < columns) {
+  for (const [k, group] of shown.entries()) {
+    // Each event its own column while there are columns enough for the rest; stacked only when there aren't.
+    const roomForEach = shown.length - k <= columns - cols.length
+    if ((need(group) > left || roomForEach) && cols[cols.length - 1].length > 0 && cols.length < columns) {
       cols.push([])
       left = lines
     }

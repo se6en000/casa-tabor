@@ -119,7 +119,7 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
         </section>
 
         {packing.total > 0 && (
-          <GetAndPack packing={packing} lines={PACKING_LINES} label="Pack tonight" onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />
+          <GetAndPack packing={packing} lines={PACKING_LINES} fill label="Pack tonight" onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />
         )}
 
         {/* An open section like the two beside it (heading, rule, first line level with theirs), not a boxed card. */}

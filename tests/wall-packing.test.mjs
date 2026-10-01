@@ -88,16 +88,26 @@ test('an event too long for any column starts one and is cut there', () => {
 })
 
 // Jake, 2026-10-01: "the home page/today should show the get and pack section so I can check off the things I need …
-// like Owen's pink shirt before I leave for school … able to see what was checked off." On today's face only what's
-// still ahead counts: an event already under way has nothing left to pack for.
-test('today: only the events still ahead keep their list', () => {
+// able to see what was checked off", then: "use that area to show as much as possible … only use 'see all' when the
+// things truly won't fit". An event already under way keeps its list (what wasn't ticked); it's only marked started,
+// so it's the first to give up its column when there are more events than room.
+test('today: an event under way keeps its list, marked started; the count is the whole day', () => {
   const items = [item('birthday', 'Card'), item('baseball', 'Glove', true), item('softball', 'Cleats')]
-  const all = packingGroups(saturday, items)
-  assert.deepEqual(all.groups.map((g) => g.eventId), ['birthday', 'baseball', 'softball'])
   // At 10:00 on Saturday the 9:00 birthday has started; the 12:30 games are still ahead.
-  const ahead = packingGroups(saturday, items, { from: new Date(2026, 8, 26, 10, 0) })
-  assert.deepEqual(ahead.groups.map((g) => g.eventId), ['baseball', 'softball'])
-  assert.deepEqual([ahead.packed, ahead.total], [1, 2])
+  const today = packingGroups(saturday, items, { from: new Date(2026, 8, 26, 10, 0) })
+  assert.deepEqual(today.groups.map((g) => [g.eventId, Boolean(g.started)]), [['birthday', true], ['baseball', false], ['softball', false]])
+  assert.deepEqual([today.packed, today.total], [1, 3])
+})
+
+test('with more events than columns, the ones under way give up their place first, and are counted', async () => {
+  const { fitPackingColumns } = await import('../src/wall/packing.ts')
+  const g = (id, started = false) => ({ eventId: id, heading: id, started, items: [item(id, 'One'), item(id, 'Two')] })
+  // Room for all three: every one shows, in time order, started or not.
+  assert.deepEqual(fitPackingColumns([g('trip', true), g('bat'), g('gym')], 6, 4).columns.map((c) => c.map((x) => x.eventId)), [['trip'], ['bat'], ['gym']])
+  // Five events, four columns: the one under way steps aside.
+  const five = fitPackingColumns([g('trip', true), g('a'), g('b'), g('c'), g('d')], 6, 4)
+  assert.deepEqual(five.columns.map((c) => c.map((x) => x.eventId)), [['a'], ['b'], ['c'], ['d']])
+  assert.equal(five.hidden, 2)
 })
 
 // Jake, 2026-10-01: "for get and pack on the today page, don't you think you can fit 3 or 4 columns instead of 2?"
