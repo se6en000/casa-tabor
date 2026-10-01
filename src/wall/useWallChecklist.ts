@@ -1,6 +1,7 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { WallChecklistItem } from './packing'
+import { CHECKLIST_KEY, tickInCache } from './checklistCache'
 
 /**
  * Checklist items for the given events ("Pack tonight"). Keyed under 'events'
@@ -25,11 +26,16 @@ export function useWallChecklist(eventIds: string[]): WallChecklistItem[] {
   return data ?? []
 }
 
-/** Tick or untick one item; the wall's checklist refreshes right away. */
+/** Tick or untick one item: the box flips at once, the write follows (a failed write puts it back). */
 export async function toggleChecklistItem(queryClient: QueryClient, id: string, checked: boolean): Promise<void> {
+  // A read already on its way would land with the old value and flip the box back.
+  void queryClient.cancelQueries({ queryKey: CHECKLIST_KEY })
+  const undo = tickInCache(queryClient, id, checked)
   const { error } = await supabase.from('event_checklist_items').update({ checked }).eq('id', id)
-  if (error) throw error
-  await queryClient.invalidateQueries({ queryKey: ['events', 'wall-checklist'] })
+  if (error) {
+    undo()
+    throw error
+  }
 }
 
 /** One event's own list — a reminder's too (the wall's week list only loads outings and activities). */
