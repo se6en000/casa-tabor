@@ -33,7 +33,10 @@ export function latestExchange(messages: AIMessage[]): { question: string | null
 
 /** The latest single action waiting for a yes (multi-item batches still use the full assistant). */
 export function pendingAction(messages: AIMessage[]): AIMessage | null {
-  return [...messages].reverse().find((m) => m.toolAction?.status === 'pending') ?? null
+  // Only the latest answer's card waits (canvas 25b; Jake, 2026-10-01: a card stayed up under the next answer after
+  // he'd said "no, what food could I make…"). Saying no, or moving on to something else, lets it go.
+  const lastAnswer = [...messages].reverse().find((m) => m.role === 'assistant')
+  return lastAnswer?.toolAction?.status === 'pending' ? lastAnswer : null
 }
 
 /**
@@ -229,4 +232,24 @@ export function historyView<T>(turns: T[], open: boolean): { shown: Array<{ turn
   const shown = turns.slice(-HISTORY_SHOWN)
   // 0 = full strength (the newest) … 5 = the faintest.
   return { shown: shown.map((turn, i) => ({ turn, fade: shown.length - 1 - i })), earlier: turns.length - shown.length }
+}
+
+/**
+ * An answer with shape (canvas 25a; Jake, 2026-10-01: the recipe ideas came as one long paragraph): a short lead, and
+ * — when Casa lists options, ideas or steps — the list as tiles, each a name and one line. Fewer than two items: none.
+ */
+export function answerShape(content: string): { lead: string; items: Array<{ title: string; detail: string }>; tail: string } {
+  const lines = content.replace(/\*\*|__|`/g, '').split('\n').map((l) => l.trim()).filter(Boolean)
+  const isItem = (l: string) => /^(?:[-*•]|\d+[.)])\s+/.test(l)
+  const first = lines.findIndex(isItem)
+  if (first < 0) return { lead: bandAnswer(content), items: [], tail: '' }
+  let last = first
+  while (last + 1 < lines.length && isItem(lines[last + 1])) last += 1
+  const items = lines.slice(first, last + 1).map((l) => {
+    const text = l.replace(/^(?:[-*•]|\d+[.)])\s+/, '')
+    const m = /^(.{2,60}?)(?::|\s[—–-]\s)\s*(.+)$/.exec(text)
+    return m ? { title: m[1].trim(), detail: m[2].trim() } : { title: text, detail: '' }
+  })
+  if (items.length < 2) return { lead: bandAnswer(content), items: [], tail: '' }
+  return { lead: bandAnswer(lines.slice(0, first).join('\n')), items: items.slice(0, 4), tail: bandAnswer(lines.slice(last + 1).join('\n')) }
 }

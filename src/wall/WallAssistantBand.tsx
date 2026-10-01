@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bug, Mic } from 'lucide-react'
+import { Bug, Mic, X } from 'lucide-react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
@@ -13,7 +13,7 @@ import { useSwipeDown } from './useSwipeDown'
 import VoiceHalo from './VoiceHalo'
 import { inkWords, shownWords, type VoiceLineState } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, historyView, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, answerShape, firstTime, historyView, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -70,15 +70,6 @@ function ScrollingAnswer({ text }: { text: string }) {
     </div>
   )
 }
-
-/** Room under the conversation for the typing line, by its height (whole classes, so the styles are built). */
-const LINE_ROOM = [
-  { fits: 150, pb: 'pb-[230px]' },
-  { fits: 210, pb: 'pb-[290px]' },
-  { fits: 270, pb: 'pb-[350px]' },
-  { fits: 330, pb: 'pb-[410px]' },
-  { fits: Infinity, pb: 'pb-[470px]' },
-]
 
 export interface WallAssistantBandProps {
   /**
@@ -200,9 +191,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const micWanted = useRef(!computer)
   const [micOn, setMicOn] = useState(!computer)
   const typeLine = useRef<WallTypeLineHandle>(null)
-  // The band keeps room for the line as it grows (pictures waiting, more lines typed).
-  const [lineHeight, setLineHeight] = useState(0)
-  const lineRoom = LINE_ROOM.find((r) => lineHeight <= r.fits) ?? LINE_ROOM[LINE_ROOM.length - 1]
   /** "Say more": the mic where talking is the way in; the line, focused, on a computer that hasn't talked. */
   const talkOrType = () => {
     setNote(null)
@@ -452,6 +440,16 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         : haloState === 'deaf' ? 'Can’t hear the mic —\ntap to try again'
           : ''
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content, 1500) : ''), [answer?.content])
+  // A list in the answer shows as tiles under a short lead (canvas 25a).
+  const shape = useMemo(() => (answer?.content ? answerShape(answer.content) : null), [answer?.content])
+  // An earlier line opened in full (each is cut to two lines; canvas 25a).
+  const [openLine, setOpenLine] = useState<number | null>(null)
+  // The panel on a computer (canvas 25c): its conversation keeps the newest in view.
+  const panelScroll = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = panelScroll.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages.length, loading, pending?.id, interim])
   const pill = 'h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment'
   const lightPill = 'h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink'
 
@@ -577,6 +575,146 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     )
   }
 
+  // On a computer, Casa is a panel down the right, beside the day (canvas 25c–d; Jake, 2026-10-01: "on the desktop as a
+  // panel"): one conversation, newest at the bottom; type, paste or drop pictures, or click the mic.
+  if (computer) {
+    const convo = messages.filter((m) => m.content.trim() || m.imageDataUrls?.length)
+    const lastAnswerId = [...convo].reverse().find((m) => m.role === 'assistant')?.id
+    const smallPill = 'h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment'
+    const smallLight = 'h-[48px] rounded-full border-0 bg-wall-on-pigment px-[20px] text-wall-detail font-semibold text-wall-ink'
+    return (
+      <>
+        <section
+          aria-label="Assistant"
+          onClick={(event) => { event.stopPropagation(); lastTouch.current = Date.now() }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); void typeLine.current?.addFiles(Array.from(e.dataTransfer.files)) }}
+          className="absolute right-0 top-0 z-30 flex h-[1080px] w-[640px] flex-col bg-wall-band font-body text-wall-on-pigment shadow-[-24px_0_60px] shadow-wall-night-ground/40"
+        >
+          <div className="flex items-center gap-[14px] border-0 border-b border-solid border-wall-ink-2/50 px-[28px] pb-[18px] pt-[26px]">
+            <button
+              type="button"
+              aria-label={speech.listening ? 'Stop listening' : 'Talk'}
+              onClick={() => { micWanted.current = true; setMicOn(true); if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
+              className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-night-brass p-0 ${state === 'LISTENING' ? 'bg-wall-night-brass text-wall-ink' : 'bg-transparent text-wall-night-brass'}`}
+            >
+              <Mic size={22} />
+            </button>
+            <span className="font-display text-wall-date font-semibold">Casa</span>
+            <span className="min-w-0 flex-1 truncate text-wall-label text-wall-night-ink-2">
+              {state === 'LISTENING' ? 'Listening…' : state === 'THINKING' ? (status ?? 'Thinking…') : state === 'NEEDS A YES' ? 'Needs a yes' : 'Type, or click the mic to talk'}
+            </span>
+            <button type="button" aria-label="Report a problem" onClick={openReport} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2"><Bug size={20} /></button>
+            <button type="button" aria-label="Close Casa" onClick={onClose} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-on-pigment"><X size={20} /></button>
+          </div>
+          <div ref={panelScroll} className="flex min-h-0 flex-1 touch-pan-y flex-col gap-[16px] overflow-y-auto px-[28px] py-[24px] text-wall-detail leading-[1.4]">
+            <div className="mt-auto" />
+            {convo.length === 0 && !interim && <div className="text-wall-body text-wall-night-ink-2">Ask about the day, or ask to add something. Type below, or paste a message or pictures.</div>}
+            {convo.map((m) => {
+              if (m.role === 'user') {
+                return (
+                  <div key={m.id} className="max-w-[480px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px]">
+                    {m.imageDataUrls && m.imageDataUrls.length > 0 && (
+                      <span className="mb-[8px] flex flex-wrap gap-[8px]">{m.imageDataUrls.map((src, j) => <img key={j} src={src} alt="" className="h-[64px] w-[88px] rounded-[8px] object-cover" />)}</span>
+                    )}
+                    {m.content}
+                  </div>
+                )
+              }
+              const shaped = m.id === lastAnswerId ? answerShape(m.content) : null
+              if (shaped && shaped.items.length > 0) {
+                return (
+                  <div key={m.id} className="flex flex-col gap-[10px]">
+                    {shaped.lead && <div>{shaped.lead}</div>}
+                    {shaped.items.map((item) => (
+                      <div key={item.title} className="flex flex-col gap-[2px] rounded-[16px] bg-wall-on-pigment px-[18px] py-[14px] text-wall-ink">
+                        <span className="font-display text-wall-heading font-bold leading-tight">{item.title}</span>
+                        {item.detail && <span className="text-wall-label text-wall-ink-2">{item.detail}</span>}
+                      </div>
+                    ))}
+                    {shaped.tail && <div className="text-wall-night-ink-2">{shaped.tail}</div>}
+                  </div>
+                )
+              }
+              return <div key={m.id} className={m.id === lastAnswerId ? 'text-wall-on-pigment' : 'text-wall-night-ink-2'}>{bandAnswer(m.content, 2000)}</div>
+            })}
+            {speech.listening && liveText && <div className="max-w-[480px] self-end rounded-[18px_18px_6px_18px] border border-dashed border-wall-ink-2 px-[16px] py-[12px] text-wall-night-ink-2">{liveText}</div>}
+            {loading && <div className="text-wall-night-ink-2">{status ?? 'Thinking…'}</div>}
+            {plan ? (
+              <WallPlanDraft plan={plan} previous={previousPlan} working={working} onSetUp={openAgree} onKeepTalking={talkOrType} />
+            ) : card ? (
+              <WallAssistantCard
+                card={card}
+                members={members}
+                pigmentOf={(id) => pigments.get(id) ?? null}
+                working={working}
+                onYes={() => void confirm()}
+                onChange={talkOrType}
+                onNo={cancel}
+                onPickDriver={card.kind === 'change' ? (name) => setPendingArgs({ driver_name: name }) : undefined}
+              />
+            ) : pending?.toolAction ? (
+              <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment px-[20px] py-[18px] text-wall-ink">
+                <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
+                <div className="whitespace-pre-line font-display text-wall-heading font-semibold">{cardText(pending.toolAction.displayText)}</div>
+                <div className="flex gap-[10px]">
+                  <button type="button" disabled={working} onClick={() => void confirm()} className="h-[48px] rounded-full border-0 bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment">{working ? 'Saving…' : 'Yes, do it'}</button>
+                  <button type="button" disabled={working} onClick={cancel} className="h-[48px] rounded-full border border-solid border-wall-rule bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">No</button>
+                </div>
+              </div>
+            ) : null}
+            {which && (
+              <div className="flex flex-col gap-[10px]">
+                {which.choices.slice(0, 3).map((c) => (
+                  <button key={c.id} type="button" disabled={loading} onClick={() => { setNote(null); void send(c.say) }} className="flex flex-col gap-[4px] rounded-[16px] border-0 bg-wall-on-pigment px-[18px] py-[14px] text-left text-wall-ink">
+                    <span className="text-wall-label font-bold tracking-[0.12em] text-wall-ink-2">{c.when}</span>
+                    <span className="font-display text-wall-heading font-semibold leading-tight">{c.title}</span>
+                  </button>
+                ))}
+                <button type="button" className={`${smallPill} self-start`} onClick={() => void send('Never mind')}>Neither — never mind</button>
+              </div>
+            )}
+            {note && <div className="text-wall-night-brass">{note}</div>}
+            {!pending && !which && !loading && (offer || (pointAt && events.some((e) => e.id === pointAt)) || (day && onOpenDay)) && (
+              <div className="flex flex-wrap gap-[10px]">
+                {offer && <button type="button" className={smallLight} disabled={loading} onClick={() => { setNote(null); void send(offer.say) }}>{offer.label}</button>}
+                {pointAt && events.some((e) => e.id === pointAt) && <button type="button" className={offer ? smallPill : smallLight} onClick={() => onOpenEvent(pointAt)}>Open {shortTitle(events.find((e) => e.id === pointAt)?.title ?? '') || 'it'}</button>}
+                {day && onOpenDay && <button type="button" className={smallPill} onClick={() => onOpenDay(day.date)}>Open {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</button>}
+              </div>
+            )}
+            {answer?.directions && <WallDirections route={answer.directions} computer />}
+          </div>
+          <div className="border-0 border-t border-solid border-wall-ink-2/50 px-[28px] pb-[24px] pt-[16px]">
+            <WallTypeLine
+              key={staged?.nonce ?? 0}
+              ref={typeLine}
+              charsPerLine={36}
+              placeholder="Type to Casa, or paste"
+              busy={busy}
+              initialText={staged?.text ?? ''}
+              initialImages={staged?.images ?? []}
+              onSend={(text, images) => {
+                stopRef.current()
+                setNote(null)
+                void send(text, images.length ? images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
+              }}
+            />
+          </div>
+        </section>
+        {agreeOpen && plan && (
+          <WallPlanAgree plan={plan} skip={agreeSkip} working={working}
+            onToggle={(id) => setAgreeSkip((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
+            onAgree={() => agree(agreeSkip)} onBack={() => setAgreeOpen(false)} />
+        )}
+        {savedPlan && (
+          <WallPlanSaved plan={savedPlan.plan} result={savedPlan.result} working={working}
+            onOpen={onOpenPlace && ((open) => { setSavedFor(null); onOpenPlace(open) })}
+            onUndo={() => void undoPlan?.(savedFor!)} onDone={() => setSavedFor(null)} />
+        )}
+      </>
+    )
+  }
+
   // A questionable trigger barely touches the screen (2026-09-30): the pill, until words are heard.
   if (bandCompact({ viaWake, heard: interim, messages: messages.length, expanded })) {
     return (
@@ -600,10 +738,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     <section
       aria-label="Assistant"
       {...swipe}
-      className={`absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] pt-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60 ${computer ? lineRoom.pb : 'pb-[44px]'}`}
-      // Pictures dropped anywhere on the band join the line (22b).
-      onDragOver={computer ? (e) => e.preventDefault() : undefined}
-      onDrop={computer ? (e) => { e.preventDefault(); void typeLine.current?.addFiles(Array.from(e.dataTransfer.files)) } : undefined}
+      className={`absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] pt-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60 pb-[44px]`}
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()
@@ -688,7 +823,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           )}
           <div className={`flex flex-col gap-[12px] text-wall-detail leading-[1.35] ${earlierOpen ? 'max-h-[440px] touch-pan-y overflow-y-auto border-0 border-l-2 border-solid border-wall-ink-2 pl-[16px]' : ''}`}>
             {history.shown.map(({ turn: t, fade }, i) => (
-              <div key={i} className={`${FADE[Math.min(fade, FADE.length - 1)]} ${t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}`}>
+              <div key={i} onClick={() => setOpenLine((o) => (o === i ? null : i))} className={`${openLine === i ? '' : 'line-clamp-2'} ${FADE[Math.min(fade, FADE.length - 1)]} ${t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}`}>
                 {t.images && t.images.length > 0 && (
                   <span className="mb-[8px] flex gap-[8px]">
                     {t.images.map((src, j) => <img key={j} src={src} alt="" className="h-[40px] w-[56px] rounded-[6px] object-cover" />)}
@@ -752,7 +887,20 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <div className="font-display text-wall-quote font-medium italic">
           {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : !micOn ? 'Type below, or paste a message or pictures.' : 'Ask about the day, or ask to add something.'}
         </div>
-        {answerText && <ScrollingAnswer text={answerText} />}
+        {shape && shape.items.length > 0 ? (
+          <div className="flex flex-col gap-[16px]">
+            {shape.lead && <div className="max-w-[1180px] text-wall-answer">{shape.lead}</div>}
+            <div className={`grid gap-[18px] ${shape.items.length === 4 ? 'grid-cols-4' : shape.items.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {shape.items.map((item) => (
+                <div key={item.title} className="flex flex-col gap-[8px] rounded-[20px] bg-wall-on-pigment px-[22px] py-[20px] text-wall-ink">
+                  <span className="font-display text-wall-heading font-bold leading-tight">{item.title}</span>
+                  {item.detail && <span className="line-clamp-3 text-wall-detail text-wall-ink-2">{item.detail}</span>}
+                </div>
+              ))}
+            </div>
+            {shape.tail && <div className="text-wall-body text-wall-night-ink-2">{shape.tail}</div>}
+          </div>
+        ) : answerText && <ScrollingAnswer text={answerText} />}
         {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
 
         {which && (
@@ -837,23 +985,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <WallPlanAgree plan={plan} skip={agreeSkip} working={working}
           onToggle={(id) => setAgreeSkip((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
           onAgree={() => agree(agreeSkip)} onBack={() => setAgreeOpen(false)} />
-      )}
-      {computer && !reporting && (
-        <div className="absolute bottom-[36px] left-[320px] right-[64px]">
-          <WallTypeLine
-            onHeight={setLineHeight}
-            key={staged?.nonce ?? 0}
-            ref={typeLine}
-            busy={busy}
-            initialText={staged?.text ?? ''}
-            initialImages={staged?.images ?? []}
-            onSend={(text, images) => {
-              stopRef.current()
-              setNote(null)
-              void send(text, images.length ? images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
-            }}
-          />
-        </div>
       )}
       {savedPlan && (
         <WallPlanSaved plan={savedPlan.plan} result={savedPlan.result} working={working}

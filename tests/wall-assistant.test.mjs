@@ -177,3 +177,27 @@ test('the conversation column: the latest six, newest strongest; the rest behind
   assert.equal(open.shown.length, 8)
   assert.equal(historyView(['a'], false).earlier, 0)
 })
+
+// Canvas 25b (Jake, 2026-10-01): the card for "snacks for the softball game" stayed up, waiting for a yes, under the
+// answer to his next question ("no, what food could I make with those ingredients"). Only the latest answer's card waits.
+test('a card waits only while it is the latest answer; moving on lets it go', async () => {
+  const { pendingAction } = await import('../src/wall/assistant.ts')
+  const card = { id: 'a1', role: 'assistant', content: 'Add watermelon and grapes?', toolAction: { tool: 'add_prep_item', args: {}, displayText: 'x', status: 'pending' } }
+  const ask = { id: 'u1', role: 'user', content: 'snacks for the game: a watermelon and some grapes' }
+  assert.equal(pendingAction([ask, card])?.id, 'a1')
+  assert.equal(pendingAction([ask, card, { id: 'u2', role: 'user', content: 'no, what food could I make with those' }])?.id, 'a1', 'still up while Casa answers')
+  assert.equal(pendingAction([ask, card, { id: 'u2', role: 'user', content: 'no, what food could I make with those' }, { id: 'a2', role: 'assistant', content: 'Fruit skewers…' }]), null)
+})
+
+// Canvas 25a (Jake, 2026-10-01: "I don't love it" — snack ideas came as one long paragraph): a short lead, the list as tiles.
+test('an answer with shape: a lead line, then options as tiles (name and one line)', async () => {
+  const { answerShape } = await import('../src/wall/assistant.ts')
+  const shaped = answerShape('Three easy ones for a hot afternoon game:\n- **Fruit skewers**: watermelon cubes and grapes on sticks.\n- Mint-lime fruit salad — watermelon, halved grapes, lime and mint.\n- Frozen grape cups: grapes frozen overnight.\nWant one on the game’s list?')
+  assert.equal(shaped.lead, 'Three easy ones for a hot afternoon game:')
+  assert.deepEqual(shaped.items.map((i) => i.title), ['Fruit skewers', 'Mint-lime fruit salad', 'Frozen grape cups'])
+  assert.equal(shaped.items[1].detail, 'watermelon, halved grapes, lime and mint.')
+  assert.equal(shaped.tail, 'Want one on the game’s list?')
+  const plain = answerShape('Yes, Kelly has Gym at 7:30 PM.')
+  assert.deepEqual([plain.lead, plain.items.length], ['Yes, Kelly has Gym at 7:30 PM.', 0])
+  assert.equal(answerShape('Only one:\n- Fruit skewers: easy').items.length, 0)
+})

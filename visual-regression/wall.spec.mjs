@@ -2112,3 +2112,23 @@ test('wall assistant: a longer conversation — the answer on the left, what was
   await band.getByRole('button', { name: '↓ Back to the latest' }).click()
   await expect(band.getByText('What’s on tomorrow?')).toHaveCount(0)
 })
+
+// Canvas 25a and 25c (Jake, 2026-10-01: "this is the right direction"): a list in an answer is tiles under a short lead —
+// in the band on the wall, and in the panel on a computer.
+test('wall assistant: an answer with a list is tiles — in the band, and in the computer’s panel', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=snacks')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const band = wall.getByRole('region', { name: 'Assistant' })
+  await expect(band.getByText('Three easy ones for a hot afternoon game:')).toBeVisible()
+  await expect(band.getByText('Fruit skewers', { exact: true })).toBeVisible()
+  await expect(band.getByText('Frozen grape cups', { exact: true })).toBeVisible()
+  await expect(wall).toHaveScreenshot('band-tiles.png')
+
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=snacks&keyboard=device')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(band.getByText('Mint-lime fruit salad', { exact: true })).toBeVisible()
+  await expect(band.getByText('how about saturday')).toBeVisible()
+  await expect(band.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
+  await expect(wall).toHaveScreenshot('panel-tiles.png')
+})

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { ArrowUp, Paperclip, X } from 'lucide-react'
 import { MAX_IMAGES, readableFiles, typedTurn, type TypedImage } from './typeLine'
 import { toImages } from './toImages'
@@ -17,17 +17,10 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
   busy?: boolean
   initialText?: string
   initialImages?: TypedImage[]
-  /** Its height as it grows, so the band can keep room for it. */
-  onHeight?: (px: number) => void
-}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], onHeight }, ref) {
-  const box = useRef<HTMLFormElement>(null)
-  useEffect(() => {
-    const el = box.current
-    if (!el || !onHeight || typeof ResizeObserver === 'undefined') return
-    const watch = new ResizeObserver(() => onHeight(el.offsetHeight))
-    watch.observe(el)
-    return () => watch.disconnect()
-  }, [onHeight])
+  /** About how many characters fit on a line (the panel is narrow), so the box grows with the words. */
+  charsPerLine?: number
+  placeholder?: string
+}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], charsPerLine = 90, placeholder = 'Type to Casa, or paste a message or pictures' }, ref) {
   const [text, setText] = useState(initialText)
   const [images, setImages] = useState<TypedImage[]>(initialImages)
   const [focused, setFocused] = useState(true)
@@ -46,10 +39,9 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
     setText('')
     setImages([])
   }
-  const lines = Math.min(4, Math.max(1, text.split('\n').length, Math.ceil(text.length / 90)))
+  const lines = Math.min(6, Math.max(1, text.split('\n').length, Math.ceil(text.length / charsPerLine)))
   return (
     <form
-      ref={box}
       aria-label="Type to Casa"
       className="flex flex-col gap-[12px]"
       onSubmit={(e) => { e.preventDefault(); submit() }}
@@ -80,7 +72,7 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
           aria-label="Type to Casa"
           value={text}
           rows={lines}
-          placeholder="Type to Casa, or paste a message or pictures"
+          placeholder={placeholder}
           onChange={(e) => setText(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

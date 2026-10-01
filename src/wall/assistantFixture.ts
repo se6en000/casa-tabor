@@ -89,6 +89,13 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Could Kelly take it instead?'),
     said('Kelly’s free then. Want me to make her the driver for softball? Jake would be off the hook.', { conversationState: { activeEntityType: 'event', activeEventId: 'softball', expectedFollowUp: 'event_follow_up', establishedAt: '' } }),
   ],
+  // Canvas 25a/c: an answer with a list — tiles under a short lead, on the wall and in the panel.
+  snacks: () => [
+    user('how about saturday'),
+    said('Saturday, October 3: Jake goes to the Green Market at 9:00. At 2:00, Jake, Kelly and Liv have the Huskies game at Olympia Park.'),
+    user('what food could I make with a watermelon and some grapes?'),
+    said('Three easy ones for a hot afternoon game:\n- Fruit skewers: watermelon cubes and grapes on sticks, easy to grab.\n- Mint-lime fruit salad: watermelon, halved grapes, lime juice and torn mint.\n- Frozen grape cups: grapes frozen overnight, watermelon wedges on the side.'),
+  ],
   // Canvas 24c–d: a longer conversation — the latest six turns on the right, the rest behind "↑ 4 earlier".
   long: () => [
     user('What’s on tomorrow?'),
