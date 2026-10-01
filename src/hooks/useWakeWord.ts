@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { sttProvider } from '../lib/sttProvider'
 
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SCREENSAVER_GRACE_MS = 3000  // ignore wake triggers for 3s after screensaver activates
@@ -74,7 +75,7 @@ export function useWakeWord(drawerOpen: boolean, screensaverActive: boolean, ena
           if (now - drawerClosedAtRef.current < DRAWER_CLOSE_GRACE_MS) return
           if (screensaverActiveRef.current && now - screensaverActiveAtRef.current < SCREENSAVER_GRACE_MS) return
 
-          ws.send(JSON.stringify({ type: 'accept_wake', wake_id: msg.wake_id }))
+          ws.send(JSON.stringify({ type: 'accept_wake', wake_id: msg.wake_id, stt_provider: sttProvider() }))
           const traceId = createTraceId()
           const launchDetail = { source: 'wake_word', traceId, wakeAt: now }
           if (screensaverActiveRef.current) {

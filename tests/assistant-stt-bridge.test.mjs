@@ -74,4 +74,7 @@ test('Flux is the recognizer when the wall asks for it: its turns in the wall\'s
   assert.match(bridge, /_emit_turn_candidate\('flux_end_of_turn', conf\)/)
   assert.match(bridge, /elif cmd == 'finalize' and _stt_provider == 'flux':[\s\S]{0,260}_emit_turn_candidate\('manual_finalize'\)/)
   assert.match(bridge, /chunk_bytes = \(RATE \* 2 \* 80\) \/\/ 1000/)
+  // A wake opens the recognizer before the wall's 'start': the choice rides on the acceptance.
+  assert.match(wake, /type: 'accept_wake', wake_id: msg\.wake_id, stt_provider: sttProvider\(\)/)
+  assert.match(bridge, /if cmd == 'accept_wake':[\s\S]{0,400}_stt_provider = msg\['stt_provider'\]/)
 })

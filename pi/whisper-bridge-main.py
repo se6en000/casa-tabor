@@ -183,6 +183,10 @@ def _handle_ws_client(ws):
                 continue
             if cmd == 'accept_wake':
                 wake_id = str(msg.get('wake_id', ''))
+                # A wake opens the recognizer before the wall's 'start' arrives, so the wall's choice of model
+                # comes with the acceptance (Jake's first Flux test ran on nova-3 for this reason).
+                if msg.get('stt_provider') in ('flux', 'nova'):
+                    _stt_provider = msg['stt_provider']
                 with _wake_lock:
                     accepted = (
                         wake_id
