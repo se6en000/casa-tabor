@@ -41,6 +41,12 @@ const WEATHER = { temp: 84, condition: 'Partly cloudy' }
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 seedKnown(queryClient)
+// `?places=1` (canvas row 23): one saved place, as the picker would load it (queries are off in the fixture).
+if (new URLSearchParams(window.location.search).get('places')) {
+  queryClient.setQueryData(['saved_places'], [
+    { id: 'p1', name: 'Royal Palm Beach Commons Park', aliases: [], address: '11600 Poinciana Blvd', city: 'Royal Palm Beach', state: 'FL', zip: '33411', lat: 26.7, lng: -80.2, category: 'sports', notes: null, phone: null, google_place_id: null, confirmed: true, source: 'manual', occurrence_count: 4, last_seen_at: null, dismissed_at: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' },
+  ])
+}
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
   { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
@@ -119,6 +125,12 @@ export default function WallFixturePage() {
     ...(events as unknown as WallEvent[]),
     ...(TRIP ? (tripEvents as unknown as WallEvent[]) : []),
     ...(DRIVE ? (driveEvents as unknown as WallEvent[]) : []),
+    // `?places=1` (canvas row 23): where softball went before, and a dentist visit, for the place picker.
+    ...(new URLSearchParams(window.location.search).get('places') ? [
+      { id: 'sb-12', title: 'Softball: Huskies vs Jupiter', start_time: new Date(2026, 8, 12, 10, 0).toISOString(), end_time: new Date(2026, 8, 12, 12, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Seminole Palms Park', address: '35 Cypress Ln, Royal Palm Beach, FL 33411', members: [{ family_member_id: 'liv', role: 'primary' }] },
+      { id: 'sb-19', title: 'Softball: Huskies @ Wellington', start_time: new Date(2026, 8, 19, 10, 0).toISOString(), end_time: new Date(2026, 8, 19, 12, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Seminole Palms Park', address: '35 Cypress Ln, Royal Palm Beach, FL 33411', members: [{ family_member_id: 'liv', role: 'primary' }] },
+      { id: 'dent-22', title: 'Dentist · Liv', start_time: new Date(2026, 8, 22, 15, 30).toISOString(), end_time: new Date(2026, 8, 22, 16, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Palm Beach Pediatric Dentistry', address: '1411 N Flagler Dr, West Palm Beach, FL', members: [{ family_member_id: 'liv', role: 'primary' }] },
+    ] as unknown as WallEvent[] : []),
     ...(new URLSearchParams(window.location.search).get('nobody') ? [{
       id: 'portfolio', title: 'Portfolio trigger review', start_time: new Date(2026, 8, 25, 9, 0).toISOString(), end_time: new Date(2026, 8, 25, 9, 30).toISOString(),
       all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],

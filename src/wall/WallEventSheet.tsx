@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft, Bookmark, Plus, Search, X } from 'lucide-react'
-import { useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
+import { Check, ChevronLeft, MapPin, Plus, Search, X } from 'lucide-react'
+import { useDeletePlace, useRenamePlace, useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
 import { supabase } from '../lib/supabase'
 import type { SavedPlaceCategory } from '../types'
+import type { FamilyRoutine } from '../lib/familyRoutines'
 import { DEFAULT_HOUSEHOLD_COORDINATES } from '../utils/geoDistance'
 import {
   canClearPlace, consequenceLine, createArgs, NEW_EVENT_ID, dayChips, draftChanges, draftFromEvent, isReminder, isRepeating, previewEvent,
@@ -15,7 +16,8 @@ import { clockTime, placeName } from './header'
 import { pigmentStyleFor, selectLaneMembers } from './lanes'
 import { driverChoices } from './people'
 import type { WallChecklistItem } from './packing'
-import { SAVE_PLACE_KINDS, placeFromSaved, placeFromSearch, yourPlaces, type PlaceSearchResult } from './places'
+import { SAVE_PLACE_KINDS, placeFromSearch, type PlaceSearchResult } from './places'
+import { guessKind, placeList, placeSuggestions, type PlaceOption } from './placeSuggest'
 import { toggleChecklistItem } from './useWallChecklist'
 import WallKeyboard from './WallKeyboard'
 import { saveDraft } from './saveDraft'
@@ -28,7 +30,7 @@ const EDIT_IDLE_MS = 5 * 60_000
 const HOUR_CHIPS = Array.from({ length: 17 }, (_, i) => i + 6) // 6 AM – 10 PM
 
 type Mode = 'details' | 'edit' | 'place'
-type KeyboardTarget = 'title' | 'search' | 'saveName' | 'item' | null
+type KeyboardTarget = 'title' | 'search' | 'keptName' | 'item' | null
 
 export interface WallEventSheetProps {
   event: EditableEvent
@@ -36,6 +38,8 @@ export interface WallEventSheetProps {
   now: Date
   /** Every cached event, so a preview can rebuild the day with this one changed. */
   allEvents: WallEvent[]
+  /** Everyone's routines: a person's own places (school, work) in the place picker (canvas 23a). */
+  routines?: FamilyRoutine[]
   buildPlanFor: (date: Date, events: WallEvent[]) => DayPlan
   /** Pigment per member id (the Score's colors). */
   pigmentOf: (memberId: string) => number | null
@@ -131,13 +135,21 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const [placeQuery, setPlaceQuery] = useState('')
   const [results, setResults] = useState<PlaceSearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  const [saveFor, setSaveFor] = useState<PlaceSearchResult | null>(null)
-  const [saveName, setSaveName] = useState('')
-  const [saveKind, setSaveKind] = useState<SavedPlaceCategory>('other')
+  // A map place picked is kept as one of yours on its own (canvas 23c), with Rename and Undo on the form.
+  const [kept, setKept] = useState<{ id: string; name: string; kind: SavedPlaceCategory } | null>(null)
+  const [keptName, setKeptName] = useState('')
   const [resolving, setResolving] = useState(false)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const savePlace = useSavePlace()
-  const mine = yourPlaces(savedPlaces, placeQuery)
+  const renamePlace = useRenamePlace()
+  const deletePlace = useDeletePlace()
+  // Before typing (canvas 23a): where this event went before, its people's own places, recent ones.
+  const suggestions = useMemo(
+    () => placeSuggestions({ title: draft.title || event.title, eventId: event.id, memberIds: draft.going, events: allEvents as never, routines: props.routines ?? [], now }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the day's clock isn't a reason to recount
+    [draft.title, draft.going, allEvents, props.routines, event.id],
+  )
+  const typedList = placeList(placeQuery, savedPlaces, results, keyboard ? 4 : 6)
 
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
   const eventDay = midnight(new Date(event.start_time))
@@ -201,12 +213,12 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     }
   }
 
-  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'saveName' ? saveName : keyboard === 'item' ? itemText : ''
+  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'keptName' ? keptName : keyboard === 'item' ? itemText : ''
   const onKeyboardChange = (value: string) => {
     touch()
     if (keyboard === 'title') setDraft((d) => setTitle(d, value))
     if (keyboard === 'search') setPlaceQuery(value)
-    if (keyboard === 'saveName') setSaveName(value)
+    if (keyboard === 'keptName') setKeptName(value)
     if (keyboard === 'item') setItemText(value)
   }
 
@@ -225,7 +237,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
       if (cancelled) return
       setSearching(false)
       const places = (data as { places?: PlaceSearchResult[] } | null)?.places
-      setResults(Array.isArray(places) ? places.slice(0, 3) : [])
+      setResults(Array.isArray(places) ? places.slice(0, 5) : [])
     }, 350)
     return () => {
       cancelled = true
@@ -250,29 +262,44 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     }
     const next: DraftPlace = { name: place.name, address: place.address, driveMinutes }
     setDraft((d) => setPlace(d, next))
-    setSaveFor(null)
     setMode('edit')
   }
 
-  const saveAndUse = async () => {
-    if (!saveFor) return
-    touch()
+  /** A place from the list: yours or a suggestion is used; a map place is kept as one of yours too (no save step). */
+  const pick = async (option: PlaceOption) => {
+    const r = option.result
+    if (!r) return choosePlace({ name: option.name, address: option.address })
+    setKept(null)
+    const kind = guessKind(r)
     try {
-      await savePlace.mutateAsync({
-        name: saveName.trim() || saveFor.name,
-        address: saveFor.street || saveFor.address,
-        city: saveFor.city ?? null,
-        state: saveFor.state ?? null,
-        zip: saveFor.zip ?? null,
-        lat: saveFor.lat,
-        lng: saveFor.lng,
-        phone: saveFor.phone ?? null,
-        category: saveKind,
+      const row = await savePlace.mutateAsync({
+        name: r.name,
+        address: r.street || r.address,
+        city: r.city ?? null,
+        state: r.state ?? null,
+        zip: r.zip ?? null,
+        lat: r.lat,
+        lng: r.lng,
+        phone: r.phone ?? null,
+        category: kind,
       })
+      setKept({ id: row.id, name: row.name, kind })
     } catch {
-      // Saving the place failed; still use it for this event.
+      // Keeping it failed; it's still used for this event.
     }
-    await choosePlace({ name: saveName.trim() || saveFor.name, address: saveFor.address })
+    await choosePlace(placeFromSearch(r))
+  }
+  const renameKept = async () => {
+    setKeyboard(null)
+    const name = keptName.trim()
+    if (!kept || !name || name === kept.name) return
+    try {
+      await renamePlace.mutateAsync({ id: kept.id, name })
+      setKept({ ...kept, name })
+      setDraft((d) => setPlace(d, { ...d.place, name }))
+    } catch {
+      // The old name stays.
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -593,6 +620,14 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                       Change
                     </button>
                   </div>
+                  {kept && (
+                    <div className="flex items-center gap-[14px] rounded-[16px] bg-wall-brass/15 px-[18px] py-[12px]">
+                      <MapPin size={20} className="shrink-0 text-wall-brass-ink" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 text-wall-detail">Kept as one of your places, as <b>{SAVE_PLACE_KINDS.find((k) => k.value === kept.kind)?.label ?? 'Other'}</b>.</span>
+                      <button type="button" className={pill} onClick={() => { setKeptName(kept.name); setKeyboard('keptName') }}>Rename</button>
+                      <button type="button" className={pill} onClick={() => { void deletePlace.mutateAsync(kept.id).catch(() => {}); setKept(null) }}>Undo</button>
+                    </div>
+                  )}
                 </div>
 
                 {changes.length > 0 && (
@@ -727,59 +762,37 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               {searching && <span className="ml-auto text-wall-label text-wall-ink-2">searching…</span>}
             </button>
 
+            {placeQuery.trim() ? (
+              // Typing (canvas 23b): one list, yours first, the map's below — above the keyboard.
+              <div className="flex flex-col">
+                {typedList.map((o, i) => <PlaceRow key={o.key} option={o} first={i === 0} onPick={() => void pick(o)} />)}
+                {typedList.length === 0 && <div className="py-[18px] text-wall-detail text-wall-ink-2">{searching || placeQuery.trim().length < 3 ? 'Keep typing…' : 'Nothing found. Try another name or the street.'}</div>}
+                {typedList.some((o) => o.result) && <div className="pt-[12px] text-wall-label text-wall-ink-2">Tap one to use it. A new one is kept as one of your places on its own.</div>}
+              </div>
+            ) : (
+              // Before typing (canvas 23a): one tap for where it usually is.
+              <div className="flex flex-col gap-[6px]">
+                {([
+                  [`WHERE ${(head.trim() || 'IT').toUpperCase()} WENT BEFORE`, suggestions.before],
+                  [`${draft.going.map((id) => nameOf(id)).filter(Boolean).join(' & ').toUpperCase()}’S PLACES`, suggestions.theirs],
+                  ['RECENT', suggestions.recent],
+                ] as Array<[string, PlaceOption[]]>).filter(([, list]) => list.length > 0).map(([label, list], g) => (
+                  <div key={label} className="flex flex-col">
+                    <div className={`${eyebrow} mb-[4px] mt-[8px] text-wall-ink-2`}>{label}</div>
+                    {list.map((o, i) => <PlaceRow key={o.key} option={o} first={i === 0} big={g === 0 && i === 0 && label.startsWith('WHERE')} onPick={() => void pick(o)} />)}
+                  </div>
+                ))}
+                {suggestions.before.length + suggestions.theirs.length + suggestions.recent.length === 0 && placeList('', savedPlaces, [], 5).length > 0 && (
+                  <div className="flex flex-col">
+                    <div className={`${eyebrow} mb-[4px] mt-[8px] text-wall-ink-2`}>YOUR PLACES</div>
+                    {placeList('', savedPlaces, [], 5).map((o, i) => <PlaceRow key={o.key} option={{ ...o, tag: undefined }} first={i === 0} onPick={() => void pick(o)} />)}
+                  </div>
+                )}
+              </div>
+            )}
+
             {keyboard === null && (
               <>
-                {mine.length > 0 && (
-                  <div className="flex flex-col gap-[10px]">
-                    <div className={`${eyebrow} text-wall-ink-2`}>YOUR PLACES</div>
-                    <div className="flex flex-wrap gap-[10px]">
-                      {mine.map((p) => (
-                        <button key={p.id} type="button" className={pill} onClick={() => void choosePlace(placeFromSaved(p))}>
-                          {p.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {results.length > 0 && (
-                  <div className="flex flex-col">
-                    <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>FROM GOOGLE MAPS</div>
-                    {results.map((r) => (
-                      <div key={r.place_id} className="flex flex-col border-t border-wall-rule">
-                        <div className="flex min-h-[84px] items-center gap-[16px]">
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate font-display text-wall-heading font-bold">{r.name}</span>
-                            <span className="truncate text-wall-label text-wall-ink-2">{r.address}</span>
-                          </div>
-                          <button type="button" className={pill} onClick={() => void choosePlace(placeFromSearch(r))}>
-                            Use
-                          </button>
-                          <button type="button" aria-label="Save as one of your places" onClick={() => { setSaveFor(r); setSaveName(r.name) }} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
-                            <Bookmark size={22} />
-                          </button>
-                        </div>
-                        {saveFor?.place_id === r.place_id && (
-                          <div className="mb-[8px] flex flex-col gap-[12px] rounded-[16px] bg-wall-brass/15 px-[20px] py-[16px]">
-                            <div className={`${eyebrow} text-wall-brass-ink`}>SAVE AS ONE OF YOUR PLACES</div>
-                            <button type="button" onClick={() => setKeyboard('saveName')} className="flex h-[60px] items-center rounded-[12px] border border-solid border-wall-rule bg-wall-ground px-[16px] text-left text-wall-body text-wall-ink">
-                              {saveName}
-                            </button>
-                            <div className="flex flex-wrap gap-[10px]">
-                              {SAVE_PLACE_KINDS.map((kind) => (
-                                <button key={kind.value} type="button" onClick={() => setSaveKind(kind.value)} className={saveKind === kind.value ? darkPill.replace('h-[60px]', 'h-[56px]') : pill}>
-                                  {kind.label}
-                                </button>
-                              ))}
-                            </div>
-                            <button type="button" className={`${darkPill} self-start bg-wall-brass-ink`} onClick={() => void saveAndUse()}>
-                              Save and use it
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
                 <div className="mt-auto flex gap-[12px] border-t border-wall-rule pt-[18px]">
                   <button type="button" className={pill} onClick={() => void choosePlace({ name: 'Home', address: '' }, 0)}>
                     It's at home
@@ -800,7 +813,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
         <WallKeyboard
           value={keyboardValue}
           onChange={onKeyboardChange}
-          onDone={keyboard === 'item' ? () => void addItem() : () => setKeyboard(null)}
+          onDone={keyboard === 'item' ? () => void addItem() : keyboard === 'keptName' ? () => void renameKept() : () => setKeyboard(null)}
           showsValue={keyboard === 'item'}
         />
       )}
@@ -851,5 +864,23 @@ function People({ event, trip, nameOf, pigmentOf }: {
         )
       })}
     </div>
+  )
+}
+
+/** A place in the picker (canvas 23a–b): one tap uses it. */
+function PlaceRow({ option, first, big = false, onPick }: { option: PlaceOption; first: boolean; big?: boolean; onPick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className={`flex min-h-[76px] w-full items-center gap-[16px] bg-transparent text-left text-wall-ink ${big ? 'rounded-[16px] border-0 bg-wall-brass/15 px-[16px]' : `rounded-none border-0 px-0 ${first ? '' : 'border-t border-solid border-wall-rule'}`}`}
+    >
+      <MapPin size={20} className="shrink-0 text-wall-brass-ink" aria-hidden="true" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-display text-wall-heading font-bold">{option.name}</span>
+        {option.address && <span className="truncate text-wall-label text-wall-ink-2">{option.address}</span>}
+      </span>
+      {option.tag && <span className="shrink-0 rounded-full border border-solid border-wall-brass px-[10px] py-[3px] text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{option.tag}</span>}
+    </button>
   )
 }

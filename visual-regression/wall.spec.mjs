@@ -2017,3 +2017,68 @@ test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc l
   await expect(wall.getByRole('img', { name: 'picture-1.png' })).toBeVisible()
   await expect(wall.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
 })
+
+// Canvas row 23 (Jake, 2026-10-01, approved; asked Sep 30: "make it easier to find saved places and new places alike,
+// much more efficient, less taps"). Change next to PLACE: suggestions before typing, one list as you type, and a new
+// map place kept as one of yours on its own — no save step. Saved places and the map are canned here.
+const SAVED = [
+  { id: 'p1', name: 'Royal Palm Beach Commons Park', aliases: [], address: '11600 Poinciana Blvd', city: 'Royal Palm Beach', state: 'FL', zip: '33411', lat: 26.7, lng: -80.2, category: 'sports', notes: null, phone: null, google_place_id: null, confirmed: true, source: 'manual', occurrence_count: 4, last_seen_at: null, dismissed_at: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' },
+]
+const MAP = [
+  { place_id: 'g1', name: 'Royal Palm Beach Commons Park', address: '11600 Poinciana Blvd, Royal Palm Beach, FL 33411', lat: 26.7, lng: -80.2 },
+  { place_id: 'g2', name: 'Royal Palm Beach Cultural Center', address: '151 Civic Center Way, Royal Palm Beach, FL 33411', street: '151 Civic Center Way', city: 'Royal Palm Beach', state: 'FL', zip: '33411', lat: 26.7, lng: -80.2, primary_type: 'community_center' },
+  { place_id: 'g3', name: 'Royal Palm Beach High School', address: '10600 Okeechobee Blvd, Royal Palm Beach, FL 33411', lat: 26.7, lng: -80.2, primary_type: 'school' },
+]
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }
+async function cannedPlaces(page) {
+  const inserted = []
+  const json = (route, status, body) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  await page.route('**/rest/v1/saved_places**', async (route) => {
+    const req = route.request()
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS })
+    if (req.method() === 'POST') {
+      const body = JSON.parse(req.postData() ?? '{}')
+      inserted.push(body)
+      return json(route, 201, { ...SAVED[0], ...body, id: 'kept-1' })
+    }
+    if (req.method() === 'GET') return json(route, 200, SAVED)
+    return route.fulfill({ status: 204, headers: CORS })
+  })
+  for (const [fn, body] of [['place-search', { places: MAP }], ['route-eta', { found: true, drive_time_mins: 25 }]]) {
+    await page.route(`**/functions/v1/${fn}`, (route) => (route.request().method() === 'OPTIONS' ? route.fulfill({ status: 204, headers: CORS }) : json(route, 200, body)))
+  }
+  return inserted
+}
+
+test('wall: a place in fewer taps — suggestions first, one list as you type, a new place kept on its own', async ({ page }) => {
+  const inserted = await cannedPlaces(page)
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00&keyboard=device&places=1')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  const sheet = wall.getByRole('region', { name: /details$/ })
+  await sheet.getByRole('button', { name: 'Edit' }).click()
+  await sheet.getByRole('button', { name: 'Change' }).click()
+  await expect(sheet.getByText('PLACE FOR SOFTBALL')).toBeVisible()
+  await expect(sheet.getByText('WHERE SOFTBALL WENT BEFORE')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Seminole Palms Park.*2 TIMES$/ })).toBeVisible()
+  await expect(sheet.getByText('RECENT')).toBeVisible()
+  await expect(wall).toHaveScreenshot('place-before.png')
+
+  await sheet.getByRole('button', { name: /Search a place/ }).click()
+  await page.keyboard.insertText('royal pa')
+  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Commons Park.*YOURS$/ })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Cultural Center/ })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Royal Palm Beach Commons Park/ })).toHaveCount(1)
+  await expect(wall).toHaveScreenshot('place-typing.png')
+
+  await sheet.getByRole('button', { name: /^Royal Palm Beach Cultural Center/ }).click()
+  await expect(sheet.getByText('Kept as one of your places, as')).toBeVisible()
+  await expect(sheet.getByText('Royal Palm Beach Cultural Center', { exact: true })).toBeVisible()
+  expect(inserted).toHaveLength(1)
+  expect(inserted[0]).toMatchObject({ name: 'Royal Palm Beach Cultural Center', address: '151 Civic Center Way', category: 'other' })
+  await expect(wall).toHaveScreenshot('place-kept.png')
+  await sheet.getByRole('button', { name: 'Undo' }).click()
+  await expect(sheet.getByText('Kept as one of your places, as')).toHaveCount(0)
+  await expect(sheet.getByText('Royal Palm Beach Cultural Center', { exact: true })).toBeVisible()
+})

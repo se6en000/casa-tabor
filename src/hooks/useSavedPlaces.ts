@@ -79,6 +79,18 @@ export function useSavePlace() {
   })
 }
 
+/** A kept place renamed (canvas 23c: "Rename" right after it was kept). */
+export function useRenamePlace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase.from('saved_places').update({ name }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  })
+}
+
 export function useDeletePlace() {
   const qc = useQueryClient()
   return useMutation({
