@@ -151,14 +151,15 @@ test('wall: needs a decision — the count opens the questions, and answers sett
   await wall.getByRole('button', { name: 'Keep two trips' }).click()
   await expect(wall.getByText('Baseball at 12:30 needs a driver.', { exact: true })).toBeVisible()
   await wall.getByRole('button', { name: 'Kelly', exact: true }).click()
-  await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
+  // Settled: the decision gives up its box in the Prep rail.
+  await expect(wall.getByRole('region', { name: 'Needs a decision' })).toHaveCount(0)
 })
 
 test('wall: "One trip" gives both games to one driver', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'One trip · Jake' }).click()
-  await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Needs a decision' })).toHaveCount(0)
   await expect(wall.getByText('Leaves at 11:56').first()).toBeVisible()
 })
 
@@ -1594,7 +1595,7 @@ test('wall: today with a list to get ready: Next Move up top, compact lanes, dec
   await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
   for (const name of ['Water bottle', 'Cleats']) await expect(pack.getByRole('button', { name }).first()).toBeVisible()
   await expect(pack.getByRole('button', { name: 'See all' })).toBeVisible()
-  // Three columns across with a decision beside it (Jake: "can't you fit 3 or 4 columns instead of 2?").
+  // Three of the rail's four boxes beside a decision (Jake: "can't you fit 3 or 4 columns instead of 2?").
   await expect(pack.locator('.grid-cols-3')).toHaveCount(1)
   await expect(wall.getByRole('region', { name: 'Needs a decision today' })).toBeVisible()
   await expect(wall.getByRole('region', { name: 'Next seven days' })).toBeVisible()
@@ -1619,6 +1620,48 @@ for (const at of ['2026-09-26T11:30:00', '2026-09-25T20:15:00']) {
     expect(cut).toEqual([])
   })
 }
+
+// Jake, 2026-10-01: "when I swipe between the days it shifts … could we standardize the placement, width, height of
+// those placeholders so when I swipe there isn't a lot of shifting", then approved: four fixed boxes, filled left to
+// right (decision, then get & pack), First departure always in the last box on the days ahead.
+test('wall: the Prep rail — every section starts on one of four fixed boxes, First departure always in the last', async ({ page }) => {
+  const rail = async () => (await page.getByRole('group', { name: 'Prep rail' }).waitFor(), page.evaluate(() => {
+    const group = document.querySelector('[aria-label="Prep rail"]')
+    const r = group.getBoundingClientRect()
+    const sections = [...group.querySelectorAll('section')].filter((x) => x.parentElement === group || x.parentElement.parentElement === group)
+    // Get & pack's own columns sit on the boxes too.
+    const columns = [...group.querySelectorAll('section[aria-label^="Get & pack"] .grid > div, section[aria-label="Pack tonight"] .grid > div')]
+    return {
+      left: r.left, width: r.width,
+      starts: [...sections, ...columns].map((x) => [x.getAttribute('aria-label') ?? 'column', Math.round(x.getBoundingClientRect().left), Math.round(x.getBoundingClientRect().width)]),
+      departure: Math.round(group.querySelector('section[aria-label="First departure"]')?.getBoundingClientRect().left ?? -1),
+    }
+  }))
+  const faces = []
+  await page.goto('/__wall-fixture?at=2026-09-26T11:30:00') // today, a list and a decision
+  await page.evaluate(() => document.fonts.ready)
+  faces.push(['today', await rail()])
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00') // the evening: tomorrow's decision, list, departure
+  await page.evaluate(() => document.fonts.ready)
+  faces.push(['evening', await rail()])
+  await page.getByTestId('wall-fixture').getByRole('button', { name: 'One trip · Jake' }).click() // no decision left
+  await page.getByRole('region', { name: 'Needs a decision' }).waitFor({ state: 'detached' })
+  faces.push(['evening, decided', await rail()])
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).getByRole('button', { name: /^Monday/ }).click() // a day ahead
+  await page.getByRole('region', { name: 'First departure' }).waitFor()
+  faces.push(['monday', await rail()])
+
+  const first = faces[0][1]
+  const box = (first.width - 3 * 40) / 4
+  const edges = [0, 1, 2, 3].map((i) => Math.round(first.left + i * (box + 40)))
+  for (const [name, f] of faces) {
+    expect(Math.round(f.left), name).toBe(Math.round(first.left))
+    expect(Math.round(f.width), name).toBe(Math.round(first.width))
+    for (const [label, x] of f.starts) expect(edges.some((e) => Math.abs(e - x) <= 1), `${name}: ${label} at ${x}, boxes at ${edges}`).toBe(true)
+    if (name !== 'today') expect(f.departure, name).toBe(edges[3])
+  }
+})
 
 test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', async ({ page }) => {
   const stripTop = async (url) => {

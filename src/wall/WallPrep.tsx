@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { fitPackingColumns, type FittedPackingGroup, type PackingGroup, type WallChecklistItem } from './packing'
 import { PackingItem } from './WallPackingSheet'
+import { DecisionRow, type DatedDecision } from './WallDecisions'
+import type { DecisionAction } from './decisions'
 
 // Get & pack (boards 04b and, for today, row 18): each event's things still to do, and one "N packed" line for what's
 // done — a tap on it (or See all) opens the whole list with every tick, to check what someone else marked done
@@ -69,7 +71,9 @@ export interface GetAndPackProps {
   /** Take the height it's given and fill it: as many rows as fit before anything goes under See all. */
   fill?: boolean
   /** Columns that fit across (2 on the evening face; 3–4 on today's, Jake: "can't you fit 3 or 4 columns?"). */
-  columns?: 2 | 3 | 4
+  columns?: 1 | 2 | 3 | 4
+  /** In the Prep rail: spans that many of its boxes, its columns exactly on them. */
+  inRail?: boolean
   /** The section's name for screen readers ("Pack tonight", "Get & pack today"). */
   label: string
   onToggleItem?: (item: WallChecklistItem) => void
@@ -77,11 +81,12 @@ export interface GetAndPackProps {
   onSeeAll?: () => void
 }
 
-const GRID = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
+const GRID = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
+const SPAN = { 1: 'col-span-1', 2: 'col-span-2', 3: 'col-span-3', 4: 'col-span-4' } as const
 
 const ROW_PX = 44
 
-export function GetAndPack({ packing, lines: least, label, columns: across = 2, fill = false, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
+export function GetAndPack({ packing, lines: least, label, columns: across = 2, fill = false, inRail = false, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
   // Jake, 2026-10-01: "use that area to show as much as possible on the screen … only use 'see all' when the things
   // truly won't fit." Every line is a 44 px row, so the rows are the list's height over 44.
   const list = useRef<HTMLDivElement>(null)
@@ -101,7 +106,7 @@ export function GetAndPack({ packing, lines: least, label, columns: across = 2, 
   // A packed line that didn't fit is the only way to the ticks gone too: See all stands in for it.
   const cut = hidden > 0 || columns.some((col) => col.some((g) => g.packed > 0 && !g.showPacked))
   return (
-    <section aria-label={label} className={`flex min-w-0 flex-1 flex-col ${fill ? 'min-h-0' : ''}`}>
+    <section aria-label={label} className={`flex min-w-0 flex-col ${inRail ? SPAN[across] : 'flex-1'} ${fill ? 'min-h-0' : ''}`}>
       <SectionHeading
         // Only when something truly doesn't fit (Jake, 2026-10-01); "N packed" still opens every tick.
         action={onSeeAll && cut && (
@@ -121,7 +126,7 @@ export function GetAndPack({ packing, lines: least, label, columns: across = 2, 
       >
         GET &amp; PACK · {packing.packed} OF {packing.total} DONE
       </SectionHeading>
-      <div ref={list} className={`grid min-h-0 ${GRID[across]} gap-x-[32px] ${fill ? 'flex-1 content-start overflow-hidden' : ''}`}>
+      <div ref={list} className={`grid min-h-0 ${GRID[across]} ${inRail ? 'gap-x-[40px]' : 'gap-x-[32px]'} ${fill ? 'flex-1 content-start overflow-hidden' : ''}`}>
         {columns.map((col, i) => (
           <div key={i} className="flex min-w-0 flex-col">
             {col.map((group) => <PackingGroupView key={group.eventId} group={group} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} />)}
@@ -129,5 +134,50 @@ export function GetAndPack({ packing, lines: least, label, columns: across = 2, 
         ))}
       </div>
     </section>
+  )
+}
+
+export interface PrepRailProps {
+  decisions: DatedDecision[]
+  /** "Needs a decision" / "Needs a decision today". */
+  decisionLabel: string
+  now: Date
+  onAnswer?: (decision: DatedDecision, action: DecisionAction) => Promise<void>
+  packing: { groups: PackingGroup[]; packed: number; total: number }
+  packLabel: string
+  /** The last box's First departure; null on today's face (the Next Move up top says it). */
+  departure: ReactNode | null
+  onToggleItem?: (item: WallChecklistItem) => void
+  onOpenEvent?: (eventId: string) => void
+  onSeeAll?: () => void
+}
+
+/**
+ * The Prep rail (Jake named it, 2026-10-01): the row under the lanes. Four boxes of one width, always in the same
+ * place, so a swipe between days changes what's in them, not where they are ("when I swipe … there isn't a lot of
+ * shifting"). What fills them flows left to right in a fixed order — a decision, then get & pack (one event a box) —
+ * and an empty part takes no box. On the days ahead the last box is always First departure, the one thing looked for
+ * by place; on today's face the Next Move says it, so get & pack may take that box too.
+ */
+export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, packLabel, departure, onToggleItem, onOpenEvent, onSeeAll }: PrepRailProps) {
+  const deciding = decisions.length > 0
+  const packBoxes = (4 - (deciding ? 1 : 0) - (departure !== null ? 1 : 0)) as 1 | 2 | 3 | 4
+  return (
+    <div aria-label="Prep rail" role="group" className="grid min-h-0 flex-1 grid-cols-4 gap-x-[40px]">
+      {deciding && (
+        <section aria-label={decisionLabel} className="flex min-w-0 flex-col">
+          <SectionHeading>NEEDS A DECISION · {decisions.length}</SectionHeading>
+          {decisions.slice(0, 1).map((d) => (onAnswer
+            // The face says which day it is, so the decision doesn't.
+            ? <DecisionRow key={d.key} decision={d} now={now} onAnswer={onAnswer} compact showDay={false} />
+            : <div key={d.key} className="border-t border-wall-rule pt-[6px] font-display text-wall-heading font-semibold">{d.text}</div>))}
+          {decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {decisions.length - 1} more under “to decide”</div>}
+        </section>
+      )}
+      {packing.total > 0 && (
+        <GetAndPack packing={packing} lines={3} fill inRail columns={packBoxes} label={packLabel} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} />
+      )}
+      {departure !== null && <div className="col-start-4 flex min-w-0 flex-col">{departure}</div>}
+    </div>
   )
 }

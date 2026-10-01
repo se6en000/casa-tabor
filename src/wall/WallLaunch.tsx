@@ -8,10 +8,10 @@ import type { DayPlan, WallMember } from './engine/types'
 import { AddButton, MenuButton, MicButton } from './WallMenu'
 import WallScore, { HideRoutinesPill, type ScoreInteraction } from './WallScore'
 import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
-import { DecisionCount, DecisionRow, EmailCount, type DatedDecision } from './WallDecisions'
+import { DecisionCount, EmailCount, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
 import type { PackingGroup, WallChecklistItem } from './packing'
-import { GetAndPack, SectionHeading } from './WallPrep'
+import { PrepRail } from './WallPrep'
 
 export interface WallLaunchProps {
   now: Date
@@ -102,19 +102,18 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
       ) : tomorrow && <WallTomorrowNote note={tomorrow} />}
       <WallScore score={score} now={now} compact={prepping} interaction={tomorrow && interaction?.routines ? { ...interaction, routines: { ...interaction.routines, elsewhere: true } } : interaction} />
       {prep && prepping && (
-        <div className="flex min-h-0 flex-1 gap-[40px]">
-          {prep.decisions.length > 0 && (
-            <section aria-label="Needs a decision today" className="flex w-[520px] shrink-0 flex-col">
-              <SectionHeading>NEEDS A DECISION · {prep.decisions.length}</SectionHeading>
-              {prep.decisions.slice(0, 1).map((d) => (prep.onAnswer
-                // Today's face: "Today ·" would only repeat what the whole screen says.
-                ? <DecisionRow key={d.key} decision={d} now={now} onAnswer={prep.onAnswer} compact showDay={false} />
-                : <div key={d.key} className="border-t border-wall-rule pt-[6px] font-display text-wall-heading font-semibold">{d.text}</div>))}
-              {prep.decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {prep.decisions.length - 1} more under “to decide”</div>}
-            </section>
-          )}
-          <GetAndPack packing={prep.packing} lines={3} fill columns={prep.decisions.length > 0 ? 3 : 4} label="Get & pack today" onToggleItem={prep.onToggleItem} onOpenEvent={prep.onOpenEvent} onSeeAll={prep.onSeeAll} />
-        </div>
+        <PrepRail
+          decisions={prep.decisions}
+          decisionLabel="Needs a decision today"
+          now={now}
+          onAnswer={prep.onAnswer}
+          packing={prep.packing}
+          packLabel="Get & pack today"
+          departure={null}
+          onToggleItem={prep.onToggleItem}
+          onOpenEvent={prep.onOpenEvent}
+          onSeeAll={prep.onSeeAll}
+        />
       )}
       {week}
     </div>

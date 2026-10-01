@@ -5,9 +5,9 @@ import type { DayPlan, WallMember } from './engine/types'
 import { describeNextMove } from './header'
 import { packingGroups, type WallChecklistItem } from './packing'
 import { forecastLine } from './posture'
-import { DecisionRow, type DatedDecision } from './WallDecisions'
+import type { DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
-import { GetAndPack, SectionHeading } from './WallPrep'
+import { PrepRail, SectionHeading } from './WallPrep'
 import { buildScore } from './score'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
@@ -40,9 +40,6 @@ export interface WallEveningProps {
   /** Tonight's nudge (P3.22, board 09a): takes the header's right side from the big date. */
   tonight?: ReactNode
 }
-
-/** Rows per packing column that fit beside the decision and the first departure. */
-const PACKING_LINES = 4
 
 /**
  * The day-ahead face (boards 02c and 04b): a day's Score from its start, what needs
@@ -104,39 +101,33 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
 
       <WallScore score={score} now={asOf} heading={`${weekday} · WHO'S WHERE`} compact interaction={interaction} />
 
-      <div className="flex min-h-0 flex-1 gap-[40px]">
-        <section aria-label="Needs a decision" className="flex w-[520px] shrink-0 flex-col">
-          <SectionHeading>{decisions.length > 0 ? `NEEDS A DECISION · ${decisions.length}` : 'NOTHING TO DECIDE'}</SectionHeading>
-          {decisions.slice(0, 1).map((d) =>
-            onAnswer ? (
-              // The face says which day it is, so the decision doesn't.
-              <DecisionRow key={d.key} decision={d} now={now} onAnswer={onAnswer} compact showDay={false} />
-            ) : (
-              <div key={d.key} className="border-t border-wall-rule pt-[6px] font-display text-wall-heading font-semibold">{d.text}</div>
-            ),
-          )}
-          {decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {decisions.length - 1} more under “to decide”</div>}
-        </section>
-
-        {packing.total > 0 && (
-          <GetAndPack packing={packing} lines={PACKING_LINES} fill label="Pack tonight" onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />
-        )}
-
-        {/* An open section like the two beside it (heading, rule, first line level with theirs), not a boxed card. */}
-        <section aria-label="First departure" className="flex w-[440px] shrink-0 flex-col">
-          <SectionHeading>FIRST DEPARTURE</SectionHeading>
-          <div className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-rule pt-[12px]">
-            {first ? (
-              <>
-                <div className="truncate font-display text-wall-date font-semibold">{first.title}</div>
-                <div className="text-wall-body">{first.leaveTime ? `Leave ${first.leaveTime} · ${first.timing}` : first.timing}</div>
-              </>
-            ) : (
-              <div className="font-display text-wall-date font-semibold italic">No departures.</div>
-            )}
-          </div>
-        </section>
-      </div>
+      <PrepRail
+        decisions={decisions}
+        decisionLabel="Needs a decision"
+        now={now}
+        onAnswer={onAnswer}
+        packing={packing}
+        packLabel="Pack tonight"
+        onToggleItem={onToggleItem}
+        onOpenEvent={onOpenEvent}
+        onSeeAll={onSeeAllPacking}
+        departure={
+          // An open section like the others (heading, rule, first line level with theirs), not a boxed card.
+          <section aria-label="First departure" className="flex min-w-0 flex-col">
+            <SectionHeading>FIRST DEPARTURE</SectionHeading>
+            <div className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-rule pt-[12px]">
+              {first ? (
+                <>
+                  <div className="truncate font-display text-wall-date font-semibold">{first.title}</div>
+                  <div className="text-wall-body">{first.leaveTime ? `Leave ${first.leaveTime} · ${first.timing}` : first.timing}</div>
+                </>
+              ) : (
+                <div className="font-display text-wall-date font-semibold italic">No departures.</div>
+              )}
+            </div>
+          </section>
+        }
+      />
 
       {week}
     </div>
