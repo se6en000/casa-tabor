@@ -1498,3 +1498,16 @@ test('wall: tapping a name opens their page beside the day — routines, what Ca
   await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(wall.getByRole('region', { name: 'Owen’s page' })).toHaveCount(0)
 })
+
+test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the end of its row, never over it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  const wall = page.getByTestId('wall-fixture')
+  const note = wall.getByRole('button', { name: /TOMORROW/ })
+  const pill = wall.getByRole('button', { name: 'Hide routines' })
+  await expect(note).toBeVisible()
+  await expect(pill).toBeVisible()
+  const a = await note.boundingBox()
+  const b = await pill.boundingBox()
+  const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  expect(overlap).toBe(false)
+})

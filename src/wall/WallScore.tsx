@@ -96,8 +96,8 @@ export interface ScoreInteraction {
   onOpenDecision?: (decisionKey: string) => void
   /** The "No one yet" row: open the event to say who's on it (board 08a). */
   onAssign?: (sourceId: string) => void
-  /** "Hide routines" (canvas 16a/b): whether they're hidden, and the tap. */
-  routines?: { hidden: boolean; onToggle: () => void }
+  /** "Hide routines" (canvas 16a/b): whether they're hidden, and the tap; `elsewhere` when the face draws the tap itself. */
+  routines?: { hidden: boolean; onToggle: () => void; elsewhere?: boolean }
   /** Tap a name at the start of a lane: that person's page (canvas 16e). */
   onOpenPerson?: (memberId: string) => void
 }
@@ -121,6 +121,25 @@ const LANE_GEOMETRY = {
   compact: { label: 'top-[2px]', bar: 'top-[28px] h-[22px]', monogram: 'top-[26px] h-[26px] w-[26px]', note: 'top-[28px]', mark: 'top-[7px]' },
 } as const
 
+/** "Hide routines" / "Routines hidden · Show" (canvas 16a/b). */
+export function HideRoutinesPill({ hidden, onToggle, className = '' }: { hidden: boolean; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={hidden}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+      className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full px-[18px] text-wall-detail font-semibold ${
+        hidden ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'
+      } ${className}`}
+    >
+      {hidden ? 'Routines hidden · Show' : <><span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />Hide routines</>}
+    </button>
+  )
+}
+
 export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, interaction }: WallScoreProps) {
   const highlight = interaction?.highlight
   const ringFor = (sourceId: string) =>
@@ -142,21 +161,9 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
 
   return (
     <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}>
-      {interaction?.routines && (
+      {interaction?.routines && !interaction.routines.elsewhere && (
         // Above the right end of the hours, where every posture leaves room (canvas 16a).
-        <button
-          type="button"
-          aria-pressed={interaction.routines.hidden}
-          onClick={(event) => {
-            event.stopPropagation()
-            interaction.routines?.onToggle()
-          }}
-          className={`absolute bottom-full right-0 mb-[6px] flex h-[44px] items-center gap-[10px] rounded-full px-[18px] text-wall-detail font-semibold ${
-            interaction.routines.hidden ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'
-          }`}
-        >
-          {interaction.routines.hidden ? 'Routines hidden · Show' : <><span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />Hide routines</>}
-        </button>
+        <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} className="absolute bottom-full right-0 mb-[6px]" />
       )}
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">

@@ -7,7 +7,7 @@ import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
 import { DecisionCount, EmailCount } from './WallDecisions'
 import { AddButton, MenuButton, MicButton } from './WallMenu'
-import WallScore, { type ScoreInteraction } from './WallScore'
+import WallScore, { HideRoutinesPill, type ScoreInteraction } from './WallScore'
 import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
 
 export interface WallLaunchProps {
@@ -68,8 +68,14 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <NextMovePanel view={nextMove} pigmentIndex={driverPigment} actions={moveActions} />
       </header>
 
-      {tomorrow && <WallTomorrowNote note={tomorrow} />}
-      <WallScore score={score} now={now} interaction={interaction} />
+      {tomorrow && interaction?.routines ? (
+        // The TOMORROW note takes the room above the hours, so the Hide tap ends its row.
+        <div className="flex shrink-0 items-center gap-[16px]">
+          <div className="min-w-0 flex-1"><WallTomorrowNote note={tomorrow} /></div>
+          <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} />
+        </div>
+      ) : tomorrow && <WallTomorrowNote note={tomorrow} />}
+      <WallScore score={score} now={now} interaction={tomorrow && interaction?.routines ? { ...interaction, routines: { ...interaction.routines, elsewhere: true } } : interaction} />
       {week}
     </div>
   )
