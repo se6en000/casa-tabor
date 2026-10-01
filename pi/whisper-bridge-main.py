@@ -77,6 +77,8 @@ AUDIO_STACK_RECOVERY_MIN_INTERVAL_SECS = 60.0
 # Keep a true pre-roll so users can speak naturally in one breath.
 # We still strip leading "Alexa" from transcript text in _strip_wake().
 BUFFER_SECS = 2.0
+WAKE_PREROLL_LEAD_SECS = 0.35   # pre-roll kept from before the moment the wake word was detected
+TAP_PREROLL_SECS = 0.3          # pre-roll kept when the mic is tapped
 
 # ── STT state ────────────────────────────────────────────────────────────────
 _state      = dict(recording=False, ready=False, volume=0, transcript=None,
@@ -635,7 +637,8 @@ def _wake_word_loop():
 
 # ── STT functions ─────────────────────────────────────────────────────────────
 import re as _re
-_WAKE_STRIP = _re.compile(r'^(alexa[\s,\.!?]*)+', _re.IGNORECASE)
+# 'Alexa', and its clipped forms when the pre-roll starts mid-word ('Lexa', 'Alex,').
+_WAKE_STRIP = _re.compile(r'^((?:a|uh|ah)?\s?lexa?[\s,\.!?]+|alexa$)+', _re.IGNORECASE)
 
 def _strip_wake(text: str) -> str:
     """Remove leading 'Alexa' (and any variant) from transcript."""
@@ -964,7 +967,16 @@ def _start_recording_locked(force_restart=False, reason='manual'):
 
     # Capture buffer for pre-fill before starting new recording
     initial_buffer = _get_buffer_copy()
-    log.info(f'[start_recording] captured {len(initial_buffer)} bytes for pre-fill')
+    # Only the audio that matters: from just before the wake word was heard (or a moment, for a tap). Deepgram
+    # works through a backlog only a little faster than real time, so the whole 2 s buffer kept the words
+    # 1.1-1.8 s behind the voice for the whole sentence (measured with Flux, 2026-09-30).
+    had = len(initial_buffer)
+    keep_s = (now - _wake_ts + WAKE_PREROLL_LEAD_SECS) if 0 <= now - _wake_ts < 4 else TAP_PREROLL_SECS
+    keep = int(max(0.0, keep_s) * RATE) * 2
+    if keep < had:
+        initial_buffer = initial_buffer[-keep:] if keep else b''
+    _timing('preroll', had_s=round(had / (RATE * 2), 2), kept_s=round(len(initial_buffer) / (RATE * 2), 2))
+    log.info(f'[start_recording] captured {had} bytes, kept {len(initial_buffer)} for pre-fill')
     
     _finals = []
     _final_conf = []
