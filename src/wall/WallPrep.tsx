@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Check } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { fitPackingColumns, type FittedPackingGroup, type PackingGroup, type WallChecklistItem } from './packing'
 import { PackingItem } from './WallPackingSheet'
 
@@ -75,9 +75,11 @@ export function GetAndPack({ packing, lines, label, columns: across = 2, onToggl
               event.stopPropagation()
               onSeeAll()
             }}
-            className="h-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-wall-detail font-semibold text-wall-ink"
+            // A quiet link like the TOMORROW note's "Open tomorrow ›": it opens the list, it isn't an action.
+            className="flex h-[44px] shrink-0 items-center gap-[4px] border-0 bg-transparent px-[4px] text-wall-detail text-wall-ink-2"
           >
             {hidden > 0 ? `See all · ${hidden} more` : 'See all'}
+            <ChevronRight size={20} aria-hidden="true" />
           </button>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { formatWallClock } from './clock'
 import { fitLabels } from './labelFit'
 import { pigmentStyleFor } from './lanes'
@@ -121,7 +122,11 @@ const LANE_GEOMETRY = {
   compact: { label: 'top-[2px]', bar: 'top-[28px] h-[22px]', monogram: 'top-[26px] h-[26px] w-[26px]', note: 'top-[28px]', mark: 'top-[7px]' },
 } as const
 
-/** "Hide routines" / "Routines hidden · Show" (canvas 16a/b). */
+/**
+ * "Hide routines" / "Routines hidden · Show" (canvas 16a/b): a quiet link, not a button — it changes the view, it
+ * isn't something to do (Jake, 2026-10-01: "those are not really action buttons, they should blend in more").
+ * Brass while routines are hidden, so a filtered day is never mistaken for an empty one.
+ */
 export function HideRoutinesPill({ hidden, onToggle, className = '' }: { hidden: boolean; onToggle: () => void; className?: string }) {
   return (
     <button
@@ -131,11 +136,11 @@ export function HideRoutinesPill({ hidden, onToggle, className = '' }: { hidden:
         event.stopPropagation()
         onToggle()
       }}
-      className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full px-[18px] text-wall-detail font-semibold ${
-        hidden ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'
+      className={`flex h-[44px] shrink-0 items-center gap-[8px] whitespace-nowrap border-0 bg-transparent px-[4px] text-wall-detail ${
+        hidden ? 'font-semibold text-wall-brass-ink' : 'text-wall-ink-2'
       } ${className}`}
     >
-      {hidden ? 'Routines hidden · Show' : <><span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />Hide routines</>}
+      {hidden ? <><EyeOff size={18} aria-hidden="true" />Routines hidden · Show</> : <><Eye size={18} aria-hidden="true" />Hide routines</>}
     </button>
   )
 }
