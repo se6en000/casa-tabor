@@ -6,6 +6,8 @@ export interface BridgeTurnMessage {
   committed?: string
   interim?: string
   confidence?: unknown
+  /** Deepgram's words with their confidence (transcript and segment_final). */
+  words?: unknown
   is_final?: boolean
   endpoint_reason?: string
   provider_timestamp?: number

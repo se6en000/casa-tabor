@@ -10,6 +10,9 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
 import { useSwipeDown } from './useSwipeDown'
+import VoiceLine from './VoiceLine'
+import { inkWords } from './voiceLine'
+import { useListenerV2 } from './listenerSwitch'
 import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
@@ -356,6 +359,25 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }, [state, onClose])
 
   const shownQuestion = speech.listening && interim ? interim : question
+  // The new listener (canvas row 17), behind the MT menu's switch: one voice line under the words.
+  const listenerV2 = useListenerV2()
+  const liveWords = speech.listening && interim ? inkWords(interim, speech.signal?.current.words ?? []) : null
+  const quote = (text: string) => (liveWords
+    ? <>“{liveWords.map((w, i) => <span key={i} className={w.faded ? 'opacity-40' : undefined}>{i > 0 ? ' ' : ''}{w.text}</span>)}”</>
+    : `“${text}”`)
+  const voiceLine = (width: number) => listenerV2 && (micOpen || loading || speech.bridgeDown) ? (
+    <VoiceLine
+      signal={speech.signal}
+      micOpen={micOpen}
+      bridgeDown={Boolean(speech.bridgeDown)}
+      thinking={loading}
+      needsYes={state === 'NEEDS A YES'}
+      heard={speech.listening ? interim : ''}
+      width={width}
+      onSendNow={() => speech.finish()}
+      onRetry={() => { captured.current = ''; void speech.start() }}
+    />
+  ) : null
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content) : ''), [answer?.content])
   const pill = 'h-[56px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-on-pigment'
   const lightPill = 'h-[56px] rounded-full border-0 bg-wall-on-pigment px-[28px] text-wall-detail font-semibold text-wall-ink'
@@ -519,7 +541,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       {/* The top edge: always a brass line, so the band never blends into the calendar; it
           breathes while Casa listens and a light sweeps across it while Casa thinks. */}
       <div aria-hidden="true" className="pointer-events-none absolute left-[32px] right-[32px] top-0 h-[6px] overflow-hidden rounded-b-full">
-        {state === 'LISTENING'
+        {listenerV2
+          ? <div className="h-[3px] w-full bg-wall-night-brass/70" />
+          : state === 'LISTENING'
           ? <div className="h-full w-full animate-[wall-edge-breathe_2.4s_ease-in-out_infinite] bg-wall-night-brass" />
           : state === 'THINKING'
             ? <>
@@ -531,14 +555,14 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       <div className="flex w-[200px] shrink-0 flex-col items-center gap-[16px]">
         <div className="relative flex h-[132px] w-[132px] items-center justify-center">
           {/* Listening: your turn — a solid brass mic with rings pulsing out. */}
-          {state === 'LISTENING' && (
+          {state === 'LISTENING' && !listenerV2 && (
             <>
               <span aria-hidden="true" className="absolute inset-0 animate-[wall-listen-ring_2.4s_ease-out_infinite] rounded-full border-[3px] border-solid border-wall-night-brass" />
               <span aria-hidden="true" className="absolute inset-0 animate-[wall-listen-ring_2.4s_ease-out_1.2s_infinite] rounded-full border-[3px] border-solid border-wall-night-brass" />
             </>
           )}
           {/* Thinking: Casa's turn — an open ring with a brass arc going round it. */}
-          {state === 'THINKING' && (
+          {state === 'THINKING' && !listenerV2 && (
             <span aria-hidden="true" className="absolute -inset-[14px] animate-[wall-think-spin_1.2s_linear_infinite] rounded-full border-[4px] border-solid border-transparent border-t-wall-night-brass border-r-wall-night-brass" />
           )}
           <button
@@ -550,12 +574,16 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             <Mic size={44} strokeWidth={state === 'LISTENING' ? 2 : 1.6} />
           </button>
         </div>
-        <div className={`font-bold tracking-[0.2em] text-wall-night-brass ${state === 'LISTENING' || state === 'THINKING' ? 'text-wall-heading' : 'text-wall-label'}`}>{state}</div>
+        {!(listenerV2 && (state === 'LISTENING' || state === 'THINKING')) && (
+          <div className={`font-bold tracking-[0.2em] text-wall-night-brass ${state === 'LISTENING' || state === 'THINKING' ? 'text-wall-heading' : 'text-wall-label'}`}>{state}</div>
+        )}
         <div className="whitespace-pre-line text-center text-wall-label text-wall-night-ink-2">
           {state === 'NEEDS A YES'
             ? 'Say yes, or change\nanything on it'
             : state === 'THINKING'
               ? '' // the ring and THINKING say it (Jake, 2026-09-29: "way redundant")
+              : state === 'LISTENING' && listenerV2
+                ? '' // the voice line says it (canvas row 17)
               : state === 'LISTENING' && question
                 ? 'Keep talking, or\nsay “that’s all”'
                 : state === 'LISTENING'
@@ -580,8 +608,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           </div>
           {(card || plan) && (
             <>
-              <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>
-              {shownQuestion && <div className="font-display text-wall-quote font-medium italic">“{shownQuestion}”</div>}
+              {!(listenerV2 && !shownQuestion) && <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>}
+              {shownQuestion && <div className="font-display text-wall-quote font-medium italic">{listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`}</div>}
+              {voiceLine(500)}
               {answerText && <div className="text-wall-body text-wall-night-ink-2">{answerText}</div>}
             </>
           )}
@@ -612,7 +641,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
         <div className="flex items-center justify-between gap-[24px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : 'LISTENING'}</div>
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : listenerV2 && liveWords ? '' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : listenerV2 ? '' : 'LISTENING'}</div>
           <button type="button" aria-pressed={sayOpen} onClick={() => setSayOpen((open) => !open)} className="flex h-[48px] shrink-0 items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment">
             <span aria-hidden="true" className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-night-brass text-wall-label font-bold text-wall-night-brass">?</span>
             {sayOpen ? 'Close the list' : 'What can I say?'}
@@ -630,8 +659,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         ) : (
         <>
         <div className="font-display text-wall-quote font-medium italic">
-          {shownQuestion ? `“${shownQuestion}”` : state === 'LISTENING' ? 'Go ahead — I’m listening.' : 'Ask about the day, or ask to add something.'}
+          {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : 'Ask about the day, or ask to add something.'}
         </div>
+        {voiceLine(1100)}
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
         {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
 

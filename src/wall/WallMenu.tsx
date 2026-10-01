@@ -1,6 +1,7 @@
 import { Mic, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
+import { setListenerV2, useListenerV2 } from './listenerSwitch'
 
 // The MT monogram opens the rest of the app. On the kiosk, each page's Home
 // button — and a few idle minutes — bring it back to the Wall (kioskHome.ts).
@@ -66,6 +67,29 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
   )
 }
 
+/** Try the new listener (canvas row 17) on this wall; off by default until it's approved as the one. */
+function ListenerSwitch() {
+  const on = useListenerV2()
+  return (
+    <div className="mt-[14px] flex items-center gap-[16px] border-t border-wall-rule pt-[14px]">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-wall-detail font-semibold">Try the new listener</span>
+        <span className="text-wall-label text-wall-ink-2">One voice line under your words; the fuse</span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Try the new listener"
+        onClick={() => setListenerV2(!on)}
+        className={`h-[52px] shrink-0 rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+      >
+        {on ? 'On' : 'Off'}
+      </button>
+    </div>
+  )
+}
+
 const PREVIEWS: Array<{ posture: Posture; label: string }> = [
   { posture: 'launch', label: 'Full day' },
   { posture: 'calm', label: 'Calm' },
@@ -115,6 +139,7 @@ export default function WallMenu({ onClose, onPreview }: { onClose: () => void; 
             </div>
           </div>
         )}
+        <ListenerSwitch />
         <button
           type="button"
           onClick={onClose}

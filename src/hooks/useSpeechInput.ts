@@ -5,6 +5,7 @@ import {
   reconcileTranscriptRevision,
   STT_TURN_PROTOCOL,
 } from '../lib/sttTurnProtocol.mjs'
+import type { VoiceSignal } from '../wall/voiceLine'
 import { heldFragmentAfterWait, isIncompleteVoiceFragment, isLikelyUnusableVoiceTranscript, voiceFinalIntent } from '../lib/voiceTurnTaking.mjs'
 
 
@@ -29,6 +30,16 @@ const MANUAL_FINALIZE_TIMEOUT_MS = 1800
 const WAKE_SILENCE_TIMEOUT_MS = 8000
 const SPEECH_WITHOUT_TRANSCRIPT_TIMEOUT_MS = 6000
 const MAX_UNUSABLE_FINALS = 2
+
+/** Deepgram's words (word / punctuated_word, confidence) as the voice line reads them. */
+function wordsOf(value: unknown): Array<{ word: string; confidence: number }> {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((w) => {
+    const word = String((w as { punctuated_word?: unknown; word?: unknown })?.punctuated_word ?? (w as { word?: unknown })?.word ?? '')
+    const confidence = Number((w as { confidence?: unknown })?.confidence)
+    return word && Number.isFinite(confidence) ? [{ word, confidence }] : []
+  })
+}
 
 function createUtteranceId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -107,6 +118,8 @@ export function useSpeechInput({
   const phaseRef           = useRef<VoicePhase>('idle')
   const setPhaseSync = (p: VoicePhase) => { phaseRef.current = p; setPhase(p) }
   const [volume, setVolume] = useState(0)
+  // The voice line (canvas row 17) reads these every frame; kept in a ref so the band isn't re-rendered for them.
+  const signalRef = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] })
   const [bridgeDown, setBridgeDown] = useState(false)
   const supported = !IS_SAFE_MODE
 
@@ -157,7 +170,7 @@ export function useSpeechInput({
     }
   }
   const stopSilenceTimer = () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
-  const stopFragmentTimer = () => { if (fragmentTimerRef.current) clearTimeout(fragmentTimerRef.current); fragmentTimerRef.current = null }
+  const stopFragmentTimer = () => { if (fragmentTimerRef.current) clearTimeout(fragmentTimerRef.current); fragmentTimerRef.current = null; signalRef.current.heldSince = 0 }
   const stopTurnCandidateTimer = () => {
     if (turnCandidateTimerRef.current) clearTimeout(turnCandidateTimerRef.current)
     turnCandidateTimerRef.current = null
@@ -193,6 +206,7 @@ export function useSpeechInput({
     stopWS()
     setPhaseSync('idle')
     setVolume(0)
+    signalRef.current = { level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] }
     onInterimRef.current('')
     onTraceRef.current?.('voice_session_auto_dismissed', {
       reason,
@@ -222,7 +236,10 @@ export function useSpeechInput({
   }
   const scheduleFragmentTimeout = () => {
     stopFragmentTimer()
+    // The voice line's fuse runs this same wait (canvas 17c).
+    signalRef.current.heldSince = Date.now()
     fragmentTimerRef.current = setTimeout(() => {
+      signalRef.current.heldSince = 0
       const held = pendingFragmentRef.current
       const heldUtteranceId = pendingFragmentUtteranceIdRef.current
       pendingFragmentRef.current = ''
@@ -455,6 +472,7 @@ export function useSpeechInput({
         isFinal: false,
       })
       lastInterimRef.current = display
+      signalRef.current.lastWordAt = Date.now()
 
       // Silence timer fallback for browsers that don't emit isFinal promptly
       stopSilenceTimer()
@@ -553,6 +571,7 @@ export function useSpeechInput({
             break
           case 'volume':
             setVolume(msg.level ?? 0)
+            signalRef.current.level = msg.level ?? 0
             break
           case 'speech_started':
             if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()
@@ -601,6 +620,9 @@ export function useSpeechInput({
               lastInterimRef.current = display
               lastInterimTimeRef.current = now
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
+              signalRef.current.lastWordAt = now
+              signalRef.current.confidence = lastConfidenceRef.current
+              signalRef.current.words = wordsOf(msg.words)
               onInterimRef.current(display, {
                 committed: String(msg.committed ?? ''),
                 interim: String(msg.interim ?? ''),
@@ -611,6 +633,7 @@ export function useSpeechInput({
           case 'segment_final': {
             const text = String(msg.text ?? '')
             lastInterimRef.current = text
+            signalRef.current.words = wordsOf(msg.words)
             stopSpeechWithoutTranscriptTimer()
             lastConfidenceRef.current = normalizeConfidence(msg.confidence)
             onInterimRef.current(text, {
@@ -685,6 +708,8 @@ export function useSpeechInput({
               lastInterimRef.current = text
               lastInterimTimeRef.current = Date.now()
               lastConfidenceRef.current = normalizeConfidence(msg.confidence)
+              signalRef.current.lastWordAt = lastInterimTimeRef.current
+              signalRef.current.confidence = lastConfidenceRef.current
               onInterimRef.current(text)
             }
             break
@@ -843,6 +868,7 @@ export function useSpeechInput({
   return {
     phase,
     volume,
+    signal: signalRef,
     supported,
     bridgeDown,
     start,

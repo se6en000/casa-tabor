@@ -1,3 +1,4 @@
+import type { VoiceSignal } from './voiceLine'
 import type { EmailOffer, EmailReviewData } from './emailReview'
 import { useEffect, useRef, useState } from 'react'
 import type { AIMessage } from '../hooks/useAISession'
@@ -200,9 +201,16 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   const latest = useRef(options)
   useEffect(() => { latest.current = options })
   const mic = (window as unknown as { __mic?: Record<string, unknown> }).__mic ??= { starts: 0 }
+  // What the voice line reads (canvas row 17): the room's level, when words last came, a held sentence.
+  const signal = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [] })
   mic.say = (text: string) => { latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
-  // Words heard so far, mid-sentence (what shows live while he speaks).
-  mic.hear = (text: string) => latest.current.onInterim(text)
+  // Words heard so far, mid-sentence (what shows live while he speaks), with Deepgram's per-word confidence if given.
+  mic.hear = (text: string, words?: Array<{ word: string; confidence: number }>, confidence?: number) => {
+    Object.assign(signal.current, { lastWordAt: Date.now(), words: words ?? [], confidence: confidence ?? null })
+    latest.current.onInterim(text)
+  }
+  mic.level = (level: number) => { signal.current.level = level }
+  mic.hold = () => { signal.current.heldSince = Date.now() }
   mic.quiet = () => { setListening(false); latest.current.onAutoDismiss?.('wake_silence') }
   mic.noise = () => { setListening(false); latest.current.onAutoDismiss?.('speech_without_transcript') }
   mic.yes = () => latest.current.onConfirm()
@@ -211,10 +219,12 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   mic.listening = listening
   return {
     listening,
+    signal,
+    bridgeDown: false,
     connecting: false,
     start: async () => { mic.starts = Number(mic.starts) + 1; setListening(true) },
     stop: async () => setListening(false),
-    finish: () => setListening(false),
+    finish: () => { mic.finished = Number(mic.finished ?? 0) + 1; setListening(false) },
   } as unknown as ReturnType<typeof import('../hooks/useSpeechInput').useSpeechInput>
 }
 

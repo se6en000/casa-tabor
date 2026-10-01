@@ -1511,3 +1511,45 @@ test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the 
   const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
   expect(overlap).toBe(false)
 })
+
+// Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
+test('wall: the new listener — one voice line under the words: quiet, the room, your voice, unsure words faded, the fuse sends on a tap', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect.poll(() => starts(page)).toBeGreaterThan(0)
+  // No rings, no LISTENING word: the line says it.
+  await expect(section.getByText('LISTENING', { exact: true })).toHaveCount(0)
+  await expect(section.locator('[data-voice-line="quiet"]')).toBeVisible()
+  await expect(section.getByText('Go ahead.', { exact: true })).toBeVisible()
+  // Loud with no words, for a while: the room, not you.
+  await mic(page, () => window.__mic.level(45))
+  await expect(section.locator('[data-voice-line="noise"]')).toBeVisible({ timeout: 4000 })
+  await expect(section.getByText('It’s loud in here — I’ll catch you when you start.')).toBeVisible()
+  // Words: your voice, and the word Deepgram isn't sure of is faded.
+  await mic(page, () => window.__mic.hear('add a dentist appointment for live', [{ word: 'for', confidence: 0.98 }, { word: 'live', confidence: 0.41 }], 0.9))
+  await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
+  await expect(section.locator('span.opacity-40', { hasText: 'live' })).toBeVisible()
+  // You stop: the fuse, and a tap sends now.
+  await mic(page, () => window.__mic.level(2))
+  await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible({ timeout: 4000 })
+  await expect(section.getByText(/tap to send now/)).toBeVisible()
+  await section.getByRole('button', { name: 'Send now' }).click()
+  expect(await page.evaluate(() => window.__mic.finished)).toBe(1)
+})
+
+test('wall: the new listener is a switch in the MT menu, remembered on the wall; off, the band is as before', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  const toggle = wall.getByRole('switch', { name: 'Try the new listener' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  expect(await page.evaluate(() => localStorage.getItem('casa-wall-listener-v2'))).toBe('1')
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
+  await expect(page.getByRole('region', { name: 'Assistant' }).locator('[data-voice-line]')).toBeVisible()
+  await page.evaluate(() => localStorage.removeItem('casa-wall-listener-v2'))
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
+  await expect(page.getByRole('region', { name: 'Assistant' }).getByText('LISTENING', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('[data-voice-line]')).toHaveCount(0)
+})
