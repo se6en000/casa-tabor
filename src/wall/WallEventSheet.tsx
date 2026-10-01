@@ -18,6 +18,7 @@ import { driverChoices } from './people'
 import type { WallChecklistItem } from './packing'
 import { SAVE_PLACE_KINDS, placeFromSearch, type PlaceSearchResult } from './places'
 import { guessKind, placeList, placeSuggestions, type PlaceOption } from './placeSuggest'
+import { usePlaceHistory } from './usePlaceHistory'
 import { toggleChecklistItem } from './useWallChecklist'
 import WallKeyboard from './WallKeyboard'
 import { saveDraft } from './saveDraft'
@@ -143,11 +144,17 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const savePlace = useSavePlace()
   const renamePlace = useRenamePlace()
   const deletePlace = useDeletePlace()
-  // Before typing (canvas 23a): where this event went before, its people's own places, recent ones.
+  // Before typing (canvas 23a): where this event went before, its people's own places, recent ones — over the last
+  // six months (read when the picker opens), not only the week the wall keeps.
+  const history = usePlaceHistory(mode === 'place')
   const suggestions = useMemo(
-    () => placeSuggestions({ title: draft.title || event.title, eventId: event.id, memberIds: draft.going, events: allEvents as never, routines: props.routines ?? [], now }),
+    () => {
+      const seen = new Set(allEvents.map((e) => e.id))
+      const events = [...allEvents, ...history.filter((h) => !seen.has(h.id))]
+      return placeSuggestions({ title: draft.title || event.title, eventId: event.id, memberIds: draft.going, events: events as never, routines: props.routines ?? [], now })
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the day's clock isn't a reason to recount
-    [draft.title, draft.going, allEvents, props.routines, event.id],
+    [draft.title, draft.going, allEvents, history, props.routines, event.id],
   )
   const typedList = placeList(placeQuery, savedPlaces, results, keyboard ? 4 : 6)
 
