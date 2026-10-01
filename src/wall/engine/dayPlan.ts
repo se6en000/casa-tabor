@@ -367,6 +367,12 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const returnAt = returnLeg ? legTime(returnLeg, end) : end
     const homeAt = driveMinutes != null ? addMinutes(returnAt, driveMinutes) : null
 
+    // The driver is away on a trip then, driving someone else (design doc "Casa: Travel design"): nobody yet.
+    const driverAway = driverId && !travelerIds.includes(driverId) ? awayDuring(driverId, leaveAt ?? start, homeAt ?? end) : null
+    if (driverAway) {
+      driverId = null
+      driverSource = null
+    }
     const trip: Trip = {
       id: `event:${event.id}`,
       kind: 'outing',
@@ -383,6 +389,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       driveMinutes,
       weather: event.enrichment?.weather_at_event ?? null,
       departedAt: departed,
+      ...(driverAway ? { usualDriverAway: { memberId: driverAway.memberId, city: driverAway.city } } : {}),
     }
     trips.push(trip)
 
@@ -514,6 +521,14 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     else nobody.push({ sourceId: key, title: chore.title, start: at, end })
   }
 
+  // Both parents away overnight (design doc "Casa: Travel design"): who's home with the kids that night.
+  const nightAt = new Date(dayStart.getTime() + 22 * 60 * MINUTE)
+  const parents = members.filter((m) => m.role === 'parent')
+  const awayAtNight = parents.filter((p) => awayWindows.some((w) => w.memberId === p.id && w.start <= nightAt && w.end > nightAt))
+  const overnight = parents.length > 0 && awayAtNight.length === parents.length
+    ? { key: 'night' as const, whoId: tripState.drivers.night ?? null, awayIds: awayAtNight.map((p) => p.id) }
+    : null
+
   // A pickup that goes straight on to the next place is one trip (school → CityPlace):
   // same driver, a picked-up child is going there, and that trip would otherwise have
   // to leave home before the pickup is back. The drive from school is estimated with
@@ -593,5 +608,5 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     t.travelerIds.forEach((id) => activeMemberIds.add(id))
   }
 
-  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations, travel, chores: choreList }
+  return { date, lanes, trips, activeMemberIds, unplaced, nobody, allDay, gaps, sharedDestinations, travel, chores: choreList, overnight }
 }

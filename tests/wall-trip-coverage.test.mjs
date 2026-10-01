@@ -31,3 +31,26 @@ test('Coming up: the trip shows from the day it lands in Casa, with what still n
   assert.equal(done.nextStep, 'Covered: Kelly drops off Emme & Owen Thu 7:35')
   assert.equal(done.pokeOn, '2026-10-06')
 })
+
+// The design doc's "both parents away": a night when every parent is gone is a gap of its own — who's home with the
+// kids — and comes before any drop-off question. Kelly flies to Atlanta Wed–Fri while Jake is in Dallas Wed–Thu.
+test('both parents away overnight: "someone home with the kids" that night, on both trips’ lists', () => {
+  const local = (d, h, m) => new Date(2026, 9, d, h, m).toISOString()
+  const kelly = [{ family_member_id: 'kelly', role: 'primary' }]
+  const hers = [
+    { id: 'k-out', title: 'Flight 802 PBI→ATL', all_day: false, start_time: local(7, 9, 0), end_time: local(7, 11, 0), location_name: null, address: null, members: kelly },
+    { id: 'k-back', title: 'Flight 803 ATL→PBI', all_day: false, start_time: local(9, 15, 0), end_time: local(9, 17, 0), location_name: null, address: null, members: kelly },
+  ]
+  const trips = buildTrips([...tripEvents, ...hers], members, travelPrefs)
+  const plan = (state = {}) => (date) => buildDayPlan({ date, members, routines, events: [], travel: trips, tripState: state[date.getDate()] ?? { drivers: {}, departed: {} } })
+  const jakes = trips.find((t) => t.memberIds.includes('jake-id'))
+  const nights = (runs) => runs.filter((r) => r.title === 'Someone home with the kids').map((r) => [r.date.getDate(), r.driverId])
+  assert.deepEqual(nights(tripCoverage(jakes, plan())), [[7, null]])
+  const kellys = trips.find((t) => t.memberIds.includes('kelly'))
+  assert.deepEqual(nights(tripCoverage(kellys, plan())), [[7, null]])
+  // Giselle stays: the night is covered.
+  assert.deepEqual(nights(tripCoverage(jakes, plan({ 7: { drivers: { night: 'giselle' }, departed: {} } }))), [[7, 'giselle']])
+  // Jake alone away: no night to cover.
+  const [alone] = buildTrips(tripEvents, members, travelPrefs)
+  assert.deepEqual(nights(tripCoverage(alone, (date) => buildDayPlan({ date, members, routines, events: [], travel: [alone] }))), [])
+})

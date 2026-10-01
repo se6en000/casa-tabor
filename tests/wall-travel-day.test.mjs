@@ -131,3 +131,24 @@ test('a trip’s own ride is never "busy" against the time away it starts', asyn
   const found = decisionsFor(tue, members, new Date(2026, 9, 13, 6, 5))
   assert.deepEqual(found.map((d) => d.kind), ['no_driver', 'no_driver'])
 })
+
+// The design doc's "the traveller's own things at home": an event he'd drive someone to while he's gone needs a
+// driver; something of his own while he's gone is a question, not a quiet overlap.
+test('while away: an event he drives someone to needs a driver; his own event is a clash to settle', async () => {
+  const { decisionsFor } = await import('../src/wall/decisions.ts')
+  const local = (d, h, m) => new Date(2026, 9, d, h, m).toISOString()
+  const field = 'Lake Lytal, 3645 Gun Club Road, West Palm Beach, FL 33406'
+  const extra = [
+    { id: 'practice', title: 'Batting practice', all_day: false, start_time: local(8, 9, 0), end_time: local(8, 10, 0), location_name: field, address: field,
+      members: [{ family_member_id: 'liv', role: 'primary' }, { family_member_id: 'jake-id', role: 'driver' }], enrichment: { drive_time_mins: 20, departure_time: null } },
+    { id: 'coach', title: 'Coaches meeting', all_day: false, start_time: local(8, 11, 0), end_time: local(8, 12, 0), location_name: field, address: field,
+      members: [{ family_member_id: 'jake-id', role: 'primary' }], enrichment: { drive_time_mins: 20, departure_time: null } },
+  ]
+  const thu = buildDayPlan({ date: THURSDAY, members, routines, events: [...tripEvents, ...extra], travelPrefs })
+  const practice = thu.trips.find((t) => t.sourceId === 'practice')
+  assert.deepEqual([practice.driverId, practice.usualDriverAway?.memberId], [null, 'jake-id'])
+  const found = decisionsFor(thu, members, on(7, 20, 15))
+  assert.equal(found.find((d) => d.sourceIds.includes('practice')).text, 'Jake’s in Dallas. Who drives Liv to Batting practice at 9:00?')
+  const clash = found.find((d) => d.sourceIds.includes('coach'))
+  assert.equal(clash.text, 'Jake’s in Dallas during Coaches meeting at 11:00.')
+})

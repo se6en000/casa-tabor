@@ -23,17 +23,29 @@ interface EventMoment {
   id: string
   title: string
   at: Date
+  /** Other events whose lists pack with this one (a trip's own list beside its flight out's). */
+  alsoIds?: string[]
+  /** The heading as it is, not cut at a colon ("Dallas trip"). */
+  heading?: string
 }
 
 function dayEvents(plan: DayPlan): EventMoment[] {
   const byId = new Map<string, EventMoment>()
   for (const trip of plan.trips) {
+    // A trip away packs once, as the trip, on the day it leaves (the flight home's list is packed away from home).
+    if (trip.travel) {
+      if (trip.travel.direction !== 'out') continue
+      const away = plan.travel?.find((t) => t.trip.outbound?.eventId === trip.sourceId)
+      const tripEventId = away?.trip.tripEventId
+      byId.set(trip.sourceId, { id: trip.sourceId, title: `${trip.travel.city} trip`, heading: `${trip.travel.city} trip`, at: trip.leaveAt ?? trip.arriveAt, ...(tripEventId ? { alsoIds: [tripEventId] } : {}) })
+      continue
+    }
     if (trip.source === 'event') byId.set(trip.sourceId, { id: trip.sourceId, title: trip.title, at: trip.arriveAt })
   }
   const routineIds = new Set(plan.trips.filter((t) => t.source === 'routine').map((t) => t.sourceId))
   for (const segments of plan.lanes.values()) {
     for (const s of segments) {
-      if (s.kind !== 'activity' || byId.has(s.sourceId) || routineIds.has(s.sourceId)) continue
+      if (s.kind !== 'activity' || s.travel || s.chore || byId.has(s.sourceId) || routineIds.has(s.sourceId)) continue
       byId.set(s.sourceId, { id: s.sourceId, title: s.label, at: s.start })
     }
   }
@@ -42,7 +54,7 @@ function dayEvents(plan: DayPlan): EventMoment[] {
 
 /** The events whose checklists belong on the wall for this day, in time order. */
 export function packingEventIds(plan: DayPlan): string[] {
-  return dayEvents(plan).map((e) => e.id)
+  return dayEvents(plan).flatMap((e) => [e.id, ...(e.alsoIds ?? [])])
 }
 
 /**
@@ -53,9 +65,10 @@ export function packingGroups(plan: DayPlan, items: WallChecklistItem[], options
   const groups: PackingGroup[] = []
   for (const event of dayEvents(plan)) {
     if (options.from && event.at.getTime() < options.from.getTime()) continue
-    const own = items.filter((i) => i.event_id === event.id).sort((a, b) => a.sort_order - b.sort_order)
+    const ids = [event.id, ...(event.alsoIds ?? [])]
+    const own = ids.flatMap((id) => items.filter((i) => i.event_id === id).sort((a, b) => a.sort_order - b.sort_order))
     if (own.length === 0) continue
-    groups.push({ eventId: event.id, heading: `${event.title.split(':')[0].trim()} · ${clockTime(event.at)}`, items: own })
+    groups.push({ eventId: event.id, heading: `${event.heading ?? event.title.split(':')[0].trim()} · ${clockTime(event.at)}`, items: own })
   }
   const all = groups.flatMap((g) => g.items)
   return { groups, packed: all.filter((i) => i.checked).length, total: all.length }

@@ -16,7 +16,7 @@ export type DecisionAction =
 export interface Decision {
   /** Stable, so a "keep" answer can be remembered. */
   key: string
-  kind: 'one_car' | 'no_driver' | 'driver_busy'
+  kind: 'one_car' | 'no_driver' | 'driver_busy' | 'away_clash'
   at: Date
   text: string
   detail?: string
@@ -82,13 +82,17 @@ export function decisionsFor(plan: DayPlan, members: WallMember[], now: Date, di
       // The usual driver is away (canvas 19b): "Jake's in Dallas. Who drops off Emme & Owen at 7:35?"
       const away = trip.usualDriverAway
       const text = away
-        ? `${nameOf(away.memberId)}’s in ${away.city}. Who ${trip.title.replace(/^Drop off /, 'drops off ').replace(/^Pick up /, 'picks up ')} at ${clockTime(trip.arriveAt)}?`
+        ? trip.source === 'event'
+          ? `${nameOf(away.memberId)}’s in ${away.city}. Who drives ${trip.travelerIds.map(nameOf).join(' & ')} to ${shortTitle(trip.title)} at ${clockTime(trip.arriveAt)}?`
+          : `${nameOf(away.memberId)}’s in ${away.city}. Who ${trip.title.replace(/^Drop off /, 'drops off ').replace(/^Pick up /, 'picks up ')} at ${clockTime(trip.arriveAt)}?`
         : `${shortTitle(trip.title)} at ${clockTime(trip.arriveAt)} needs a driver.`
       found.push({ key, kind: 'no_driver', at: trip.arriveAt, text, tripIds: [trip.id], sourceIds: [trip.sourceId], answers: answers.slice(0, 2) })
       continue
     }
-    // A trip's own ride (canvas 19) is the traveller going away, never a clash with their time away.
+    // A trip's own ride (canvas 19) is the traveller going away, never a clash with their time away; and a driver
+    // away on a trip is the clash below, not "busy".
     if (trip.travel) continue
+    if (plan.travel?.some((t) => t.memberId === trip.driverId)) continue
     // A driver with something else on at the same time (one car to one place isn't a clash).
     const key = `driver_busy:${trip.id}:${trip.driverId}`
     if (dismissed.has(key)) continue
@@ -112,5 +116,17 @@ export function decisionsFor(plan: DayPlan, members: WallMember[], now: Date, di
     })
   }
 
+  // Something of a traveller's own while they're away (design doc "Casa: Travel design"): said, to settle or let go.
+  for (const away of plan.travel ?? []) {
+    const from = away.leaveHomeAt?.getTime() ?? -Infinity
+    const to = away.homeAt?.getTime() ?? Infinity
+    const own = (plan.lanes.get(away.memberId) ?? []).filter((seg) => seg.kind === 'activity' && !seg.travel && !seg.chore && !seg.fromRoutine
+      && seg.start.getTime() < to && seg.end.getTime() > from && seg.start.getTime() > now.getTime())
+    for (const seg of own.filter((x, i) => own.findIndex((y) => y.sourceId === x.sourceId) === i)) {
+      const key = `away_clash:${seg.sourceId}:${away.memberId}`
+      if (dismissed.has(key)) continue
+      found.push({ key, kind: 'away_clash', at: seg.start, text: `${nameOf(away.memberId)}’s in ${away.city} during ${shortTitle(seg.label)} at ${clockTime(seg.start)}.`, tripIds: [], sourceIds: [seg.sourceId], answers: [{ label: 'Got it', action: { type: 'dismiss' } }] })
+    }
+  }
   return found.sort((a, b) => a.at.getTime() - b.at.getTime()).slice(0, MAX_SHOWN)
 }

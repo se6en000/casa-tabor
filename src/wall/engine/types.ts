@@ -188,6 +188,8 @@ export interface DayPlan {
   travel: DayTravel[]
   /** The day's household chores (chores.ts), and who has each. */
   chores: DayChore[]
+  /** Every parent is away that night (trips): who's home with the kids (a hand-off saved as `night`). */
+  overnight: { key: 'night'; whoId: string | null; awayIds: string[] } | null
   gaps: DayGap[]
   sharedDestinations: SharedDestination[]
 }

@@ -116,3 +116,19 @@ test('today\'s get & pack spreads across 3 columns (4 with no decision beside it
   assert.equal(four.columns.length, 4)
   assert.equal(four.hidden, 0)
 })
+
+// A trip's get & pack (design doc "Casa: Travel design"): on the leaving day — and the evening before — one group for
+// the trip, from the flight out's list (ID, boarding pass) and the trip's own (charger, shoes); the flight home's list
+// is packed in Dallas, not at home.
+test('a trip away packs as one group on the day it leaves: the flight out and the trip, not the flight home', async () => {
+  const { WEDNESDAY, THURSDAY, members: m, routines: r, tripEvents, travelPrefs } = await import('./fixtures/wall-trip-2026-10-07.mjs')
+  const wed = buildDayPlan({ date: WEDNESDAY, members: m, routines: r, events: tripEvents, travelPrefs })
+  const items = [item('f1419', 'ID'), item('f1419', 'Boarding pass'), item('trip-dallas', 'Phone charger'), item('f2640', 'ID'), item('f2640', 'Boarding pass')]
+  assert.deepEqual(packingEventIds(wed).filter((id) => ['f1419', 'f2640', 'trip-dallas'].includes(id)).sort(), ['f1419', 'trip-dallas'])
+  const { groups } = packingGroups(wed, items)
+  const trip = groups.find((g) => g.eventId === 'f1419')
+  assert.equal(trip.heading, 'Dallas trip · 12:58')
+  assert.deepEqual(trip.items.map((i) => i.label), ['ID', 'Boarding pass', 'Phone charger'])
+  const thu = buildDayPlan({ date: THURSDAY, members: m, routines: r, events: tripEvents, travelPrefs })
+  assert.equal(packingGroups(thu, items).groups.some((g) => ['f2640', 'f1419'].includes(g.eventId)), false)
+})

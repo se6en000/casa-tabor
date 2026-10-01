@@ -37,6 +37,10 @@ export function tripCoverage(trip: TravelTrip, planDay: (date: Date) => DayPlan 
   const runs: CoverageRun[] = []
   for (let d = dayStart(first); d <= dayStart(last); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
     const plan = planDay(new Date(d))
+    // Every parent away that night: who's home with the kids, first on the list.
+    if (plan?.overnight && plan.overnight.awayIds.some((id) => trip.memberIds.includes(id))) {
+      runs.push({ date: new Date(d), tripId: plan.overnight.key, title: 'Someone home with the kids', time: 'night', driverId: plan.overnight.whoId, source: 'routine', sourceId: plan.overnight.key })
+    }
     for (const t of plan?.trips ?? []) {
       if (!t.usualDriverAway || !trip.memberIds.includes(t.usualDriverAway.memberId)) continue
       runs.push({ date: new Date(d), tripId: t.id, title: t.title, time: formatWallClock(t.arriveAt).time, driverId: t.driverId, source: t.source, sourceId: t.sourceId })
