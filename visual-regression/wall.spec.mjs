@@ -1937,3 +1937,83 @@ test('wall: Casa wants to talk — "Not now" puts it away until the evening; the
   await expect(band).toHaveCount(0)
   await expect(wall.getByRole('button', { name: 'Casa has something for you · Jake' })).toHaveCount(0)
 })
+
+// Canvas row 22 (Jake, 2026-10-01, approved; asked Sep 30: "I get a lot of text msgs on my mac that I like to copy and
+// paste into the casa desktop app … and also able to copy/paste images"). On a computer Casa opens ready to type.
+const pastePictures = (page, selector, count) => page.evaluate(async ({ selector, count }) => {
+  const dt = new DataTransfer()
+  for (let i = 0; i < count; i++) {
+    const c = document.createElement('canvas')
+    c.width = 120; c.height = 90
+    const g = c.getContext('2d')
+    g.fillStyle = i ? '#7A5A26' : '#5F7382'; g.fillRect(0, 0, 120, 90)
+    g.fillStyle = '#F6F1E8'; g.fillRect(10, 12 + i * 8, 90, 10); g.fillRect(10, 40, 70, 10)
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'))
+    dt.items.add(new File([blob], `picture-${i + 1}.png`, { type: 'image/png' }))
+  }
+  const target = selector ? document.querySelector(selector) : document.body
+  target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+}, { selector, count })
+
+test('wall on a computer: Casa opens ready to type; a pasted thread and a few words, Enter sends', async ({ page }) => {
+  await page.goto('/__wall-fixture?band=empty&keyboard=device&at=2026-09-30T20:42:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const line = wall.getByRole('textbox', { name: 'Type to Casa' })
+  await expect(line).toBeFocused()
+  await expect(wall.getByText('Type, or click')).toBeVisible()
+  await page.keyboard.insertText('Kim K: Reminder for Friday’s field trip!! Kids wear their PINK class shirt and bring a packed lunch, no glass. Bus leaves 9:30 sharp, back by 2:15')
+  await page.keyboard.press('Shift+Enter')
+  await page.keyboard.insertText('add this to Owen’s field trip')
+  await expect(wall).toHaveScreenshot('type-band.png')
+  await page.keyboard.press('Enter')
+  await expect(line).toHaveValue('')
+  const sent = await page.evaluate(() => window.__casaSent)
+  expect(sent).toHaveLength(1)
+  expect(sent[0].text).toContain('PINK class shirt')
+  expect(sent[0].text).toContain('\nadd this to Owen’s field trip')
+  await expect(wall.getByText(/^You said: Kim K/)).toBeVisible()
+})
+
+test('wall on a computer: pictures pasted into the line go with the words', async ({ page }) => {
+  await page.goto('/__wall-fixture?band=empty&keyboard=device&at=2026-09-30T20:42:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
+  await pastePictures(page, 'textarea[aria-label="Type to Casa"]', 2)
+  await expect(wall.getByRole('img', { name: /picture-\d\.png/ })).toHaveCount(2)
+  await wall.getByRole('button', { name: 'Remove picture-2.png' }).click()
+  await pastePictures(page, 'textarea[aria-label="Type to Casa"]', 1)
+  await expect(wall.getByRole('img', { name: /picture-\d\.png/ })).toHaveCount(2)
+  await wall.getByRole('textbox', { name: 'Type to Casa' }).fill('what do we need from these')
+  await expect(wall).toHaveScreenshot('paste-band.png')
+  await wall.getByRole('button', { name: 'Send' }).click()
+  const sent = await page.evaluate(() => window.__casaSent)
+  expect(sent).toEqual([{ text: 'what do we need from these', images: 2 }])
+})
+
+test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc lets it go; pasted pictures open Casa', async ({ page }) => {
+  await page.goto('/__wall-fixture?quick=1&keyboard=device&at=2026-09-30T20:42:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
+  await page.keyboard.press('x')
+  const quick = wall.getByRole('textbox', { name: 'Ask Casa' })
+  await expect(quick).toHaveValue('x')
+  await page.keyboard.press('Escape')
+  await expect(quick).toHaveCount(0)
+
+  await page.keyboard.press('i')
+  await page.keyboard.insertText('s Liv’s dentist tomorrow')
+  await expect(wall).toHaveScreenshot('quick-ask.png')
+  await page.keyboard.press('Enter')
+  await expect(wall.getByText('You said: is Liv’s dentist tomorrow.')).toBeVisible()
+  expect(await page.evaluate(() => window.__casaSent)).toEqual([{ text: 'is Liv’s dentist tomorrow', images: 0 }])
+
+  await page.reload()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
+  await pastePictures(page, null, 1)
+  await expect(wall.getByRole('img', { name: 'picture-1.png' })).toBeVisible()
+  await expect(wall.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
+})

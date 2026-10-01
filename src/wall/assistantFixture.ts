@@ -147,8 +147,12 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
       asidesInARow,
       loading,
       status: loading && scene === 'looking-up' ? 'Searching the web: outdoor Halloween decorations Florida Reddit' : null,
-      send: async (text: string) => {
-        setMessages((list) => [...list, user(text)])
+      send: async (text: string, images?: { dataUrl: string; mimeType: string } | Array<{ dataUrl: string; mimeType: string }>) => {
+        // What was sent, for the tests (canvas row 22: typed words and pasted pictures).
+        const pics = images ? (Array.isArray(images) ? images : [images]) : []
+        const w = window as unknown as { __casaSent?: Array<{ text: string; images: number }> }
+        w.__casaSent = [...(w.__casaSent ?? []), { text, images: pics.length }]
+        setMessages((list) => [...list, { ...user(text), ...(pics.length ? { imageDataUrls: pics.map((p) => p.dataUrl) } : {}) }])
         setLoading(true)
         await new Promise((resolve) => setTimeout(resolve, 300))
         // "psst …" plays someone in the room talking, not to Casa (an aside).

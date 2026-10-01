@@ -20,6 +20,9 @@ import { useEmailOffers } from './useEmailOffers'
 import WallEmailReview from './WallEmailReview'
 import { deviceKeyboardHere } from './keyboardMode'
 import { useCasaTalk } from './useCasaTalk'
+import WallQuickAsk from './WallQuickAsk'
+import { toImages } from './toImages'
+import type { TypedImage } from './typeLine'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
@@ -41,6 +44,8 @@ export default function WallFrame() {
   // `say`: opened with words to send first (a project's "Talk to Casa about it", P3.25).
   // Opened by the wake word (a trigger that may be a false one): the band starts as the small pill.
   const [viaWake, setViaWake] = useState(false)
+  // Pictures pasted on the wall (canvas 22c): Casa opens with them waiting in its line.
+  const [staged, setStaged] = useState<{ text: string; images: TypedImage[]; nonce: number } | null>(null)
   const ask = useCallback((say?: string) => {
     setEmailOpen(false)
     setViaWake(false)
@@ -84,6 +89,7 @@ export default function WallFrame() {
       }}
       opening={opening}
       viaWake={viaWake}
+      staged={staged}
       onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }}
       onOpenDay={(date) => {
         setBandOpen(false)
@@ -105,6 +111,17 @@ export default function WallFrame() {
   const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const review = emailOpen && email.data ? <WallEmailReview data={email.data} act={email.act} onClose={() => setEmailOpen(false)} computer={deviceKeyboardHere()} today={localDay} /> : null
   const todos = useTodos()
+  // Start typing (or paste) anywhere on a computer (canvas 22c).
+  const pasteFiles = useCallback((files: File[]) => {
+    void toImages(files).then((images) => {
+      setStaged({ text: '', images, nonce: Date.now() })
+      setEmailOpen(false)
+      setViaWake(false)
+      setOpening(null)
+      setBandOpen(true)
+    })
+  }, [])
+  const quick = <WallQuickAsk enabled={deviceKeyboardHere() && !bandOpen && !emailOpen} onSend={(text) => ask(text)} onPasteFiles={pasteFiles} />
   // "Casa wants to talk to you" (canvas row 21): the wall alone sends the phone notice.
   const talk = useCasaTalk()
   const casaTalk = useMemo(() => ({
@@ -114,5 +131,5 @@ export default function WallFrame() {
       if (error) throw error
     },
   }), [talk])
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} />
+  return <><WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} />{quick}</>
 }

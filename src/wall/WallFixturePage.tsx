@@ -28,6 +28,9 @@ import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, ty
 import { members as baseMembers, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import { driveEvents, tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
 import type { CasaTalkState } from './casaTalk'
+import WallQuickAsk from './WallQuickAsk'
+import { toImages } from './toImages'
+import type { TypedImage } from './typeLine'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 
@@ -163,8 +166,12 @@ export default function WallFixturePage() {
   }, [ledLog, now])
   const recordOutcome = useCallback((kind: 'confirm' | 'cancel') => { ledLog.outcomes.push(kind) }, [ledLog])
   const scene = new URLSearchParams(window.location.search).get('band')
-  const useTurn = useMemo(() => (scene ? fixtureTurn(scene) : null), [scene])
-  const [bandOpen, setBandOpen] = useState(true)
+  // `?quick=1&keyboard=device` (canvas 22c): Casa closed; typing or pasting anywhere opens it.
+  const quickOn = new URLSearchParams(window.location.search).get('quick') === '1'
+  const useTurn = useMemo(() => (scene ? fixtureTurn(scene) : quickOn ? fixtureTurn('empty') : null), [scene, quickOn])
+  const [bandOpen, setBandOpen] = useState(Boolean(scene))
+  const [opening, setOpening] = useState<{ text: string; nonce: number } | null>(null)
+  const [staged, setStaged] = useState<{ text: string; images: TypedImage[]; nonce: number } | null>(null)
   const [talking, setTalking] = useState(false)
   const [assistantDraft, setAssistantDraft] = useState<WallEvent | null>(null)
   const [pointAt, setPointAt] = useState<string | null>(null)
@@ -196,6 +203,8 @@ export default function WallFixturePage() {
         onOutcome={recordOutcome}
         onTalking={setTalking}
         lookupDrive={async () => 24}
+        opening={opening}
+        staged={staged}
       />
     </ProfileSessionContext.Provider>
   ) : null
@@ -232,7 +241,7 @@ export default function WallFixturePage() {
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
-    <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
+    <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
       <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={FIXTURE_DAY_OFFS} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
@@ -240,6 +249,13 @@ export default function WallFixturePage() {
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
         } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} />
+      {quickOn && (
+        <WallQuickAsk
+          enabled={!bandOpen}
+          onSend={(text) => { setOpening({ text, nonce: Date.now() }); setBandOpen(true) }}
+          onPasteFiles={(files) => void toImages(files).then((images) => { setStaged({ text: '', images, nonce: Date.now() }); setBandOpen(true) })}
+        />
+      )}
     </div>
     </WallSpeechContext.Provider>
     } />

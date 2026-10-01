@@ -95,13 +95,13 @@ export function cardText(displayText: string): string {
 }
 
 /** The turns before the latest question (board 06a's thread), so nobody wonders what it remembers. */
-export function threadTurns(messages: AIMessage[], max = 4): Array<{ role: 'user' | 'assistant'; text: string }> {
+export function threadTurns(messages: AIMessage[], max = 4): Array<{ role: 'user' | 'assistant'; text: string; images?: string[] }> {
   const lastUser = messages.map((m) => m.role).lastIndexOf('user')
   return messages
     .slice(0, Math.max(0, lastUser))
     .filter((m) => m.content.trim())
     .slice(-max)
-    .map((m) => ({ role: m.role, text: m.role === 'assistant' ? bandAnswer(m.content, 160) : m.content.trim() }))
+    .map((m) => ({ role: m.role, text: m.role === 'assistant' ? bandAnswer(m.content, 160) : m.content.trim(), ...(m.imageDataUrls?.length ? { images: m.imageDataUrls } : {}) }))
 }
 
 interface ChoiceEvent {

@@ -528,6 +528,10 @@
       {
         "path": "src/phone/PhoneCasaTalk.tsx",
         "reason": "Phone: \"Casa wants to talk to you\" (canvas 21c) — the same answers as the Wall's band, drawn with the Wall's component set like the rest of the phone lens."
+      },
+      {
+        "path": "src/wall/WallTypeLine.tsx",
+        "reason": "Family Wall: typing to Casa on a computer (canvas 22a-b) — remove a picture, add a picture, send, part of the Wall's own component set."
       }
     ]
   }

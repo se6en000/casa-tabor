@@ -25,6 +25,8 @@ import { WallPlanAgree, WallPlanDraft, WallPlanSaved } from './WallPlan'
 import { withDependents, type PlanArgs, type PlanOpen } from './plan'
 import { pigmentStyleFor } from './lanes'
 import { noteSaid, tipFor, tipsByTopic } from './tips'
+import WallTypeLine, { type WallTypeLineHandle } from './WallTypeLine'
+import type { TypedImage } from './typeLine'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
 // shows what it heard large, answers in a sentence or two, points at the wall,
@@ -46,7 +48,23 @@ const shortTitle = (title: string) => {
   return head.length <= 24 ? head : head.split(' ').slice(0, 3).join(' ')
 }
 
+/** Room under the conversation for the typing line, by its height (whole classes, so the styles are built). */
+const LINE_ROOM = [
+  { fits: 150, pb: 'pb-[230px]' },
+  { fits: 210, pb: 'pb-[290px]' },
+  { fits: 270, pb: 'pb-[350px]' },
+  { fits: 330, pb: 'pb-[410px]' },
+  { fits: Infinity, pb: 'pb-[470px]' },
+]
+
 export interface WallAssistantBandProps {
+  /**
+   * On a computer (canvas 22a): the band opens ready to type, with the line at its foot; the mic waits for a click.
+   * Defaults to this browser's keyboard (keyboardMode.ts).
+   */
+  computer?: boolean
+  /** Opened by pasting pictures on the wall (22c): they wait in the line, with any words, until sent. */
+  staged?: { text: string; images: TypedImage[]; nonce: number } | null
   /** Changes each time the band should (re)start listening: the mic button or the wake word. */
   listenNonce: number
   events: EventWithDetails[]
@@ -83,7 +101,7 @@ export interface WallAssistantBandProps {
   opening?: { text: string; nonce: number } | null
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, viaWake = false, opening = null, onTalking }: WallAssistantBandProps) {
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta, useSpeech = useSpeechInput, onLed, onOutcome, onOpenPlace, onOpenDay, onOpenEmail, viaWake = false, opening = null, onTalking, computer = deviceKeyboardHere(), staged = null }: WallAssistantBandProps) {
   const { messages, asidesInARow = 0, loading, status = null, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs, undoPlan, agreeAsked = 0 } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
@@ -151,6 +169,20 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const heardRef = useRef('')
 
   const [relisten, setRelisten] = useState(0)
+  // On a computer the mic waits until it's clicked (canvas 22a); from then on it behaves as on the wall.
+  const micWanted = useRef(!computer)
+  const [micOn, setMicOn] = useState(!computer)
+  const typeLine = useRef<WallTypeLineHandle>(null)
+  // The band keeps room for the line as it grows (pictures waiting, more lines typed).
+  const [lineHeight, setLineHeight] = useState(0)
+  const lineRoom = LINE_ROOM.find((r) => lineHeight <= r.fits) ?? LINE_ROOM[LINE_ROOM.length - 1]
+  /** "Say more": the mic where talking is the way in; the line, focused, on a computer that hasn't talked. */
+  const talkOrType = () => {
+    setNote(null)
+    if (!micWanted.current) return typeLine.current?.focus()
+    captured.current = ''
+    void speech.start()
+  }
   const pendingRef = useRef(pending)
   pendingRef.current = pending
   // A conversation has started: from here only he closes the band (quiet or noise just turn the mic off).
@@ -245,7 +277,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }, [busy])
   useEffect(() => {
     // Not after two asides in a row: the room is talking, so the mic stays off until he wants it.
-    if (relisten === 0 || reportingRef.current || asidesRef.current >= 2) return
+    if (relisten === 0 || reportingRef.current || asidesRef.current >= 2 || !micWanted.current) return
     captured.current = ''
     void speech.start()
   }, [relisten]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -255,7 +287,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     lastTouch.current = Date.now()
     setInterim('')
     captured.current = ''
-    void speech.start()
+    if (micWanted.current) void speech.start()
   }, [listenNonce]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => void speech.stop(), []) // eslint-disable-line react-hooks/exhaustive-deps
   // Opened from a project ("Talk to Casa about it"): its words go first; the mic opens after the answer.
@@ -541,7 +573,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     <section
       aria-label="Assistant"
       {...swipe}
-      className="absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] py-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
+      className={`absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] pt-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60 ${computer ? lineRoom.pb : 'pb-[44px]'}`}
+      // Pictures dropped anywhere on the band join the line (22b).
+      onDragOver={computer ? (e) => e.preventDefault() : undefined}
+      onDrop={computer ? (e) => { e.preventDefault(); void typeLine.current?.addFiles(Array.from(e.dataTransfer.files)) } : undefined}
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()
@@ -584,7 +619,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           <button
             type="button"
             aria-label={speech.listening ? 'Stop listening' : 'Talk'}
-            onClick={() => { if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
+            onClick={() => { micWanted.current = true; setMicOn(true); if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
             className={`relative flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid p-0 ${haloState === 'deaf' ? 'border-wall-night-rust bg-transparent text-wall-night-rust' : state === 'LISTENING' ? 'border-wall-night-brass bg-wall-night-brass text-wall-ink' : 'border-wall-night-brass bg-transparent text-wall-night-brass'}`}
           >
             <Mic size={44} strokeWidth={state === 'LISTENING' ? 2 : 1.6} />
@@ -604,7 +639,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
                 ? 'Keep talking, or\nsay “that’s all”'
                 : state === 'LISTENING'
                   ? 'Go ahead'
-                  : 'Say the wake word,\nor tap the mic'}
+                  : !micOn
+                    ? 'Type, or click\nthe mic to talk'
+                    : 'Say the wake word,\nor tap the mic'}
         </div>
       </div>
 
@@ -618,6 +655,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           <div className="flex flex-col gap-[12px] text-wall-detail leading-[1.35]">
             {thread.map((t, i) => (
               <div key={i} className={t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}>
+                {t.images && t.images.length > 0 && (
+                  <span className="mb-[8px] flex gap-[8px]">
+                    {t.images.map((src, j) => <img key={j} src={src} alt="" className="h-[40px] w-[56px] rounded-[6px] object-cover" />)}
+                  </span>
+                )}
                 {t.text}
               </div>
             ))}
@@ -636,7 +678,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <div className="flex min-w-0 flex-1 flex-col gap-[14px] pr-[64px]">
           <WallPlanDraft plan={plan} previous={previousPlan} working={working}
             onSetUp={openAgree}
-            onKeepTalking={() => { setNote(null); captured.current = ''; void speech.start() }} />
+            onKeepTalking={talkOrType} />
           {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
         </div>
       ) : card ? (
@@ -647,7 +689,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             pigmentOf={(id) => pigments.get(id) ?? null}
             working={working}
             onYes={() => void confirm()}
-            onChange={() => { setNote(null); captured.current = ''; void speech.start() }}
+            onChange={talkOrType}
             onNo={cancel}
             onPickDriver={card.kind === 'change' ? (name) => setPendingArgs({ driver_name: name }) : undefined}
           />
@@ -656,7 +698,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
         <div className="flex items-center justify-between gap-[24px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : listenerV2 ? '' : 'LISTENING'}</div>
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : !micOn && state !== 'LISTENING' ? 'TYPE OR PASTE' : listenerV2 ? '' : 'LISTENING'}</div>
           <button type="button" aria-pressed={sayOpen} onClick={() => setSayOpen((open) => !open)} className="flex h-[48px] shrink-0 items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment">
             <span aria-hidden="true" className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-night-brass text-wall-label font-bold text-wall-night-brass">?</span>
             {sayOpen ? 'Close the list' : 'What can I say?'}
@@ -674,7 +716,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         ) : (
         <>
         <div className="font-display text-wall-quote font-medium italic">
-          {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : 'Ask about the day, or ask to add something.'}
+          {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : !micOn ? 'Type below, or paste a message or pictures.' : 'Ask about the day, or ask to add something.'}
         </div>
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
         {answer?.directions && <WallDirections route={answer.directions} computer={deviceKeyboardHere()} />}
@@ -745,7 +787,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               Open {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
             </button>
           )}
-          <button type="button" className={pill} onClick={() => { setNote(null); captured.current = ''; void speech.start() }}>
+          <button type="button" className={pill} onClick={talkOrType}>
             Ask something else
           </button>
           <button type="button" className={pill} onClick={onClose}>
@@ -761,6 +803,23 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <WallPlanAgree plan={plan} skip={agreeSkip} working={working}
           onToggle={(id) => setAgreeSkip((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
           onAgree={() => agree(agreeSkip)} onBack={() => setAgreeOpen(false)} />
+      )}
+      {computer && !reporting && (
+        <div className="absolute bottom-[36px] left-[320px] right-[64px]">
+          <WallTypeLine
+            onHeight={setLineHeight}
+            key={staged?.nonce ?? 0}
+            ref={typeLine}
+            busy={busy}
+            initialText={staged?.text ?? ''}
+            initialImages={staged?.images ?? []}
+            onSend={(text, images) => {
+              stopRef.current()
+              setNote(null)
+              void send(text, images.length ? images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
+            }}
+          />
+        </div>
       )}
       {savedPlan && (
         <WallPlanSaved plan={savedPlan.plan} result={savedPlan.result} working={working}
