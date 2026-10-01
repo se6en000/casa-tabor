@@ -58,3 +58,24 @@ test("today counts only prep for what hasn't happened yet", () => {
   const evening = weekDays(week, members, [], at(25, 20, 0), kit)
   assert.equal(evening[0].toDo, 0)
 })
+
+// Jake, 2026-10-01: "when hide routines is on, update the bottom tile row with the correct active events vs the
+// routine ones … with routines hidden I expect there to be fewer dots in the tiles, no?"
+test('with routines hidden, a tile\'s dots and "first out" leave out school, work and the regular runs', async () => {
+  const { buildDayPlan } = await import('../src/wall/engine/dayPlan.ts')
+  const { weekDays } = await import('../src/wall/week.ts')
+  const fx = await import('./fixtures/wall-day-2026-09-25.mjs')
+  const friday = buildDayPlan({ date: fx.FRIDAY, members: fx.members, routines: fx.routines, events: fx.events })
+  const now = new Date(2026, 8, 25, 6, 0)
+  const [shown] = weekDays([friday], fx.members, [], now)
+  const [hidden] = weekDays([friday], fx.members, [], now, [], { hideRoutines: true })
+  // Shown: everyone with school or a school run has a dot; the first trip is the 7:25 drop-off.
+  assert.ok(shown.memberIds.includes('liv') && shown.memberIds.includes('giselle'))
+  assert.equal(shown.firstOut, 'First out 7:25')
+  // Hidden: Liv (only school) and Giselle (only the pickups) drop out; Jake (the photobook) and Emme (violin) stay.
+  assert.deepEqual(hidden.memberIds.filter((id) => ['liv', 'giselle'].includes(id)), [])
+  assert.ok(hidden.memberIds.includes('jake-id') && hidden.memberIds.includes('emme'))
+  assert.ok(hidden.memberIds.length < shown.memberIds.length)
+  // The photobook pickup has no address and violin is at home: with the school runs hidden there's no trip at all.
+  assert.equal(hidden.firstOut, 'No trips')
+})

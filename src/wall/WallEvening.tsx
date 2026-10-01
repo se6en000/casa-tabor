@@ -7,7 +7,7 @@ import { packingGroups, type WallChecklistItem } from './packing'
 import { forecastLine } from './posture'
 import { DecisionRow, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
-import { GetAndPack } from './WallPrep'
+import { GetAndPack, SectionHeading } from './WallPrep'
 import { buildScore } from './score'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
@@ -106,14 +106,13 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
 
       <div className="flex min-h-0 flex-1 gap-[40px]">
         <section aria-label="Needs a decision" className="flex w-[520px] shrink-0 flex-col">
-          <div className="mb-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
-            {decisions.length > 0 ? `NEEDS A DECISION · ${decisions.length}` : 'NOTHING TO DECIDE'}
-          </div>
+          <SectionHeading>{decisions.length > 0 ? `NEEDS A DECISION · ${decisions.length}` : 'NOTHING TO DECIDE'}</SectionHeading>
           {decisions.slice(0, 1).map((d) =>
             onAnswer ? (
-              <DecisionRow key={d.key} decision={d} now={now} onAnswer={onAnswer} compact />
+              // The face says which day it is, so the decision doesn't.
+              <DecisionRow key={d.key} decision={d} now={now} onAnswer={onAnswer} compact showDay={false} />
             ) : (
-              <div key={d.key} className="border-t border-wall-rule py-[12px] font-display text-wall-heading font-semibold">{d.text}</div>
+              <div key={d.key} className="border-t border-wall-rule pt-[6px] font-display text-wall-heading font-semibold">{d.text}</div>
             ),
           )}
           {decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {decisions.length - 1} more under “to decide”</div>}
@@ -123,16 +122,19 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
           <GetAndPack packing={packing} lines={PACKING_LINES} label="Pack tonight" onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />
         )}
 
-        <section aria-label="First departure" className="flex w-[440px] shrink-0 flex-col gap-[8px] self-start rounded-[18px] border border-wall-rule px-[26px] py-[22px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">FIRST DEPARTURE</div>
-          {first ? (
-            <>
-              <div className="truncate font-display text-wall-date font-semibold">{first.title}</div>
-              <div className="text-wall-body">{first.leaveTime ? `Leave ${first.leaveTime} · ${first.timing}` : first.timing}</div>
-            </>
-          ) : (
-            <div className="font-display text-wall-date font-semibold italic">No departures.</div>
-          )}
+        {/* An open section like the two beside it (heading, rule, first line level with theirs), not a boxed card. */}
+        <section aria-label="First departure" className="flex w-[440px] shrink-0 flex-col">
+          <SectionHeading>FIRST DEPARTURE</SectionHeading>
+          <div className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-rule pt-[12px]">
+            {first ? (
+              <>
+                <div className="truncate font-display text-wall-date font-semibold">{first.title}</div>
+                <div className="text-wall-body">{first.leaveTime ? `Leave ${first.leaveTime} · ${first.timing}` : first.timing}</div>
+              </>
+            ) : (
+              <div className="font-display text-wall-date font-semibold italic">No departures.</div>
+            )}
+          </div>
         </section>
       </div>
 

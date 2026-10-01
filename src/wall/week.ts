@@ -1,4 +1,5 @@
 import { formatWallClock } from './clock.ts'
+import { shownSegments, shownTrips } from './score.ts'
 import type { DayPlan, WallMember } from './engine/types.ts'
 import { packingGroups, type WallChecklistItem } from './packing.ts'
 
@@ -30,13 +31,21 @@ function lastEnd(plan: DayPlan, sourceId: string): number {
   return end
 }
 
-export function weekDays(week: DayPlan[], members: WallMember[], decisions: Array<{ date: Date }>, now: Date, checklist: WallChecklistItem[] = []): WeekDay[] {
+/**
+ * `hideRoutines`: the tiles follow "Hide routines" (Jake, 2026-10-01: "with routines hidden I expect there to be fewer
+ * dots in the tiles") — a dot only for someone with something besides school, work and the regular runs, and the
+ * first trip that's left.
+ */
+export function weekDays(week: DayPlan[], members: WallMember[], decisions: Array<{ date: Date }>, now: Date, checklist: WallChecklistItem[] = [], options: { hideRoutines?: boolean } = {}): WeekDay[] {
+  const hide = options.hideRoutines === true
   return week.map((plan) => {
-    const firstLeave = plan.trips
+    const firstLeave = shownTrips(plan.trips, hide)
       .map((trip) => trip.leaveAt)
       .filter((leave): leave is Date => Boolean(leave))
       .sort((a, b) => a.getTime() - b.getTime())[0]
-    const memberIds = members.filter((m) => plan.activeMemberIds.has(m.id)).map((m) => m.id)
+    const memberIds = members
+      .filter((m) => plan.activeMemberIds.has(m.id) && (!hide || shownSegments(plan.lanes.get(m.id) ?? [], plan.trips, true).length > 0))
+      .map((m) => m.id)
     const isToday = dayKey(plan.date) === dayKey(now)
     const next = new Date(now)
     next.setDate(now.getDate() + 1)

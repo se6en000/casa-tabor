@@ -16,21 +16,26 @@ const dayWord = (date: Date, now: Date) => {
   return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-export function DecisionRow({ decision, now, onAnswer, compact = false }: {
+export function DecisionRow({ decision, now, onAnswer, compact = false, showDay = true }: {
   decision: DatedDecision
   now: Date
   onAnswer: (decision: DatedDecision, action: DecisionAction) => Promise<void>
   compact?: boolean
+  /** "Today ·" / "Tomorrow ·" — left off where the face already says which day it is. */
+  showDay?: boolean
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   return (
-    <div className="flex flex-col gap-[8px] border-t border-wall-rule py-[14px]">
-      <div className="font-display text-wall-heading font-bold">
-        {dayWord(decision.date, now)} · {decision.text}
+    // Compact (under the lanes): its first line level with the get & pack headings beside it (measured), and tight
+    // enough that its buttons keep the usual room above the week strip.
+    <div className={`flex flex-col border-t border-wall-rule ${compact ? 'gap-[6px] pt-[10px]' : 'gap-[8px] py-[14px]'}`}>
+      {/* Balanced lines: never a lone "12:30." on a line of its own. */}
+      <div className="text-balance font-display text-wall-heading font-bold">
+        {showDay ? `${dayWord(decision.date, now)} · ` : ''}{decision.text}
       </div>
       {decision.detail && <div className="text-wall-detail text-wall-ink-2">{decision.detail}</div>}
-      <div className="mt-[4px] flex flex-wrap gap-[10px]">
+      <div className={`${compact ? '' : 'mt-[4px] '}flex flex-wrap gap-[10px]`}>
         {decision.answers.map((answer, i) => (
           <button
             key={answer.label}

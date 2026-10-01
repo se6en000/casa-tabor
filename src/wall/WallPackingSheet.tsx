@@ -14,7 +14,7 @@ export function PackingItem({ item, onToggle }: { item: WallChecklistItem; onTog
         event.stopPropagation()
         onToggle?.(item)
       }}
-      className="flex h-[44px] w-full min-w-0 items-center gap-[14px] border-0 bg-transparent p-0 pl-[4px] text-left text-wall-ink"
+      className="flex h-[44px] w-full min-w-0 items-center gap-[14px] border-0 bg-transparent p-0 text-left text-wall-ink"
     >
       <span
         aria-hidden="true"

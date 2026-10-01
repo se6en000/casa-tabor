@@ -140,10 +140,16 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
  * "Hide routines" (canvas 16b): school, work and the regular runs come off the lanes; a run that needs someone
  * (no driver) or was changed today (handed off) stays.
  */
-function shownSegments(segments: LaneSegment[], trips: Trip[], hideRoutines: boolean): LaneSegment[] {
+export function shownSegments(segments: LaneSegment[], trips: Trip[], hideRoutines: boolean): LaneSegment[] {
   if (!hideRoutines) return segments
-  const stays = new Set(trips.filter((t) => t.source === 'routine' && (t.driverId == null || t.driverSource === 'handoff')).map((t) => t.id))
+  const stays = new Set(shownTrips(trips, true).filter((t) => t.source === 'routine').map((t) => t.id))
   return segments.filter((s) => !s.fromRoutine || (s.tripId != null && stays.has(s.tripId)))
+}
+
+/** The day's trips with routines hidden: a routine run stays only if it needs someone or was handed off today. */
+export function shownTrips(trips: Trip[], hideRoutines: boolean): Trip[] {
+  if (!hideRoutines) return trips
+  return trips.filter((t) => t.source !== 'routine' || t.driverId == null || t.driverSource === 'handoff')
 }
 
 export function buildScore(plan: DayPlan, members: WallMember[], now: Date, options: { hideRoutines?: boolean } = {}): Score {

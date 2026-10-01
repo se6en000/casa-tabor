@@ -388,7 +388,7 @@ export default function WallView(props: WallViewProps) {
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = strip.length > 1 ? (
     <WallWeek
-      days={weekDays(strip, members, stripDecisions, now, checklist)}
+      days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden })}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
       shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}

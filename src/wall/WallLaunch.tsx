@@ -11,7 +11,7 @@ import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
 import { DecisionCount, DecisionRow, EmailCount, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
 import type { PackingGroup, WallChecklistItem } from './packing'
-import { GetAndPack } from './WallPrep'
+import { GetAndPack, SectionHeading } from './WallPrep'
 
 export interface WallLaunchProps {
   now: Date
@@ -105,10 +105,11 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <div className="flex min-h-0 flex-1 gap-[40px]">
           {prep.decisions.length > 0 && (
             <section aria-label="Needs a decision today" className="flex w-[520px] shrink-0 flex-col">
-              <div className="mb-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NEEDS A DECISION · {prep.decisions.length}</div>
+              <SectionHeading>NEEDS A DECISION · {prep.decisions.length}</SectionHeading>
               {prep.decisions.slice(0, 1).map((d) => (prep.onAnswer
-                ? <DecisionRow key={d.key} decision={d} now={now} onAnswer={prep.onAnswer} compact />
-                : <div key={d.key} className="border-t border-wall-rule py-[12px] font-display text-wall-heading font-semibold">{d.text}</div>))}
+                // Today's face: "Today ·" would only repeat what the whole screen says.
+                ? <DecisionRow key={d.key} decision={d} now={now} onAnswer={prep.onAnswer} compact showDay={false} />
+                : <div key={d.key} className="border-t border-wall-rule pt-[6px] font-display text-wall-heading font-semibold">{d.text}</div>))}
               {prep.decisions.length > 1 && <div className="text-wall-detail text-wall-ink-2">and {prep.decisions.length - 1} more under “to decide”</div>}
             </section>
           )}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { fitPackingColumns, type FittedPackingGroup, type PackingGroup, type WallChecklistItem } from './packing'
 import { PackingItem } from './WallPackingSheet'
@@ -7,6 +7,20 @@ import { PackingItem } from './WallPackingSheet'
 // done — a tap on it (or See all) opens the whole list with every tick, to check what someone else marked done
 // (Jake, 2026-10-01: "able to see what was checked off … in case someone checked something that wasn't done").
 // Shared by the evening face and today's.
+
+/**
+ * A section's heading under the lanes: one 44 px row, the label centred in it and an optional link on the right, so
+ * every section's rule and first line sit at the same height (Jake, 2026-10-01: "align the thin bars for Needs a
+ * decision and Get & Pack").
+ */
+export function SectionHeading({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex h-[44px] shrink-0 items-center justify-between gap-[16px]">
+      <span className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{children}</span>
+      {action}
+    </div>
+  )
+}
 
 function PackingGroupView({ group, onToggleItem, onOpenEvent, onSeeAll }: {
   group: FittedPackingGroup
@@ -37,9 +51,10 @@ function PackingGroupView({ group, onToggleItem, onOpenEvent, onSeeAll }: {
             event.stopPropagation()
             onSeeAll?.()
           }}
-          className="flex h-[44px] items-center gap-[10px] border-0 bg-transparent p-0 pl-[4px] text-left text-wall-detail text-wall-ink-2"
+          className="flex h-[44px] items-center gap-[14px] border-0 bg-transparent p-0 text-left text-wall-detail text-wall-ink-2"
         >
-          <Check size={18} strokeWidth={2.5} aria-hidden="true" />
+          {/* As wide as a checkbox, so "packed" lines up with the things to pack. */}
+          <span aria-hidden="true" className="flex w-[22px] shrink-0 justify-center"><Check size={18} strokeWidth={2.5} /></span>
           {group.packed} packed
         </button>
       )}
@@ -66,9 +81,8 @@ export function GetAndPack({ packing, lines, label, columns: across = 2, onToggl
   const { columns, hidden } = useMemo(() => fitPackingColumns(packing.groups, lines, across), [packing.groups, lines, across])
   return (
     <section aria-label={label} className="flex min-w-0 flex-1 flex-col">
-      <div className="flex h-[44px] shrink-0 items-center justify-between gap-[16px]">
-        <span className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">GET &amp; PACK · {packing.packed} OF {packing.total} DONE</span>
-        {onSeeAll && (
+      <SectionHeading
+        action={onSeeAll && (
           <button
             type="button"
             onClick={(event) => {
@@ -82,7 +96,9 @@ export function GetAndPack({ packing, lines, label, columns: across = 2, onToggl
             <ChevronRight size={20} aria-hidden="true" />
           </button>
         )}
-      </div>
+      >
+        GET &amp; PACK · {packing.packed} OF {packing.total} DONE
+      </SectionHeading>
       <div className={`grid min-h-0 ${GRID[across]} gap-x-[32px]`}>
         {columns.map((col, i) => (
           <div key={i} className="flex min-w-0 flex-col">

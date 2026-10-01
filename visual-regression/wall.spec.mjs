@@ -143,12 +143,13 @@ test('wall: needs a decision — the count opens the questions, and answers sett
   const wall = page.getByTestId('wall-fixture')
   // Evening: tomorrow's questions are listed with their answers, and marked on the Score.
   await expect(wall.getByText('NEEDS A DECISION · 1')).toBeVisible()
-  await expect(wall.getByText('Tomorrow · Baseball and Softball are both at Ferrin Park Field 1 at 12:30.')).toBeVisible()
+  // The face says it's tomorrow, so the decision doesn't repeat it (polish, 2026-10-01).
+  await expect(wall.getByText('Baseball and Softball are both at Ferrin Park Field 1 at 12:30.', { exact: true })).toBeVisible()
   await expect(wall.getByRole('button', { name: 'Needs a decision' }).first()).toBeVisible()
   await expect(wall).toHaveScreenshot('evening-decisions.png')
 
   await wall.getByRole('button', { name: 'Keep two trips' }).click()
-  await expect(wall.getByText('Tomorrow · Baseball at 12:30 needs a driver.')).toBeVisible()
+  await expect(wall.getByText('Baseball at 12:30 needs a driver.', { exact: true })).toBeVisible()
   await wall.getByRole('button', { name: 'Kelly', exact: true }).click()
   await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
 })
@@ -1460,8 +1461,12 @@ test('wall: Hide routines takes school, work and the runs off the lanes until Sh
   await page.evaluate(() => document.fonts.ready)
   await expect(wall.getByText('Bak Middle School', { exact: true })).toBeVisible()
   await expect(wall.getByText('Work', { exact: true }).first()).toBeVisible()
+  const todayDots = () => wall.getByRole('region', { name: 'Next seven days' }).getByRole('button').first().locator('span.h-\\[18px\\].rounded-full').count()
+  const dotsShown = await todayDots()
   await wall.getByRole('button', { name: 'Hide routines' }).click()
   await expect(wall.getByRole('button', { name: 'Routines hidden · Show' })).toBeVisible()
+  // The tiles follow: fewer dots on Today with school, work and the runs hidden (Jake, 2026-10-01).
+  expect(await todayDots()).toBeLessThan(dotsShown)
   await expect(wall.getByText('Bak Middle School', { exact: true })).toHaveCount(0)
   await expect(wall.getByText('Work', { exact: true })).toHaveCount(0)
   // Where they are still reads on the lane.
@@ -1608,3 +1613,35 @@ test('wall: the week strip sits in the same place on every face — today, today
   const other = await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).boundingBox()
   expect(Math.round(other.y)).toBe(today)
 })
+
+// Jake, 2026-10-01: "you are usually a lot more detail oriented than this. can you please align the thin bars for
+// Needs a decision and Get & Pack?" — measured, then held here: on today's face and the evening's, the sections under
+// the lanes share their heading height, their rule and their first line; the lists start flush with their headings.
+for (const [name, at] of [['today', '2026-09-26T11:30:00'], ['the evening', '2026-09-25T20:15:00']]) {
+  test(`wall: ${name} — the sections under the lanes line up: headings, rules, first lines; lists flush; room above the week`, async ({ page }) => {
+    await page.goto(`/__wall-fixture?at=${at}`)
+    await page.getByRole('region', { name: 'Next seven days' }).waitFor()
+    await page.evaluate(() => document.fonts.ready)
+    const m = await page.evaluate(() => {
+      const r = (el) => el.getBoundingClientRect()
+      const sections = [...document.querySelectorAll('section[aria-label^="Needs a decision"], section[aria-label="Get & pack today"], section[aria-label="Pack tonight"], section[aria-label="First departure"]')]
+      return {
+        headings: sections.map((s) => Math.round(r(s.firstElementChild.firstElementChild).top)),
+        rules: sections.map((s) => Math.round(r(s.children[1]?.querySelector?.('button') && s.getAttribute('aria-label').match(/pack/i) ? s.querySelector('.grid > div > div > button') : s.children[1]).top)),
+        firstLines: sections.map((s) => {
+          const el = s.getAttribute('aria-label').match(/pack/i) ? s.querySelector('.grid > div > div > button') : s.children[1].firstElementChild
+          const range = document.createRange(); range.selectNodeContents(el); return Math.round(range.getBoundingClientRect().top)
+        }),
+        headX: Math.round(r(document.querySelector('.grid > div > div > button')).left),
+        boxX: Math.round(r(document.querySelector('.grid button[aria-pressed] > span')).left),
+        lowest: Math.max(...sections.map((s) => Math.round(r(s).bottom)), ...[...document.querySelectorAll('section[aria-label^="Needs a decision"] button')].map((b) => Math.round(r(b).bottom))),
+        week: Math.round(r(document.querySelector('[aria-label="Next seven days"]')).top),
+      }
+    })
+    expect(new Set(m.headings).size, `headings ${m.headings}`).toBe(1)
+    expect(new Set(m.rules).size, `rules ${m.rules}`).toBe(1)
+    expect(Math.max(...m.firstLines) - Math.min(...m.firstLines), `first lines ${m.firstLines}`).toBeLessThanOrEqual(2)
+    expect(m.boxX).toBe(m.headX)
+    expect(m.week - m.lowest, `room above the week: ${m.week - m.lowest}`).toBeGreaterThanOrEqual(16)
+  })
+}
