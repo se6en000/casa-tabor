@@ -2,6 +2,7 @@
 // drives whom. Built by buildDayPlan() from calendar events, family routines
 // and family members. Maps to the design's Score (lanes), Next Move, and
 // "Needs a decision" (gaps / shared destinations).
+import type { TravelTrip } from './travel'
 
 /** Whether an item happens at home, somewhere else, or nobody recorded a place. */
 export type PlaceStatus = 'home' | 'away' | 'unknown'
@@ -137,6 +138,8 @@ export interface DayTravel {
   dayCount: number
   leaveHomeAt: Date | null
   homeAt: Date | null
+  /** The whole trip (the trip sheet opens it). */
+  trip: TravelTrip
 }
 
 /** Separate trips that go to the same place at about the same time (one car could do both). */

@@ -95,3 +95,14 @@ test('the decision says why and asks who; the Next Move is the ride to the airpo
   assert.equal(view.detail, 'Uber · 15 min · at the airport by 1:13 · Flight 1419 to Dallas at 2:13')
   assert.equal(view.eyebrow, 'NEXT MOVE · LEAVE BY 12:58')
 })
+
+test('the trip sheet: Kelly drives him to the airport — the run is on her lane, there and back', () => {
+  const wed = buildDayPlan({ date: WEDNESDAY, members, routines, events: tripEvents, travelPrefs, travelSettings: { f1419: { wayOut: 'someone', driverOutId: 'kelly' } } })
+  const ride = wed.trips.find((t) => t.travel?.direction === 'out')
+  assert.deepEqual([ride.driverId, ride.driverSource], ['kelly', 'plan'])
+  const hers = wed.lanes.get('kelly').filter((s) => s.tripId === ride.id)
+  assert.deepEqual(hers.map((s) => [s.label, s.start.toTimeString().slice(0, 5), s.end.toTimeString().slice(0, 5)]), [['Drive Jake to DJT', '12:58', '13:28']])
+  // Nobody picked yet: the ride needs someone.
+  const open = buildDayPlan({ date: WEDNESDAY, members, routines, events: tripEvents, travelPrefs, travelSettings: { f1419: { wayOut: 'someone' } } })
+  assert.equal(open.gaps.some((g) => g.kind === 'no_driver' && g.sourceId === 'f1419'), true)
+})

@@ -15,6 +15,17 @@ export interface TravelPrefs {
 }
 export type TravelWay = 'uber' | 'someone' | 'drive_park'
 
+/** What the trip sheet (canvas 19d) changed for one trip, kept by its key. */
+export interface TravelSettings {
+  airportMinutes?: number
+  deplaneMinutes?: number
+  wayOut?: TravelWay
+  wayHome?: TravelWay
+  /** "Someone drives" / "someone picks up": who. */
+  driverOutId?: string | null
+  driverHomeId?: string | null
+}
+
 export interface FlightLeg {
   eventId: string
   number: string | null
@@ -26,13 +37,25 @@ export interface FlightLeg {
 
 export interface TravelTrip {
   id: string
+  /** What its settings are kept under: the flight out (or the flight home when that's all there is). */
+  key: string
   memberIds: string[]
   city: string
   /** The all-day event that names the trip ("JRT Trip Dallas"), if there is one: shown as the trip, not on its own. */
   tripEventId: string | null
+  /** Where they're staying, from the trip's all-day event. */
+  hotel: string | null
   outbound: FlightLeg | null
   inbound: FlightLeg | null
+  /** The way there (kept as `way` too). */
   way: TravelWay
+  wayOut: TravelWay
+  /** The way home: the way there unless the sheet said otherwise (drive & park comes home in the car). */
+  wayHome: TravelWay
+  driverOutId: string | null
+  driverHomeId: string | null
+  /** "Your car is at DJT": parked at one airport, landing at another. */
+  carWarning: string | null
   airportMinutes: number
   deplaneMinutes: number
   /** null when there's no outbound flight (only a way home known). */
@@ -125,7 +148,7 @@ function cityFromTitle(title: string): string | null {
  * The family's trips: for each set of travellers, a flight out of a home airport paired with the next flight back
  * into one. `prefs`: each person's travel settings (family_members.travel_prefs).
  */
-export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Record<string, TravelPrefs> = {}): TravelTrip[] {
+export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Record<string, TravelPrefs> = {}, settings: Record<string, TravelSettings> = {}): TravelTrip[] {
   const legs = events
     .filter((e) => e.status !== 'cancelled' && !e.all_day)
     .flatMap((e) => {
@@ -156,10 +179,13 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
   return trips
 
   function assemble(outbound: FlightLeg | null, inbound: FlightLeg | null, memberIds: string[]): TravelTrip {
+    const key = outbound?.eventId ?? inbound!.eventId
+    const set = settings[key] ?? {}
     const people = memberIds.map((id) => prefsFor(members.find((m) => m.id === id), prefs))
-    const airportMinutes = Math.max(...people.map((p) => p.airportMinutes), 0)
-    const deplaneMinutes = Math.max(...people.map((p) => p.deplaneMinutes), 0)
-    const way = people[0]?.way ?? 'uber'
+    const airportMinutes = set.airportMinutes ?? Math.max(...people.map((p) => p.airportMinutes), 0)
+    const deplaneMinutes = set.deplaneMinutes ?? Math.max(...people.map((p) => p.deplaneMinutes), 0)
+    const wayOut = set.wayOut ?? people[0]?.way ?? 'uber'
+    const wayHome = set.wayHome ?? wayOut
     const driveOutMinutes = outbound ? HOME_AIRPORTS[outbound.from]?.driveMinutes ?? 30 : 0
     const driveHomeMinutes = inbound ? HOME_AIRPORTS[inbound.to]?.driveMinutes ?? 30 : 0
     const atAirportAt = outbound ? addMinutes(outbound.departAt, -airportMinutes) : null
@@ -170,14 +196,22 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
       memberIdsOf(e).some((id) => memberIds.includes(id))
       && new Date(e.start_time) <= addMinutes(last, 24 * 60) && new Date(e.end_time) >= addMinutes(first, -24 * 60))
     const awayCode = outbound?.to ?? inbound!.from
+    const parkedAt = wayOut === 'drive_park' && outbound ? outbound.from : null
     return {
       id: `travel:${outbound?.eventId ?? 'none'}:${inbound?.eventId ?? 'none'}`,
+      key,
       memberIds,
       city: (tripEvent && cityFromTitle(tripEvent.title)) || CITY_BY_AIRPORT[awayCode] || awayCode,
       tripEventId: tripEvent?.id ?? null,
+      hotel: tripEvent?.location_name?.trim() || null,
       outbound,
       inbound,
-      way,
+      way: wayOut,
+      wayOut,
+      wayHome,
+      driverOutId: wayOut === 'someone' ? set.driverOutId ?? null : null,
+      driverHomeId: wayHome === 'someone' ? set.driverHomeId ?? null : null,
+      carWarning: parkedAt && inbound && wayHome === 'drive_park' && inbound.to !== parkedAt ? `Your car is at ${parkedAt}` : null,
       airportMinutes,
       deplaneMinutes,
       atAirportAt,

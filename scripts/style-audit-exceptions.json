@@ -512,6 +512,10 @@
       {
         "path": "src/wall/WallPrep.tsx",
         "reason": "Family Wall: get & pack (boards 04b, row 18) — each event heading opens it, each item ticks, \"N packed\" and See all open every tick; shared by the evening and today, part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallTripSheet.tsx",
+        "reason": "Family Wall: the trip sheet (canvas 19d) — the ways there and home, who drives, the time steppers, close and Done, part of the Wall's own component set."
       }
     ]
   }

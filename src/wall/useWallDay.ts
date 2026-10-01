@@ -4,7 +4,8 @@ import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutinesFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
-import { buildTrips } from './engine/travel'
+import { buildTrips, type TravelSettings } from './engine/travel'
+import { useWallTravel } from './useWallTravel'
 import { dayState, type WallTripState } from './tripState'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { eventsFor, routinesFor, type Audience, type KeepFrom } from './audience'
@@ -23,6 +24,8 @@ export interface WallDay {
   aroundEvents: WallEvent[] | null
   routines: FamilyRoutine[]
   dayOffs: DayOff[]
+  /** Save a trip sheet's choice (canvas 19d). */
+  saveTravel: (key: string, change: TravelSettings) => Promise<void>
 }
 
 /**
@@ -57,11 +60,12 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
     [members, rules, audienceKey],
   )
   // Trips away, from every event we hold (a day needs the flight out or home on another day).
+  const travelSettings = useWallTravel()
   const travel = useMemo(() => {
     const byId = new Map<string, WallEvent>()
     for (const list of [allEvents, todayShown ?? [], tomorrowShown ?? []]) for (const e of list) byId.set(e.id, e)
-    return buildTrips([...byId.values()], members)
-  }, [allEvents, todayShown, tomorrowShown, members])
+    return buildTrips([...byId.values()], members, {}, travelSettings.settings)
+  }, [allEvents, todayShown, tomorrowShown, members, travelSettings.settings])
   // Wait for routines too, so school runs don't pop in after the rest of the day.
   const ready = Boolean(familyMembers) && !availabilityLoading
 
@@ -88,5 +92,5 @@ export function useWallDay(now: Date, tripState: WallTripState = {}, audience: A
     return [today, tomorrow, ...later]
   }, [ready, today, tomorrow, dayKey, members, routines, allEvents, exceptions, tripState, travel])
 
-  return { members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs: exceptions as DayOff[] }
+  return { members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs: exceptions as DayOff[], saveTravel: travelSettings.save }
 }

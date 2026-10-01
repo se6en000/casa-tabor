@@ -13,6 +13,8 @@ import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
 import { packingGroups, type WallChecklistItem } from './packing'
 import WallPackingSheet from './WallPackingSheet'
+import WallTripSheet from './WallTripSheet'
+import type { TravelSettings, TravelTrip } from './engine/travel'
 import { surpriseSafeChecklist } from './surprise'
 import { eveningFocus, selectPosture, tomorrowLine, type Posture } from './posture'
 import { formatWallDate } from './clock'
@@ -87,6 +89,8 @@ export interface WallViewProps {
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Ticks or unticks a packing item. */
   toggleChecklist?: (item: WallChecklistItem) => void
+  /** Save a trip sheet's choice (canvas 19d). */
+  saveTravel?: (key: string, change: TravelSettings) => Promise<void>
   /** Add a line to an event's get & pack list (from its details). */
   addChecklist?: (eventId: string, label: string) => Promise<void>
   /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
@@ -126,7 +130,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -140,6 +144,8 @@ export default function WallView(props: WallViewProps) {
   // The + sheet: a blank item on the day on show.
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** The trip sheet on show (canvas 19d), by the trip's key. */
+  const [tripKey, setTripKey] = useState<string | null>(null)
   // Opened from the "No one yet" row: straight to who's on it (board 08a).
   const [selectedForWho, setSelectedForWho] = useState(false)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
@@ -274,12 +280,18 @@ export default function WallView(props: WallViewProps) {
     if (selectedId && !eventsById.has(selectedId)) setSelectedId(null)
   }, [selectedId, eventsById])
 
+  // A trip's chip, flights or time away open the trip sheet, not the flight's own event (canvas 19d).
+  const tripFor = (sourceId: string): TravelTrip | null =>
+    (planFor(dayOnShow)?.travel ?? []).map((t) => t.trip).find((t) =>
+      [t.id, t.tripEventId, t.outbound?.eventId, t.inbound?.eventId].includes(sourceId)) ?? null
   const interaction: ScoreInteraction = {
     onSelect: (id) => {
+      const trip = saveTravel ? tripFor(id) : null
+      if (trip) return setTripKey(trip.key)
       setSelectedForWho(false)
       setSelectedId(id)
     },
-    selectable: (id) => eventsById.has(id),
+    selectable: (id) => eventsById.has(id) || Boolean(saveTravel && tripFor(id)),
     highlight: selectedId
       ? { sourceId: selectedId, draft: Boolean(draftPreview) }
       : assistantDraft
@@ -384,7 +396,7 @@ export default function WallView(props: WallViewProps) {
     else if (extras[next - strip.length] === 'coming') openComingUp()
     else openTodo()
   }
-  useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen && !person, minDistance: 200 })
+  useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen && !person && !tripKey, minDistance: 200 })
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = strip.length > 1 ? (
     <WallWeek
@@ -606,6 +618,11 @@ export default function WallView(props: WallViewProps) {
       {decisionsOpen && tripActions && (
         <WallDecisionsSheet decisions={weekDecisions} now={now} onAnswer={answer} onClose={() => setDecisionsOpen(false)} />
       )}
+      {tripKey && saveTravel && (() => {
+        const trip = (planFor(dayOnShow)?.travel ?? []).map((t) => t.trip).find((t) => t.key === tripKey)
+        if (!trip) return null
+        return <WallTripSheet trip={trip} members={members} pigmentOf={(id) => pigments.get(id) ?? 0} onChange={(change) => void saveTravel(trip.key, change)} onClose={() => setTripKey(null)} />
+      })()}
       {packingOpen && toggleChecklist && (() => {
         const plan = planFor(dayOnShow)
         const packing = plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }

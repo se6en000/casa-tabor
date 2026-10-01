@@ -1761,3 +1761,27 @@ test('wall: a trip away — leave by, the lane, the trip chip, the plane on the 
   await wall.getByRole('button', { name: 'Giselle', exact: true }).click()
   await expect(wall.getByText('Jake’s in Dallas. Who drops off Emme & Owen at 7:35?')).toHaveCount(0)
 })
+
+// Canvas 19d (Jake: "personally id like to configure the whole trip in one sheet"): the trip chip opens one sheet for
+// the whole trip; its choices move the lanes and the Next Move at once.
+test('wall: the trip sheet — going and coming home in one; someone drives, more time at the airport', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&at=2026-10-07T12:30:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await wall.getByRole('button', { name: 'Open Jake in Dallas' }).click()
+  const sheet = wall.getByRole('region', { name: 'Jake in Dallas' })
+  await expect(sheet.getByText('TRIP · WED, OCT 7 – THU, OCT 8 · 2 DAYS')).toBeVisible()
+  await expect(sheet.getByText('Leave home 12:58')).toBeVisible()
+  await expect(sheet.getByText('Home about 7:19')).toBeVisible()
+  await expect(wall).toHaveScreenshot('trip-sheet.png')
+  await sheet.getByRole('button', { name: 'More time at the airport' }).click()
+  await expect(sheet.getByText('1 hr 15')).toBeVisible()
+  await expect(sheet.getByText('Leave home 12:43')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Someone drives' }).click()
+  await sheet.getByRole('button', { name: 'Kelly' }).first().click()
+  await expect(sheet.getByRole('button', { name: 'Kelly' }).first()).toHaveAttribute('aria-pressed', 'true')
+  await sheet.getByRole('button', { name: 'Done' }).click()
+  const move = wall.getByRole('region', { name: 'Next move' })
+  await expect(move.getByText('Kelly → DJT airport')).toBeVisible()
+  await expect(move.getByText('NEXT MOVE · LEAVE BY 12:43')).toBeVisible()
+})

@@ -14,6 +14,7 @@ import { useFixtureFonts } from './fixtureFonts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
+import type { TravelSettings } from './engine/travel'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
@@ -94,6 +95,8 @@ export default function WallFixturePage() {
   next.setDate(next.getDate() + 1)
   // Trip decisions live in memory here (the real wall saves them to settings).
   const [tripState, setTripState] = useState<WallTripState>({})
+  // The trip sheets' choices (canvas 19d), in memory here (the real wall keeps them in settings).
+  const [travelSettings, setTravelSettings] = useState<Record<string, TravelSettings>>({})
   // `?nobody=1` (board 08a): Jake's portfolio review with nobody on it, as on 2026-09-28.
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
@@ -116,7 +119,7 @@ export default function WallFixturePage() {
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
   const plan = (date: Date) =>
-    buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date) })
+    buildDayPlan({ date, members: members as WallMember[], routines, events: evs, tripState: dayState(tripState, date), travelSettings })
   const tripActions = {
     leaving: (ids: string[]) => setTripState((s) => withDeparted(s, day, ids, now)),
     undoLeaving: (ids: string[]) => setTripState((s) => withoutDeparted(s, day, ids)),
@@ -161,7 +164,7 @@ export default function WallFixturePage() {
         onOpenDay={(date) => { setBandOpen(false); setOpenRequest({ day: date.toISOString(), nonce: Date.now() }) }}
         viaWake={new URLSearchParams(window.location.search).get('wake') === '1'}
         members={members as WallMember[]}
-        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines, events: list, tripState: dayState(tripState, date) })}
+        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines, events: list, tripState: dayState(tripState, date), travelSettings })}
         onDraft={setAssistantDraft}
         useTurn={useTurn}
         useSpeech={useFixtureSpeech}
@@ -213,7 +216,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
+        } as unknown as WallEvent])} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
     </div>
     </WallSpeechContext.Provider>
     } />

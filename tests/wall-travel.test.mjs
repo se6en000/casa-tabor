@@ -14,7 +14,7 @@ const ev = (id, title, start, end, memberIds, extra = {}) => ({
 })
 const out = ev('f1419', 'TABOR JACOB | Flight 1419 DJT→DFW', '2026-10-07T18:13:00Z', '2026-10-07T20:30:00Z', ['jake'], { location_name: 'Verizon Corporate Office' })
 const back = ev('f2640', 'TABOR JACOB | Flight 2640 DFW→DJT', '2026-10-08T18:45:00Z', '2026-10-08T22:34:00Z', ['jake'], { location_name: 'DJT' })
-const hotel = ev('trip', 'JRT Trip Dallas', '2026-10-07T00:00:00Z', '2026-10-08T23:59:59Z', ['jake'], { all_day: true })
+const hotel = ev('trip', 'JRT Trip Dallas', '2026-10-07T00:00:00Z', '2026-10-08T23:59:59Z', ['jake'], { all_day: true, location_name: 'Courtyard by Marriott Dallas Allen' })
 const prefs = { jake: { airportMinutes: 60, way: 'uber' } }
 const local = (s) => new Date(s)
 
@@ -77,4 +77,29 @@ test('with no prefs passed, each person’s stored travel_prefs (their page) are
   assert.equal(trip.leaveHomeAt.toISOString(), '2026-10-07T16:58:00.000Z')
   // Nothing stored: a parent gets 90 minutes.
   assert.equal(buildTrips([out, back], members)[0].airportMinutes, 90)
+})
+
+// Canvas 19d, the trip sheet: one sheet for the whole trip. Its choices are kept per trip (keyed by the flight out,
+// so adding the flight home later keeps them) and change the times at once.
+test('the trip sheet’s choices: time at the airport, a different way home, someone driving', () => {
+  const [plain] = buildTrips([hotel, back, out], members, prefs)
+  assert.equal(plain.key, 'f1419')
+  assert.deepEqual([plain.wayOut, plain.wayHome], ['uber', 'uber'])
+  assert.equal(plain.hotel, 'Courtyard by Marriott Dallas Allen')
+  const settings = { f1419: { airportMinutes: 90, wayOut: 'someone', driverOutId: 'kelly', wayHome: 'someone', driverHomeId: 'kelly', deplaneMinutes: 45 } }
+  const [trip] = buildTrips([hotel, back, out], members, prefs, settings)
+  assert.equal(trip.airportMinutes, 90)
+  assert.equal(trip.leaveHomeAt.toISOString(), '2026-10-07T16:28:00.000Z')
+  assert.deepEqual([trip.wayOut, trip.driverOutId, trip.wayHome, trip.driverHomeId], ['someone', 'kelly', 'someone', 'kelly'])
+  assert.equal(trip.homeAt.toISOString(), '2026-10-08T23:34:00.000Z')
+})
+
+test('drive & park out means the car home; landing at another airport flags where the car is', () => {
+  const [trip] = buildTrips([back, out], members, prefs, { f1419: { wayOut: 'drive_park' } })
+  assert.deepEqual([trip.wayOut, trip.wayHome, trip.carWarning], ['drive_park', 'drive_park', null])
+  const intoFll = { ...back, title: 'Flight 2640 DFW→FLL' }
+  const [other] = buildTrips([intoFll, out], members, prefs, { f1419: { wayOut: 'drive_park' } })
+  assert.equal(other.carWarning, 'Your car is at DJT')
+  // The drive home is from where they land: FLL is 50 minutes.
+  assert.equal(other.driveHomeMinutes, 50)
 })
