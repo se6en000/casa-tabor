@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
-import { amplitude, fuseProgress, stepLevel, voiceState, type VoiceLineState, type VoiceSignal } from './voiceLine'
+import { LOUD_ABOVE_ROOM, envelope, fuseProgress, stepLevel, voiceState, waveformPoints, type VoiceLineState, type VoiceSignal } from './voiceLine'
 
-// The voice line under your words (canvas row 17). Jake on the wall, 2026-09-30: "the wave line was static, I didn't
-// have the alive feeling at all … a lot of transitions happening very quickly." So it's one continuous line that
-// never swaps for another: its height, speed and brightness ease toward each state — a slow idle ripple when it's
-// quiet, alive with your voice (height and pace from the bridge's decibel loudness), flat and still while Casa decides,
-// with Casa's sweep and the fuse fading over it. It draws on its own animation loop (~30 fps, reading the speech
-// hook's signal), so the band isn't re-rendered for it on the Pi; the hint row keeps its space so nothing jumps.
+// The voice line under your words (canvas row 17). The wave IS your voice: the last two seconds of loudness (the
+// bridge's decibel level, every 20 ms), newest in the middle, travelling out to both edges — each syllable its own
+// bump, pauses flat, a faint ripple while it listens. It starts the moment you're louder than the room and settles a
+// third of a second after you stop (Jake, fifth try: "slow to start … slow to stop … the same wave … sloppy"). Bright
+// brass once Deepgram confirms a voice; Casa's sweep and the fuse fade over it. It draws on its own animation loop
+// (40 fps, reading the speech hook's signal ref), so the band isn't re-rendered for it on the Pi.
 
 export interface VoiceLineProps {
   signal: MutableRefObject<VoiceSignal> | undefined
@@ -23,46 +23,14 @@ export interface VoiceLineProps {
 }
 
 const HEIGHT = 48
-const MID = HEIGHT / 2
-const POINTS = 96
-const FRAME_MS = 33
+const FRAME_MS = 25
+/** Two seconds of loudness, one sample a frame. */
+const HISTORY = 80
+/** While it listens, the quietest the ripple gets: alive, never flat. */
+const IDLE = 0.06
 
-/** Per state: the wave's height (px), its pace, and the brass line's brightness. */
-const LOOK: Record<VoiceLineState, { height: number; pace: number; ink: number }> = {
-  off: { height: 0, pace: 0, ink: 0 },
-  quiet: { height: 1.6, pace: 0.35, ink: 0.55 },
-  noise: { height: 0, pace: 0, ink: 0.2 },
-  voice: { height: 4, pace: 1.1, ink: 1 },
-  heard: { height: 0, pace: 0, ink: 0.8 },
-  fuse: { height: 0, pace: 0, ink: 0.25 },
-  thinking: { height: 0, pace: 0, ink: 0.25 },
-  yes: { height: 0, pace: 0, ink: 0.55 },
-  deaf: { height: 0, pace: 0, ink: 0 },
-}
-
-/** The line: a few soft waves, strongest in the middle. */
-function wavePath(width: number, amp: number, phase: number): string {
-  let d = ''
-  for (let i = 0; i <= POINTS; i += 1) {
-    const u = i / POINTS
-    const env = Math.sin(Math.PI * u) ** 1.5
-    const y = MID - amp * env * (0.6 * Math.sin(2 * Math.PI * 5 * u + phase) + 0.4 * Math.sin(2 * Math.PI * 11.5 * u - phase * 1.4))
-    d += `${i === 0 ? 'M' : ' L'}${(u * width).toFixed(1)},${y.toFixed(1)}`
-  }
-  return d
-}
-
-/** The room's noise: a low, fine grain. */
-function grainPath(width: number, amp: number, t: number): string {
-  let d = ''
-  const steps = Math.round(width / 8)
-  for (let i = 0; i <= steps; i += 1) {
-    const n = Math.sin(i * 12.9898 + Math.floor(t * 8) * 78.233) * 43758.5453
-    const y = MID + amp * ((n - Math.floor(n)) * 2 - 1)
-    d += `${i === 0 ? 'M' : ' L'}${(i * 8).toFixed(0)},${y.toFixed(1)}`
-  }
-  return d
-}
+/** The brass line's brightness per state: full for a confirmed voice. */
+const INK: Record<VoiceLineState, number> = { off: 0, quiet: 0.5, noise: 0.35, voice: 0.8, heard: 0.7, fuse: 0.25, thinking: 0.25, yes: 0.55, deaf: 0 }
 
 const fade = (on: boolean) => `transition-opacity duration-300 ${on ? 'opacity-100' : 'opacity-0'}`
 
@@ -70,7 +38,6 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
   const [state, setState] = useState<VoiceLineState>('off')
   const [slow, setSlow] = useState(false)
   const wave = useRef<SVGPathElement>(null)
-  const grain = useRef<SVGPathElement>(null)
   const fill = useRef<HTMLDivElement>(null)
   const inputs = useRef({ micOpen, bridgeDown, thinking, needsYes, heard })
   useEffect(() => { inputs.current = { micOpen, bridgeDown, thinking, needsYes, heard } }, [micOpen, bridgeDown, thinking, needsYes, heard])
@@ -79,10 +46,12 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
     let frame = 0
     let last = 0
     let levels = { level: 34, floor: 34 }
+    let seeded = false
+    let loudAt = 0
     let noisySince = 0
-    // What's drawn eases toward the state's look, so the line glides between states and never snaps.
-    const drawn = { height: 0, pace: 0, ink: 0 }
-    let phase = 0
+    let ink = 0
+    let count = 0
+    const history = new Array<number>(HISTORY).fill(0)
     let shown: VoiceLineState = 'off'
     const tick = (ms: number) => {
       frame = requestAnimationFrame(tick)
@@ -91,31 +60,32 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       last = ms
       const now = Date.now()
       const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, speechAt: 0 }
-      // Only learn the room while the mic is open: when it closes (Casa thinking) the level reads 0, and learning
-      // that would make the ordinary room look loud when the mic opens again.
-      if (inputs.current.micOpen) levels = stepLevel(levels, s.level ?? levels.level, dt)
-      const voiced = Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 8000
-      const wordsLately = s.lastWordAt > 0 && now - s.lastWordAt < 2000
-      noisySince = levels.level - levels.floor > 12 && !wordsLately && !voiced ? noisySince || now : 0
-      const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, signal: s })
+      const open = inputs.current.micOpen
+      // Only learn the room from real samples while the mic is open: 0 means no sample yet (or the mic closed for
+      // Casa's turn), and learning it made the ordinary room read as a shout for seconds after the mic opened.
+      const raw = s.level ?? 0
+      if (open && raw > 0) levels = seeded ? stepLevel(levels, raw, dt) : { level: raw, floor: raw }
+      if (open && raw > 0) seeded = true
+      const loud = open && levels.level - levels.floor > LOUD_ABOVE_ROOM
+      if (loud) loudAt = now
+      const confirmed = (Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 4000) || (s.lastWordAt > 0 && now - s.lastWordAt < 2500)
+      noisySince = loud && !confirmed ? noisySince || now : loud ? 0 : noisySince && now - loudAt < 1000 ? noisySince : 0
+      const next = voiceState({ now, ...inputs.current, loudAt, noisyFor: noisySince ? now - noisySince : 0, signal: s })
       if (next !== shown) {
         shown = next
         setState(next)
       }
-      const look = LOOK[next]
-      const voice = next === 'voice' ? amplitude(levels.level, levels.floor) : 0
-      const ease = (from: number, to: number, k: number) => from + (to - from) * k
-      // Up at once with your voice (a frame or two), down slowly — lively without the jitter, and without lag.
-      const rise = (from: number, to: number, down: number) => ease(from, to, to > from ? 0.6 : down)
-      drawn.height = rise(drawn.height, look.height + 14 * voice, 0.14)
-      drawn.pace = rise(drawn.pace, look.pace + 2.2 * voice, 0.1)
-      drawn.ink = ease(drawn.ink, look.ink, 0.12)
-      phase += drawn.pace * dt / 1000 * Math.PI * 2
+      // The newest loudness into the middle; the rest moves out a step.
+      history.pop()
+      history.unshift(open ? Math.max(IDLE, seeded ? envelope(levels.level, levels.floor) : 0) : 0)
+      count += 1
+      const target = next === 'voice' && confirmed ? 1 : INK[next]
+      ink += (target - ink) * 0.25
       if (wave.current) {
-        wave.current.setAttribute('d', wavePath(width, drawn.height, phase))
-        wave.current.style.opacity = drawn.ink.toFixed(3)
+        const pts = waveformPoints(history, count, width, HEIGHT)
+        wave.current.setAttribute('d', pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '))
+        wave.current.style.opacity = ink.toFixed(3)
       }
-      if (grain.current && next === 'noise') grain.current.setAttribute('d', grainPath(width, 2 + 2 * amplitude(levels.level, levels.floor), ms / 1000))
       if (fill.current) fill.current.style.width = `${(fuseProgress(now, s) * 100).toFixed(1)}%`
     }
     frame = requestAnimationFrame(tick)
@@ -152,10 +122,7 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
         {/* Under the moving line: a faint rule, so the line always has somewhere to be. */}
         <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-rule" />
         <svg width={width} height={HEIGHT} className="absolute left-0 top-0 text-wall-night-brass" aria-hidden="true">
-          <path ref={wave} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
-        </svg>
-        <svg width={width} height={HEIGHT} className={`absolute left-0 top-0 text-wall-night-ink-2/60 ${fade(state === 'noise')}`} aria-hidden="true">
-          <path ref={grain} fill="none" stroke="currentColor" strokeWidth={2} />
+          <path ref={wave} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <div ref={fill} className={`absolute left-0 top-[21px] h-[6px] w-0 rounded-full bg-wall-night-brass ${fade(state === 'fuse')}`} />
         <div className={`absolute inset-0 ${fade(state === 'thinking')}`}>

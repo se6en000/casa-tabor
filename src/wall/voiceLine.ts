@@ -20,18 +20,15 @@ export interface VoiceSignal {
 }
 
 /**
- * Deepgram sends words in bursts about a second apart while you talk, so "hearing you" holds this long after the
- * last words — between bursts, still talking and done look the same from here; only Deepgram knows, and when it
- * decides, Casa sends within 0.35 s.
+ * You stop talking this long after the last loud moment (a gap between syllables is shorter). Jake, fifth try:
+ * "slow to start vibing and slow to stop" — it waited for Deepgram's voice start (300–700 ms) and held 1.8–3.5 s.
  */
-export const VOICE_HANGOVER_MS = 1800
-/** Deepgram's voice start counts as you talking this long before the first words come. */
-const VOICE_START_MS = 3500
+export const QUIET_AFTER_MS = 350
 /** An unfinished-sounding sentence waits this long for the rest (useSpeechInput's fragment hold) — the real stall. */
 export const FUSE_HELD_MS = 4500
-/** Louder than the room by this much (on the bridge's decibel scale, ~5 dB) is sound worth noticing (the room's noise only). */
-const LOUD_ABOVE_ROOM = 12
-/** Loud with no voice this long reads as the room. */
+/** Louder than the room by this much (on the bridge's decibel scale, ~2.5 dB) counts as sound. */
+export const LOUD_ABOVE_ROOM = 6
+/** Loud with no voice detected and no words this long reads as the room. */
 export const NOISE_AFTER_MS = 1500
 
 export interface VoiceStateInput {
@@ -42,31 +39,26 @@ export interface VoiceStateInput {
   needsYes: boolean
   /** The words on screen so far (empty before any). */
   heard: string
-  level: number
-  floor: number
-  /** How long it has been loud with no voice. */
+  /** When the sound was last louder than the room (ms), 0 when not yet. */
+  loudAt: number
+  /** How long it has been loud with no voice detected and no words. */
   noisyFor: number
   signal: Pick<VoiceSignal, 'lastWordAt' | 'heldSince' | 'speechAt'>
 }
 
-/** The line changes only on real signals (a voice start, words, a hold, Casa's turn), so it never flickers. */
+/** The line's state, from the loudness itself (every 20 ms) and the real signals (a hold, Casa's turn). */
 export function voiceState(input: VoiceStateInput): VoiceLineState {
   const { now, signal } = input
   if (input.bridgeDown) return 'deaf'
-  const hearing = input.micOpen && Boolean(input.heard.trim()) && signal.lastWordAt > 0
-  const wordsRecent = hearing && now - signal.lastWordAt < VOICE_HANGOVER_MS
-  const speechAt = signal.speechAt ?? 0
-  // A voice this turn with no words shown yet (or only the wake word, which isn't shown): you, while anything —
-  // the voice start or words — came in the last few seconds.
-  const voiceStarting = input.micOpen && speechAt > 0 && !hearing && now - Math.max(speechAt, signal.lastWordAt) < VOICE_START_MS
+  const talking = input.micOpen && input.loudAt > 0 && now - input.loudAt < QUIET_AFTER_MS
+  if (talking && input.noisyFor >= NOISE_AFTER_MS) return 'noise'
   // Planning keeps the mic open while Casa thinks, so talking over the thinking shows your voice.
-  if (wordsRecent || voiceStarting) return 'voice'
+  if (talking) return 'voice'
   if (input.thinking) return 'thinking'
   if (!input.micOpen) return input.needsYes ? 'yes' : 'off'
   if (signal.heldSince > 0) return 'fuse'
-  if (hearing) return 'heard'
+  if (input.heard.trim() && signal.lastWordAt > 0) return 'heard'
   if (input.needsYes) return 'yes'
-  if (input.level - input.floor > LOUD_ABOVE_ROOM && input.noisyFor >= NOISE_AFTER_MS) return 'noise'
   return 'quiet'
 }
 
@@ -77,21 +69,47 @@ export function fuseProgress(now: number, signal: Pick<VoiceSignal, 'heldSince'>
 }
 
 /**
- * The level as a voice feels, not a meter: fast to rise (~60 ms), slow to fall (~400 ms). The room's own level
+ * The level follows the voice closely — up at once, down in ~80 ms — so each syllable shows. The room's own level
  * (`floor`) is learned quickly downward and slowly upward, so a voice barely moves it but a fan settles in.
  */
 export function stepLevel(prev: { level: number; floor: number }, raw: number, dtMs: number): { level: number; floor: number } {
   const toward = (from: number, to: number, ms: number) => from + (to - from) * Math.min(1, dtMs / ms)
   return {
-    level: toward(prev.level, raw, raw > prev.level ? 60 : 200),
+    level: toward(prev.level, raw, raw > prev.level ? 20 : 80),
     floor: toward(prev.floor, raw, raw < prev.floor ? 300 : 8000),
   }
 }
 
-/** How much the line lifts (0–1): loudness above the room's own level. */
-export function amplitude(level: number, floor: number): number {
-  // On the bridge's decibel scale a voice reads ~8–20 above the room, loud ~50 (measured on the wall, 2026-09-30).
-  return Math.max(0, Math.min(1, (level - floor) / 20))
+/** How tall the voice is (0–1) above the room: the room itself is nothing, a syllable most of it, a shout all of it. */
+export function envelope(level: number, floor: number): number {
+  return Math.max(0, Math.min(1, (level - floor - 4) / 14))
+}
+
+/** Radians per history sample: about five samples per ripple. */
+const CARRIER = 1.25
+
+/**
+ * The wave is the voice: `history` is the envelope per frame, newest first; the newest sits in the middle and older
+ * samples travel out to both edges, each riding a ripple (its phase fixed to the sample, so a syllable keeps its
+ * shape as it travels). `count` is how many samples have been pushed, for the ripple's phase.
+ */
+export function waveformPoints(history: number[], count: number, width: number, height: number, every = 3): Array<{ x: number; y: number }> {
+  const mid = height / 2
+  const half = width / 2
+  const reach = Math.max(1, history.length - 1)
+  const room = height / 2 - 2
+  const points: Array<{ x: number; y: number }> = []
+  for (let x = 0; x <= width + 0.001; x += every) {
+    const d = Math.abs(x - half)
+    const s = (d / half) * reach
+    const i = Math.floor(s)
+    const f = s - i
+    const a = (history[i] ?? 0) * (1 - f) + (history[i + 1] ?? 0) * f
+    const fade = Math.max(0, Math.min(1, (half - d) / (width * 0.08)))
+    const y = a === 0 || fade === 0 ? mid : mid - a * room * fade * Math.sin((count - s) * CARRIER)
+    points.push({ x, y })
+  }
+  return points
 }
 
 const bare = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')

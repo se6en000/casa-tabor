@@ -1513,24 +1513,26 @@ test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the 
 })
 
 // Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
-test('wall: the new listener — calm: your voice from its start, held through the gaps between words, a still line while Deepgram decides, the fuse only for a held sentence', async ({ page }) => {
+test('wall: the new listener — the wave is your voice: it starts the moment you\'re louder than the room, stops a third of a second after, a still line while Deepgram decides, the fuse only for a held sentence', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
   // No rings, no LISTENING word: the line says it.
   await expect(section.getByText('LISTENING', { exact: true })).toHaveCount(0)
+  // The room (~34 on the bridge's decibel scale): listening, quiet.
+  await mic(page, () => window.__mic.level(34))
   await expect(section.locator('[data-voice-line="quiet"]')).toBeVisible()
-  // Deepgram hears a voice start: your voice, before any words, however low the meter reads on the wall.
-  await mic(page, () => window.__mic.speak(3))
-  await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
-  // A burst of words, then a gap: still your voice — no fuse, no hint line (Jake, 2026-09-30: "extremely chaotic").
+  // Louder than the room: your voice at once — before Deepgram's voice start or any words (Jake, 2026-09-30:
+  // "slow to start vibing and slow to stop").
+  // (Deepgram confirms a voice within ~0.5 s in life; without it, 1.5 s of loudness would read as the room.)
+  await mic(page, () => window.__mic.speak(52))
+  await expect(section.locator('[data-voice-line="voice"]')).toBeVisible({ timeout: 1000 })
   await mic(page, () => window.__mic.hear('Alexa, tell me what is on the', [{ word: 'the', confidence: 0.3 }]))
-  await page.waitForTimeout(900)
-  await expect(section.locator('[data-voice-line="voice"]')).toBeVisible()
-  await expect(section.getByText(/tap to send now/)).toHaveCount(0)
   await expect(section.locator('span.opacity-40', { hasText: 'the' })).toBeVisible()
-  // Nothing new for a while: a still line while Deepgram decides you're done.
-  await expect(section.locator('[data-voice-line="heard"]')).toBeVisible({ timeout: 3000 })
+  await expect(section.getByText(/tap to send now/)).toHaveCount(0)
+  // You stop: within a moment, a still line while Deepgram decides you're done.
+  await mic(page, () => window.__mic.level(34))
+  await expect(section.locator('[data-voice-line="heard"]')).toBeVisible({ timeout: 1000 })
   // A sentence that sounds unfinished is held for the rest: the fuse, and a tap sends now.
   await mic(page, () => window.__mic.hold())
   await expect(section.locator('[data-voice-line="fuse"]')).toBeVisible()

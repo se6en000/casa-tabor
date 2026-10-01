@@ -1,14 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FUSE_HELD_MS, VOICE_HANGOVER_MS, amplitude, fuseProgress, inkWords, shownWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
+import { FUSE_HELD_MS, QUIET_AFTER_MS, envelope, fuseProgress, inkWords, shownWords, stepLevel, voiceState, waveformPoints } from '../src/wall/voiceLine.ts'
 
-// Canvas row 17: one voice line under the words. Jake on the wall, 2026-09-30: "it's still extremely chaotic" — a
-// screen recording showed the fuse filling and restarting with every burst of words while he talked (Deepgram sends
-// words about a second apart, and his voice reads only 1–5 of 100 on the bridge's meter, so it never counted as
-// talking). So: hearing you holds through the gaps; the line only changes on real signals; the fuse is only the
-// real stall (an unfinished sentence held 4.5 s).
+// Canvas row 17: one voice line under the words. Jake on the wall, 2026-09-30, fifth try: "it's slow to start vibing
+// and slow to stop at the end … it's like the same wave, there's no real dynamism … it seems to just be on and waving
+// around or off … it feels sloppy." So the line starts and stops on the loudness itself (every 20 ms from the bridge),
+// and the wave IS the voice: the last couple of seconds of loudness, travelling out from the middle.
 
-const base = { now: 10_000, micOpen: true, bridgeDown: false, thinking: false, needsYes: false, heard: '', level: 1, floor: 1, noisyFor: 0, signal: { lastWordAt: 0, heldSince: 0, speechAt: 0 } }
+const base = { now: 10_000, micOpen: true, bridgeDown: false, thinking: false, needsYes: false, heard: '', loudAt: 0, noisyFor: 0, signal: { lastWordAt: 0, heldSince: 0, speechAt: 0 } }
 
 test('the line\'s state: can\'t hear first, then Casa\'s turn, then yours', () => {
   assert.equal(voiceState({ ...base, bridgeDown: true, thinking: true }), 'deaf')
@@ -19,18 +18,20 @@ test('the line\'s state: can\'t hear first, then Casa\'s turn, then yours', () =
   assert.equal(voiceState({ ...base, needsYes: true }), 'yes')
 })
 
-test('hearing you starts with Deepgram\'s voice start and holds through the gaps between bursts of words', () => {
-  // A voice started, no words yet (they come a second or more later): hearing you, however quiet the meter reads.
-  assert.equal(voiceState({ ...base, level: 3, signal: { ...base.signal, speechAt: 9_400 } }), 'voice')
-  // Words a second ago, the next burst not here yet: still hearing you — no flip to anything else.
-  const talking = { ...base, heard: 'Alexa, tell me', signal: { lastWordAt: 9_000, heldSince: 0, speechAt: 7_000 } }
-  assert.equal(voiceState(talking), 'voice')
-  // Only the wake word so far (hidden from the words shown): still your voice, not a drop to quiet mid-sentence.
-  assert.equal(voiceState({ ...base, heard: '', signal: { lastWordAt: 9_700, heldSince: 0, speechAt: 9_000 } }), 'voice')
-  // Planning keeps the mic open while Casa thinks: talking over it shows your voice.
-  assert.equal(voiceState({ ...talking, thinking: true }), 'voice')
-  // Words on screen and nothing new for a while: a still line while Deepgram decides you're done.
-  assert.equal(voiceState({ ...talking, signal: { ...talking.signal, lastWordAt: 10_000 - VOICE_HANGOVER_MS - 1 } }), 'heard')
+test('it starts the moment you\'re louder than the room and stops a third of a second after you stop', () => {
+  // Loud 20 ms ago, no voice detected yet (Deepgram's takes 300–700 ms): already you.
+  assert.equal(voiceState({ ...base, loudAt: 9_980 }), 'voice')
+  // Quiet for less than the gap between syllables: still you.
+  assert.equal(voiceState({ ...base, loudAt: 10_000 - QUIET_AFTER_MS + 50 }), 'voice')
+  // Quiet longer than that: done — no waiting seconds for words.
+  assert.equal(voiceState({ ...base, loudAt: 10_000 - QUIET_AFTER_MS - 50, heard: 'tell me', signal: { lastWordAt: 9_000, heldSince: 0, speechAt: 8_000 } }), 'heard')
+  // Talking over Casa's thinking (planning keeps the mic open) shows your voice.
+  assert.equal(voiceState({ ...base, loudAt: 9_990, thinking: true }), 'voice')
+})
+
+test('loud for a while with no voice and no words is the room, not you', () => {
+  assert.equal(voiceState({ ...base, loudAt: 9_990, noisyFor: 2_000 }), 'noise')
+  assert.equal(voiceState({ ...base, loudAt: 9_990, noisyFor: 800 }), 'voice')
 })
 
 test('the fuse is only the real stall: an unfinished sentence held for the rest (4.5 s), with tap to send', () => {
@@ -38,34 +39,45 @@ test('the fuse is only the real stall: an unfinished sentence held for the rest 
   assert.equal(voiceState(held), 'fuse')
   assert.equal(fuseProgress(held.now, held.signal), 2_000 / FUSE_HELD_MS)
   assert.equal(fuseProgress(60_000, held.signal), 0.97)
-  // Talking again during the hold is your voice.
-  assert.equal(voiceState({ ...held, signal: { ...held.signal, lastWordAt: 9_800 } }), 'voice')
+  assert.equal(voiceState({ ...held, loudAt: 9_950 }), 'voice')
 })
 
-test('the room: loud with no voice detected for a while; a cough with nothing after it settles back', () => {
-  assert.equal(voiceState({ ...base, level: 30, noisyFor: 2_000 }), 'noise')
-  assert.equal(voiceState({ ...base, level: 30, noisyFor: 800 }), 'quiet')
-  assert.equal(voiceState({ ...base, signal: { ...base.signal, speechAt: 10_000 - VOICE_HANGOVER_MS - 2_000 } }), 'quiet')
+test('the level: up at once, down quickly (syllables show); the room is learned slowly up, quickly down', () => {
+  let s = { level: 34, floor: 34 }
+  s = stepLevel(s, 52, 20)
+  assert.ok(s.level > 50, `up at once: ${s.level}`)
+  const after = stepLevel(s, 34, 60)
+  assert.ok(after.level < 45, `down quickly: ${after.level}`)
+  assert.ok(stepLevel({ level: 34, floor: 34 }, 52, 100).floor < 35, 'a voice barely moves the room')
+  assert.ok(stepLevel({ level: 34, floor: 40 }, 30, 300).floor < 33, 'a quieter room is learned fast')
 })
 
-test('the level rises fast and falls slower; the room\'s level is learned; height is scaled to the bridge\'s decibel scale', () => {
-  let s = { level: 30, floor: 34 }
-  s = stepLevel(s, 52, 60)
-  assert.ok(s.level > 51, `fast up: ${s.level}`)
-  const after = stepLevel(s, 34, 100)
-  assert.ok(after.level > 40 && after.level < 48, `slower down: ${after.level}`)
-  assert.ok(stepLevel({ level: 34, floor: 34 }, 52, 100).floor < 35, 'a voice barely moves the floor')
-  assert.equal(amplitude(34, 34), 0)
-  // A normal voice on the wall (~45–55 against a room of ~34) is most of the height; a shout is all of it.
-  assert.ok(amplitude(50, 34) >= 0.7)
-  assert.equal(amplitude(90, 34), 1)
+test('the envelope: nothing for the room, a syllable most of the height, a shout all of it', () => {
+  assert.equal(envelope(34, 34), 0)
+  assert.equal(envelope(37, 34), 0)
+  assert.ok(envelope(50, 34) >= 0.6)
+  assert.equal(envelope(90, 34), 1)
 })
 
-test('the wake word is left off the words shown, so the sentence doesn\'t jump when it\'s dropped', () => {
-  assert.equal(shownWords('Alexa, tell me what\'s on the calendar'), 'tell me what\'s on the calendar')
-  assert.equal(shownWords('Alexa.'), '')
-  assert.equal(shownWords('Hey Alexa what time is it'), 'what time is it')
-  assert.equal(shownWords('Tell Alexa no'), 'Tell Alexa no')
+test('the wave is the voice: flat when quiet; the newest loudness in the middle, older out to both sides', () => {
+  const quiet = waveformPoints(new Array(60).fill(0), 0, 600, 40)
+  assert.ok(quiet.every((p) => p.y === 20), 'flat when quiet')
+  // A syllable just now: tall in the middle, flat at the edges, the same on both sides.
+  const hist = new Array(60).fill(0)
+  hist[0] = 1; hist[1] = 0.9
+  const pts = waveformPoints(hist, 7, 600, 40)
+  const mid = pts.reduce((m, p) => Math.max(m, Math.abs(p.y - 20) * (Math.abs(p.x - 300) < 20 ? 1 : 0)), 0)
+  assert.ok(mid > 8, `tall in the middle: ${mid}`)
+  assert.ok(Math.abs(pts[0].y - 20) < 0.5 && Math.abs(pts.at(-1).y - 20) < 0.5, 'flat at the edges')
+  const left = pts.find((p) => Math.abs(p.x - 290) < 2)
+  const right = pts.find((p) => Math.abs(p.x - 310) < 2)
+  assert.ok(Math.abs((left.y - 20) - (right.y - 20)) < 0.01, 'mirrored')
+  // The same syllable a second ago has travelled out from the middle.
+  const older = new Array(60).fill(0)
+  older[30] = 1
+  const out = waveformPoints(older, 37, 600, 40)
+  assert.ok(Math.abs(out.find((p) => Math.abs(p.x - 300) < 2).y - 20) < 0.5, 'the middle is flat again')
+  assert.ok(out.some((p) => Math.abs(p.y - 20) > 5 && Math.abs(p.x - 300) > 100), 'the bump is further out')
 })
 
 test('words in confidence ink: the ones Deepgram isn\'t sure of are faded, matched from the end', () => {
@@ -74,5 +86,10 @@ test('words in confidence ink: the ones Deepgram isn\'t sure of are faded, match
   ])
   assert.deepEqual(ink.filter((w) => w.faded).map((w) => w.text), ['live', 'Friday'])
   assert.equal(ink.map((w) => w.text).join(' '), 'Add a dentist appointment for live on Friday')
-  assert.deepEqual(inkWords('hello there', []).map((w) => w.faded), [false, false])
+})
+
+test('the wake word is left off the words shown, so the sentence doesn\'t jump when it\'s dropped', () => {
+  assert.equal(shownWords('Alexa, tell me what\'s on the calendar'), 'tell me what\'s on the calendar')
+  assert.equal(shownWords('Alexa.'), '')
+  assert.equal(shownWords('Tell Alexa no'), 'Tell Alexa no')
 })
