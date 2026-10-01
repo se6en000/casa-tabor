@@ -4,6 +4,7 @@ import { formatWallClock } from './clock'
 import type { WallMember } from './engine/types'
 import type { TravelSettings, TravelTrip, TravelWay } from './engine/travel'
 import { pigmentStyleFor } from './lanes'
+import type { CoverageRun } from './coverage'
 
 // The trip sheet (canvas 19d): one sheet for the whole trip — who's going, then Going and Coming home side by side.
 // Jake, 2026-10-01: "personally id like to configure the whole trip in one sheet if possible." The way home follows the
@@ -56,9 +57,12 @@ export interface WallTripSheetProps {
   pigmentOf: (memberId: string) => number
   onChange: (change: TravelSettings) => void
   onClose: () => void
+  /** The runs they usually drive while away (coverage.ts), and who takes one. */
+  coverage?: CoverageRun[]
+  onCover?: (run: CoverageRun, driverId: string) => void
 }
 
-export default function WallTripSheet({ trip, members, pigmentOf, onChange, onClose }: WallTripSheetProps) {
+export default function WallTripSheet({ trip, members, pigmentOf, onChange, onClose, coverage = [], onCover }: WallTripSheetProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const who = trip.memberIds.map(nameOf).join(' & ')
   // Who could drive them: anyone who drives and isn't on the trip.
@@ -151,6 +155,36 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
             ) : <span className="mt-[8px] text-wall-body text-wall-ink-2">No flight home in the calendar yet.</span>}
           </div>
         </div>
+        )}
+
+        {coverage.length > 0 && (
+          // While they're away (Jake: "that's the hardest part of traveling is aligning help"): each run, and who has it.
+          <section aria-label={`While ${who} is away`} className="mb-[18px] flex flex-col gap-[10px] border-0 border-t border-solid border-wall-rule pt-[18px]">
+            <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">WHILE {who.toUpperCase()}’S AWAY</span>
+            {coverage.map((run) => (
+              <div key={`${run.tripId}:${run.date.toDateString()}`} className="flex items-center justify-between gap-[16px]">
+                <span className="min-w-0 truncate text-wall-body">
+                  <span className="font-semibold">{run.date.toLocaleDateString('en-US', { weekday: 'short' })} {run.time}</span> · {run.title}
+                  {!run.driverId && <span className="text-wall-rust"> · no one yet</span>}
+                </span>
+                <div className="flex shrink-0 gap-[8px]">
+                  {drivers.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      aria-pressed={run.driverId === m.id}
+                      aria-label={`${m.name} takes ${run.title} ${run.time}`}
+                      onClick={(e) => { e.stopPropagation(); onCover?.(run, m.id) }}
+                      className={`flex h-[48px] items-center gap-[8px] rounded-full pl-[4px] pr-[14px] text-wall-detail font-semibold ${run.driverId === m.id ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+                    >
+                      <span aria-hidden="true" className={`flex h-[38px] w-[38px] items-center justify-center rounded-full font-display text-wall-detail font-bold text-wall-on-pigment ${pigmentStyleFor(pigmentOf(m.id)).solid}`}>{m.name.charAt(0)}</span>
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
         )}
 
         <div className="flex items-center justify-between border-0 border-t border-solid border-wall-rule pt-[18px]">

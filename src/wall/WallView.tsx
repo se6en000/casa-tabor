@@ -14,6 +14,7 @@ import WallHandOffSheet from './WallHandOffSheet'
 import { packingGroups, type WallChecklistItem } from './packing'
 import WallPackingSheet from './WallPackingSheet'
 import WallTripSheet from './WallTripSheet'
+import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
 import { surpriseSafeChecklist } from './surprise'
 import { eveningFocus, selectPosture, tomorrowLine, type Posture } from './posture'
@@ -91,6 +92,8 @@ export interface WallViewProps {
   toggleChecklist?: (item: WallChecklistItem) => void
   /** Save a trip sheet's choice (canvas 19d). */
   saveTravel?: (key: string, change: TravelSettings) => Promise<void>
+  /** Every trip we know of, up to four months out (coverage.ts plans each from the day it lands). */
+  travelTrips?: TravelTrip[]
   /** Add a line to an event's get & pack list (from its details). */
   addChecklist?: (eventId: string, label: string) => Promise<void>
   /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
@@ -130,7 +133,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -162,6 +165,16 @@ export default function WallView(props: WallViewProps) {
   // A person's page (canvas 16e), from a tap on their name.
   const [personId, setPersonId] = useState<string | null>(null)
 
+  // Covering each trip (coverage.ts): its runs while the traveller is gone, from the day the trip lands in Casa.
+  const tripCoverageByKey = useMemo(() => new Map(travelTrips
+    .filter((t) => (t.homeAt ?? t.leaveHomeAt ?? new Date(0)).getTime() > now.getTime() - 3_600_000)
+    .map((t) => [t.key, tripCoverage(t, (date) => buildDayPlan({ date, members, routines, events: allEvents, dayOffs, tripState: tripStateFor?.(date), travel: travelTrips }))] as const)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the minute clock isn't a reason to replan; the day is
+  [travelTrips, members, routines, allEvents, dayOffs, tripStateFor, now.toDateString()])
+  const comingUpItems = useMemo(() => comingUp ? [
+    ...travelTrips.filter((t) => tripCoverageByKey.has(t.key)).map((t) => coverageComingUp(t, tripCoverageByKey.get(t.key)!, members, comingUp.today)),
+    ...comingUp.items,
+  ] : [], [comingUp, travelTrips, tripCoverageByKey, members])
   // A far day's week (dayFocus.ts) joins the cache, so its events open like any other.
   const knownEvents = useMemo(() => mergeEvents(allEvents, aroundEvents), [allEvents, aroundEvents])
   const eventsById = useMemo(() => new Map(knownEvents.map((e) => [e.id, e as EditableEvent])), [knownEvents])
@@ -405,7 +418,7 @@ export default function WallView(props: WallViewProps) {
       pigmentOf={(id) => pigments.get(id) ?? null}
       shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
       onSelect={showDay}
-      comingUp={comingUp ? { ...comingUpTile(comingUp.items, comingUp.today), open: comingUpOpen, onOpen: openComingUp } : null}
+      comingUp={comingUp ? { ...comingUpTile(comingUpItems, comingUp.today), open: comingUpOpen, onOpen: openComingUp } : null}
       todo={todos ? { ...todoTile(todos.list), open: todoOpen, onOpen: openTodo } : null}
     />
   ) : null
@@ -451,7 +464,7 @@ export default function WallView(props: WallViewProps) {
     face = (
       <WallComingUp
         now={now}
-        items={comingUp.items}
+        items={comingUpItems}
         ideas={comingUp.ideas}
         onEditIdea={comingUp.editIdea}
         today={comingUp.today}
@@ -462,6 +475,7 @@ export default function WallView(props: WallViewProps) {
         onBack={() => setComingUpUntil(0)}
         week={weekStrip}
         onOpenProject={todos ? (id) => { openTodo(); setTodoProject(id) } : undefined}
+        onOpenTrip={saveTravel ? (key) => setTripKey(key) : undefined}
         onStart={todos && comingUp.start ? (key) => void comingUp.start!(key).then((id) => { if (id) { openTodo(); setTodoProject(id) } }) : undefined}
       />
     )
@@ -619,9 +633,19 @@ export default function WallView(props: WallViewProps) {
         <WallDecisionsSheet decisions={weekDecisions} now={now} onAnswer={answer} onClose={() => setDecisionsOpen(false)} />
       )}
       {tripKey && saveTravel && (() => {
-        const trip = (planFor(dayOnShow)?.travel ?? []).map((t) => t.trip).find((t) => t.key === tripKey)
+        const trip = travelTrips.find((t) => t.key === tripKey) ?? (planFor(dayOnShow)?.travel ?? []).map((t) => t.trip).find((t) => t.key === tripKey)
         if (!trip) return null
-        return <WallTripSheet trip={trip} members={members} pigmentOf={(id) => pigments.get(id) ?? 0} onChange={(change) => void saveTravel(trip.key, change)} onClose={() => setTripKey(null)} />
+        return (
+          <WallTripSheet
+            trip={trip}
+            members={members}
+            pigmentOf={(id) => pigments.get(id) ?? 0}
+            onChange={(change) => void saveTravel(trip.key, change)}
+            onClose={() => setTripKey(null)}
+            coverage={tripCoverageByKey.get(trip.key) ?? []}
+            onCover={tripActions ? (run, driverId) => void tripActions.handOff({ id: run.tripId, source: run.source, sourceId: run.sourceId } as Trip, driverId, run.date) : undefined}
+          />
+        )
       })()}
       {packingOpen && toggleChecklist && (() => {
         const plan = planFor(dayOnShow)

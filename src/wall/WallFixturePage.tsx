@@ -14,7 +14,7 @@ import { useFixtureFonts } from './fixtureFonts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
-import type { TravelSettings } from './engine/travel'
+import { buildTrips, type TravelSettings } from './engine/travel'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
@@ -219,7 +219,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} />
     </div>
     </WallSpeechContext.Provider>
     } />

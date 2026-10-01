@@ -19,6 +19,8 @@ export interface WallComingUpProps {
   week: ReactNode
   /** A project's step or target opens its project (P3.23, canvas 10e). */
   onOpenProject?: (id: string) => void
+  /** A trip away (coverage.ts): opens its sheet, where its runs are covered. */
+  onOpenTrip?: (key: string) => void
   /** A season starts as this year's project, then opens (canvas 11c). */
   onStart?: (key: string) => void
   /** A gift idea corrected by hand, or removed (null). */
@@ -40,7 +42,7 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
   )
 }
 
-function Row({ item, today, onAct, onOpenProject, onStart }: { item: ComingUpItem; today: string; onAct: WallComingUpProps['onAct']; onOpenProject?: (id: string) => void; onStart?: (key: string) => void }) {
+function Row({ item, today, onAct, onOpenProject, onStart, onOpenTrip }: { item: ComingUpItem; today: string; onAct: WallComingUpProps['onAct']; onOpenProject?: (id: string) => void; onStart?: (key: string) => void; onOpenTrip?: (key: string) => void }) {
   const day = new Date(`${item.date}T12:00:00Z`)
   const part = (options: Intl.DateTimeFormatOptions) => day.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' }).toUpperCase()
   return (
@@ -57,6 +59,12 @@ function Row({ item, today, onAct, onOpenProject, onStart }: { item: ComingUpIte
         <span className={`text-wall-detail ${item.late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{planByLine(item, today)}</span>
         {item.ideas && item.ideas.length > 0 && <span className="truncate text-wall-detail text-wall-ink-2">Gift ideas: {item.ideas.join('; ')}</span>}
       </div>
+      {item.tripKey ? (
+        // A trip away: its coverage is set in the trip sheet (Done / Snooze have nothing to mean here).
+        <div className="flex shrink-0 gap-[8px]">
+          {onOpenTrip && <Answer label="Open trip" primary onClick={() => onOpenTrip(item.tripKey!)} />}
+        </div>
+      ) : (
       <div className="flex shrink-0 gap-[8px]">
         <Answer label="Done" primary onClick={() => void onAct(item.key, 'done')} />
         {item.projectId && onOpenProject
@@ -66,6 +74,7 @@ function Row({ item, today, onAct, onOpenProject, onStart }: { item: ComingUpIte
             : <Answer label="Snooze" onClick={() => void onAct(item.key, 'snooze')} />}
         <Answer label="Not needed" onClick={() => void onAct(item.key, 'dismiss')} />
       </div>
+      )}
     </div>
   )
 }
@@ -115,7 +124,7 @@ function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: ()
   )
 }
 
-export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject, onStart, onEditIdea }: WallComingUpProps) {
+export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject, onStart, onEditIdea, onOpenTrip }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
@@ -166,7 +175,7 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
                 {heading && (
                   <div className="pb-[8px] pt-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{heading}</div>
                 )}
-                <Row item={item} today={today} onAct={onAct} onOpenProject={onOpenProject} onStart={onStart} />
+                <Row item={item} today={today} onAct={onAct} onOpenProject={onOpenProject} onStart={onStart} onOpenTrip={onOpenTrip} />
               </div>
             ))}
           </div>

@@ -1800,3 +1800,24 @@ test('wall: a driving trip — the drive out, away, a car on the tiles', async (
   await expect(wall.getByText('Away 6:30 · back Thu ~7:15')).toBeVisible()
   await expect(wall).toHaveScreenshot('trip-driving.png')
 })
+
+// Jake, 2026-10-01: "we should start planning coverage right away. that's the hardest part of traveling is aligning
+// help." A week before the trip: Coming up has it, with the run that needs someone; the trip sheet covers it.
+test('wall: a trip’s coverage — in Coming up a week ahead, covered from the trip sheet', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&at=2026-10-01T07:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await wall.getByRole('button', { name: /^Coming up:/ }).click()
+  await expect(wall.getByText('Jake away Wed–Thu')).toBeVisible()
+  await expect(wall.getByText('Drop off Emme & Owen Thu 7:35 needs someone')).toBeVisible()
+  await wall.getByRole('button', { name: 'Open trip' }).click()
+  const sheet = wall.getByRole('region', { name: 'Jake in Dallas' })
+  const away = sheet.getByRole('region', { name: 'While Jake is away' })
+  await expect(away.getByText('no one yet')).toBeVisible()
+  await expect(wall).toHaveScreenshot('trip-coverage.png')
+  await away.getByRole('button', { name: 'Giselle takes Drop off Emme & Owen 7:35' }).click()
+  await expect(away.getByRole('button', { name: 'Giselle takes Drop off Emme & Owen 7:35' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(away.getByText('no one yet')).toHaveCount(0)
+  await sheet.getByRole('button', { name: 'Done' }).click()
+  await expect(wall.getByText('Covered: Giselle drops off Emme & Owen Thu 7:35')).toBeVisible()
+})

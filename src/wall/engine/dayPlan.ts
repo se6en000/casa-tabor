@@ -244,7 +244,8 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const leaveAt = departed && departed < run.arriveAt ? departed : addMinutes(run.arriveAt, -run.driveMinutes)
     const homeAt = addMinutes(run.arriveAt, run.driveMinutes)
     // The usual driver is away on a trip: nobody yet, and the question says why (a hand-off made today still wins).
-    const usualAway = handedOff ? null : awayDuring(run.driverId, leaveAt, homeAt)
+    // (A hand-off made today still wins, and the run stays marked as the away driver's, so the trip lists it as covered.)
+    const usualAway = awayDuring(run.driverId, leaveAt, homeAt)
     const driverId = handedOff ? tripState.drivers[tripId] : usualAway ? null : run.driverId
     const trip: Trip = {
       id: tripId,
@@ -267,7 +268,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     if (driverId) {
       addSegment(driverId, { kind: 'drive', start: leaveAt, end: homeAt, label: title, placeStatus: 'away', sourceId: run.sourceId, tripId: trip.id, driverId, fromRoutine: true })
     } else {
-      gaps.push({ kind: 'no_driver', sourceId: run.sourceId, title, at: leaveAt, ...(usualAway ? { away: { memberId: usualAway.memberId, city: usualAway.city } } : {}) })
+      gaps.push({ kind: 'no_driver', sourceId: run.sourceId, title, at: leaveAt, ...(usualAway && !handedOff ? { away: { memberId: usualAway.memberId, city: usualAway.city } } : {}) })
     }
     for (const travelerId of run.travelerIds) {
       const [start, end] = run.kind === 'dropoff' ? [leaveAt, run.arriveAt] : [run.arriveAt, homeAt]

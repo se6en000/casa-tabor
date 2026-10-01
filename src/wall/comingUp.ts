@@ -22,6 +22,8 @@ export interface ComingUpItem {
   startable?: boolean
   /** Its plan at a glance, for its dashed card on the To do shelf. */
   plan?: { steps: number; minutes: number; first: string }
+  /** A trip away (coverage.ts): opens the trip sheet, where its runs are covered. */
+  tripKey?: string
 }
 export interface GiftIdea { id?: string; for_name: string; for_member_id?: string | null; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'
