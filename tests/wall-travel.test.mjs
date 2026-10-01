@@ -129,3 +129,11 @@ test('a driving trip: “Drive to Orlando” and “Drive home from Orlando” a
   const [typed] = buildTrips([{ ...there, title: 'Orlando', leg_type: 'drive_outbound', location_name: 'Orlando' }, { ...home, title: 'Back', leg_type: 'drive_return' }], members, prefs)
   assert.deepEqual([typed.mode, typed.city], ['drive', 'Orlando'])
 })
+
+test('the same flight in the calendar twice (a synced copy) is still one trip', () => {
+  const copy = { ...out, id: 'f1419-copy' }
+  const trips = buildTrips([out, copy, back], members, prefs)
+  assert.equal(trips.length, 1)
+  assert.equal(trips[0].inbound.eventId, 'f2640')
+  assert.deepEqual(trips[0].legEventIds, ['f1419-copy'])
+})

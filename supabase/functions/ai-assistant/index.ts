@@ -172,7 +172,7 @@ import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-cre
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1496,17 +1496,49 @@ Deno.serve(async (req) => {
         const failed = changes.find((c) => 'error' in c) as { error: string }
         return { status: 200, payload: { type: 'text', text: failed.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
       }
-      const cards = changes as Array<{ tool: string; args: Record<string, unknown> }>
+      let cards = changes as Array<{ tool: string; args: Record<string, unknown> }>
+      // A trip already on the calendar is never added again (Jake, 2026-10-01: Casa proposed his Dallas trip a second
+      // time, though the work email had put it there): its days are read in full, past the three weeks Casa holds.
+      let alreadyNote = ''
+      const tripCards = cards.filter((c) => c.tool === 'create_event' && tripLegOf(c.args.title, c.args.all_day === true))
+      if (tripCards.length) {
+        const times = tripCards.flatMap((c) => [Date.parse(String(c.args.start ?? '')), Date.parse(String(c.args.end ?? c.args.start ?? ''))]).filter(Number.isFinite)
+        const { data: around } = await sb.from('events').select('id, title, start_time, end_time, all_day')
+          .gte('end_time', new Date(Math.min(...times) - 86_400_000).toISOString())
+          .lte('start_time', new Date(Math.max(...times) + 86_400_000).toISOString())
+          .is('deleted_at', null).neq('status', 'cancelled').limit(400)
+        const { keep, already } = alreadyOnCalendar(cards, [...(around ?? []), ...events] as Array<{ id: string; title: string; start_time: string; end_time: string; all_day: boolean }>)
+        if (already.length) {
+          alreadyNote = alreadyOnCalendarText(already)
+          if (!keep.length) return { status: 200, payload: { type: 'text', text: `${alreadyNote} Nothing to add.`, semantic_intent: 'full_ai.trip_already_there', correlation_id: cid } }
+          cards = keep
+        }
+      }
+      // Describing a flight that's already there is not changing it (the same live check: "lands DFW at 3:30 their
+      // time" became a time edit with a Dallas time read as home time).
+      const edits = cards.filter((c) => c.tool === 'update_event')
+      if (edits.length) {
+        const heardNow = Array.isArray(messages) ? String((messages as Array<{ role?: string; content?: unknown }>).filter((m) => m?.role === 'user').pop()?.content ?? '') : ''
+        const { data: targets } = await sb.from('events').select('id, title, start_time, end_time, all_day').in('id', edits.map((c) => String(c.args.id ?? '')).filter(Boolean))
+        const known = (targets ?? []) as Array<{ id: string; title: string; start_time: string; end_time: string; all_day: boolean }>
+        const described = cards.filter((c) => describesExistingLeg(c, known, heardNow))
+        if (described.length) {
+          const legs = described.map((c) => ({ event: known.find((e) => e.id === c.args.id)! }))
+          alreadyNote = `${alreadyNote}${alreadyNote ? ' ' : ''}${alreadyOnCalendarText(legs)}`
+          cards = cards.filter((c) => !described.includes(c))
+          if (!cards.length) return { status: 200, payload: { type: 'text', text: `${alreadyNote} Nothing to change.`, semantic_intent: 'full_ai.trip_already_there', correlation_id: cid } }
+        }
+      }
       if (cards.length > 1) {
         // Several changes at once (a flyer with three dates): one batch, each still needing a yes.
         const filled = await Promise.all(cards.map(async (c) => ({ tool: c.tool, args: await withWho(c.tool, c.args) })))
-        return { status: 200, payload: { type: 'tool_action_batch', actions: filled.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: buildDisplayText(c.tool, c.args) })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
+        return { status: 200, payload: { type: 'tool_action_batch', actions: filled.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: `${i === 0 && alreadyNote ? `${alreadyNote} ` : ''}${buildDisplayText(c.tool, c.args)}` })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
       }
       const card = { tool: cards[0].tool, args: await withWho(cards[0].tool, cards[0].args) }
       const about = events.find((e) => e.id === card.args.id) ?? null
       // A plan (P3.25 phase 3) comes with what the planning model said about it, shown above the draft.
       const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
-      const shown = card.tool === 'apply_plan' ? (said || `Here’s the plan: ${String(card.args.title ?? '')}.`) : buildDisplayText(card.tool, card.args)
+      const shown = card.tool === 'apply_plan' ? (said || `Here’s the plan: ${String(card.args.title ?? '')}.`) : `${alreadyNote ? `${alreadyNote} ` : ''}${buildDisplayText(card.tool, card.args)}`
       return { status: 200, payload: { ...(planning ? { planning: true } : {}), type: 'tool_action', tool: card.tool, args: card.args, display_text: shown, conversation_state: about ? eventConversationState(about, new Date()) : incomingConversationState ?? null, semantic_intent: `full_ai.${card.tool}`, correlation_id: cid } }
     }
     const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()

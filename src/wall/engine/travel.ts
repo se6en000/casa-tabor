@@ -172,6 +172,8 @@ function cityFromTitle(title: string): string | null {
  */
 export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Record<string, TravelPrefs> = {}, settings: Record<string, TravelSettings> = {}): TravelTrip[] {
   const flightEvents = new Map<string, WallEvent>()
+  const copiesOf = new Map<string, string[]>()
+  const copies = (...legs: Array<FlightLeg | null>) => legs.flatMap((l) => (l ? copiesOf.get(l.eventId) ?? [] : []))
   const legs = events
     .filter((e) => e.status !== 'cancelled' && !e.all_day)
     .flatMap((e) => {
@@ -188,6 +190,15 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
       return [{ event: e, memberIds: memberIdsOf(e), leg: { eventId: e.id, mode: 'drive', number: null, from: d.direction === 'out' ? HOME : city, to: d.direction === 'out' ? city : HOME, ...at } as FlightLeg }]
     })
     .sort((a, b) => a.leg.departAt.getTime() - b.leg.departAt.getTime())
+    // A copy of the same leg (synced twice, or added again) is one leg: same route, number and take-off; the copy
+    // is folded into the trip so it isn't drawn as an outing of its own.
+    .filter((x, i, all) => {
+      const first = all.slice(0, i).find((y) => y.leg.mode === x.leg.mode && y.leg.from === x.leg.from && y.leg.to === x.leg.to
+        && y.leg.number === x.leg.number && y.leg.departAt.getTime() === x.leg.departAt.getTime()
+        && y.memberIds.join() === x.memberIds.join())
+      if (first) copiesOf.set(first.leg.eventId, [...(copiesOf.get(first.leg.eventId) ?? []), x.leg.eventId])
+      return !first
+    })
   const isHome = (code: string) => code === HOME || code in HOME_AIRPORTS
   const used = new Set<string>()
   const trips: TravelTrip[] = []
@@ -224,7 +235,7 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
     return {
       id: `travel:${outbound?.eventId ?? 'none'}:${inbound?.eventId ?? 'none'}`,
       key, mode: 'drive', memberIds, city,
-      tripEventId: tripEvent?.id ?? null, legEventIds: [], hotel: tripEvent?.location_name?.trim() || null,
+      tripEventId: tripEvent?.id ?? null, legEventIds: copies(outbound, inbound), hotel: tripEvent?.location_name?.trim() || null,
       outbound, inbound,
       way: 'drive_park', wayOut: 'drive_park', wayHome: 'drive_park', driverOutId: null, driverHomeId: null, carWarning: null,
       airportMinutes: 0, deplaneMinutes: 0, atAirportAt: null,
@@ -262,7 +273,7 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
       memberIds,
       city: (tripEvent && cityFromTitle(tripEvent.title)) || CITY_BY_AIRPORT[awayCode] || awayCode,
       tripEventId: tripEvent?.id ?? null,
-      legEventIds: otherLegs.map((e) => e.id),
+      legEventIds: [...otherLegs.map((e) => e.id), ...copies(outbound, inbound)],
       hotel: tripEvent?.location_name?.trim() || hotelLeg?.title?.split('|').pop()?.trim() || null,
       outbound,
       inbound,

@@ -147,3 +147,60 @@ test('trip talk goes to the full model; ordinary drives and adds do not', async 
     'remind me to take the trash out at 8',
   ]) assert.equal(isTripTalk(said), false, said)
 })
+
+// Jake, 2026-10-01: "fix that and make sure it doesn't happen for future trips" — told about his Dallas trip, Casa
+// proposed it again ("JRT Trip Dallas" and both flights) though the work email had already put it on the calendar.
+test('a trip already on the calendar is not added again: same flight, same drive, or the trip itself', async () => {
+  const { alreadyOnCalendar } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const existing = [
+    { id: 'f1', title: 'TABOR JACOB | Flight 1419 DJT→DFW', start_time: '2026-10-07T18:13:00Z', end_time: '2026-10-07T20:30:00Z', all_day: false },
+    { id: 'f2', title: 'TABOR JACOB | Flight 2640 DFW→DJT', start_time: '2026-10-08T18:45:00Z', end_time: '2026-10-08T22:34:00Z', all_day: false },
+    { id: 't', title: 'JRT Trip Dallas', start_time: '2026-10-07T00:00:00Z', end_time: '2026-10-08T23:59:59Z', all_day: true },
+    { id: 'd', title: 'Drive to Orlando', start_time: '2026-10-13T10:30:00Z', end_time: '2026-10-13T13:30:00Z', all_day: false },
+  ]
+  const card = (title, start, end, all_day = false) => ({ tool: 'create_event', args: { title, start, end, all_day } })
+  const proposed = [
+    card('Work trip to Dallas', '2026-10-07T00:00:00-04:00', '2026-10-09T00:00:00-04:00', true),
+    card('Flight 1419 DJT→DFW', '2026-10-07T14:13:00-04:00', '2026-10-07T16:30:00-04:00'),
+    card('Flight 2640 DFW→DJT', '2026-10-08T14:45:00-04:00', '2026-10-08T18:34:00-04:00'),
+    card('Drive to Orlando', '2026-10-13T06:30:00-04:00', '2026-10-13T09:30:00-04:00'),
+    card('Drive home from Orlando', '2026-10-15T16:00:00-04:00', '2026-10-15T19:00:00-04:00'),
+    card('Soccer practice', '2026-10-07T17:00:00-04:00', '2026-10-07T18:00:00-04:00'),
+  ]
+  const { keep, already } = alreadyOnCalendar(proposed, existing)
+  assert.deepEqual(keep.map((c) => c.args.title), ['Drive home from Orlando', 'Soccer practice'])
+  assert.deepEqual(already.map((a) => a.event.id), ['t', 'f1', 'f2', 'd'])
+  // A different flight the same day, or the same flight a week later, is new.
+  const other = alreadyOnCalendar([card('Flight 2211 DJT→DFW', '2026-10-07T08:00:00-04:00', '2026-10-07T10:00:00-04:00'), card('Flight 1419 DJT→DFW', '2026-10-14T14:13:00-04:00', '2026-10-14T16:30:00-04:00')], existing)
+  assert.equal(other.keep.length, 2)
+})
+
+test('the assistant and the wall read trip titles the same way', async () => {
+  const { tripLegOf, alreadyOnCalendarText } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const { parseFlight, parseDrive } = await import('../src/wall/engine/travel.ts')
+  for (const title of ['TABOR JACOB | Flight 1419 DJT→DFW', 'Flight 2640 DFW->PBI', 'AA 2640 DFW -> PBI', 'Drive to Orlando', 'Jake | Drive home from Orlando', 'Drive back', 'Drive Liv to practice', 'Pick up Liv @ Bak', 'Soccer practice', 'Flight to Dallas (DJT to DFW)']) {
+    const mine = tripLegOf(title, false)
+    const flight = parseFlight({ title })
+    const drive = parseDrive({ title })
+    assert.equal(mine?.kind === 'flight', Boolean(flight), `flight? ${title}`)
+    assert.equal(mine?.kind === 'drive', Boolean(drive), `drive? ${title}`)
+    if (flight) assert.deepEqual([mine.from, mine.to], [flight.from, flight.to], title)
+    if (drive) assert.equal(mine.direction, drive.direction, title)
+  }
+  assert.equal(alreadyOnCalendarText([{ event: { title: 'TABOR JACOB | Flight 1419 DJT→DFW', start_time: '2026-10-07T18:13:00Z', all_day: false } }, { event: { title: 'JRT Trip Dallas', all_day: true } }]),
+    'Already on the calendar: Flight 1419 DJT→DFW (Wed 2:13 PM), JRT Trip Dallas.')
+})
+
+// The same live run, turn three: describing the flights already on the calendar ("lands DFW at 3:30 their time")
+// became two time edits with Dallas times taken as home times. Describing a trip leg is not changing it.
+test('describing a flight already on the calendar does not change it; asking to move it does', async () => {
+  const { describesExistingLeg } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const flight = { id: 'f1', title: 'TABOR JACOB | Flight 1419 DJT→DFW', start_time: '2026-10-07T18:13:00Z', end_time: '2026-10-07T20:30:00Z', all_day: false }
+  const edit = { tool: 'update_event', args: { id: 'f1', start: '2026-10-07T14:13:00-04:00', end: '2026-10-07T15:30:00-04:00' } }
+  const said = 'Flight 1419 from DJT at 2:13 PM, lands DFW at 3:30 their time.'
+  assert.equal(describesExistingLeg(edit, [flight], said), true)
+  for (const change of ['My flight 1419 got delayed, it now leaves at 4:13', 'move my Dallas flight to 5:10', 'they changed flight 1419 to leave at 3:30 instead'])
+    assert.equal(describesExistingLeg({ tool: 'update_event', args: { id: 'f1', start: '2026-10-07T16:13:00-04:00' } }, [flight], change), false, change)
+  // Not a trip leg: an ordinary edit is never held back.
+  assert.equal(describesExistingLeg({ tool: 'update_event', args: { id: 's', start: '2026-10-07T17:00:00-04:00' } }, [{ id: 's', title: 'Soccer practice', start_time: '2026-10-07T20:00:00Z', end_time: '2026-10-07T21:00:00Z', all_day: false }], 'soccer is at 5'), false)
+})
