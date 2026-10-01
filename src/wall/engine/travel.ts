@@ -43,6 +43,8 @@ export interface TravelTrip {
   city: string
   /** The all-day event that names the trip ("JRT Trip Dallas"), if there is one: shown as the trip, not on its own. */
   tripEventId: string | null
+  /** The importer's other legs of the same trip (its hotel, a rental car): part of the trip, not events on the lane. */
+  legEventIds: string[]
   /** Where they're staying, from the trip's all-day event. */
   hotel: string | null
   outbound: FlightLeg | null
@@ -149,10 +151,12 @@ function cityFromTitle(title: string): string | null {
  * into one. `prefs`: each person's travel settings (family_members.travel_prefs).
  */
 export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Record<string, TravelPrefs> = {}, settings: Record<string, TravelSettings> = {}): TravelTrip[] {
+  const flightEvents = new Map<string, WallEvent>()
   const legs = events
     .filter((e) => e.status !== 'cancelled' && !e.all_day)
     .flatMap((e) => {
       const f = parseFlight(e)
+      if (f) flightEvents.set(e.id, e)
       return f ? [{ event: e, memberIds: memberIdsOf(e), leg: { eventId: e.id, number: f.number, from: f.from, to: f.to, departAt: new Date(e.start_time), landAt: new Date(e.end_time) } as FlightLeg }] : []
     })
     .sort((a, b) => a.leg.departAt.getTime() - b.leg.departAt.getTime())
@@ -196,6 +200,9 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
       memberIdsOf(e).some((id) => memberIds.includes(id))
       && new Date(e.start_time) <= addMinutes(last, 24 * 60) && new Date(e.end_time) >= addMinutes(first, -24 * 60))
     const awayCode = outbound?.to ?? inbound!.from
+    const tripIds = new Set([outbound, inbound].map((l) => (l ? flightEvents.get(l.eventId)?.trip_id : null)).filter(Boolean))
+    const otherLegs = events.filter((e) => e.trip_id && tripIds.has(e.trip_id) && !flightEvents.has(e.id))
+    const hotelLeg = otherLegs.find((e) => e.leg_type === 'hotel')
     const parkedAt = wayOut === 'drive_park' && outbound ? outbound.from : null
     return {
       id: `travel:${outbound?.eventId ?? 'none'}:${inbound?.eventId ?? 'none'}`,
@@ -203,7 +210,8 @@ export function buildTrips(events: WallEvent[], members: WallMember[], prefs: Re
       memberIds,
       city: (tripEvent && cityFromTitle(tripEvent.title)) || CITY_BY_AIRPORT[awayCode] || awayCode,
       tripEventId: tripEvent?.id ?? null,
-      hotel: tripEvent?.location_name?.trim() || null,
+      legEventIds: otherLegs.map((e) => e.id),
+      hotel: tripEvent?.location_name?.trim() || hotelLeg?.title?.split('|').pop()?.trim() || null,
       outbound,
       inbound,
       way: wayOut,

@@ -40,6 +40,9 @@ export interface WallEvent {
   all_day: boolean
   event_type?: string | null
   status?: string | null
+  /** A trip's leg, as the travel email importer files it (flight_outbound / flight_return / hotel / car_rental). */
+  leg_type?: string | null
+  trip_id?: string | null
   location_name: string | null
   address: string | null
   members?: Array<{ family_member_id?: string | null; family_member?: { id: string } | null; role?: string | null }> | null

@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     .from('events')
     .select(`
       id, title, start_time, end_time, all_day, event_type, status, deleted_at,
-      location_name, address, lat, lng, record_kind, series_id, exception_paths,
+      location_name, address, lat, lng, record_kind, series_id, exception_paths, leg_type, trip_id,
       event_enrichments(category),
       event_plan_overrides(
         event_id, waits, driver_overrides, mode_override, transportation_plan,
@@ -115,6 +115,12 @@ Deno.serve(async (req) => {
     .maybeSingle()
   if (eventError) return json({ error: eventError.message }, 500)
   if (!rawEvent) return json({ error: 'event not found' }, 404)
+  // A trip's flights and hotel (Jake, 2026-10-01: "this probably should not go through enrichment … it won't be
+  // realistic"): the family wants when the traveller leaves the house and walks back in, which the trip itself works
+  // out (wall travel.ts). No place lookup (it named the Dallas flight "Verizon Corporate Office") and no drive plan.
+  if ((rawEvent as { leg_type?: string | null }).leg_type || (rawEvent as { trip_id?: string | null }).trip_id) {
+    return complete({ ok: true, skipped: 'trip_leg' })
+  }
 
   const enrichment = Array.isArray(rawEvent.event_enrichments)
     ? rawEvent.event_enrichments[0] ?? null

@@ -103,3 +103,12 @@ test('drive & park out means the car home; landing at another airport flags wher
   // The drive home is from where they land: FLL is 50 minutes.
   assert.equal(other.driveHomeMinutes, 50)
 })
+
+test('the importer’s other legs of the trip (its hotel) belong to the trip, and name where they stay', () => {
+  const legOut = { ...out, trip_id: 't1', leg_type: 'flight_outbound' }
+  const legBack = { ...back, trip_id: 't1', leg_type: 'flight_return' }
+  const hotelLeg = ev('h1', 'TABOR JACOB | Courtyard Allen', '2026-10-07T19:00:00Z', '2026-10-08T15:00:00Z', ['jake'], { trip_id: 't1', leg_type: 'hotel' })
+  const [trip] = buildTrips([legOut, legBack, hotelLeg], members, prefs)
+  assert.deepEqual(trip.legEventIds, ['h1'])
+  assert.equal(trip.hotel, 'Courtyard Allen')
+})

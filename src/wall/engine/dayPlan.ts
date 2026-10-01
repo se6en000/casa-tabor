@@ -173,7 +173,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   // Trips away (canvas 19): who is gone, from leaving the house to being home again.
   const travelTrips = input.travel ?? buildTrips(events, members, input.travelPrefs ?? {}, input.travelSettings ?? {})
   const travelDays = travelTrips.flatMap((t) => tripDay(t, date) ?? [])
-  const travelEventIds = new Set(travelTrips.flatMap((t) => [t.outbound?.eventId, t.inbound?.eventId, t.tripEventId].filter((id): id is string => Boolean(id))))
+  const travelEventIds = new Set(travelTrips.flatMap((t) => [t.outbound?.eventId, t.inbound?.eventId, t.tripEventId, ...t.legEventIds].filter((id): id is string => Boolean(id))))
   const awayWindows = travelDays.flatMap(({ trip }) => trip.memberIds.map((memberId) => ({
     memberId, city: trip.city,
     start: trip.leaveHomeAt ?? dayStart,

@@ -611,7 +611,8 @@ async function extractAndUpsertTrip(
 
   // ── Guard: skip trips where the destination is the home location (return-home emails) ──
   // Home airports / cities for the Tabor family (Palm Beach, FL area)
-  const HOME_AIRPORTS = ['PBI', 'FLL', 'MIA']
+  // DJT is Palm Beach International's newer code (Jake's Oct 2026 tickets).
+  const HOME_AIRPORTS = ['PBI', 'DJT', 'FLL', 'MIA']
   const HOME_CITY_KEYWORDS = ['palm beach', 'west palm beach', 'lake worth', 'boca raton', 'jupiter', 'boynton beach', 'delray beach']
   const destCityLower = destCity.toLowerCase()
   const isHomeDestination =

@@ -441,7 +441,10 @@ Deno.serve(async (req) => {
   console.log('[enrich-event] logistics check:', { isAtHome, isHomeService, homeAddress: !!homeAddress, location: finalLocationName })
 
   const shouldRunLogistics = targetFields.length === 0 || targetFields.some((f) => ['departure_time', 'drive_time_mins', 'route_summary'].includes(f))
-  if (shouldRunLogistics && !isAtHome && !isHomeService && homeAddress && (finalLocationName || finalAddress)) {
+  // A trip's legs get no drive plan: the trip works out leaving the house and getting home (wall travel.ts); an
+  // errand-style plan for a flight read "Leave home by 2:35, arrive at DJT by 2:55" for a flight out of Dallas.
+  if (isTripLeg) await sb.from('event_logistics').delete().eq('event_id', event_id)
+  if (!isTripLeg && shouldRunLogistics && !isAtHome && !isHomeService && homeAddress && (finalLocationName || finalAddress)) {
     const allAttendeeNames = [resolvedPrimary, ...(aiAttendees ?? [])]
     const attendeeObjs = familyMembers.filter(m => allAttendeeNames.includes(m.name))
 
