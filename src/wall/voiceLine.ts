@@ -5,7 +5,7 @@ export type VoiceLineState = 'off' | 'quiet' | 'noise' | 'voice' | 'heard' | 'fu
 
 /** What the speech hook keeps for the line, updated without re-rendering (useSpeechInput's `signal`). */
 export interface VoiceSignal {
-  /** The mic's loudness, 0–100, as the Pi measures it 10 times a second (a voice on the wall reads only ~3–5). */
+  /** The mic's loudness, 0–100 on the bridge's decibel scale, 10 times a second (the room ~34, a voice ~45–90). */
   level?: number
   /** When the last words came through (ms), 0 when none yet. */
   lastWordAt: number
@@ -29,8 +29,8 @@ export const VOICE_HANGOVER_MS = 1800
 const VOICE_START_MS = 3500
 /** An unfinished-sounding sentence waits this long for the rest (useSpeechInput's fragment hold) — the real stall. */
 export const FUSE_HELD_MS = 4500
-/** Louder than the room by this much (on the bridge's 0–100 scale) is sound worth noticing (the room's noise only). */
-const LOUD_ABOVE_ROOM = 6
+/** Louder than the room by this much (on the bridge's decibel scale, ~5 dB) is sound worth noticing (the room's noise only). */
+const LOUD_ABOVE_ROOM = 12
 /** Loud with no voice this long reads as the room. */
 export const NOISE_AFTER_MS = 1500
 
@@ -56,7 +56,9 @@ export function voiceState(input: VoiceStateInput): VoiceLineState {
   const hearing = input.micOpen && Boolean(input.heard.trim()) && signal.lastWordAt > 0
   const wordsRecent = hearing && now - signal.lastWordAt < VOICE_HANGOVER_MS
   const speechAt = signal.speechAt ?? 0
-  const voiceStarting = input.micOpen && speechAt > 0 && now - speechAt < VOICE_START_MS && speechAt > signal.lastWordAt
+  // A voice this turn with no words shown yet (or only the wake word, which isn't shown): you, while anything —
+  // the voice start or words — came in the last few seconds.
+  const voiceStarting = input.micOpen && speechAt > 0 && !hearing && now - Math.max(speechAt, signal.lastWordAt) < VOICE_START_MS
   // Planning keeps the mic open while Casa thinks, so talking over the thinking shows your voice.
   if (wordsRecent || voiceStarting) return 'voice'
   if (input.thinking) return 'thinking'
@@ -88,8 +90,8 @@ export function stepLevel(prev: { level: number; floor: number }, raw: number, d
 
 /** How much the line lifts (0–1): loudness above the room's own level. */
 export function amplitude(level: number, floor: number): number {
-  // The wall's mic reads a voice at only ~3–5 above a room of ~1 (2026-09-30), so the scale is small.
-  return Math.max(0, Math.min(1, (level - floor) / 6))
+  // On the bridge's decibel scale a voice reads ~8–20 above the room, loud ~50 (measured on the wall, 2026-09-30).
+  return Math.max(0, Math.min(1, (level - floor) / 20))
 }
 
 const bare = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')
@@ -104,4 +106,9 @@ export function inkWords(text: string, words: Array<{ word: string; confidence: 
     if (at >= 0 && bare(tokens[at]) === bare(w.word) && w.confidence < threshold) out[at].faded = true
   })
   return out
+}
+
+/** The words as shown: the wake word ("Alexa,") left off, so the start of the sentence doesn't jump when it's dropped. */
+export function shownWords(text: string): string {
+  return text.replace(/^\s*(hey\s+)?alexa\b[\s,.!?]*/i, '')
 }

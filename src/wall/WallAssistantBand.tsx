@@ -11,7 +11,7 @@ import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
 import { useSwipeDown } from './useSwipeDown'
 import VoiceLine from './VoiceLine'
-import { inkWords } from './voiceLine'
+import { inkWords, shownWords } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
 import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
@@ -358,10 +358,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     return () => window.clearInterval(timer)
   }, [state, onClose])
 
-  const shownQuestion = speech.listening && interim ? interim : question
-  // The new listener (canvas row 17), behind the MT menu's switch: one voice line under the words.
+  // The new listener (canvas row 17), behind the MT menu's switch: one voice line under the words, and the wake
+  // word left off the words shown (it sat there, then vanished — one more jump).
   const listenerV2 = useListenerV2()
-  const liveWords = speech.listening && interim ? inkWords(interim, speech.signal?.current.words ?? []) : null
+  const liveText = listenerV2 && interim ? shownWords(interim) : interim
+  const shownQuestion = speech.listening && liveText ? liveText : question
+  const liveWords = listenerV2 && speech.listening && liveText ? inkWords(liveText, speech.signal?.current.words ?? []) : null
   const quote = (text: string) => (liveWords
     ? <>“{liveWords.map((w, i) => <span key={i} className={w.faded ? 'opacity-40' : undefined}>{i > 0 ? ' ' : ''}{w.text}</span>)}”</>
     : `“${text}”`)
@@ -372,7 +374,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       bridgeDown={Boolean(speech.bridgeDown)}
       thinking={loading}
       needsYes={state === 'NEEDS A YES'}
-      heard={speech.listening ? interim : ''}
+      heard={speech.listening ? liveText : ''}
       width={width}
       onSendNow={() => speech.finish()}
       onRetry={() => { captured.current = ''; void speech.start() }}
@@ -641,7 +643,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
         <div className="flex items-center justify-between gap-[24px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : listenerV2 && liveWords ? '' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : listenerV2 ? '' : 'LISTENING'}</div>
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : listenerV2 ? '' : 'LISTENING'}</div>
           <button type="button" aria-pressed={sayOpen} onClick={() => setSayOpen((open) => !open)} className="flex h-[48px] shrink-0 items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment">
             <span aria-hidden="true" className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-night-brass text-wall-label font-bold text-wall-night-brass">?</span>
             {sayOpen ? 'Close the list' : 'What can I say?'}

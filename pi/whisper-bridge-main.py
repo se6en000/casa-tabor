@@ -788,7 +788,10 @@ def _stream_audio(proc, ws_arg, gen, initial_buffer=None):
             rms = math.sqrt(sum(s*s for s in samples) / len(samples))
             vol = int(min(rms / 70, 100))
             _set(volume=vol)
-            _ws_push_stt({'type': 'volume', 'level': vol})
+            # The wall's voice line (canvas row 17) needs finer steps than `level`, which reads a normal voice as 1-5:
+            # loudness in decibels mapped to 0-100 (30 dB -> 0, 70 dB -> 100); the kitchen's quiet reads ~34, a voice ~50-90.
+            db = 20 * math.log10(max(rms, 1.0))
+            _ws_push_stt({'type': 'volume', 'level': vol, 'db': round(max(0.0, min(100.0, (db - 30) * 2.5)), 1)})
             now = time.time()
             if now - last_voice_push >= 0.08:
                 _push_voice_level(vol)

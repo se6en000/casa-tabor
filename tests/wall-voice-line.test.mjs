@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FUSE_HELD_MS, VOICE_HANGOVER_MS, amplitude, fuseProgress, inkWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
+import { FUSE_HELD_MS, VOICE_HANGOVER_MS, amplitude, fuseProgress, inkWords, shownWords, stepLevel, voiceState } from '../src/wall/voiceLine.ts'
 
 // Canvas row 17: one voice line under the words. Jake on the wall, 2026-09-30: "it's still extremely chaotic" — a
 // screen recording showed the fuse filling and restarting with every burst of words while he talked (Deepgram sends
@@ -25,6 +25,8 @@ test('hearing you starts with Deepgram\'s voice start and holds through the gaps
   // Words a second ago, the next burst not here yet: still hearing you — no flip to anything else.
   const talking = { ...base, heard: 'Alexa, tell me', signal: { lastWordAt: 9_000, heldSince: 0, speechAt: 7_000 } }
   assert.equal(voiceState(talking), 'voice')
+  // Only the wake word so far (hidden from the words shown): still your voice, not a drop to quiet mid-sentence.
+  assert.equal(voiceState({ ...base, heard: '', signal: { lastWordAt: 9_700, heldSince: 0, speechAt: 9_000 } }), 'voice')
   // Planning keeps the mic open while Casa thinks: talking over it shows your voice.
   assert.equal(voiceState({ ...talking, thinking: true }), 'voice')
   // Words on screen and nothing new for a while: a still line while Deepgram decides you're done.
@@ -46,17 +48,24 @@ test('the room: loud with no voice detected for a while; a cough with nothing af
   assert.equal(voiceState({ ...base, signal: { ...base.signal, speechAt: 10_000 - VOICE_HANGOVER_MS - 2_000 } }), 'quiet')
 })
 
-test('the level rises fast and falls slower; the room\'s level is learned; height is scaled to this mic\'s small range', () => {
-  let s = { level: 0, floor: 1 }
-  s = stepLevel(s, 6, 60)
-  assert.ok(s.level > 5.5, `fast up: ${s.level}`)
-  const after = stepLevel(s, 0, 100)
-  assert.ok(after.level > 2 && after.level < 5, `slower down: ${after.level}`)
-  assert.ok(stepLevel({ level: 1, floor: 1 }, 5, 100).floor < 1.2, 'a voice barely moves the floor')
-  assert.equal(amplitude(1, 1), 0)
-  // A normal voice on the wall reads 3–5 against a room of ~1: most of the height.
-  assert.ok(amplitude(5, 1) >= 0.6)
-  assert.equal(amplitude(40, 1), 1)
+test('the level rises fast and falls slower; the room\'s level is learned; height is scaled to the bridge\'s decibel scale', () => {
+  let s = { level: 30, floor: 34 }
+  s = stepLevel(s, 52, 60)
+  assert.ok(s.level > 51, `fast up: ${s.level}`)
+  const after = stepLevel(s, 34, 100)
+  assert.ok(after.level > 40 && after.level < 48, `slower down: ${after.level}`)
+  assert.ok(stepLevel({ level: 34, floor: 34 }, 52, 100).floor < 35, 'a voice barely moves the floor')
+  assert.equal(amplitude(34, 34), 0)
+  // A normal voice on the wall (~45–55 against a room of ~34) is most of the height; a shout is all of it.
+  assert.ok(amplitude(50, 34) >= 0.7)
+  assert.equal(amplitude(90, 34), 1)
+})
+
+test('the wake word is left off the words shown, so the sentence doesn\'t jump when it\'s dropped', () => {
+  assert.equal(shownWords('Alexa, tell me what\'s on the calendar'), 'tell me what\'s on the calendar')
+  assert.equal(shownWords('Alexa.'), '')
+  assert.equal(shownWords('Hey Alexa what time is it'), 'what time is it')
+  assert.equal(shownWords('Tell Alexa no'), 'Tell Alexa no')
 })
 
 test('words in confidence ink: the ones Deepgram isn\'t sure of are faded, matched from the end', () => {

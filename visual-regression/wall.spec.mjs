@@ -1543,7 +1543,10 @@ test('wall: the new listener — loud with no voice detected is the room, not yo
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
-  await mic(page, () => window.__mic.level(30))
+  // On the bridge's decibel scale: the room ~34, then something loud (60) with no voice detected.
+  await mic(page, () => window.__mic.level(34))
+  await page.waitForTimeout(600)
+  await mic(page, () => window.__mic.level(60))
   await expect(section.locator('[data-voice-line="noise"]')).toBeVisible({ timeout: 4000 })
   await expect(section.getByText('It’s loud in here — I’ll catch you when you start.')).toBeVisible()
 })

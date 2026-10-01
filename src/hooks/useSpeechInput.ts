@@ -587,8 +587,9 @@ export function useSpeechInput({
             break
           case 'volume':
             setVolume(msg.level ?? 0)
-            signalRef.current.level = msg.level ?? 0
-            if (levelsRef.current.length < 600) levelsRef.current.push(msg.level ?? 0)
+            // The bridge's finer decibel scale when it sends one (0–100: the room ~34, a voice ~45–90).
+            signalRef.current.level = (msg as { db?: number }).db ?? msg.level ?? 0
+            if (levelsRef.current.length < 600) levelsRef.current.push(signalRef.current.level)
             break
           case 'speech_started':
             if (speechStartedAtRef.current === 0) speechStartedAtRef.current = Date.now()

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { amplitude, fuseProgress, stepLevel, voiceState, type VoiceLineState, type VoiceSignal } from './voiceLine'
 
-// The voice line under your words (canvas row 17): quiet breathes, the room's noise is a dull grain, your voice
-// lifts it in brass, the fuse fills while Casa waits, Casa's turn sweeps along it. It draws on its own animation
-// loop (about 30 frames a second, reading the speech hook's signal), so the band isn't re-rendered for it on the Pi.
+// The voice line under your words (canvas row 17). Jake on the wall, 2026-09-30: "the wave line was static, I didn't
+// have the alive feeling at all … a lot of transitions happening very quickly." So it's one continuous line that
+// never swaps for another: its height, speed and brightness ease toward each state — a slow idle ripple when it's
+// quiet, alive with your voice (height and pace from the bridge's decibel loudness), flat and still while Casa decides,
+// with Casa's sweep and the fuse fading over it. It draws on its own animation loop (~30 fps, reading the speech
+// hook's signal), so the band isn't re-rendered for it on the Pi; the hint row keeps its space so nothing jumps.
 
 export interface VoiceLineProps {
   signal: MutableRefObject<VoiceSignal> | undefined
@@ -24,13 +27,26 @@ const MID = HEIGHT / 2
 const POINTS = 96
 const FRAME_MS = 33
 
-/** The line through your voice: a few soft waves, strongest in the middle, height from the level. */
-function wavePath(width: number, amp: number, t: number): string {
+/** Per state: the wave's height (px), its pace, and the brass line's brightness. */
+const LOOK: Record<VoiceLineState, { height: number; pace: number; ink: number }> = {
+  off: { height: 0, pace: 0, ink: 0 },
+  quiet: { height: 1.6, pace: 0.35, ink: 0.55 },
+  noise: { height: 0, pace: 0, ink: 0.2 },
+  voice: { height: 4, pace: 1.1, ink: 1 },
+  heard: { height: 0, pace: 0, ink: 0.8 },
+  fuse: { height: 0, pace: 0, ink: 0.25 },
+  thinking: { height: 0, pace: 0, ink: 0.25 },
+  yes: { height: 0, pace: 0, ink: 0.55 },
+  deaf: { height: 0, pace: 0, ink: 0 },
+}
+
+/** The line: a few soft waves, strongest in the middle. */
+function wavePath(width: number, amp: number, phase: number): string {
   let d = ''
   for (let i = 0; i <= POINTS; i += 1) {
     const u = i / POINTS
     const env = Math.sin(Math.PI * u) ** 1.5
-    const y = MID - amp * env * (0.6 * Math.sin(2 * Math.PI * 6 * u + t * 2.6) + 0.4 * Math.sin(2 * Math.PI * 13.8 * u - t * 3.9))
+    const y = MID - amp * env * (0.6 * Math.sin(2 * Math.PI * 5 * u + phase) + 0.4 * Math.sin(2 * Math.PI * 11.5 * u - phase * 1.4))
     d += `${i === 0 ? 'M' : ' L'}${(u * width).toFixed(1)},${y.toFixed(1)}`
   }
   return d
@@ -41,17 +57,20 @@ function grainPath(width: number, amp: number, t: number): string {
   let d = ''
   const steps = Math.round(width / 8)
   for (let i = 0; i <= steps; i += 1) {
-    const n = Math.sin(i * 12.9898 + Math.floor(t * 12) * 78.233) * 43758.5453
+    const n = Math.sin(i * 12.9898 + Math.floor(t * 8) * 78.233) * 43758.5453
     const y = MID + amp * ((n - Math.floor(n)) * 2 - 1)
     d += `${i === 0 ? 'M' : ' L'}${(i * 8).toFixed(0)},${y.toFixed(1)}`
   }
   return d
 }
 
+const fade = (on: boolean) => `transition-opacity duration-300 ${on ? 'opacity-100' : 'opacity-0'}`
+
 export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needsYes, heard, width, onSendNow, onRetry }: VoiceLineProps) {
   const [state, setState] = useState<VoiceLineState>('off')
   const [slow, setSlow] = useState(false)
-  const path = useRef<SVGPathElement>(null)
+  const wave = useRef<SVGPathElement>(null)
+  const grain = useRef<SVGPathElement>(null)
   const fill = useRef<HTMLDivElement>(null)
   const inputs = useRef({ micOpen, bridgeDown, thinking, needsYes, heard })
   useEffect(() => { inputs.current = { micOpen, bridgeDown, thinking, needsYes, heard } }, [micOpen, bridgeDown, thinking, needsYes, heard])
@@ -59,33 +78,41 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
   useEffect(() => {
     let frame = 0
     let last = 0
-    let levels = { level: 0, floor: 1 }
+    let levels = { level: 34, floor: 34 }
     let noisySince = 0
-    // The drawn height eases toward the voice (the meter only updates 10 times a second), so it glides, never jumps.
-    let height = 0
+    // What's drawn eases toward the state's look, so the line glides between states and never snaps.
+    const drawn = { height: 0, pace: 0, ink: 0 }
+    let phase = 0
     let shown: VoiceLineState = 'off'
     const tick = (ms: number) => {
       frame = requestAnimationFrame(tick)
       if (ms - last < FRAME_MS) return
-      const dt = last ? ms - last : FRAME_MS
+      const dt = last ? Math.min(100, ms - last) : FRAME_MS
       last = ms
       const now = Date.now()
       const s = signal?.current ?? { level: 0, lastWordAt: 0, heldSince: 0, speechAt: 0 }
       levels = stepLevel(levels, s.level ?? 0, dt)
-      const loud = levels.level - levels.floor > 6
       const voiced = Boolean(s.speechAt) && now - (s.speechAt ?? 0) < 8000
       const wordsLately = s.lastWordAt > 0 && now - s.lastWordAt < 2000
-      noisySince = loud && !wordsLately && !voiced ? noisySince || now : 0
+      noisySince = levels.level - levels.floor > 12 && !wordsLately && !voiced ? noisySince || now : 0
       const next = voiceState({ now, ...inputs.current, level: levels.level, floor: levels.floor, noisyFor: noisySince ? now - noisySince : 0, signal: s })
       if (next !== shown) {
         shown = next
         setState(next)
       }
-      const t = ms / 1000
-      height += ((next === 'voice' ? 5 + 13 * amplitude(levels.level, levels.floor) : 0) - height) * 0.12
-      if (path.current && next === 'voice') path.current.setAttribute('d', wavePath(width, height, t * 0.7))
-      else if (path.current && next === 'noise') path.current.setAttribute('d', grainPath(width, 1.5 + 2.5 * amplitude(levels.level, levels.floor), t))
-      if (fill.current && next === 'fuse') fill.current.style.width = `${(fuseProgress(now, s) * 100).toFixed(1)}%`
+      const look = LOOK[next]
+      const voice = next === 'voice' ? amplitude(levels.level, levels.floor) : 0
+      const ease = (from: number, to: number, k: number) => from + (to - from) * k
+      drawn.height = ease(drawn.height, look.height + 14 * voice, 0.14)
+      drawn.pace = ease(drawn.pace, look.pace + 2.2 * voice, 0.1)
+      drawn.ink = ease(drawn.ink, look.ink, 0.12)
+      phase += drawn.pace * dt / 1000 * Math.PI * 2
+      if (wave.current) {
+        wave.current.setAttribute('d', wavePath(width, drawn.height, phase))
+        wave.current.style.opacity = drawn.ink.toFixed(3)
+      }
+      if (grain.current && next === 'noise') grain.current.setAttribute('d', grainPath(width, 2 + 2 * amplitude(levels.level, levels.floor), ms / 1000))
+      if (fill.current) fill.current.style.width = `${(fuseProgress(now, s) * 100).toFixed(1)}%`
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
@@ -118,21 +145,22 @@ export default function VoiceLine({ signal, micOpen, bridgeDown, thinking, needs
       style={{ width }}
     >
       <div className="relative h-[48px] overflow-hidden">
-        {(state === 'voice' || state === 'noise') && (
-          <svg width={width} height={HEIGHT} className={`absolute left-0 top-0 ${state === 'noise' ? 'text-wall-night-ink-2/60' : 'text-wall-night-brass'}`} aria-hidden="true">
-            <path ref={path} fill="none" stroke="currentColor" strokeWidth={state === 'noise' ? 2 : 3} strokeLinecap="round" />
-          </svg>
-        )}
-        {state === 'quiet' && <div className="absolute left-0 right-0 top-[23px] h-[2px] animate-[wall-line-breathe_4s_ease-in-out_infinite] bg-wall-night-brass" />}
-        {state === 'yes' && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-brass/55" />}
-        {/* Your words are in; Deepgram is deciding you're done (Casa sends a moment later): a still line. */}
-        {state === 'heard' && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-brass/80" />}
-        {(state === 'fuse' || state === 'thinking') && <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-rule" />}
-        {state === 'fuse' && <div ref={fill} className="absolute left-0 top-[21px] h-[6px] w-0 rounded-full bg-wall-night-brass" />}
-        {state === 'thinking' && <div className="absolute top-[22px] h-[4px] w-[15%] animate-[wall-line-sweep_1.8s_linear_infinite] rounded-full bg-wall-night-brass" />}
-        {state === 'deaf' && <div className="absolute left-0 right-0 top-[23px] h-0 border-0 border-t-2 border-dashed border-wall-night-rust" />}
+        {/* Under the moving line: a faint rule, so the line always has somewhere to be. */}
+        <div className="absolute left-0 right-0 top-[23px] h-[2px] bg-wall-night-rule" />
+        <svg width={width} height={HEIGHT} className="absolute left-0 top-0 text-wall-night-brass" aria-hidden="true">
+          <path ref={wave} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+        </svg>
+        <svg width={width} height={HEIGHT} className={`absolute left-0 top-0 text-wall-night-ink-2/60 ${fade(state === 'noise')}`} aria-hidden="true">
+          <path ref={grain} fill="none" stroke="currentColor" strokeWidth={2} />
+        </svg>
+        <div ref={fill} className={`absolute left-0 top-[21px] h-[6px] w-0 rounded-full bg-wall-night-brass ${fade(state === 'fuse')}`} />
+        <div className={`absolute inset-0 ${fade(state === 'thinking')}`}>
+          <div className="absolute top-[22px] h-[4px] w-[15%] animate-[wall-line-sweep_1.8s_linear_infinite] rounded-full bg-wall-night-brass" />
+        </div>
+        <div className={`absolute left-0 right-0 top-[23px] h-0 border-0 border-t-2 border-dashed border-wall-night-rust ${fade(state === 'deaf')}`} />
       </div>
-      {hint && <div className={`text-wall-label ${state === 'deaf' ? 'text-wall-night-rust' : 'text-wall-night-ink-2'} animate-[wall-line-appear_0.3s_ease]`}>{hint}</div>}
+      {/* The hint row keeps its height, so the answer below never jumps when a hint comes or goes. */}
+      <div className={`h-[22px] whitespace-nowrap text-wall-label ${state === 'deaf' ? 'text-wall-night-rust' : 'text-wall-night-ink-2'} ${fade(Boolean(hint))}`}>{hint ?? ''}</div>
     </div>
   )
 }
