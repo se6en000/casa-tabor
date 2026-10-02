@@ -18,6 +18,7 @@ import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from '../wall/routineFixtu
 
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
 import PhoneView from './PhoneView'
+import type { ShopItem } from './groceries'
 import PhoneAssistantView from './PhoneAssistantView'
 import type { PhoneLine } from './assistant'
 import { previewEvent, withDriver } from '../wall/editing'
@@ -33,6 +34,16 @@ const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
   { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
   { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
+]
+
+// Groceries (canvas 33d): a store list, two aisles and a pet item; one already got.
+const GROCERIES: ShopItem[] = [
+  { id: 'g-ban', name: 'Bananas', quantity: null, unit: null, category: 'produce', checked: false },
+  { id: 'g-av', name: 'Avocados', quantity: '3', unit: null, category: 'produce', checked: false },
+  { id: 'g-milk', name: 'Milk, 2%', quantity: '1', unit: 'gallon', category: 'dairy', checked: false },
+  { id: 'g-yog', name: 'Greek yogurt', quantity: '2', unit: null, category: 'dairy', checked: false },
+  { id: 'g-dog', name: 'Dog food', quantity: null, unit: null, category: 'pet', checked: false },
+  { id: 'g-bread', name: 'Bread', quantity: null, unit: null, category: 'bakery', checked: true },
 ]
 
 const PLACES = [{ id: 'p-ferrin', name: 'Ferrin Park', address: '11921 Okeechobee Blvd', city: 'Royal Palm Beach', state: 'FL', zip: '33411' }]
@@ -109,6 +120,7 @@ function PhoneFixturePageInner() {
   const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})
   const [checklist, setChecklist] = useState(CHECKLIST)
+  const [groceryItems, setGroceryItems] = useState(GROCERIES)
   // `?chores=1` (canvas 30a): Liv's meds at 6 and trash at 8, ticked in memory.
   const [choreDone, setChoreDone] = useState<ReadonlySet<string>>(() => new Set())
   const [evs, setEvs] = useState(() => [
@@ -173,6 +185,14 @@ function PhoneFixturePageInner() {
                 editIdea: async (id, idea) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               todos={viewerId === 'jake-id' ? todos : null}
+              groceries={{
+                items: groceryItems,
+                usual: ['Eggs', 'Coffee', 'Bananas', 'Bread'],
+                loading: false,
+                tick: (id, checked) => setGroceryItems((list) => list.map((i) => (i.id === id ? { ...i, checked } : i))),
+                add: (item) => setGroceryItems((list) => [...list, { id: `g-added-${list.length}`, checked: false, ...item }]),
+                clearDone: () => setGroceryItems((list) => list.filter((i) => !i.checked)),
+              }}
               checklist={checklist}
               scan={async () => (params.get('scan') === 'trip' ? SCANNED_TRIP : SCANNED)}
               findSimilar={params.get('similar') === 'trip' ? async () => ({ t1: { id: 'school-trip', title: 'Field trip', start_time: new Date(2026, 9, 1, 0, 0).toISOString() } })

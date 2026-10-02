@@ -23,6 +23,7 @@ import { similarEvent } from './scan'
 import { decisionsFor } from '../wall/decisions'
 import { casaTopic } from '../wall/casaTalk'
 import { useCasaTalk } from '../wall/useCasaTalk'
+import { usePhoneGroceries } from './usePhoneGroceries'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 /** What's already on the calendar on the scanned days: one read for the whole span, matched in the app. */
@@ -63,6 +64,7 @@ export default function PhoneFrame() {
     [members, routines, dayOffs, tripStateFor, chores],
   )
   const { data: contacts = [] } = useContactDirectory()
+  const groceries = usePhoneGroceries()
   const { data: places = [] } = useSavedPlaces()
   const comingUp = useComingUp({ surface: 'phone' })
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
@@ -117,6 +119,7 @@ export default function PhoneFrame() {
       contacts={contacts}
       places={places}
       comingUp={comingUp.data ? { items: comingUp.data.items, today: comingUp.data.today, act: comingUp.act, start: comingUp.start, ideas: comingUp.data.ideas, editIdea: comingUp.editIdea } : null}
+      groceries={groceries}
       todos={isJake && todos.data ? { list: todos.data, act: todos.act, useProject: useTodoProject } : null}
     />
   )

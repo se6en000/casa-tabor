@@ -1305,6 +1305,10 @@ html.phone-app [role="button"]:active {
 html.phone-app[data-keyboard="open"] nav[aria-label="Sections"] {
   display: none;
 }
+/* …and a sheet sitting on the keyboard drops the home-indicator gap it keeps at the screen's edge. */
+html.phone-app[data-keyboard="open"] .phone-kb-tight {
+  padding-bottom: 12px;
+}
 
 /* ── The phone's motion (canvas 30, "iOS polish") ───────────────────
    Only transform and opacity move, so the iPhone draws it all on its GPU (60–120 fps). A spring: sheets rise and

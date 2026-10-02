@@ -15,6 +15,7 @@ import { eventView, familyItems, meView, type FamilyItem, type PhoneMove } from 
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
+import PhoneGroceries, { type PhoneGroceriesData } from './PhoneGroceries'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { DayOff } from '../wall/engine/dayPlan'
 
@@ -116,6 +117,8 @@ export interface PhoneViewProps {
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
   comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; ideas?: GiftIdea[]; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
+  /** Groceries (canvas 33d): the shared list, live; the frame's own hook, or the fixture's. */
+  groceries?: PhoneGroceriesData | null
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject: (id: string | null) => { data?: TodoProjectDetail | null } } | null
 }
 
@@ -173,7 +176,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, groceries = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -207,6 +210,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
   const [addOpen, setAddOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [groceriesOpen, setGroceriesOpen] = useState(false)
+  const [groceryAdding, setGroceryAdding] = useState(false)
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
@@ -627,7 +632,15 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         </span>
       </button>
       <div className="grid grid-cols-2 gap-[10px]">
-        {tiles.map((t) => (
+        {tiles.map((t) => t.label === 'Grocery' && groceries ? (
+          <button key={t.label} type="button" onClick={() => setGroceriesOpen(true)} className="flex h-[124px] flex-col justify-between rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment p-[14px] text-left text-wall-ink">
+            <span className="flex h-[40px] w-[40px] items-center justify-center rounded-full bg-phone-card">{t.icon}</span>
+            <span className="flex flex-col gap-[2px]">
+              <span className="font-display text-phone-heading font-bold">Groceries</span>
+              <span className="text-phone-detail text-wall-ink-2">What’s left, by aisle</span>
+            </span>
+          </button>
+        ) : (
           <Link key={t.label} to={t.to} className="flex h-[124px] flex-col justify-between rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment p-[14px] text-wall-ink no-underline">
             <span className="flex h-[40px] w-[40px] items-center justify-center rounded-full bg-phone-card">{t.icon}</span>
             <span className="flex flex-col gap-[2px]">
@@ -669,7 +682,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
   const loading = week.length === 0 || members.length === 0
   // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
-  const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || (todos && projectId))
+  const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || groceriesOpen || emailSettingsOpen || (todos && projectId))
   const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || askOpen)
   // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
   const paged = !loading && (tab === 'me' || tab === 'family')
@@ -818,6 +831,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         />
         </PhonePushPage>
       )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {groceriesOpen && groceries && (
+          <PhonePushPage key="groceries" onShift={shiftBehind} onBack={() => { setGroceriesOpen(false); setGroceryAdding(false) }}>
+            <PhoneGroceries data={groceries} onBack={() => { setGroceriesOpen(false); setGroceryAdding(false) }} adding={groceryAdding} setAdding={setGroceryAdding} />
+          </PhonePushPage>
+        )}
       </AnimatePresence>
       <AnimatePresence>
         {emailSettingsOpen && (

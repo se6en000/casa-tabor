@@ -69,7 +69,9 @@ test('phone: Family lists everyone\'s day and filters by person; Week opens a da
 test('phone: More opens the rest of Casa', async ({ page }) => {
   const phone = await open(page)
   await phone.getByRole('button', { name: 'More' }).click()
-  await expect(phone.getByRole('link', { name: /Grocery/ })).toBeVisible()
+  // Groceries is the phone's own list now (canvas 33d); Meals and the rest are still the web pages.
+  await expect(phone.getByRole('button', { name: /Groceries/ })).toBeVisible()
+  await expect(phone.getByRole('link', { name: /Meals/ })).toBeVisible()
   await expect(phone.getByRole('link', { name: /See the Wall/ })).toBeVisible()
 })
 
@@ -829,4 +831,30 @@ test('phone: scrolling down tucks the title into a small frosted bar', async ({ 
   expect(scrolled).toBeGreaterThan(64)
   await expect(bar).toHaveClass(/opacity-100/)
   await expect(bar).toContainText('To do')
+})
+
+test('phone: Groceries — by aisle with the amount by the name; ticks wait, then leave together; add a few at once', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00')
+  await phone.getByRole('button', { name: /^More/ }).first().click()
+  await phone.getByRole('button', { name: /Groceries/ }).click()
+  const list = phone.getByRole('region', { name: 'Groceries' })
+  await expect(list.getByText('5 to get')).toBeVisible()
+  await expect(list.getByRole('heading', { name: 'PRODUCE' })).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Avocados, 3' })).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Milk, 2%, 1 gallon' })).toBeVisible()
+  // Two ticks in a row: both stay in place, ticked, then leave together after the pause.
+  await list.getByRole('button', { name: 'Bananas' }).click()
+  await list.getByRole('button', { name: 'Avocados, 3' }).click()
+  await expect(list.getByRole('button', { name: 'Bananas, got it' })).toBeVisible()
+  await expect(list.getByRole('status').getByText('2 ticked')).toBeVisible()
+  await expect(list.getByRole('heading', { name: 'PRODUCE' })).toBeHidden({ timeout: 5000 })
+  await expect(list.getByRole('button', { name: /Got · 3/ })).toBeVisible()
+  // Adding from the bottom: "eggs, milk" — eggs is new (dairy), milk was on already.
+  await list.getByRole('button', { name: 'Add to groceries' }).click()
+  const add = phone.getByRole('region', { name: 'Add to groceries' })
+  await add.getByRole('textbox', { name: 'What to add' }).fill('eggs, milk')
+  await add.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(add.getByText(/Added eggs.*was on already/i)).toBeVisible()
+  await expect(list.getByRole('button', { name: /^eggs$/i })).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-groceries-add.png')
 })

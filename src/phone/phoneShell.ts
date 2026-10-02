@@ -65,6 +65,49 @@ function reportLayout() {
   void import('../lib/remoteVoiceTrace').then(({ sendBugReport }) => sendBugReport({ event: 'phone_layout', detail: `inner ${window.innerHeight} · screen ${screen.height} · vv ${vv?.height} · frame ${JSON.stringify(payload.frame)}`, page: '/phone', payload })).catch(() => {})
 }
 
+/**
+ * The keyboard, measured on the phone (Jake, Oct 2: in Ask Casa "the keyboard makes everything jump around and can't see
+ * what you are typing"). The first time a field is typed in each session, every viewport move from the tap until a
+ * moment after the keyboard goes is recorded — the window, the visual viewport, the page's scroll, the frame, the field
+ * and the list above it — and sent once as "phone_keyboard", so the jump is seen before anything is changed.
+ */
+const kbTrace: { on: boolean; sent: boolean; t0: number; samples: unknown[]; stop: number | null } = { on: false, sent: false, t0: 0, samples: [], stop: null }
+function sampleKeyboard(why: string) {
+  if (!kbTrace.on || kbTrace.samples.length >= 120) return
+  const vv = window.visualViewport
+  const r = (el: Element | null | undefined) => { const b = el?.getBoundingClientRect(); return b ? [Math.round(b.top), Math.round(b.bottom)] : null }
+  const field = document.activeElement
+  const list = field?.closest('section')?.querySelector('[data-ask-scroll], .overflow-y-auto') as HTMLElement | null
+  kbTrace.samples.push({
+    t: Math.round(performance.now() - kbTrace.t0), why,
+    ih: window.innerHeight, vh: vv ? Math.round(vv.height) : null, vt: vv ? Math.round(vv.offsetTop) : null, sy: Math.round(window.scrollY),
+    kb: document.documentElement.style.getPropertyValue('--phone-kb'), frame: r(document.querySelector('[data-phone-frame]')),
+    field: r(field), tag: field?.tagName ?? null, list: list ? { top: Math.round(list.scrollTop), h: list.scrollHeight, ch: list.clientHeight } : null,
+  })
+}
+function startKeyboardTrace() {
+  try { if (sessionStorage.getItem('casa-phone-keyboard-sent')) kbTrace.sent = true } catch { /* send anyway */ }
+  if (kbTrace.sent || kbTrace.on) return
+  kbTrace.on = true
+  kbTrace.t0 = performance.now()
+  // Every frame for the first 1.2 s: the keyboard's own animation.
+  const until = kbTrace.t0 + 1200
+  const tick = () => { sampleKeyboard('frame'); if (performance.now() < until) requestAnimationFrame(tick) }
+  requestAnimationFrame(tick)
+}
+function endKeyboardTrace() {
+  if (!kbTrace.on) return
+  if (kbTrace.stop) window.clearTimeout(kbTrace.stop)
+  kbTrace.stop = window.setTimeout(() => {
+    sampleKeyboard('after')
+    kbTrace.on = false
+    kbTrace.sent = true
+    try { sessionStorage.setItem('casa-phone-keyboard-sent', '1') } catch { /* fine */ }
+    const samples = kbTrace.samples
+    void import('../lib/remoteVoiceTrace').then(({ sendBugReport }) => sendBugReport({ event: 'phone_keyboard', detail: `${samples.length} samples · ua ${navigator.userAgent.slice(0, 60)}`, page: '/phone', payload: { samples, screen: { w: screen.width, h: screen.height }, ua: navigator.userAgent } })).catch(() => {})
+  }, 1500)
+}
+
 export function usePhoneShell() {
   // Instant start (premium plan, Phase C): the app's code cached on the phone by the service worker, so it opens
   // without waiting on the network (the day itself comes from the saved cache, eventsCachePersister.ts). Only here: the
@@ -94,7 +137,10 @@ export function usePhoneShell() {
     }
     dead()
     window.addEventListener('resize', dead)
-    const update = () => {
+    const update = (e?: Event) => {
+      if (e?.type === 'focusin' && isTyping(document.activeElement)) startKeyboardTrace()
+      sampleKeyboard(e?.type ?? 'start')
+      if (e?.type === 'focusout') endKeyboardTrace()
       const kb = keyboardHeight(window.innerHeight, vv, isTyping(document.activeElement))
       root.style.setProperty('--phone-kb', `${kb}px`)
       if (kb) root.dataset.keyboard = 'open'
@@ -171,4 +217,19 @@ export function useSheetSwipe(onClose: () => void, { handle }: { handle?: number
       } else reset(el)
     },
   }
+}
+
+/**
+ * iPhone only raises the keyboard for a field focused inside the tap itself. A sheet's field mounts a moment later, so
+ * the tap focuses a stand-in field first and the sheet's own field takes the focus over, keyboard and all.
+ */
+export function primeKeyboard(): void {
+  if (typeof document === 'undefined') return
+  const stand = document.createElement('input')
+  stand.setAttribute('aria-hidden', 'true')
+  stand.tabIndex = -1
+  stand.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px;pointer-events:none'
+  document.body.appendChild(stand)
+  stand.focus()
+  window.setTimeout(() => stand.remove(), 1000)
 }
