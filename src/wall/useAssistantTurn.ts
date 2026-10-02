@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { optimisticEvent, withEvent } from '../lib/optimisticEvent'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAIAssistant } from '../hooks/useAIAssistant'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -80,6 +81,12 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
       return
     }
     updateMessageToolStatus(message.id, 'done', { actionId: result.actionId, resultEventId: result.eventId, ...(result.plan ? { planResult: result.plan, args } : {}) } as never)
+    // What was just added shows at once — on the day and behind "Open it" — rather than after the calendar is fetched
+    // again while the server is busy with it (optimisticEvent.ts; Kelly's gym add, Oct 2).
+    if (action.tool === 'create_event' && result.eventId) {
+      const added = optimisticEvent(result.eventId, args, queryClient.getQueryData<Array<{ id: string; name: string; full_name?: string | null }>>(['family-members']) ?? [])
+      queryClient.setQueriesData({ predicate: (q) => q.queryKey[0] === 'events' && q.queryKey[1] !== 'week-index' && (q.queryKey[1] !== 'all-reminders' || added?.event_type === 'reminder') }, (old: unknown) => withEvent(old, added))
+    }
     invalidateAllCalendarQueries(queryClient, String(args.event_id ?? args.id ?? result.eventId ?? ''))
     // The to-do list and Coming up live beside the calendar: a new to-do or project shows at once.
     void queryClient.invalidateQueries({ queryKey: ['todos'] })
