@@ -674,7 +674,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
     // the top clears the notch / status bar and the tab bar clears the home indicator. With the keyboard up the frame
     // ends at its top (--phone-kb, phoneShell.ts), so a sheet or Ask Casa's line sits above it, never under it.
-    <div className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
+    <div data-phone-frame className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
       {/* The list runs under the frosted tab bar (padding for it at the end); a tab fades in, a day slides in from the
           side it came from. */}
       <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
