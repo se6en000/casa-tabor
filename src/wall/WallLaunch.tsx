@@ -50,14 +50,20 @@ export interface WallLaunchProps {
     onToggleItem?: (item: WallChecklistItem) => void
     onOpenEvent?: (eventId: string) => void
     onSeeAll?: () => void
+    /** NEXT UP (canvas 27a): the day's chores and timed to-dos, drawn across one box or two; null when there are none. */
+    nextUp?: ((columns: 1 | 2) => ReactNode) | null
   } | null
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
 export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, calling = null, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow: tomorrowNote = null, prep = null }: WallLaunchProps) {
-  const prepping = Boolean(prep && prep.packing.total > 0)
+  const packing = Boolean(prep && prep.packing.total > 0)
+  // The rail shows with a list to get ready or the day's small jobs (NEXT UP, canvas 27a).
+  const prepping = packing || Boolean(prep?.nextUp)
   // Today's list takes the room the TOMORROW note would use; tomorrow's own list is on the evening face.
-  const tomorrow = prepping ? null : tomorrowNote
+  const tomorrow = packing ? null : tomorrowNote
+  // NEXT UP takes two boxes, or one beside a get & pack list.
+  const nextUpColumns: 1 | 2 = packing ? 1 : 2
   const hideRoutines = interaction?.routines?.hidden === true
   const score = useMemo(() => (plan ? buildScore(plan, members, now, { hideRoutines }) : null), [plan, members, now, hideRoutines])
   const clock = formatWallClock(now)
@@ -132,6 +138,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
           onToggleItem={prep.onToggleItem}
           onOpenEvent={prep.onOpenEvent}
           onSeeAll={prep.onSeeAll}
+          nextUp={prep.nextUp ? { node: prep.nextUp(nextUpColumns), columns: nextUpColumns } : null}
         />
       )}
       {week}

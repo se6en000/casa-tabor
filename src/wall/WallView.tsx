@@ -18,7 +18,7 @@ import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
-import { eveningFocus, selectPosture, tomorrowLine, type Posture } from './posture'
+import { eveningFocus, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
@@ -41,6 +41,8 @@ import { casaTopic, pushMessage, pushNow, snoozeUntil, type TalkAnswer } from '.
 import type { CasaTalkProps } from './useCasaTalk'
 import WallCasaTalk, { CasaCalling } from './WallCasaTalk'
 import type { ScoreInteraction } from './WallScore'
+import { comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, type NextUpItem } from './nextUp'
+import { NextUpSection, StillTonight } from './WallNextUp'
 
 export interface WallViewProps {
   now: Date
@@ -114,6 +116,19 @@ export interface WallViewProps {
   comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
+  /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 27a/27c). */
+  choreDone?: ReadonlySet<string>
+  tickChore?: (choreId: string, date: Date, done: boolean) => Promise<void>
+}
+
+const NO_TICKS: ReadonlySet<string> = new Set()
+/** A tick crosses the line out this long before it's saved and leaves; a second tap in that time takes it back. */
+const TICK_MS = 4000
+const addTo = (key: string) => (set: Set<string>) => new Set(set).add(key)
+const takeFrom = (key: string) => (set: Set<string>) => {
+  const next = new Set(set)
+  next.delete(key)
+  return next
 }
 
 const HIDE_ROUTINES_KEY = 'casa-wall-hide-routines'
@@ -143,9 +158,13 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
+  // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set())
+  const [gone, setGone] = useState<Set<string>>(() => new Set())
+  const tickTimers = useRef(new Map<string, number>())
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [packingOpen, setPackingOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
@@ -457,10 +476,45 @@ export default function WallView(props: WallViewProps) {
     else openTodo()
   }
   useDaySwipe(rootRef, swipeDay, { enabled: strip.length > 1 && !overlay && !selected && !adding && !handOff && !decisionsOpen && !packingOpen && !menuOpen && !person && !tripKey, minDistance: 200 })
+  // NEXT UP and STILL TONIGHT (canvas 27a/27c): today's chores and timed to-dos, ticked here.
+  const dayJobs = useMemo(() => nextUpItems(shownToday, todos?.list ?? null, choreDone, now), [shownToday, todos?.list, choreDone, now])
+  const jobs = dayJobs.filter((item) => !gone.has(item.key))
+  const tick = (item: NextUpItem) => {
+    const pending = tickTimers.current.get(item.key)
+    if (pending) {
+      window.clearTimeout(pending)
+      tickTimers.current.delete(item.key)
+      setTicked(takeFrom(item.key))
+      return
+    }
+    setTicked(addTo(item.key))
+    tickTimers.current.set(item.key, window.setTimeout(() => {
+      tickTimers.current.delete(item.key)
+      setTicked(takeFrom(item.key))
+      setGone(addTo(item.key))
+      const saved = item.kind === 'chore' ? tickChore?.(item.id, item.at, true) : todos?.act({ action: 'done', id: item.id })
+      // Didn't save: it comes back.
+      Promise.resolve(saved).catch(() => setGone(takeFrom(item.key)))
+    }, TICK_MS))
+  }
+  const rowProps = { members, pigmentOf: (id: string) => pigments.get(id) ?? null, ticked, onTick: tick, onOpen: (id: string) => eventsById.has(id) && setSelectedId(id) }
+  const soonJobs = comingHours(jobs, now)
+  const nextUp = soonJobs.length > 0 ? (columns: 1 | 2) => {
+    const { shown, more } = fitNextUp(soonJobs, columns)
+    return <NextUpSection items={shown} more={more} columns={columns} onSeeAll={todos ? openTodo : undefined} {...rowProps} />
+  } : null
+  // Before midnight the evening looks at tomorrow; what's left of today, and who's still out, sit in its header.
+  const tonightJobs = evening && tonightByClock(now) ? stillTonight(jobs, outTonight(shownToday, members, now)) : []
+  const tonightFit = fitNextUp(tonightJobs, 2)
+  const leftTonight = tonightJobs.filter((item) => item.kind !== 'out').length
+  const stillTonightCard = tonightJobs.length > 0
+    ? <StillTonight items={tonightFit.shown} more={tonightFit.more} day={now.toLocaleDateString('en-US', { weekday: 'long' })} {...rowProps} />
+    : null
+
   const tomorrowDate = tomorrow?.date ?? null
   const weekStrip = strip.length > 1 ? (
     <WallWeek
-      days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden })}
+      days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden }).map((day) => (day.isToday && leftTonight > 0 ? { ...day, leftTonight } : day))}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
       shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
@@ -475,13 +529,13 @@ export default function WallView(props: WallViewProps) {
   // The surface of To do (board 09a): tonight's nudge on the evening face, one small job in a quiet stretch.
   const nudgeItem = todos ? tonightNudge(todos.list, now) : null
   const nudge = nudgeItem && !(nudgeLater?.id === nudgeItem.id && Date.now() < nudgeLater.until) ? nudgeItem : null
-  const tonight = nudge && todos ? (
+  const tonight = stillTonightCard ?? (nudge && todos ? (
     <WallNudge
       item={nudge}
       onDone={() => void todos.act({ action: 'done', id: nudge.id })}
       onLater={() => setNudgeLater({ id: nudge.id, until: Date.now() + 45 * 60_000 })}
     />
-  ) : null
+  ) : null)
   const smallJob = todos ? quietStep(todos.list, now, move?.leaveAt ?? null) : null
   const meanwhile = smallJob && todos ? <WallQuietStep item={smallJob} onDone={() => void todos.act({ action: 'done', id: smallJob.id })} /> : null
 
@@ -584,6 +638,7 @@ export default function WallView(props: WallViewProps) {
           onToggleItem: toggleChecklist,
           onOpenEvent: (id) => eventsById.has(id) && setSelectedId(id),
           onSeeAll: () => setPackingOpen(true),
+          nextUp,
         } : null}
       />
     )

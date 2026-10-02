@@ -150,6 +150,8 @@ export interface PrepRailProps {
   onToggleItem?: (item: WallChecklistItem) => void
   onOpenEvent?: (eventId: string) => void
   onSeeAll?: () => void
+  /** NEXT UP (canvas 27a), the first box on today's face: the day's chores and timed to-dos, and how many boxes it takes. */
+  nextUp?: { node: ReactNode; columns: 1 | 2 } | null
 }
 
 /**
@@ -157,13 +159,15 @@ export interface PrepRailProps {
  * place, so a swipe between days changes what's in them, not where they are ("when I swipe … there isn't a lot of
  * shifting"). What fills them flows left to right in a fixed order — a decision, then get & pack (one event a box) —
  * and an empty part takes no box. On the days ahead the last box is always First departure, the one thing looked for
- * by place; on today's face the Next Move says it, so get & pack may take that box too.
+ * by place; on today's face the Next Move says it, so get & pack may take that box too. On today's face NEXT UP comes first
+ * (Jake, 2026-10-01: "make it the first slot where drivers sometimes goes … we usually figure that out fast").
  */
-export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, packLabel, departure, onToggleItem, onOpenEvent, onSeeAll }: PrepRailProps) {
+export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, packLabel, departure, onToggleItem, onOpenEvent, onSeeAll, nextUp = null }: PrepRailProps) {
   const deciding = decisions.length > 0
-  const packBoxes = (4 - (deciding ? 1 : 0) - (departure !== null ? 1 : 0)) as 1 | 2 | 3 | 4
+  const packBoxes = Math.max(1, 4 - (nextUp?.columns ?? 0) - (deciding ? 1 : 0) - (departure !== null ? 1 : 0)) as 1 | 2 | 3 | 4
   return (
     <div aria-label="Prep rail" role="group" className="grid min-h-0 flex-1 grid-cols-4 gap-x-[40px]">
+      {nextUp?.node}
       {deciding && (
         <section aria-label={decisionLabel} className="flex min-w-0 flex-col">
           <SectionHeading>NEEDS A DECISION · {decisions.length}</SectionHeading>

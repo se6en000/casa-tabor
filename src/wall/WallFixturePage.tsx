@@ -16,6 +16,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import { buildTrips, type TravelSettings } from './engine/travel'
 import type { WallChore } from './engine/chores'
+import { choreDoneKey } from './nextUp'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
 import type { ComingUpItem, GiftIdea } from './comingUp'
@@ -120,6 +121,8 @@ export default function WallFixturePage() {
   const [travelSettings, setTravelSettings] = useState<Record<string, TravelSettings>>({})
   // Chores (canvas 20), saved in memory here.
   const [CHORES, setChores] = useState<WallChore[]>(CHORE_LIST as WallChore[])
+  // Chores ticked for the day (canvas 27a/27c), in memory here; recorded for the tests.
+  const [choreDone, setChoreDone] = useState<ReadonlySet<string>>(() => new Set())
   // `?nobody=1` (board 08a): Jake's portfolio review with nobody on it, as on 2026-09-28.
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
@@ -135,6 +138,11 @@ export default function WallFixturePage() {
       { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'emme', role: 'primary' }] },
       { id: 'far-market', title: 'Green Market', start_time: new Date(2026, 9, 18, 9, 0).toISOString(), end_time: new Date(2026, 9, 18, 11, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'kelly', role: 'primary' }] },
     ] as unknown as WallEvent[] : []),
+    // `?gym=1` (canvas 27c): Kelly at the gym, 7 to 9:30 tonight.
+    ...(new URLSearchParams(window.location.search).get('gym') ? [{
+      id: 'kelly-gym', title: 'Gym', start_time: new Date(2026, 8, 25, 19, 0).toISOString(), end_time: new Date(2026, 8, 25, 21, 30).toISOString(),
+      all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Gym', address: '1500 N Flagler Dr, West Palm Beach, FL', members: [{ family_member_id: 'kelly', role: 'primary' }],
+    } as unknown as WallEvent] : []),
     // `?stepEvent=1` (P3.23): a project step's all-day calendar event today.
     ...(STEP_EVENT ? [{
       id: 'ev-colours', title: 'Paint the house: Pick colours: 3 sample pots', start_time: '2026-09-25T00:00:00Z', end_time: '2026-09-25T23:59:59Z',
@@ -254,7 +262,11 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} />
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} choreDone={choreDone} tickChore={async (id, date, done) => {
+          const key = choreDoneKey(id, date)
+          ;(window as unknown as { __choreTicks?: string[] }).__choreTicks = [...((window as unknown as { __choreTicks?: string[] }).__choreTicks ?? []), `${done ? '+' : '-'}${key}`]
+          setChoreDone((was) => { const next = new Set(was); if (done) next.add(key); else next.delete(key); return next })
+        }} />
       {quickOn && (
         <WallQuickAsk
           enabled={!bandOpen}

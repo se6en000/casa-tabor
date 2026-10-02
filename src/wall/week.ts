@@ -24,6 +24,8 @@ export interface WeekDay {
   decisionCount: number
   /** Prep for that day's events not yet checked off ("3 to do"). */
   toDo: number
+  /** Today's tile in the evening (canvas 27c): what's left tonight, said in place of the morning's first out. */
+  leftTonight?: number
 }
 
 const dayKey = (date: Date) => date.toDateString()

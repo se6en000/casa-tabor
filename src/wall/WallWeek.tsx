@@ -65,7 +65,9 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
               </div>
               <div className="flex items-baseline justify-between gap-[8px]">
                 {/* With "2 to do" beside it, "First out 7:25" became "First ou…": "Out 7:25" fits whole. */}
-                <span className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.toDo > 0 ? day.firstOut.replace(/^First out /, 'Out ') : day.firstOut}</span>
+                {day.leftTonight
+                  ? <span className="truncate text-wall-detail font-bold text-wall-brass-ink">{day.leftTonight} left tonight</span>
+                  : <span className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.toDo > 0 ? day.firstOut.replace(/^First out /, 'Out ') : day.firstOut}</span>}
                 {day.toDo > 0 && <span className="shrink-0 text-wall-label font-bold text-wall-brass-ink">{day.toDo} to do</span>}
               </div>
             </button>

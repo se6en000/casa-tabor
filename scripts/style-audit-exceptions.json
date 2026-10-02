@@ -526,6 +526,10 @@
         "reason": "Family Wall: the chore sheet (canvas 20b) — who does it, how often, the day chips, the time steppers, Cancel/Delete/Save, part of the Wall's own component set."
       },
       {
+        "path": "src/wall/WallNextUp.tsx",
+        "reason": "Family Wall: NEXT UP and STILL TONIGHT (canvas 27a, 27c) — a row is a tick (role checkbox) or opens who's out; the To do link. Part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallCasaTalk.tsx",
         "reason": "Family Wall: \"Casa wants to talk to you\" (canvas 21a-b) — the quiet line, the band's mic and its answers, part of the Wall's own component set."
       },

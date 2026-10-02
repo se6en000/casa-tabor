@@ -85,12 +85,12 @@ function blockClass(block: ScoreBlock): string {
 }
 
 /** The place may be cut short; the time after the last " · " never is. */
-function LaneStatus({ text }: { text: string }) {
+function LaneStatus({ text, tight = false }: { text: string; tight?: boolean }) {
   const cut = text.lastIndexOf(' · ')
   const lead = cut === -1 ? text : text.slice(0, cut)
   const tail = cut === -1 ? null : text.slice(cut)
   return (
-    <div className="mt-[4px] flex min-w-0 whitespace-nowrap text-wall-detail text-wall-ink-2">
+    <div className={`flex min-w-0 whitespace-nowrap text-wall-detail text-wall-ink-2 ${tight ? 'leading-[1.25]' : 'mt-[4px]'}`}>
       <span className="truncate">{lead}</span>
       {tail && <span className="shrink-0 whitespace-pre">{tail}</span>}
     </div>
@@ -246,13 +246,14 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             >
               <span
                 aria-hidden="true"
-                className={`flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold text-wall-on-pigment ${pigmentStyleFor(lane.pigmentIndex).solid}`}
+                className={`flex ${compact ? 'h-[40px] w-[40px]' : 'h-[48px] w-[48px]'} shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold text-wall-on-pigment ${pigmentStyleFor(lane.pigmentIndex).solid}`}
               >
                 {lane.member.name.charAt(0)}
               </span>
+              {/* Compact lanes are 52px: a smaller name and a tight status line keep both clear of the rules. */}
               <div className="min-w-0">
-                <div className="font-display text-wall-name font-bold">{lane.member.name}</div>
-                {lane.status && <LaneStatus text={lane.status} />}
+                <div className={`font-display font-bold ${compact ? 'text-wall-heading leading-[1.1]' : 'text-wall-name'}`}>{lane.member.name}</div>
+                {lane.status && <LaneStatus text={lane.status} tight={compact} />}
               </div>
             </div>
             <div className="w-[20px] shrink-0" />

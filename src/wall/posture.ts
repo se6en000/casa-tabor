@@ -18,6 +18,9 @@ const LAUNCH_LEAD_MIN = 60
 /** Departures before this hour make up the morning rush. */
 const MORNING_RUSH_END_HOUR = 9
 
+/** 7 PM to midnight by the clock: tonight is still today (STILL TONIGHT, canvas 27c), whatever face is previewed. */
+export const tonightByClock = (now: Date) => now.getHours() >= EVENING_START_HOUR
+
 export function selectPosture(plan: DayPlan | null, now: Date): Posture {
   const hour = now.getHours()
   if (hour >= EVENING_START_HOUR || hour < NIGHT_END_HOUR) return 'evening'
