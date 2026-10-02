@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Bug, Camera, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
@@ -62,7 +62,6 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
   const [expected, setExpected] = useState('')
   const [happened, setHappened] = useState('')
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
-  const endRef = useRef<HTMLDivElement>(null)
   // "What can I say?" (board 07f) and a tip while Casa thinks (07e), from the wall's own list.
   const [saying, setSaying] = useState(false)
   const lastAsked = [...lines].reverse().find((l) => l.role === 'user')
@@ -75,7 +74,37 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
   const tip = useMemo(() => (thinking ? tipFor(lastAsked?.text ?? null, lines.length) : null), [thinking, lastAsked?.text, lines.length])
 
   // The newest line in view as the conversation grows.
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [lines.length, thinking, pending, note, card, which])
+  // The conversation stays on its newest line (Jake's iPhone, Oct 2: the keyboard took the list from 693 to 280 pt and it
+  // kept its old place, so Casa's answer sat out of sight below the box). It scrolls inside itself — never the page — and
+  // whenever its space changes, it stays at the bottom unless you've scrolled up to read.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const pinned = useRef(true)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    pinned.current = true
+  }, [lines.length, thinking, pending, note, card, which, reporting, saying])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (pinned.current) el.scrollTop = el.scrollHeight })
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  }, [reporting, saying])
+  // The box grows with what's typed, up to about five lines, so all of it is in view.
+  const boxRef = useRef<HTMLTextAreaElement>(null)
+  const shown = mic?.listening && mic.interim ? mic.interim : text
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    // Empty, it's one line (the hint never stretches it); typed in, it grows with the words.
+    box.style.height = ''
+    if (!shown) return
+    box.style.height = 'auto'
+    box.style.height = `${Math.max(48, Math.min(box.scrollHeight, 140))}px`
+  }, [shown])
 
   const submit = (value: string) => {
     const q = value.trim()
@@ -165,7 +194,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
         </div>
       ) : (
         <>
-          <div data-ask-scroll className="flex flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px]">
+          <div ref={scrollRef} data-ask-scroll onScroll={(e) => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48 }} className="flex flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px]">
             {lines.length === 0 && !thinking && (
               <div className="flex flex-col gap-[10px]">
                 <div className="font-display text-phone-heading italic text-wall-ink-2">Ask about the family’s day, or ask to add something. Nothing changes without your yes.</div>
@@ -223,7 +252,6 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
                 {openDay && <button type="button" onClick={openDay.go} className={pill}>{openDay.label}</button>}
               </div>
             )}
-            <div ref={endRef} />
           </div>
 
           <form
@@ -233,13 +261,16 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             {onScan && (
               <button type="button" aria-label="Scan it" onClick={onScan} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><Camera size={20} /></button>
             )}
-            <input
+            <textarea
+              ref={boxRef}
+              rows={1}
               aria-label="Ask Casa"
-              value={mic?.listening && mic.interim ? mic.interim : text}
+              value={shown}
               onChange={(e) => setText(e.target.value)}
-              placeholder={mic?.listening ? 'Listening…' : 'Ask, or say what to add'}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(text) } }}
+              placeholder={mic?.listening ? 'Listening…' : 'Ask or add…'}
               enterKeyHint="send"
-              className="h-[48px] min-w-0 flex-1 rounded-full border border-solid border-wall-stone bg-wall-on-pigment px-[16px] text-phone-body text-wall-ink outline-none"
+              className="h-[48px] max-h-[140px] min-h-[48px] min-w-0 flex-1 resize-none overflow-y-auto rounded-[24px] border border-solid border-wall-stone bg-wall-on-pigment px-[16px] py-[12px] text-phone-body leading-snug text-wall-ink outline-none"
             />
             {mic && (
               // Listening looks like the wall's: a solid brass mic with a ring pulsing out.

@@ -186,6 +186,7 @@ test('phone: + → Scan it reads a flyer into ticked drafts; only what stays tic
   await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   const sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await sheet.getByRole('button', { name: /^Read/ }).click()
   await expect(sheet.getByText('Sun, Sep 27 · 11:00 AM – 3:00 PM')).toBeVisible()
   await expect(sheet.getByText('Tue, Sep 29 · All day')).toBeVisible()
   await expect(sheet.getByRole('button', { name: 'Add 2' })).toBeVisible()
@@ -478,6 +479,7 @@ test('phone: Scan it — something already on the calendar gets what’s new add
   await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   const sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await sheet.getByRole('button', { name: /^Read/ }).click()
   await expect(sheet.getByText(/Already on your calendar: PTO Fall Festival · 11:00 AM\. I’ll add what’s new to it\./)).toBeVisible()
   await expect(sheet.getByRole('button', { name: 'Skip Palm Beach Public PTO Fall Festival' })).toHaveAttribute('aria-pressed', 'true')
   await sheet.getByRole('button', { name: 'Add 2' }).click()
@@ -493,6 +495,7 @@ test('phone: Scan it — what to wear and bring is packing for the field trip, o
   await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   let sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await sheet.getByRole('button', { name: /^Read/ }).click()
   await expect(sheet.getByText('PACK THE NIGHT BEFORE')).toBeVisible()
   await expect(sheet.getByRole('button', { name: 'Skip Packed lunch' })).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-scan-trip.png')
@@ -508,6 +511,7 @@ test('phone: Scan it — what to wear and bring is packing for the field trip, o
   await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
+  await sheet.getByRole('button', { name: /^Read/ }).click()
   await expect(sheet.getByText(/Already on your calendar: Field trip · .*I’ll add what’s new to it\./)).toBeVisible()
   await sheet.getByRole('button', { name: 'Add 3' }).click()
   await expect(sheet.getByRole('list', { name: 'Added' }).getByText('Added what’s new to Field trip')).toBeVisible()
@@ -826,4 +830,42 @@ test('phone: Groceries — by aisle with the amount by the name; ticks wait, the
   await expect(add.getByText(/Added eggs.*was on already/i)).toBeVisible()
   await expect(list.getByRole('button', { name: /^eggs$/i })).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-groceries-add.png')
+})
+
+// Jake's iPhone, Oct 2 (phone_keyboard, "Ask Casa"): the keyboard took the conversation from 693 to 280 pt and it kept
+// its old place, so Casa's answer sat out of sight below the box. It stays on its newest line as its space changes;
+// the box grows with what's typed (up to about five lines).
+test('phone: Casa — the keyboard comes up and the conversation stays on its newest line; the box grows', async ({ page }) => {
+  const { ask } = await askScene(page, 'plan')
+  const list = ask.locator('[data-ask-scroll]')
+  await expect(list).toBeVisible()
+  const atBottom = () => list.evaluate((el) => Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 4)
+  await expect.poll(atBottom).toBe(true)
+  // The keyboard, as the phone reports it: the frame ends 413 pt up (after the shell's own settling after a tap).
+  await page.waitForTimeout(1000)
+  await page.evaluate(() => document.documentElement.style.setProperty('--phone-kb', '413px'))
+  await expect.poll(() => list.evaluate((el) => el.clientHeight)).toBeLessThan(300)
+  await expect.poll(atBottom).toBe(true)
+  const box = ask.getByRole('textbox', { name: 'Ask Casa' })
+  const one = (await box.boundingBox()).height
+  await box.fill('Line one of a longer message\nline two\nline three\nline four')
+  await expect.poll(async () => (await box.boundingBox()).height).toBeGreaterThan(one + 40)
+})
+
+// Jake, Oct 2: "snap multiple photo then it can scan. so it takes into account all the information at once."
+test('phone: Scan it — several photos join a tray and are read together in one go', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
+  const sheet = phone.getByRole('region', { name: 'Scan it' })
+  const camera = sheet.locator('input[type=file]').first()
+  await camera.setInputFiles({ name: 'page1.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('one') })
+  await expect(sheet.getByRole('button', { name: 'Take another' })).toBeVisible()
+  await camera.setInputFiles({ name: 'page2.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('two') })
+  await expect(sheet.getByRole('list', { name: 'Photos to read' }).getByRole('listitem')).toHaveCount(2)
+  await sheet.getByRole('button', { name: 'Remove photo 2' }).click()
+  await camera.setInputFiles({ name: 'page3.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('three') })
+  await sheet.getByRole('button', { name: 'Read 2 photos together' }).click()
+  await expect(sheet.getByText('Sun, Sep 27 · 11:00 AM – 3:00 PM')).toBeVisible()
+  expect(await page.evaluate(() => window.__scanFiles)).toEqual(['page1.jpg', 'page3.jpg'])
 })

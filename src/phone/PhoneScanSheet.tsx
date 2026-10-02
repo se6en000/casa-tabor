@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Bell, CalendarDays, Camera, Check, ChevronLeft, Images, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bell, CalendarDays, Camera, Check, ChevronLeft, Images, Loader2, X } from 'lucide-react'
 import type { WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { ScannedItem } from '../utils/documentScanner'
@@ -53,6 +53,11 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
   // What went in, said plainly afterwards (Jake, 2026-09-28: "everything went away, so I can't tell").
   const [addedLines, setAddedLines] = useState<string[]>([])
   const [already, setAlready] = useState<Record<string, SimilarEvent>>({})
+  // Several photos, read together (Jake, Oct 2: "snap multiple photo then it can scan. so it takes into account all the
+  // information at once"): each photo joins a tray; Read sends them all in one go, as pages of the same thing.
+  const [photos, setPhotos] = useState<File[]>([])
+  const thumbs = useMemo(() => photos.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)), [photos])
+  useEffect(() => () => thumbs.forEach((u) => u && URL.revokeObjectURL(u)), [thumbs])
 
   const read = async (files: File[]) => {
     if (files.length === 0) return
@@ -77,7 +82,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
   const picked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
     e.target.value = ''
-    void read(files)
+    if (files.length) { setError(''); setPhotos((was) => [...was, ...files]) }
   }
   const patch = (id: string, change: (i: ScannedItem) => Partial<ScannedItem>) => setItems((list) => list.map((i) => (i.id === id ? { ...i, ...change(i) } : i)))
   const people = members.filter((m) => m.show_on_home_sidebar !== false)
@@ -145,8 +150,26 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
         {stage === 'intake' && (
           <div className="flex flex-col gap-[12px]">
             <p className="m-0 font-display text-phone-heading text-wall-ink">A flyer, an invite, a team schedule, a card. Every date on it comes back for you to check.</p>
-            <button type="button" className={dark} onClick={() => cameraRef.current?.click()}><Camera size={20} aria-hidden="true" /> Take a photo</button>
-            <button type="button" className={pill} onClick={() => libraryRef.current?.click()}><Images size={20} aria-hidden="true" /> Choose photos</button>
+            {photos.length > 0 && (
+              <div role="list" aria-label="Photos to read" className="-mx-[20px] flex gap-[10px] overflow-x-auto px-[20px] py-[4px]">
+                {photos.map((f, i) => (
+                  <div key={`${f.name}-${i}`} role="listitem" className="relative h-[96px] w-[76px] shrink-0 overflow-hidden rounded-[12px] border border-solid border-wall-stone bg-phone-card">
+                    {thumbs[i] ? <img src={thumbs[i]!} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-phone-detail text-wall-ink-2">PDF</span>}
+                    <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => setPhotos((was) => was.filter((_, j) => j !== i))} className="absolute right-[2px] top-[2px] flex h-[44px] w-[44px] items-start justify-end border-0 bg-transparent p-[4px] text-wall-on-pigment">
+                      <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-wall-ink/70"><X size={14} strokeWidth={2.5} /></span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {photos.length > 0 && (
+              <button type="button" className={dark} onClick={() => { const all = photos; setPhotos([]); void read(all) }}>
+                <Check size={20} aria-hidden="true" /> Read {photos.length === 1 ? 'it' : `${photos.length} photos together`}
+              </button>
+            )}
+            <button type="button" className={photos.length ? pill : dark} onClick={() => cameraRef.current?.click()}><Camera size={20} aria-hidden="true" /> {photos.length ? 'Take another' : 'Take a photo'}</button>
+            <button type="button" className={pill} onClick={() => libraryRef.current?.click()}><Images size={20} aria-hidden="true" /> {photos.length ? 'Add from photos' : 'Choose photos'}</button>
+            {photos.length === 1 && <p className="m-0 text-phone-detail text-wall-ink-2">More than one page? Take another; they’re read together.</p>}
             {error && <div role="alert" className="text-phone-body text-wall-rust">{error}</div>}
           </div>
         )}

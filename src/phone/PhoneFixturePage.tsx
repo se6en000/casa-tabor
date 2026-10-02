@@ -196,7 +196,7 @@ function PhoneFixturePageInner() {
                 clearDone: () => setGroceryItems((list) => list.filter((i) => !i.checked)),
               }}
               checklist={checklist}
-              scan={async () => (params.get('scan') === 'trip' ? SCANNED_TRIP : SCANNED)}
+              scan={async (files) => { (window as unknown as { __scanFiles?: string[] }).__scanFiles = files.map((f) => f.name); return params.get('scan') === 'trip' ? SCANNED_TRIP : SCANNED }}
               findSimilar={params.get('similar') === 'trip' ? async () => ({ t1: { id: 'school-trip', title: 'Field trip', start_time: new Date(2026, 9, 1, 0, 0).toISOString() } })
                 : params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
               planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
