@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { TodoAction, TodoList, TodoProjectDetail } from './todos'
+import { refreshAfter } from './todoRefresh'
 
 /**
  * Jake's to-dos, organised (P3.22), from the `todos` function. They change slowly — a capture on his
@@ -36,8 +37,7 @@ export function useTodos({ enabled = true, surface = 'wall' }: { enabled?: boole
       }
     })
     const { error } = await supabase.functions.invoke('todos', { body: { ...request, surface } })
-    await queryClient.invalidateQueries({ queryKey: ['todos'] })
-    if (request.action === 'project_edit') await queryClient.invalidateQueries({ queryKey: ['todo-project', request.id] })
+    await refreshAfter(queryClient, request)
     if (error) throw error
   }, [queryClient, surface])
   return { data: query.data ?? null, act }
