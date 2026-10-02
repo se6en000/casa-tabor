@@ -122,6 +122,8 @@ export interface FamilyItem {
   end: Date
   /** A chore or a to-do gets a tick on the list. */
   kind: 'event' | 'chore' | 'todo'
+  /** From a routine (school, work, a standing run): every week's, so Calendar leaves it out. */
+  routine?: boolean
 }
 
 /**
@@ -155,7 +157,7 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
           : trip
             ? `${placeName(trip)} · ${trip.driverId ? `${nameOf(trip.driverId)} drives` : 'needs a driver'}`
             : s.placeStatus === 'home' ? 'At home' : ''
-      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: s.label, sub, people: [memberId], kind })
+      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: s.label, sub, people: [memberId], kind, ...(s.fromRoutine ? { routine: true } : {}) })
     }
   }
   // An outing nobody is listed for yet still shows (it needs someone).
@@ -230,4 +232,9 @@ export function eventView(input: { eventId: string; plan: DayPlan | null; events
     prep,
     repeating: isRepeating(event),
   }
+}
+
+/** Calendar (canvas 33c): a day's real appointments — no school or work, no chores or to-dos. */
+export function agendaItems(plan: DayPlan | null, members: WallMember[]): FamilyItem[] {
+  return familyItems(plan, members, null).filter((i) => i.kind === 'event' && !i.routine)
 }

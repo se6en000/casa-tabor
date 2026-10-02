@@ -23,6 +23,8 @@ export interface PhoneScanSheetProps {
   applyPlan?: (title: string, items: ScanPlanItem[]) => Promise<void>
   /** Looks up the calendar on the scanned days for things already there (item id → the match). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, SimilarEvent>>
+  /** What clashes for whoever it's for (step 5), said as Casa's card says it; a warning, never a block. */
+  clashesFor?: (start: Date, end: Date, memberIds: string[]) => string[]
   onClose: () => void
 }
 
@@ -40,7 +42,7 @@ function localOffset(): string {
   return `${m < 0 ? '-' : '+'}${String(Math.floor(Math.abs(m) / 60)).padStart(2, '0')}:${String(Math.abs(m) % 60).padStart(2, '0')}`
 }
 
-export default function PhoneScanSheet({ members, pigments, scan, createEvent, applyPlan, findSimilar, onClose }: PhoneScanSheetProps) {
+export default function PhoneScanSheet({ members, pigments, scan, createEvent, applyPlan, findSimilar, clashesFor, onClose }: PhoneScanSheetProps) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
   const [stage, setStage] = useState<Stage>('intake')
@@ -204,6 +206,10 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
                     className="field-sizing-content min-w-0 resize-none border-0 border-b border-solid border-transparent bg-transparent p-0 font-display text-phone-heading font-bold text-wall-ink outline-none focus:border-wall-stone"
                   />
                   <div className="text-phone-body text-wall-ink">{scanWhen(item)}</div>
+                  {clashesFor && !item.all_day && item.selected && (() => {
+                    const a = scanArgs(item, members)
+                    return clashesFor(new Date(String(a.start)), new Date(String(a.end)), item.selectedMemberIds).map((c) => <div key={c} className="text-phone-detail font-semibold text-wall-rust">{c}</div>)
+                  })()}
                   {(item.location_name || item.address) && (
                     <div className="text-phone-detail text-wall-ink-2">
                       {[item.location_name, item.address].filter((v, i, all) => v && all.indexOf(v) === i).join(' · ')}

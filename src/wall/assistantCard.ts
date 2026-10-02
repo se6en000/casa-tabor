@@ -1,4 +1,5 @@
 import type { DayPlan, LaneSegment, WallEvent, WallMember } from './engine/types'
+import { clashLines } from './clashes.ts'
 import { reconcileTransportationLegTimes, rescheduledDepartureIso } from '../lib/eventMutations.ts'
 import { NEW_EVENT_ID, withDriver, type EditableEvent } from './editing.ts'
 import { driverChoices } from './people.ts'
@@ -175,14 +176,10 @@ export function assistantCard(action: CardAction | null, previous: CardAction | 
   const lane = plan && lanePerson ? { memberId: lanePerson, segments: plan.lanes.get(lanePerson) ?? [] } : null
 
   // What else is going on for these people while it happens.
-  const clashes = allDay || !plan
-    ? []
-    : people.flatMap((id) => (plan.lanes.get(id) ?? [])
-      .filter((s) => s.sourceId !== event.id && s.kind !== 'drive' && s.start < end && s.end > start)
-      .map((s) => `Clashes with ${s.label} (${ctx.members.find((m) => m.id === id)?.name ?? ''})`))
+  const clashes = allDay ? [] : clashLines(plan, people, start, end, ctx.members, event.id)
   const nameList = people.map((id) => ctx.members.find((m) => m.id === id)?.name).filter(Boolean) as string[]
   const touches = clashes.length > 0
-    ? [...new Set(clashes)]
+    ? clashes
     : nameList.length > 0 && !allDay
       ? [`Nothing else then for ${nameList.length > 1 ? `${nameList.slice(0, -1).join(', ')} and ${nameList.at(-1)}` : nameList[0]}`]
       : []

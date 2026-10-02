@@ -9,9 +9,9 @@ import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
 import { driverChoices } from '../wall/people'
 import { pigmentIndexes } from '../wall/score'
-import { weekDays } from '../wall/week'
 import type { EditDraft, EditableEvent } from '../wall/editing'
-import { eventView, familyItems, meView, type FamilyItem, type PhoneMove } from './lens'
+import { agendaItems, eventView, familyItems, meView, type FamilyItem, type PhoneMove } from './lens'
+import { clashLines, placeFromLastTime, type PastPlace } from './drafts'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
@@ -127,6 +127,8 @@ export interface PhoneViewProps {
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
   comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; ideas?: GiftIdea[]; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
+  /** Past events with a place, newest first: "Happy Tails, like last time" on the form (step 5). */
+  pastPlaces?: PastPlace[]
   /** Groceries (canvas 33d): the shared list, live; the frame's own hook, or the fixture's. */
   groceries?: PhoneGroceriesData | null
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject: (id: string | null) => { data?: TodoProjectDetail | null } } | null
@@ -186,7 +188,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -516,7 +518,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     </button>
   ) : null
   // Today (canvas 32a/33a): one pager of days; the chips choose whose — Everyone first (Jake: "I first want to see big
-  // picture"), then Me, then the rest. Everyone leaves the chores out; a person's own day has them (33a/33b notes).
+  // picture"), then Me, then the rest. Everyone leaves chores and routines out; a person's own day has them (33a/33b notes).
   const todayScreenFor = (dayAt: number) => {
     const shownDay = shownDays[dayAt] ?? today
     const mine = Boolean(viewerId) && filter === viewerId
@@ -525,7 +527,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     const onTomorrow = Boolean(shownDay) && sameDay(shownDay!.date, new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
     const whenWord = onToday ? 'day' : onTomorrow ? 'tomorrow' : shownDay!.date.toLocaleDateString('en-US', { weekday: 'long' })
     const title = !filter ? 'Everyone' : mine ? `Your ${whenWord}` : person ? `${person.name}’s ${whenWord}` : 'Everyone'
-    const items = familyItems(shownDay, members, filter).filter((i) => filter !== null || i.kind !== 'chore')
+    // Everyone is the big picture: no chores and no routines — school, work, the standing runs (Jake, Oct 2: "I do see
+    // palm beach public and Bak for Liv which are all school routines"). A person's own day has them.
+    const items = familyItems(shownDay, members, filter).filter((i) => filter !== null || (i.kind !== 'chore' && !i.routine))
     const chipPeople = [
       { id: null as string | null, name: 'Everyone' },
       ...(viewer && lanePeople.some((m) => m.id === viewer.id) ? [{ id: viewer.id as string | null, name: 'Me' }] : []),
@@ -569,10 +573,26 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   }
 
   const phoneToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  // The week's tiles count events only, at home and away — not school, work or chores (Jake, Oct 2: "so the dots mean
-  // something"); the first out is the first trip that isn't a routine run.
-  const days = weekDays(week, members, [], now, checklist, { eventsOnly: true })
-  // Calendar (was Week): the days ahead; a day opens on Today. Coming up stays on the wall (UX review).
+  // Calendar (was Week; canvas 33c, Jake: "the day and under it event cards for that day … only the real events not
+  // routine or chores for the next say 7 days. if you want to go further then you select any day"). A day's name opens
+  // it on Today; a card opens the event.
+  const agendaCard = (i: FamilyItem) => (
+    <button key={i.id} type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)}
+      className="flex w-full items-stretch gap-[12px] rounded-[16px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] py-[12px] text-left text-wall-ink disabled:opacity-100">
+      <span className="flex w-[48px] shrink-0 flex-col pt-[1px] leading-tight">
+        <span className="text-phone-body font-bold">{i.time === 'All day' ? 'All' : i.time}</span>
+        <span className="text-phone-label font-semibold text-wall-ink-2">{i.time === 'All day' ? 'day' : i.at.getHours() < 12 ? 'AM' : 'PM'}</span>
+      </span>
+      <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
+      <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+        <span className="text-phone-body font-semibold leading-snug">{i.title}</span>
+        {i.sub && <span className="text-phone-detail text-wall-ink-2">{i.sub}</span>}
+      </span>
+      <span className="flex shrink-0 self-start">
+        {i.people.map((id, n) => <span key={id} className={n ? '-ml-[7px]' : ''}><Disc id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" /></span>)}
+      </span>
+    </button>
+  )
   const calendarScreen = (
     <div className="flex flex-col gap-[10px]">
       <div className="flex items-center justify-between gap-[12px]">
@@ -584,24 +604,23 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           {initial}
         </div>
       </div>
-      {days.map((d, i) => (
-        <button
-          key={d.key}
-          type="button"
-          onClick={() => { setFarDay(null); setDayIndex(i); setTab('today') }}
-          className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === focusIndex ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
-        >
-          <span className="flex w-[80px] flex-col">
-            <span className={`text-phone-label font-bold tracking-[0.16em] ${i === focusIndex ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{d.weekday.toUpperCase()}</span>
-            <span className="font-display text-phone-heading font-bold">{d.dayNumber}</span>
-          </span>
-          <span className="flex flex-1 flex-col gap-[6px]">
-            <span className="flex gap-[4px]">{d.memberIds.map((id) => <span key={id} className={`h-[12px] w-[12px] rounded-full ${pigmentStyleFor(pigments.get(id) ?? 0).solid}`} />)}</span>
-            <span className="text-phone-detail text-wall-ink-2">{d.firstOut}</span>
-          </span>
-          {d.toDo > 0 && <span className="text-phone-detail font-bold text-wall-brass-ink">{d.toDo} to do</span>}
-        </button>
-      ))}
+      <div className="-mt-[6px] text-phone-detail text-wall-ink-2">The next 7 days · events only</div>
+      {week.map((plan, i) => {
+        const items = agendaItems(plan, members)
+        const today = sameDay(plan.date, now)
+        const tomorrow = sameDay(plan.date, new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
+        const name = today ? 'Today' : tomorrow ? 'Tomorrow' : plan.date.toLocaleDateString('en-US', { weekday: 'long' })
+        return (
+          <section key={plan.date.toDateString()} aria-label={name} className="mt-[8px] flex flex-col gap-[8px]">
+            <button type="button" aria-label={`Open ${name}`} onClick={() => { setFarDay(null); setDayIndex(i); setTab('today') }}
+              className="flex min-h-[44px] items-baseline gap-[10px] border-0 bg-transparent p-0 text-left text-wall-ink">
+              <span className="font-display text-phone-heading font-bold">{name}</span>
+              <span className={`text-phone-label font-bold tracking-[0.14em] ${today ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{plan.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span>
+            </button>
+            {items.length ? items.map(agendaCard) : <div className="text-phone-detail text-wall-ink-2">Nothing planned</div>}
+          </section>
+        )
+      })}
     </div>
   )
   // To do (Jake's alone, 32e): his to-dos.
@@ -868,7 +887,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         </div>
       )}
       {scanOpen && scan && createEvent && (
-        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} applyPlan={applyPlan} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
+        <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} applyPlan={applyPlan} findSimilar={findSimilar} onClose={() => setScanOpen(false)}
+          clashesFor={(start, end, ids) => {
+            const day = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+            const plan = week.find((p) => sameDay(p.date, day)) ?? planDay?.(day, shownEvents as WallEvent[]) ?? null
+            return clashLines(plan, ids, start, end, members)
+          }} />
       )}
       {initialOpen && (
         <div className="phone-scrim absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setInitialOpen(false)}>
@@ -916,6 +940,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           now={now}
           onClose={() => setAdding(null)}
           createEvent={createEvent}
+          clashesFor={(draft) => {
+            const at = (min: number) => { const d = new Date(draft.day); d.setMinutes(min); return d }
+            const plan = week.find((p) => sameDay(p.date, draft.day)) ?? planDay?.(draft.day, shownEvents as WallEvent[]) ?? null
+            return clashLines(plan, draft.going, at(draft.startMin), at(draft.endMin), members)
+          }}
+          placeFromLastTime={(title) => placeFromLastTime(title, pastPlaces, now)}
         />
       )}
 

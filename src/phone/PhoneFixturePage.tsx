@@ -199,6 +199,7 @@ function PhoneFixturePageInner() {
                 editIdea: async (id, idea) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               todos={viewerId === 'jake-id' ? todos : null}
+              pastPlaces={[{ title: 'Milo grooming', location_name: 'Happy Tails', address: '12 Pet Way, Jupiter, FL', start_time: '2026-08-20T14:00:00Z' }]}
               groceries={{
                 items: groceryItems,
                 usual: ['Eggs', 'Coffee', 'Bananas', 'Bread'],
@@ -265,6 +266,7 @@ function PhoneFixturePageInner() {
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
               createEvent={async (args) => {
+                ;(window as unknown as { __createArgs?: unknown[] }).__createArgs = [...((window as unknown as { __createArgs?: unknown[] }).__createArgs ?? []), args]
                 const id = `added-${Date.now().toString(36)}-${String(args.title).length}`
                 setEvs((list) => [...list, {
                   id, title: String(args.title), event_type: String(args.event_type), all_day: Boolean(args.all_day),

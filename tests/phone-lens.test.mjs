@@ -124,3 +124,17 @@ test('Family shows an event with nobody on it, marked "No one yet" (not under an
   assert.deepEqual(item.people, [])
   assert.ok(!familyItems(plan, members, 'kelly').some((i) => i.id === 'portfolio'))
 })
+
+// Canvas 33c (Jake, Oct 2: "the calendar view should have the day and under it event cards for that day … only the real
+// events not routine or chores for the next say 7 days"): a day's appointments — no school or work, no chores or to-dos.
+import { agendaItems } from '../src/phone/lens.ts'
+
+test('Calendar: a day’s real events only — school, chores and to-dos stay off', () => {
+  const fri = agendaItems(friday, members)
+  const titles = fri.map((i) => i.title)
+  assert.ok(!titles.includes('Palm Beach Public'), 'school is a routine')
+  assert.ok(!titles.includes('Bak Middle School'), 'school is a routine')
+  assert.ok(!titles.includes('Pick up Photobook for Liv'), 'a to-do')
+  assert.ok(fri.every((i) => i.kind === 'event'))
+  assert.deepEqual(agendaItems(saturday, members).map((i) => i.id).includes('softball'), true)
+})

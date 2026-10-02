@@ -23,6 +23,8 @@ import { decisionsFor } from '../wall/decisions'
 import { casaTopic } from '../wall/casaTalk'
 import { useCasaTalk } from '../wall/useCasaTalk'
 import { usePhoneGroceries } from './usePhoneGroceries'
+import { useQuery } from '@tanstack/react-query'
+import type { PastPlace } from './drafts'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 /** What's already on the calendar on the scanned days: one read for the whole span, matched in the app. */
@@ -42,6 +44,16 @@ async function findSimilar(items: ScannedItem[]) {
     if (match) out[item.id] = match
   }
   return out
+}
+
+/** The last few months' events that had a place, newest first: "Happy Tails, like last time" on the form (step 5). */
+async function fetchPastPlaces(): Promise<PastPlace[]> {
+  const since = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await supabase.from('events').select('title, location_name, address, start_time')
+    .is('deleted_at', null).not('location_name', 'is', null).gte('start_time', since).lte('start_time', new Date().toISOString())
+    .order('start_time', { ascending: false }).limit(400)
+  if (error) throw error
+  return (data ?? []) as PastPlace[]
 }
 
 /** Any day (canvas 30b): the month's events while the month is open (the sheet is only mounted then). */
@@ -64,6 +76,7 @@ export default function PhoneFrame() {
   )
   const { data: contacts = [] } = useContactDirectory()
   const groceries = usePhoneGroceries()
+  const { data: pastPlaces = [] } = useQuery({ queryKey: ['phone-past-places'], queryFn: fetchPastPlaces, staleTime: 60 * 60_000 })
   const { data: places = [] } = useSavedPlaces()
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
   const isJake = members.find((m) => m.id === profile?.memberId)?.name === 'Jake'
@@ -117,6 +130,7 @@ export default function PhoneFrame() {
       contacts={contacts}
       places={places}
       groceries={groceries}
+      pastPlaces={pastPlaces}
       todos={isJake && todos.data ? { list: todos.data, act: todos.act, useProject: useTodoProject } : null}
     />
   )

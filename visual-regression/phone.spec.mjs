@@ -60,14 +60,24 @@ test('phone: hidden from the honoree — on Jake\'s phone, not on Kelly\'s', asy
 test('phone: Family lists everyone\'s day and filters by person; Week opens a day', async ({ page }) => {
   const phone = await open(page)
   await phone.getByRole('button', { name: 'Today' }).click()
-  await expect(phone.getByText('Bak Middle School')).toBeVisible()
+  // Everyone is the big picture: no school runs or other routines (Jake, Oct 2); a person's own day has them.
+  await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
+  await expect(phone.getByText('Bak Middle School')).toHaveCount(0)
+  await expect(phone.getByText('Palm Beach Public')).toHaveCount(0)
   await expect(phone).toHaveScreenshot('phone-family.png')
+  await phone.getByRole('button', { name: 'Liv', exact: true }).click()
+  await expect(phone.getByText('Bak Middle School')).toBeVisible()
   await phone.getByRole('button', { name: 'Emme', exact: true }).click()
   await expect(phone.getByText('Bak Middle School')).toHaveCount(0)
   await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
   await phone.getByRole('button', { name: 'Calendar' }).click()
+  // Calendar (33c): each day, then its real events as cards — school and to-dos stay off.
+  const today = phone.getByRole('region', { name: 'Today', exact: true })
+  await expect(today.getByText('Emme Practice Violin with Meredith')).toBeVisible()
+  await expect(today.getByText('Bak Middle School')).toHaveCount(0)
+  await expect(today.getByText('Pick up Photobook for Liv')).toHaveCount(0)
   await expect(phone).toHaveScreenshot('phone-week.png')
-  await phone.getByRole('button', { name: /TOMORROW/ }).click()
+  await phone.getByRole('button', { name: 'Open Tomorrow' }).click()
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
 })
 
@@ -199,10 +209,10 @@ test('phone: + → Scan it reads a flyer into ticked drafts; only what stays tic
   await sheet.getByRole('button', { name: 'Done' }).click()
   await expect(phone.getByRole('region', { name: 'Scan it' })).toHaveCount(0)
   await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: /^SUN/ }).click()
+  await phone.getByRole('button', { name: 'Open Sunday' }).click()
   await expect(phone.getByRole('button', { name: /PTO Fall Festival/ })).toBeVisible()
   await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: /^TUE/ }).click()
+  await phone.getByRole('button', { name: 'Open Tuesday' }).click()
   await expect(phone.getByText('Picture Day')).toHaveCount(0)
 })
 
@@ -230,7 +240,7 @@ test('phone: + → Say it asks the assistant; a change waits for a yes; the bug 
   await ask.getByRole('button', { name: 'Back', exact: true }).first().click()
   await ask.getByRole('button', { name: 'Back' }).first().click()
   await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: /TOMORROW/ }).click()
+  await phone.getByRole('button', { name: 'Open Tomorrow' }).click()
   await expect(phone.getByRole('button', { name: /Jaida watching the kids/ })).toBeVisible()
 })
 
@@ -256,11 +266,11 @@ test("phone: Giselle's lens — the kids' things and what she drives, not Jake's
   await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-giselle-family.png')
   await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: /^THU/ }).click()
+  await phone.getByRole('button', { name: 'Open Thursday' }).click()
   await expect(phone.getByText('Book club at the Harrisons')).toHaveCount(0)
   phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
   await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: /^THU/ }).click()
+  await phone.getByRole('button', { name: 'Open Thursday' }).click()
   await expect(phone.getByText('Book club at the Harrisons')).toBeVisible()
 })
 
@@ -500,6 +510,8 @@ test('phone: Scan it — what to wear and bring is packing for the field trip, o
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
   await sheet.getByRole('button', { name: /^Read/ }).click()
   await expect(sheet.getByText('PACK THE NIGHT BEFORE')).toBeVisible()
+  // Step 5: a scanned draft warns of a clash as Casa's card does (in school hours, here).
+  await expect(sheet.getByText(/^Clashes with .+ \(Owen\)$/).first()).toBeVisible()
   await expect(sheet.getByRole('button', { name: 'Skip Packed lunch' })).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-scan-trip.png')
   await sheet.getByRole('button', { name: 'Add 3' }).click()
@@ -650,14 +662,11 @@ test('phone: Today — the NOW line, what’s past folded and faded, the next li
   await page.evaluate(() => document.fonts.ready)
   await phone.getByRole('button', { name: /^Today/ }).first().click()
   await expect(phone.getByText('NOW · 10:45')).toBeVisible()
-  await expect(phone.getByRole('button', { name: /earlier/ })).toBeVisible()
   // The first thing after 10:45, with how long until it; the 10:25 to-do not done yet is late, not faded.
   await expect(phone.getByText(/^In \d+ hr/).first()).toBeVisible()
   await expect(phone.getByText('Late · To do')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-family-now.png')
 
-  await phone.getByRole('button', { name: /earlier/ }).click()
-  await expect(phone.getByRole('button', { name: /earlier/ })).toHaveCount(0)
 
   // Everyone leaves the chores out (Jake, 33a: "no chores shown for everyone on mobile"); a person's own day has them.
   await expect(phone.getByRole('checkbox', { name: 'Done: Take meds' })).toHaveCount(0)
@@ -874,4 +883,26 @@ test('phone: Casa — Return on the keyboard sends at once', async ({ page }) =>
   // iOS can put the line break straight into the box: that sends too.
   await box.fill('And Sunday?\n')
   await expect.poll(() => page.evaluate(() => (window.__casaSent ?? []).length)).toBe(2)
+})
+
+// Step 5, smarter drafts (the UX review's ten moments): the form warns of a clash as Casa's card does, offers the place
+// from last time, and an outing asks who's driving.
+test('phone: the form — the place from last time, a clash warned, who’s driving', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Casa', exact: true }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Use the form' }).click()
+  const form = phone.getByRole('region', { name: /on the phone/ })
+  await form.getByPlaceholder('What is it?').fill('Pet grooming')
+  await form.getByRole('button', { name: 'Happy Tails, like last time' }).click()
+  await expect(form.getByPlaceholder(/Home, a place/)).toHaveValue('Happy Tails')
+  await expect(form.getByText('Nobody’s on it yet — who’s going?')).toBeVisible()
+  await form.getByRole('button', { name: 'Liv', exact: true }).click()
+  await expect(form.getByText('Clashes with Bak Middle School (Liv)')).toBeVisible()
+  await form.getByRole('button', { name: 'Jake', exact: true }).last().click()
+  await expect(phone).toHaveScreenshot('phone-form-smart.png')
+  await form.getByRole('button', { name: 'Add it' }).click()
+  const args = await page.evaluate(() => window.__createArgs.at(-1))
+  expect(args.title).toBe('Pet grooming')
+  expect(args.location).toBe('12 Pet Way, Jupiter, FL')
+  expect(args.driver_name).toBe('Jake')
 })

@@ -349,5 +349,7 @@ export function createArgs(draft: EditDraft, kind: 'event' | 'reminder', members
     event_type: kind,
     ...(location ? { location } : {}),
     members: draft.going.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean),
+    // Who's driving, picked on the form (the phone's smarter drafts): saved on the trip, as Casa's card does.
+    ...(draft.driverId && members.find((m) => m.id === draft.driverId) ? { driver_name: members.find((m) => m.id === draft.driverId)!.name } : {}),
   }
 }

@@ -20,6 +20,10 @@ const fmt = (minutes: number) => {
 }
 
 export interface PhoneEventSheetProps {
+  /** Adding (step 5, smarter drafts): what clashes for whoever's going, said as Casa's card says it. */
+  clashesFor?: (draft: EditDraft) => string[]
+  /** Adding: the place the last event like this one was at ("Happy Tails, like last time"). */
+  placeFromLastTime?: (title: string) => { name: string; address: string | null } | null
   view: EventView
   members: WallMember[]
   pigments: Map<string, number>
@@ -47,7 +51,7 @@ export interface PhoneEventSheetProps {
 
 const noItems = (): WallChecklistItem[] => []
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, clashesFor, placeFromLastTime }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -80,6 +84,11 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
     <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-display font-bold text-wall-on-pigment ${size} ${pigmentStyleFor(pigments.get(id) ?? 0).solid}`}>{nameOf(id).charAt(0)}</span>
   )
   const changes = draftChanges(event, draft, members)
+  // Smarter drafts (step 5): a clash warns but never blocks; the place from last time is one tap; an outing asks who drives.
+  const clashes = isNew && kind === 'event' && !draft.allDay && clashesFor ? clashesFor(draft) : []
+  const lastPlace = isNew && !draft.place.name.trim() && draft.title.trim().length >= 3 && placeFromLastTime ? placeFromLastTime(draft.title) : null
+  const outing = Boolean(draft.place.name.trim()) && !/^home$/i.test(draft.place.name.trim())
+  const drivers = members.filter((m) => m.can_drive)
   const run = async (work: () => Promise<void>, failed: string, stayOpen = false) => {
     setBusy(true)
     setError(null)
@@ -254,6 +263,12 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                 onChange={(e) => setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null }))}
                 className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
               />
+              {lastPlace && (
+                <button type="button" onClick={() => setDraft((d) => setPlace(d, { name: lastPlace.name, address: lastPlace.address ?? '', driveMinutes: null }))}
+                  className="flex min-h-[44px] items-center gap-[6px] self-start rounded-full border border-solid border-wall-brass bg-wall-brass/10 px-[14px] text-phone-detail font-semibold text-wall-brass-ink">
+                  <MapPin size={15} aria-hidden="true" /> {lastPlace.name}, like last time
+                </button>
+              )}
             </label>
           )}
           <div className="flex flex-col gap-[6px]">
@@ -288,6 +303,26 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               })}
             </div>
           </div>
+          {isNew && kind === 'event' && draft.going.length === 0 && draft.title.trim() && (
+            <div className="text-phone-detail font-semibold text-wall-brass-ink">Nobody’s on it yet — who’s going?</div>
+          )}
+          {clashes.map((c) => <div key={c} role="status" className="text-phone-detail font-semibold text-wall-rust">{c}</div>)}
+          {isNew && kind === 'event' && outing && drivers.length > 0 && (
+            <div className="flex flex-col gap-[8px]">
+              <span className={label}>WHO’S DRIVING?</span>
+              <div className="flex flex-wrap gap-[8px]">
+                {drivers.map((m) => {
+                  const on = draft.driverId === m.id
+                  return (
+                    <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => ({ ...d, driverId: on ? null : m.id }))}
+                      className={`flex h-[44px] items-center gap-[6px] rounded-full pl-[5px] pr-[14px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-transparent'}`}>
+                      {disc(m.id, 'h-[30px] w-[30px] text-phone-detail')}{m.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
           <div className="flex gap-[8px]">
             {isNew ? (
