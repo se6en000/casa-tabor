@@ -2197,13 +2197,14 @@ test('wall: NEXT UP — the day’s chores and timed to-dos first in the rail, d
   expect(await page.evaluate(() => window.__choreTicks)).toEqual(['+chore:meds:2026-09-25'])
 })
 
-test('wall: STILL TONIGHT — from 7 PM the wall is tomorrow’s, and what’s left of today sits in the header with who’s still out', async ({ page }) => {
+test('wall: STILL TONIGHT — from 7 PM the wall is tomorrow’s, and what’s left of today is a small column beside tomorrow’s date (28c)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T19:40:00&chores=1&gym=1')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
   const card = wall.getByRole('region', { name: 'Still tonight' })
-  await expect(card.getByText('STILL TONIGHT · FRIDAY')).toBeVisible()
-  await expect(card.getByText('2 to do · 1 out')).toBeVisible()
+  await expect(card.getByText('STILL TONIGHT')).toBeVisible()
+  // Tomorrow keeps the header (canvas 28c): its date beside the column.
+  await expect(wall.getByRole('banner').getByText('Saturday, September 26')).toBeVisible()
   await expect(card.getByRole('checkbox', { name: '7:00 Liv: Give Liv her meds, 40 min late' })).toBeVisible()
   await expect(card.getByRole('checkbox', { name: '8:00: Trash out to the street, in 20 min' })).toBeVisible()
   await expect(card.getByRole('button', { name: 'Kelly at the gym, until 9:30' })).toBeVisible()

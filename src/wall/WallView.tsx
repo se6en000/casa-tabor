@@ -42,7 +42,7 @@ import type { CasaTalkProps } from './useCasaTalk'
 import WallCasaTalk, { CasaCalling } from './WallCasaTalk'
 import type { ScoreInteraction } from './WallScore'
 import { comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, type NextUpItem } from './nextUp'
-import { NextUpSection, StillTonight } from './WallNextUp'
+import { NextUpSection, StillTonight, TONIGHT_ROOM } from './WallNextUp'
 
 export interface WallViewProps {
   now: Date
@@ -505,10 +505,10 @@ export default function WallView(props: WallViewProps) {
   } : null
   // Before midnight the evening looks at tomorrow; what's left of today, and who's still out, sit in its header.
   const tonightJobs = evening && tonightByClock(now) ? stillTonight(jobs, outTonight(shownToday, members, now)) : []
-  const tonightFit = fitNextUp(tonightJobs, 2)
+  const tonightShown = tonightJobs.slice(0, TONIGHT_ROOM)
   const leftTonight = tonightJobs.filter((item) => item.kind !== 'out').length
   const stillTonightCard = tonightJobs.length > 0
-    ? <StillTonight items={tonightFit.shown} more={tonightFit.more} day={now.toLocaleDateString('en-US', { weekday: 'long' })} {...rowProps} />
+    ? <StillTonight items={tonightShown} more={tonightJobs.length - tonightShown.length} {...rowProps} />
     : null
 
   const tomorrowDate = tomorrow?.date ?? null
@@ -529,7 +529,7 @@ export default function WallView(props: WallViewProps) {
   // The surface of To do (board 09a): tonight's nudge on the evening face, one small job in a quiet stretch.
   const nudgeItem = todos ? tonightNudge(todos.list, now) : null
   const nudge = nudgeItem && !(nudgeLater?.id === nudgeItem.id && Date.now() < nudgeLater.until) ? nudgeItem : null
-  const tonight = stillTonightCard ?? (nudge && todos ? (
+  const tonight = stillTonightCard ? null : (nudge && todos ? (
     <WallNudge
       item={nudge}
       onDone={() => void todos.act({ action: 'done', id: nudge.id })}
@@ -607,6 +607,7 @@ export default function WallView(props: WallViewProps) {
         week={weekStrip}
         onBack={picked ? () => setDayPreview(null) : undefined}
         tonight={evening && !picked ? tonight : null}
+        stillTonight={evening && !picked ? stillTonightCard : null}
       />
     )
   } else if (shown.posture === 'calm') {

@@ -5,10 +5,11 @@ import { pigmentStyleFor } from './lanes'
 import { SectionHeading } from './WallPrep'
 import type { NextUpItem } from './nextUp'
 
-// The day's small timed jobs (canvas 27a, 27c): NEXT UP, the first slot of the full day's rail, and STILL TONIGHT,
-// the evening header's card while the wall looks at tomorrow. One row for both: a tick, the time, whose it is, what.
-// Late is rust, due within half an hour is brass, later is plain; a tick crosses it out for a moment, and a second
-// tap in that moment takes it back.
+// The day's small timed jobs (canvas 27a, 28c): NEXT UP, the first slot of the full day's rail, and STILL TONIGHT,
+// a small column beside tomorrow's date in the evening header. One quiet line for both (Jake, Oct 1: the brass card
+// was loud "compared to the rest of the page"): a tick, the time, whose it is, what — no fills; late shows only in
+// the rust time and words, due within half an hour in a brass "in 20 min". A tick crosses it out for a moment, and a
+// second tap in that moment takes it back.
 
 export interface NextUpRowsProps {
   items: NextUpItem[]
@@ -21,36 +22,35 @@ export interface NextUpRowsProps {
   onOpen?: (id: string) => void
 }
 
-const WASH = { late: 'bg-wall-rust/14', soon: 'bg-wall-brass/14', later: '' } as const
-const TIME = { late: 'text-wall-rust', soon: 'text-wall-brass-ink', later: 'text-wall-ink' } as const
-const BOX = { late: 'border-wall-rust', soon: 'border-wall-brass', later: 'border-wall-ink-2' } as const
+const TIME = { late: 'text-wall-rust', soon: 'text-wall-ink', later: 'text-wall-ink' } as const
+const BOX = { late: 'border-wall-rust', soon: 'border-wall-ink-2', later: 'border-wall-ink-2' } as const
 const TAG = { late: 'text-wall-rust', soon: 'text-wall-brass-ink', later: 'text-wall-ink-2' } as const
 
-function Row({ item, members, pigmentOf, ticked, onTick, onOpen, tall }: Omit<NextUpRowsProps, 'items' | 'ticked'> & { item: NextUpItem; ticked: boolean; tall: boolean }) {
+function Row({ item, members, pigmentOf, ticked, onTick, onOpen, small }: Omit<NextUpRowsProps, 'items' | 'ticked'> & { item: NextUpItem; ticked: boolean; small: boolean }) {
   const member = item.whoId ? members.find((m) => m.id === item.whoId) ?? null : null
   const out = item.kind === 'out'
   const state = ticked ? 'later' : item.state
   const body = (
     <>
       {out
-        ? <MapPin aria-hidden="true" size={26} strokeWidth={1.8} className="shrink-0 text-wall-ink-2" />
+        ? <MapPin aria-hidden="true" size={22} strokeWidth={1.6} className="w-[24px] shrink-0 text-wall-ink-2" />
         : (
-          <span aria-hidden="true" className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[7px] border-2 border-solid ${ticked ? 'border-wall-ink bg-wall-ink text-wall-ground' : BOX[state]}`}>
-            {ticked && <Check size={20} strokeWidth={3} />}
+          <span aria-hidden="true" className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'border-wall-ink bg-wall-ink text-wall-ground' : BOX[state]}`}>
+            {ticked && <Check size={18} strokeWidth={3} />}
           </span>
         )}
-      <span className={`min-w-[58px] shrink-0 whitespace-nowrap text-right text-wall-heading font-bold tabular-nums lining-nums ${out || ticked ? 'text-wall-ink-2' : TIME[state]}`}>
+      <span className={`min-w-[54px] shrink-0 whitespace-nowrap text-right ${small ? 'text-wall-body' : 'text-wall-heading'} font-semibold tabular-nums lining-nums ${out || ticked ? 'text-wall-ink-2' : TIME[state]}`}>
         {formatWallClock(item.at).time}
         {item.meridiem && <span className="ml-[4px] text-wall-label font-semibold">{item.meridiem}</span>}
       </span>
       {member
-        ? <span aria-hidden="true" className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
-        : <span aria-hidden="true" className="w-[30px] shrink-0" />}
-      <span className={`min-w-0 flex-1 truncate text-left ${tall ? 'text-wall-heading' : 'text-wall-body'} ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>
-      {item.tag && !ticked && <span className={`shrink-0 whitespace-nowrap text-wall-detail font-bold ${out ? 'font-normal' : ''} ${TAG[state]}`}>{item.tag}</span>}
+        ? <span aria-hidden="true" className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
+        : <span aria-hidden="true" className="w-[28px] shrink-0" />}
+      <span className={`min-w-0 flex-1 truncate text-left text-wall-body ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>
+      {item.tag && !ticked && <span className={`shrink-0 whitespace-nowrap text-wall-detail ${TAG[state]}`}>{item.tag}</span>}
     </>
   )
-  const shape = `flex ${tall ? 'h-[54px]' : 'h-[48px]'} min-w-0 items-center gap-[14px] rounded-[14px] border-0 pl-[14px] pr-[18px] font-body transition-opacity duration-300 ${ticked ? 'bg-transparent opacity-60' : WASH[state] || 'bg-transparent'}`
+  const shape = `flex ${small ? 'h-[44px]' : 'h-[48px]'} min-w-0 items-center gap-[14px] border-0 bg-transparent p-0 font-body transition-opacity duration-300 ${ticked ? 'opacity-60' : ''}`
   if (out) {
     return onOpen
       ? <button type="button" aria-label={`${item.title}, ${item.tag}`} onClick={(e) => { e.stopPropagation(); onOpen(item.id) }} className={shape}>{body}</button>
@@ -71,10 +71,10 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, tall }: Omit<Ne
 }
 
 /** Two rows a column, read down then across. */
-function Rows({ items, columns, tall, ...rest }: NextUpRowsProps & { columns: number; tall: boolean }) {
+function Rows({ items, columns, ...rest }: NextUpRowsProps & { columns: number }) {
   return (
-    <div className={`grid grid-flow-col ${items.length > 1 ? 'grid-rows-2' : 'grid-rows-1'} ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'} ${tall ? 'gap-x-[12px] gap-y-[6px]' : 'gap-x-[28px] gap-y-[4px]'}`}>
-      {items.map((item) => <Row key={item.key} item={item} tall={tall} {...rest} ticked={rest.ticked.has(item.key)} />)}
+    <div className={`grid grid-flow-col ${items.length > 1 ? 'grid-rows-2' : 'grid-rows-1'} ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-x-[48px] gap-y-[2px]`}>
+      {items.map((item) => <Row key={item.key} item={item} small={false} {...rest} ticked={rest.ticked.has(item.key)} />)}
     </div>
   )
 }
@@ -100,26 +100,28 @@ export function NextUpSection({ items, more, columns, onSeeAll, ...rest }: NextU
       </SectionHeading>
       <div className="border-0 border-t border-solid border-wall-rule pt-[8px]">
         {/* Two or fewer read as one column, at about one box's width. */}
-        <div className={`-mx-[14px] ${items.length > 2 ? '' : 'max-w-[600px]'}`}>
-          <Rows items={items} columns={items.length > 2 ? columns : 1} tall={false} {...rest} />
+        <div className={items.length > 2 ? '' : 'max-w-[560px]'}>
+          <Rows items={items} columns={items.length > 2 ? columns : 1} {...rest} />
         </div>
       </div>
     </section>
   )
 }
 
-/** STILL TONIGHT (canvas 27c): the evening header's card, what's left of today while the wall looks at tomorrow. */
-export function StillTonight({ items, more, day, ...rest }: NextUpRowsProps & { more: number; day: string }) {
-  const toDo = items.filter((i) => i.kind !== 'out' && !rest.ticked.has(i.key)).length + more
-  const out = items.filter((i) => i.kind === 'out').length
-  const summary = [toDo ? `${toDo} to do` : null, out ? `${out} out` : null, more ? `+${more} later` : null].filter(Boolean).join(' · ')
+/** How many lines STILL TONIGHT has room for beside tomorrow's date. */
+export const TONIGHT_ROOM = 3
+
+/** STILL TONIGHT (canvas 28c): a small column beside tomorrow's date — what's left of today, and who's still out. */
+export function StillTonight({ items, more, ...rest }: NextUpRowsProps & { more: number }) {
   return (
-    <section aria-label="Still tonight" className="flex min-w-0 flex-1 flex-col justify-center gap-[8px] rounded-[24px] border border-solid border-wall-brass/50 bg-wall-brass/10 px-[18px] py-[14px]">
-      <div className="flex items-baseline justify-between gap-[16px] px-[14px]">
-        <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">STILL TONIGHT · {day.toUpperCase()}</span>
-        <span className="truncate text-wall-detail text-wall-ink-2">{summary}</span>
+    <section aria-label="Still tonight" className="flex w-[440px] min-w-[320px] shrink flex-col justify-center">
+      <div className="flex items-baseline justify-between gap-[16px]">
+        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-ink-2">STILL TONIGHT</span>
+        {more > 0 && <span className="text-wall-detail text-wall-ink-2">+{more} later</span>}
       </div>
-      <Rows items={items} columns={items.length > 2 ? 2 : 1} tall {...rest} />
+      <div className="flex flex-col">
+        {items.map((item) => <Row key={item.key} item={item} small {...rest} ticked={rest.ticked.has(item.key)} />)}
+      </div>
     </section>
   )
 }

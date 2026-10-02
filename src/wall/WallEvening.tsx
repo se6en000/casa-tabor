@@ -39,6 +39,8 @@ export interface WallEveningProps {
   onBack?: () => void
   /** Tonight's nudge (P3.22, board 09a): takes the header's right side from the big date. */
   tonight?: ReactNode
+  /** STILL TONIGHT (canvas 28c): what's left of today, a small column beside tomorrow's date. */
+  stillTonight?: ReactNode
 }
 
 /**
@@ -46,7 +48,7 @@ export interface WallEveningProps {
  * deciding, what to get and pack, and the first departure. In the evening it is
  * tomorrow, dark; by day it is whichever day was tapped in the week strip.
  */
-export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack, tonight = null }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack, tonight = null, stillTonight = null }: WallEveningProps) {
   // A day that hasn't started reads as plans ("Leaves at 11:56"): its Score is drawn from its start.
   const asOf = useMemo(() => {
     if (!plan || plan.date.toDateString() === now.toDateString()) return now
@@ -78,11 +80,18 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
           <div className="flex min-w-0 flex-1 items-center pr-[220px]">{tonight}</div>
         ) : (
         <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
-          <div className="flex min-w-0 flex-col gap-[8px]">
+          <div className={`flex min-w-0 flex-col gap-[8px] ${stillTonight ? 'shrink-0' : ''}`}>
             <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">{heading}</div>
-            <div className="font-display text-wall-move font-semibold">{plan ? formatWallDate(plan.date) : ''}</div>
+            <div className={`font-display text-wall-move font-semibold ${stillTonight ? 'whitespace-nowrap' : ''}`}>{plan ? formatWallDate(plan.date) : ''}</div>
             {forecast && <div className="truncate text-wall-body text-wall-ink-2">{forecast}</div>}
           </div>
+          {stillTonight && (
+            // Clear of the +, mic and MT buttons in the top right.
+            <div className="mr-[220px] flex min-w-0 shrink items-center gap-[40px] self-stretch py-[14px]">
+              <div className="w-px self-stretch bg-wall-rule" />
+              {stillTonight}
+            </div>
+          )}
           {onBack && (
             <button
               type="button"
