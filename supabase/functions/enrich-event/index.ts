@@ -5,6 +5,8 @@ import {
 } from '../_shared/enrichment-impact.mjs'
 import {
   findSavedEventPlace,
+  findUsualPlace,
+  isGenericPlace,
   selectConfidentEventPlace,
 } from '../_shared/event-place-resolution.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
@@ -21,7 +23,7 @@ interface ResolvedDestination {
   address: string
   lat: number | null
   lng: number | null
-  source: 'saved_place' | 'google_places'
+  source: 'saved_place' | 'google_places' | 'usual_place'
 }
 
 const CORS = {
@@ -132,6 +134,12 @@ Deno.serve(async (req) => {
         lng: null,
         source: 'saved_place',
       }
+    } else if (isGenericPlace(destinationQuery)) {
+      // "Gym", "the dentist": where this person goes for it, from their own calendar — never a business guessed on
+      // Google (Kelly, Oct 2: "Gym" became IRON RELIGION GYM in Orlando).
+      const memberIds = ((event.event_members ?? []) as Array<{ family_members?: { id?: string } | null }>).map((m) => m.family_members?.id).filter(Boolean) as string[]
+      const usual = await findUsualPlace(sb, destinationQuery, memberIds)
+      if (usual) resolvedDestination = { name: usual.name, address: usual.address, lat: null, lng: null, source: 'usual_place' }
     } else {
       const cityBias = homeConfig?.state || undefined
       const placeRes = await sb.functions.invoke('place-search', {

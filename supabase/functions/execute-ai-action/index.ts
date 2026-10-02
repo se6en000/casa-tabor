@@ -14,6 +14,7 @@ import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { verifyPlaceAddress } from '../_shared/verify-place-address.mjs'
 import { resolveFamilyMemberByName } from '../_shared/family-identity.mjs'
 import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
+import { findUsualPlace, isGenericPlace } from '../_shared/event-place-resolution.mjs'
 import { ENRICHMENT_FIELDS } from '../_shared/enrichment-impact.mjs'
 import {
   buildRecurringDetailMutation,
@@ -845,6 +846,16 @@ Deno.serve(async (req) => {
           .map((name: string) => resolveFamilyMemberByName(family, name)?.id)
           .filter(Boolean) as string[]
         memberRows = memberIds.map((id, i) => ({ family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
+      }
+
+      // "The gym", "the dentist" (Kelly, Oct 2: saved as a place called "Gym", then guessed as a gym in Orlando): no
+      // saved place has that name, so it's where these people last went for it, from their own calendar.
+      if (normalizedLocation && !resolvedAddress && isGenericPlace(normalizedLocation)) {
+        const usual = await findUsualPlace(sb, normalizedLocation, memberRows.map((r) => r.family_member_id))
+        if (usual) {
+          resolvedLocationName = usual.name
+          resolvedAddress = usual.address
+        }
       }
 
       // Event + attendees in ONE atomic round trip (public.upsert_event_bundle):

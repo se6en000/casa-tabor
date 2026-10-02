@@ -2,7 +2,7 @@ import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sparkles, Sun, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Car, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sparkles, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -10,7 +10,7 @@ import type { WallChecklistItem } from '../wall/packing'
 import { driverChoices } from '../wall/people'
 import { pigmentIndexes } from '../wall/score'
 import type { EditDraft, EditableEvent } from '../wall/editing'
-import { agendaItems, eventView, familyItems, meView, type FamilyItem, type PhoneMove } from './lens'
+import { agendaItems, awayLines, eventView, familyItems, meView, type FamilyItem, type PhoneMove } from './lens'
 import { clashLines, placeFromLastTime, type PastPlace } from './drafts'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
@@ -328,8 +328,14 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               with {me.next.travelerIds.filter((id) => id !== viewerId).map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[22px] w-[22px] text-phone-label" />)}
             </div>
           )}
+          {/* The way to the airport is an Uber (Jake, Oct 2): order it here, the airport filled in. */}
+          {me.next.uber ? (
+            <a href={me.next.uber} target="_blank" rel="noreferrer" className="mt-[8px] flex h-[48px] items-center justify-center gap-[8px] rounded-full bg-wall-on-pigment text-phone-body font-bold text-wall-ink no-underline">
+              <Car size={18} aria-hidden="true" /> Order an Uber
+            </a>
+          ) : null}
           {/* Directions first: it's what you reach for (Jake, 2026-09-26). */}
-          {me.next.address && (
+          {me.next.address && !me.next.uber && (
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(me.next.address)}`}
               target="_blank"
@@ -531,7 +537,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     const title = !filter ? 'Everyone' : mine ? `Your ${whenWord}` : person ? `${person.name}’s ${whenWord}` : 'Everyone'
     // Everyone is the big picture: no chores and no routines — school, work, the standing runs (Jake, Oct 2: "I do see
     // palm beach public and Bak for Liv which are all school routines"). A person's own day has them.
-    const items = familyItems(shownDay, members, filter, shownEvents as WallEvent[]).filter((i) => filter !== null || (i.kind !== 'chore' && !i.routine))
+    const items = familyItems(shownDay, members, filter, shownEvents as WallEvent[]).filter((i) => filter !== null || (i.kind !== 'chore' && !i.routine && !i.stay))
+    // Someone away (Jake, Oct 2): one quiet line on Everyone in place of a card each day.
+    const away = filter === null ? awayLines(shownDay, shownDays, members, now) : []
     const chipPeople = [
       { id: null as string | null, name: 'Everyone' },
       ...(viewer && lanePeople.some((m) => m.id === viewer.id) ? [{ id: viewer.id as string | null, name: 'Me' }] : []),
@@ -567,6 +575,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {mine ? meScreenFor(dayAt, true) : (
         <>
           {!filter && talkTopic && <PhoneCasaTalk topic={talkTopic} onAnswer={answerTalk} onTalk={assistant ? () => { setAskOpening(null); setAskOpen(true) } : undefined} />}
+          {away.map((l) => (
+            <div key={l.key} className="flex items-center gap-[10px] rounded-[14px] bg-phone-card px-[14px] py-[10px] text-phone-detail text-wall-ink-2">
+              <Plane size={16} aria-hidden="true" className="shrink-0 text-wall-brass-ink" />
+              <span className="min-w-0 flex-1">{l.text}</span>
+            </div>
+          ))}
           {dayList(shownDay, items)}
         </>
       )}

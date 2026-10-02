@@ -938,3 +938,16 @@ test('phone: Groceries — hold an item and let go on the right aisle; or tap on
   await expect(list.getByRole('heading', { name: 'OTHER' })).toBeVisible()
   await expect(list.getByRole('button', { name: 'Bananas' })).toHaveAttribute('aria-pressed', 'false')
 })
+
+// Jake, Oct 2: someone away is one quiet line on Everyone; the day you leave, the card orders the Uber.
+test('phone: a trip — "Jake away in Dallas · back tomorrow" on Everyone; Order an Uber on the day out', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-10-07T11:05:00&viewer=jake-id&trip=1')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await expect(phone.getByText('Jake away in Dallas · back tomorrow 7:19 PM').first()).toBeVisible()
+  await expect(phone.getByText('Jake in Dallas', { exact: true })).toHaveCount(0)
+  await expect(phone.getByText('Flight 1419 → DFW')).toBeVisible()
+  await phone.getByRole('button', { name: 'Me', exact: true }).click()
+  await expect(phone.getByRole('link', { name: 'Order an Uber' })).toHaveAttribute('href', /^https:\/\/m\.uber\.com\/ul\/\?action=setPickup/)
+  await expect(phone.getByRole('button', { name: 'All day Jake in Dallas' })).toBeVisible() // your own day keeps the stay
+})

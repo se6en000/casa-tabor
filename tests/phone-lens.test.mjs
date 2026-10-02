@@ -161,3 +161,25 @@ test('a trip on the phone: the flights and the stay, not the airport wait or the
   assert.ok(!day2.some((i) => /^Away|^Off the plane/.test(i.title)), day2.map((i) => i.title).join(' | '))
   assert.equal(day2.find((i) => i.id === 'f2640').sub, 'Lands 6:34 · Uber home')
 })
+
+// Jake, Oct 2: on Everyone, one quiet line for someone away instead of a card each day; and an Uber button on the day
+// you leave when that's your way to the airport.
+import { awayLines } from '../src/phone/lens.ts'
+
+test('away: one line — who, where, and when they’re back home', () => {
+  const travel = buildTrips(tripEvents, tripMembers, { 'jake-id': { airportMinutes: 60, way: 'uber' } })
+  const days = [7, 8, 9].map((d) => buildDayPlan({ date: new Date(2026, 9, d), members: tripMembers, routines: tripRoutines, events: tripEvents, travel }))
+  assert.deepEqual(awayLines(days[0], days, tripMembers, new Date(2026, 9, 7, 11, 5)).map((l) => l.text), ['Jake away in Dallas · back tomorrow 7:19 PM'])
+  assert.deepEqual(awayLines(days[1], days, tripMembers, new Date(2026, 9, 8, 9, 0)).map((l) => l.text), ['Jake away in Dallas · back today 7:19 PM'])
+  assert.deepEqual(awayLines(days[2], days, tripMembers, new Date(2026, 9, 9, 9, 0)), [])
+})
+
+test('the day you leave: the move to the airport offers an Uber when that’s the way there', () => {
+  const travel = buildTrips(tripEvents, tripMembers, { 'jake-id': { airportMinutes: 60, way: 'uber' } })
+  const plan = buildDayPlan({ date: new Date(2026, 9, 7), members: tripMembers, routines: tripRoutines, events: tripEvents, travel })
+  const me = meView({ viewerId: 'jake-id', plan, members: tripMembers, events: tripEvents, checklist: [], now: new Date(2026, 9, 7, 11, 5) })
+  assert.match(me.next.uber, /^https:\/\/m\.uber\.com\/ul\/\?action=setPickup&pickup=my_location&dropoff%5Bformatted_address%5D=DJT/)
+  // A school run has none.
+  const fri = meView({ viewerId: 'jake-id', plan: friday, members, events, checklist: [], now: at(25, 7, 12) })
+  assert.equal(fri.next.uber, null)
+})

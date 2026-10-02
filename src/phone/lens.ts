@@ -25,6 +25,8 @@ export interface PhoneMove {
   address: string
   /** The calendar item behind it (for Edit); null for a school run. */
   eventId: string | null
+  /** The way to the airport is an Uber (Jake, Oct 2): a link that opens Uber with the airport filled in; null otherwise. */
+  uber: string | null
 }
 
 export interface MeView {
@@ -71,7 +73,13 @@ function move(trip: Trip, now: Date): PhoneMove {
     summary: trip.onward ? `${trip.title}, then on to ${trip.onward.place}` : trip.title,
     travelerIds: trip.travelerIds,
     departed: Boolean(trip.departedAt),
+    uber: trip.travel?.way === 'uber' && trip.travel.direction === 'out' && trip.travel.flight?.from ? uberLink(`${trip.travel.flight.from} airport`, trip.travel.flight.from) : null,
   }
+}
+
+/** Uber's own link: the app opens (or the web) with the drop-off filled in, from where you are. */
+export function uberLink(address: string, nickname: string): string {
+  return `https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff%5Bformatted_address%5D=${encodeURIComponent(address)}&dropoff%5Bnickname%5D=${encodeURIComponent(nickname)}`
 }
 
 export function meView(input: { viewerId: string; plan: DayPlan | null; members: WallMember[]; events: WallEvent[]; checklist: WallChecklistItem[]; now: Date }): MeView {
@@ -124,6 +132,8 @@ export interface FamilyItem {
   kind: 'event' | 'chore' | 'todo'
   /** From a routine (school, work, a standing run): every week's, so Calendar leaves it out. */
   routine?: boolean
+  /** A trip's stay (the all-day line): Everyone shows it as one quiet "away" line instead. */
+  stay?: boolean
 }
 
 /**
@@ -192,7 +202,7 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
     ? [events.find((e) => e.id === a.sourceId)?.location_name ?? '', `Day ${a.trip.dayIndex} of ${a.trip.dayCount}`].filter(Boolean).join(' · ')
     : ''
   const allDay: FamilyItem[] = plan.allDay.map((a) => ({
-    id: a.sourceId, time: 'All day', at: plan.date, end: new Date(plan.date.getFullYear(), plan.date.getMonth(), plan.date.getDate() + 1), kind: 'event' as const, title: a.title, sub: stayOf(a), people: order(a.memberIds),
+    id: a.sourceId, time: 'All day', at: plan.date, end: new Date(plan.date.getFullYear(), plan.date.getMonth(), plan.date.getDate() + 1), kind: 'event' as const, title: a.title, sub: stayOf(a), people: order(a.memberIds), ...(a.trip ? { stay: true } : {}),
   }))
   const timed = [...items.values()].sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
   const mine = (i: FamilyItem) => !filterId || i.people.includes(filterId)
@@ -253,4 +263,30 @@ export function eventView(input: { eventId: string; plan: DayPlan | null; events
 /** Calendar (canvas 33c): a day's real appointments — no school or work, no chores or to-dos. */
 export function agendaItems(plan: DayPlan | null, members: WallMember[], events: WallEvent[] = []): FamilyItem[] {
   return familyItems(plan, members, null, events).filter((i) => i.kind === 'event' && !i.routine)
+}
+
+/**
+ * Someone away, as one quiet line on Everyone (Jake, Oct 2) in place of a card each day: "Jake away in Dallas · back
+ * tomorrow 7:19 PM" — back is when the trip home gets them home, from the days ahead that are loaded.
+ */
+export function awayLines(plan: DayPlan | null, days: DayPlan[], members: WallMember[], now: Date): Array<{ key: string; text: string; memberIds: string[] }> {
+  if (!plan) return []
+  const lines: Array<{ key: string; text: string; memberIds: string[] }> = []
+  for (const a of plan.allDay) {
+    if (!a.trip) continue
+    const who = a.memberIds
+    const names = who.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean) as string[]
+    const label = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] ?? 'Someone'
+    const home = days
+      .filter((d) => d.date.getTime() >= plan.date.getTime())
+      .flatMap((d) => d.trips)
+      .find((t) => t.travel?.direction === 'home' && t.travel.city === a.trip!.city && t.travelerIds.some((id) => who.includes(id)))
+    const back = home ? home.homeAt ?? home.arriveAt : null
+    const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    const today = day(now)
+    const when = !back ? '' : day(back) === today ? 'today' : day(back) === today + 86_400_000 ? 'tomorrow' : back.toLocaleDateString('en-US', { weekday: 'short' })
+    const text = back ? `${label} away in ${a.trip.city} · back ${when} ${clockTime(back)} ${back.getHours() < 12 ? 'AM' : 'PM'}` : `${label} away in ${a.trip.city}`
+    lines.push({ key: `away:${a.sourceId}`, text, memberIds: who })
+  }
+  return lines
 }
