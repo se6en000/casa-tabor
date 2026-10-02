@@ -774,9 +774,10 @@ export function useTomorrowEvents(date: Date) {
   }
 }
 
-export function useMonthEvents(selectedDate: Date) {
+/** A whole month (the calendar's month view; the phone's month, canvas 30b, only while it's open: `enabled`). */
+export function useMonthEvents(selectedDate: Date, enabled = true) {
   const monthStart = startOfMonth(selectedDate)
   const monthEnd = addDays(endOfMonth(selectedDate), 1)
 
-  return useEventsForRange(['events', 'month', monthStart.toISOString()], monthStart, monthEnd)
+  return useEventsForRange(['events', 'month', monthStart.toISOString()], monthStart, monthEnd, enabled)
 }

@@ -59,8 +59,8 @@ export function PhonePlanAgree({ plan, working, onAgree, onBack }: { plan: PlanA
   const count = planCount(plan.items, left)
   const swipe = useSheetSwipe(onBack)
   return (
-    <div className="absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onBack}>
-      <section {...swipe} aria-label={`Set up ${plan.title}`} onClick={(e) => e.stopPropagation()} className="flex max-h-[92%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
+    <div className="phone-scrim absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onBack}>
+      <section {...swipe} aria-label={`Set up ${plan.title}`} onClick={(e) => e.stopPropagation()} className="phone-sheet flex max-h-[92%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
         <span className={`${label} text-wall-brass-ink`}>NOTHING IS SAVED UNTIL YOU AGREE</span>
         <span className="font-display text-phone-heading font-bold leading-tight">{plan.title}</span>
         {agreeGroups(plan.items).map((g) => (
@@ -98,8 +98,8 @@ export function PhonePlanSaved({ plan, result, working, onOpen, onUndo, onDone }
   const lastDay = until ? new Date(until.getTime() - 60_000).toLocaleDateString('en-US', { weekday: 'short' }) : ''
   const swipe = useSheetSwipe(onDone)
   return (
-    <div className="absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onDone}>
-      <section {...swipe} aria-label={`${plan.title} — saved`} onClick={(e) => e.stopPropagation()} className="flex max-h-[92%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
+    <div className="phone-scrim absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onDone}>
+      <section {...swipe} aria-label={`${plan.title} — saved`} onClick={(e) => e.stopPropagation()} className="phone-sheet flex max-h-[92%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
         <div className="flex items-start justify-between">
           <span className={`${label} text-wall-brass-ink`}>{result.undone ? 'UNDONE' : `SAVED · ${saved.things} ${saved.things === 1 ? 'THING' : 'THINGS'}`}</span>
           <button type="button" aria-label="Close" onClick={onDone} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>

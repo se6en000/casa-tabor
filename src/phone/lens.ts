@@ -118,6 +118,10 @@ export interface FamilyItem {
   sub: string
   /** Who is in it, in lane order. */
   people: string[]
+  /** When it's over (the NOW line fades what's finished, canvas 30a). */
+  end: Date
+  /** A chore or a to-do gets a tick on the list. */
+  kind: 'event' | 'chore' | 'todo'
 }
 
 /**
@@ -143,19 +147,22 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
         continue
       }
       const trip = tripFor.get(s.sourceId)
-      const sub = s.kind === 'at_place'
-        ? `until ${clockTime(s.end)}`
-        : trip
-          ? `${placeName(trip)} · ${trip.driverId ? `${nameOf(trip.driverId)} drives` : 'needs a driver'}`
-          : s.placeStatus === 'home' ? 'At home' : ''
-      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, title: s.label, sub, people: [memberId] })
+      const kind = s.chore ? 'chore' : s.reminder ? 'todo' : 'event'
+      const sub = kind === 'chore' ? 'Chore'
+        : kind === 'todo' ? 'To do'
+        : s.kind === 'at_place'
+          ? `until ${clockTime(s.end)}`
+          : trip
+            ? `${placeName(trip)} · ${trip.driverId ? `${nameOf(trip.driverId)} drives` : 'needs a driver'}`
+            : s.placeStatus === 'home' ? 'At home' : ''
+      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: s.label, sub, people: [memberId], kind })
     }
   }
   // An outing nobody is listed for yet still shows (it needs someone).
   for (const trip of tripFor.values()) {
     if (items.has(trip.sourceId)) continue
     items.set(trip.sourceId, {
-      id: trip.sourceId, time: clockTime(trip.arriveAt), at: trip.arriveAt, title: trip.title,
+      id: trip.sourceId, time: clockTime(trip.arriveAt), at: trip.arriveAt, end: trip.homeAt ?? trip.arriveAt, kind: 'event', title: trip.title,
       sub: `${placeName(trip)} · ${trip.driverId ? `${nameOf(trip.driverId)} drives` : 'needs a driver'}`,
       people: order([...trip.travelerIds, ...(trip.driverId ? [trip.driverId] : [])]),
     })
@@ -163,11 +170,11 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
   // Nobody on it yet (board 08a): it still shows, marked, in time order.
   for (const n of plan.nobody) {
     if (items.has(n.sourceId)) continue
-    items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, title: n.title, sub: 'No one yet', people: [] })
+    items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, end: n.end, title: n.title, sub: 'No one yet', people: [], kind: n.sourceId.startsWith('chore:') ? 'chore' : 'event' })
   }
   // All-day items head the day; one for nobody in particular is for everyone.
   const allDay: FamilyItem[] = plan.allDay.map((a) => ({
-    id: a.sourceId, time: 'All day', at: plan.date, title: a.title, sub: '', people: order(a.memberIds),
+    id: a.sourceId, time: 'All day', at: plan.date, end: new Date(plan.date.getFullYear(), plan.date.getMonth(), plan.date.getDate() + 1), kind: 'event' as const, title: a.title, sub: '', people: order(a.memberIds),
   }))
   const timed = [...items.values()].sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
   const mine = (i: FamilyItem) => !filterId || i.people.includes(filterId)

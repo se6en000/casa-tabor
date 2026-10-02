@@ -43,6 +43,7 @@ import { useHouseholdTodoSync } from './hooks/useHouseholdTodoSync'
 import { useReminderNeedsYouActions } from './hooks/useReminderNeedsYouActions'
 
 import { AlertTriangle } from 'lucide-react'
+import PhoneSkeleton from './phone/PhoneSkeleton'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -343,7 +344,7 @@ function RootSwitch() {
   // The phone lens (Phase 4): the same family day, one person's view.
   if (pathname === '/phone') {
     return (
-      <Suspense fallback={<div className="fixed inset-0 bg-phone-ground" />}>
+      <Suspense fallback={<div className="fixed inset-0 bg-phone-ground px-[20px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]"><PhoneSkeleton /></div>}>
         <PhoneFrame />
       </Suspense>
     )

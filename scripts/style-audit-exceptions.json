@@ -306,6 +306,10 @@
       {
         "path": "src/wall/WallKeyboard.tsx",
         "reason": "Family Wall: on a computer, the typing box sits exactly over the field that was pressed — its place, size and font are read from that field at runtime (Jake, 2026-10-01: type in place, not in a bar)."
+      },
+      {
+        "path": "src/phone/PullToRefresh.tsx",
+        "reason": "The phone lens: pull to refresh (canvas 30) — the mark's height, turn and fade follow the finger at runtime."
       }
     ],
     "nativeControlRecreations": [
@@ -544,6 +548,10 @@
       {
         "path": "src/wall/WallTypeLine.tsx",
         "reason": "Family Wall: typing to Casa on a computer (canvas 22a-b) — remove a picture, add a picture, send, part of the Wall's own component set."
+      },
+      {
+        "path": "src/phone/PhoneMonth.tsx",
+        "reason": "The phone lens: Any day (canvas 30b) — the month's day cells, ‹ › and Today/Open, styled with wall-*/phone-* tokens."
       }
     ]
   }

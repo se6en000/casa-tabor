@@ -1,10 +1,10 @@
 import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { stepWithin, type DayStep } from '../lib/daySwipe'
 import { useDaySwipe } from '../lib/useDaySwipe'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Check, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Check, ChevronDown, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -13,7 +13,7 @@ import { driverChoices } from '../wall/people'
 import { pigmentIndexes } from '../wall/score'
 import { weekDays } from '../wall/week'
 import type { EditDraft, EditableEvent } from '../wall/editing'
-import { eventView, familyItems, meView, type PhoneMove } from './lens'
+import { eventView, familyItems, meView, type FamilyItem, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
@@ -41,6 +41,11 @@ import { keepFromSuggestion, keptFrom as keptFromOf, type KeepFrom } from '../wa
 import { snoozeUntil, type CasaTopic, type TalkAnswer } from '../wall/casaTalk'
 import PhoneCasaTalk from './PhoneCasaTalk'
 import { usePhoneShell, useSheetSwipe } from './phoneShell'
+import { dayTimeline, foldLabel, isPast, untilWords } from './timeline'
+import { usePendingTicks } from './ticks'
+import PhoneMonth from './PhoneMonth'
+import PullToRefresh from './PullToRefresh'
+import PhoneSkeleton from './PhoneSkeleton'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -69,6 +74,13 @@ export interface PhoneViewProps {
   tripActions?: PhoneTripActions
   /** "Casa wants to talk to you" (canvas 21c): the one thing Casa raises, on top of Me when it's for this person. */
   casaTalk?: { topic: CasaTopic | null; snooze: (key: string, until: Date) => Promise<void> } | null
+  /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 30a, as the wall's NEXT UP). */
+  choreDone?: ReadonlySet<string>
+  tickChore?: (choreId: string, date: Date, done: boolean) => Promise<void>
+  /** A month's events, for Any day (canvas 30b); fetched while the month is open. Without it, the events already here. */
+  useMonthEvents?: (month: Date) => WallEvent[]
+  /** Pull down to refresh: re-read the day. */
+  onRefresh?: () => Promise<void>
   onToggleItem?: (item: WallChecklistItem) => void
   onAddItem?: (eventId: string, label: string) => Promise<void>
   useEventItems?: (eventId: string) => WallChecklistItem[]
@@ -115,6 +127,8 @@ function ProjectOnPhone({ id, todos, today, onBack, onOpenProject, onTalk }: { i
 const LOOK_AHEAD_HOUR = 19
 
 const shortDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+const phoneDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const clock = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/, '')
 
 function Disc({ id, members, pigments, size = 'h-[32px] w-[32px] text-phone-detail' }: { id: string; members: WallMember[]; pigments: Map<string, number>; size?: string }) {
@@ -141,7 +155,9 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null }: PhoneViewProps) {
+const NO_TICKS: ReadonlySet<string> = new Set()
+
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [weekView, setWeekView] = useState<'week' | 'coming' | 'todo'>('week')
   // A project open on the phone, and a to-do being edited (P3.22 step 7).
@@ -149,6 +165,20 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [editingTodo, setEditingTodo] = useState<TodoItem | null>(null)
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
+  // "↑ 4 earlier" opened on today's list (canvas 30a): for the day it was opened on; another day folds again.
+  const [earlierFor, setEarlierFor] = useState<string | null>(null)
+  const [monthOpen, setMonthOpen] = useState(false)
+  // Which way the last day change went, so the new day slides in from that side (canvas 30, motion).
+  const [slide, setSlide] = useState<'next' | 'back' | null>(null)
+  const ticks = usePendingTicks((key) => {
+    if (key.startsWith('todo:')) void todos?.act({ action: 'done', id: key.slice('todo:'.length) })
+    else {
+      // chore:<id>:<YYYY-MM-DD>
+      const [, choreId, ymd] = key.split(':')
+      const [y, m, d] = ymd.split('-').map(Number)
+      void tickChore?.(choreId, new Date(y, m - 1, d), true)
+    }
+  })
   const [meIndex, setMeIndex] = useState<number | null>(null)
   // A far day Casa opened (Jake, 2026-09-30), with the week around it to swipe through on Family and Me.
   const [farDay, setFarDay] = useState<Date | null>(null)
@@ -227,6 +257,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     }
   }
 
+  const nowLine = (
+    <div data-now-line aria-label={`Now, ${clock(now)}`} className="my-[6px] flex items-center gap-[8px]">
+      <span aria-hidden="true" className="h-[10px] w-[10px] shrink-0 rounded-full bg-wall-brass ring-4 ring-wall-brass/25" />
+      <span className="shrink-0 text-phone-label font-extrabold tracking-[0.14em] text-wall-brass-ink">NOW · {clock(now)}</span>
+      <span aria-hidden="true" className="h-[2px] flex-1 rounded-full bg-wall-brass" />
+    </div>
+  )
   const meScreen = (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-center justify-between">
@@ -331,23 +368,91 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {me.justYours.length > 0 && (
         <section aria-label="Just yours">
           <Label>JUST YOURS</Label>
-          {me.justYours.map((j) => (
-            <button key={j.id} type="button" onClick={() => setOpenId(j.id)} className="flex w-full items-baseline gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-phone-body text-wall-ink">
-              <span className="w-[56px] shrink-0 text-phone-detail font-bold">{clock(j.at)}</span>
-              <span>{j.title}</span>
-            </button>
-          ))}
+          {me.justYours.map((j, n) => {
+            // The NOW line before the first one still ahead, on today (canvas 30a).
+            const lineHere = onToday && j.at > now && (n === 0 || me.justYours[n - 1].at <= now)
+            return (
+              <Fragment key={j.id}>
+                {lineHere && nowLine}
+                <button type="button" onClick={() => setOpenId(j.id)} className={`flex w-full items-baseline gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-phone-body text-wall-ink ${onToday && j.at <= now ? 'opacity-45' : ''}`}>
+                  <span className="w-[56px] shrink-0 text-phone-detail font-bold">{clock(j.at)}</span>
+                  <span>{j.title}</span>
+                </button>
+              </Fragment>
+            )
+          })}
+          {onToday && me.justYours.every((j) => j.at <= now) && nowLine}
         </section>
       )}
     </div>
   )
 
   const shownDay = shownDays[dayIndex ?? (farAt >= 0 ? farAt : focusIndex)] ?? today
+  const shownKey = shownDay?.date.toDateString() ?? ''
+  // A day opened from Casa or the month (canvas 30b): Family on that day, with the week around it to swipe.
+  const openDay = (date: Date) => {
+    setMonthOpen(false)
+    setSlide(null)
+    setTab('family')
+    const i = week.findIndex((p) => p.date.toDateString() === date.toDateString())
+    setFarDay(i >= 0 || !planDay ? null : date)
+    setDayIndex(i >= 0 ? i : null)
+    setMeIndex(null)
+  }
   const items = familyItems(shownDay, members, filter)
+  // Today's list splits at NOW (canvas 30a): started above the line (the last two in view), finished faded, the next
+  // lifted with how long until it; chores and to-dos get ticks.
+  const familyToday = Boolean(shownDay && sameDay(shownDay.date, now))
+  const timeline = dayTimeline(items, now)
+  const familyRow = (i: FamilyItem) => {
+    const next = familyToday && i.id === timeline.nextId
+    const tickKey = i.kind === 'chore' ? `${i.id}:${phoneDay(shownDay?.date ?? now)}` : `todo:${i.id}`
+    const tickable = (i.kind === 'chore' && tickChore) || (i.kind === 'todo' && todos)
+    const ticked = ticks.pending.has(tickKey) || (i.kind === 'chore' && choreDone.has(tickKey))
+    // A chore or to-do whose time has passed, not ticked, is late (rust), not faded: it still needs doing.
+    const late = familyToday && Boolean(tickable) && !ticked && i.kind !== 'event' && i.at.getTime() < now.getTime()
+    const past = familyToday && isPast(i, now) && !late
+    return (
+      <div key={i.id} className={`flex items-stretch gap-[12px] ${next ? '-mx-[12px] my-[2px] rounded-[16px] bg-wall-brass/12 px-[12px] py-[12px]' : 'border-0 border-t border-solid border-wall-stone py-[10px]'} ${past ? 'opacity-45' : ''}`}>
+        <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
+          <span className={`w-[52px] shrink-0 pt-[2px] text-phone-body font-bold ${next ? 'text-wall-brass-ink' : late ? 'text-wall-rust' : ''}`}>{i.time}</span>
+          <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${past ? 'bg-wall-stone' : pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
+          <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+            <span className={`text-phone-body font-semibold ${ticked ? 'text-wall-ink-2 line-through' : ''}`}>{i.title}</span>
+            {(i.sub || next || late) && <span className={`text-phone-detail ${next ? 'font-semibold text-wall-brass-ink' : late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{next ? [untilWords(i.at, now), i.sub].filter(Boolean).join(' · ') : late ? `Late · ${i.sub}` : i.sub}</span>}
+            {keptFromOf(keepFrom, i.id).length > 0 && (
+              <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
+                <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
+              </span>
+            )}
+          </span>
+        </button>
+        {tickable && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={ticked}
+            aria-label={`Done: ${i.title}`}
+            onClick={() => (i.kind === 'chore' && choreDone.has(tickKey) ? void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false) : ticks.toggle(tickKey))}
+            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
+          >
+            <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+              {ticked && <Check size={16} strokeWidth={3} />}
+            </span>
+          </button>
+        )}
+        <span className="flex shrink-0 gap-[2px] self-center">
+          {i.people.map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" />)}
+        </span>
+      </div>
+    )
+  }
   const familyScreen = (
     <div className="flex flex-col gap-[14px]">
       <div>
-        <div className="text-phone-detail text-wall-ink-2">{shownDay ? shortDate(shownDay.date) : ''}</div>
+        <button type="button" aria-label="Any day" onClick={() => setMonthOpen(true)} className="flex min-h-[28px] items-center gap-[4px] border-0 bg-transparent p-0 text-phone-detail text-wall-ink-2">
+          {shownDay ? shortDate(shownDay.date) : ''}<ChevronDown size={15} aria-hidden="true" />
+        </button>
         <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Everyone</h1>
       </div>
       <div className="-mx-[20px] flex gap-[8px] overflow-x-auto px-[20px] pb-[2px]">
@@ -365,26 +470,26 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </button>
         ))}
       </div>
-      <div>
+      <div className="phone-rise">
         {items.length === 0 && <div className="py-[12px] font-display text-phone-heading italic text-wall-ink-2">Nothing on the calendar.</div>}
-        {items.map((i) => (
-          <button key={i.id} type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex w-full items-stretch gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-wall-ink">
-            <span className="w-[52px] shrink-0 pt-[2px] text-phone-body font-bold">{i.time}</span>
-            <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
-            <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-              <span className="text-phone-body font-semibold">{i.title}</span>
-              {i.sub && <span className="text-phone-detail text-wall-ink-2">{i.sub}</span>}
-              {keptFromOf(keepFrom, i.id).length > 0 && (
-                <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
-                  <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
-                </span>
-              )}
-            </span>
-            <span className="flex shrink-0 gap-[2px] self-center">
-              {i.people.map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" />)}
-            </span>
-          </button>
-        ))}
+        {familyToday ? (
+          <>
+            {timeline.allDay.map((i) => familyRow(i))}
+            {timeline.folded.length > 0 && (earlierFor === shownKey
+              ? timeline.folded.map((i) => familyRow(i))
+              : (
+                <div className="flex justify-center py-[8px]">
+                  <button type="button" onClick={() => setEarlierFor(shownKey)} className="flex h-[36px] max-w-full items-center gap-[6px] rounded-full border-0 bg-phone-card px-[14px] text-phone-detail font-semibold text-wall-ink-2">
+                    <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0" />
+                    <span className="truncate">{foldLabel(timeline.folded)}</span>
+                  </button>
+                </div>
+              ))}
+            {timeline.before.map((i) => familyRow(i))}
+            {nowLine}
+            {timeline.after.map((i) => familyRow(i))}
+          </>
+        ) : items.map((i) => familyRow(i))}
       </div>
     </div>
   )
@@ -439,12 +544,17 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   ) : (
     <div className="flex flex-col gap-[10px]">
       {weekSwitch}
-      <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
+      <div className="flex items-baseline justify-between gap-[12px]">
+        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">The week</h1>
+        <button type="button" onClick={() => setMonthOpen(true)} className="flex h-[44px] items-center gap-[4px] rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">
+          Any day <ChevronDown size={15} aria-hidden="true" />
+        </button>
+      </div>
       {days.map((d, i) => (
         <button
           key={d.key}
           type="button"
-          onClick={() => { setFarDay(null); setDayIndex(i); setTab('family') }}
+          onClick={() => { setSlide(null); setFarDay(null); setDayIndex(i); setTab('family') }}
           className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === focusIndex ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
         >
           <span className="flex w-[80px] flex-col">
@@ -515,7 +625,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       key={t.id}
       type="button"
       aria-current={tab === t.id ? 'page' : undefined}
-      onClick={() => { setTab(t.id); if (t.id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) } if (t.id === 'me') { setMeIndex(null); setFarDay(null) } }}
+      // The tab you're on goes back to its start, as an iPhone tab bar does: today, and the top.
+      onClick={() => { if (t.id === tab) mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); setSlide(null); setTab(t.id); if (t.id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) } if (t.id === 'me') { setMeIndex(null); setFarDay(null) } }}
       className={`flex h-[52px] w-[62px] flex-col items-center justify-center gap-[3px] border-0 bg-transparent p-0 text-phone-label ${tab === t.id ? 'font-bold text-wall-ink' : 'font-medium text-wall-ink-2'}`}
     >
       {t.icon}
@@ -526,7 +637,21 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // Swipe between days on Me and Family (Jake, 2026-09-28: "it feels natural there"): left for the
   // next day, right for the day before, within the week; stops at the ends; off while a sheet is up.
   const mainRef = useRef<HTMLElement>(null)
+  // Today's list opens scrolled to NOW (canvas 30a), a little of what's just happened above it; "↑ earlier" folds again
+  // when the day or the tab changes.
+  useEffect(() => {
+    if (tab !== 'family' && tab !== 'me') return
+    const frame = window.requestAnimationFrame(() => {
+      const main = mainRef.current
+      const line = main?.querySelector<HTMLElement>('[data-now-line]')
+      if (!main || !line) return
+      const top = line.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop
+      main.scrollTo({ top: Math.max(0, top - main.clientHeight * 0.38) })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [tab, shownKey, filter])
   const swipeDay = (step: DayStep) => {
+    setSlide(step === 1 ? 'next' : 'back')
     if (tab === 'me') {
       const next = stepWithin(meAt, step, shownDays.length - 1)
       if (next != null) setMeIndex(next)
@@ -537,7 +662,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   }
   usePhoneShell()
   const handOffSwipe = useSheetSwipe(() => setHandOff(null))
-  const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || emailSettingsOpen || scanOpen || askOpen || adding || projectId || editingTodo)
+  // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
+  const loading = week.length === 0 || members.length === 0
+  const sheetOpen = Boolean(monthOpen || openId || handOff || addOpen || peopleOpen || emailSettingsOpen || scanOpen || askOpen || adding || projectId || editingTodo)
   useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
@@ -548,15 +675,22 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // the top clears the notch / status bar and the tab bar clears the home indicator. With the keyboard up the frame
     // ends at its top (--phone-kb, phoneShell.ts), so a sheet or Ask Casa's line sits above it, never under it.
     <div className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
-      <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[24px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
-        {tab === 'me' && meScreen}
-        {tab === 'family' && familyScreen}
-        {tab === 'week' && weekScreen}
-        {tab === 'more' && moreScreen}
+      {/* The list runs under the frosted tab bar (padding for it at the end); a tab fades in, a day slides in from the
+          side it came from. */}
+      <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
+        <PullToRefresh scrollRef={mainRef} onRefresh={onRefresh} />
+        <div key={`${tab}|${tab === 'me' ? focus?.date.toDateString() : tab === 'family' ? shownKey : ''}`} className={(tab === 'me' || tab === 'family') && slide ? (slide === 'next' ? 'phone-day-next' : 'phone-day-back') : 'phone-tab-in'}>
+          {loading && tab !== 'more' && <PhoneSkeleton />}
+          {!loading && tab === 'me' && meScreen}
+          {!loading && tab === 'family' && familyScreen}
+          {!loading && tab === 'week' && weekScreen}
+          {tab === 'more' && moreScreen}
+        </div>
       </main>
       {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />}
+      {monthOpen && <PhoneMonth now={now} members={members} pigments={pigments} useMonth={useMonthEvents ?? (() => shownEvents as WallEvent[])} onOpen={openDay} onClose={() => setMonthOpen(false)} />}
       {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
-      <nav aria-label="Sections" className="flex shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px]">
+      <nav aria-label="Sections" className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between border-0 border-t border-solid border-wall-stone/70 bg-wall-on-pigment/80 px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px] backdrop-blur-xl backdrop-saturate-150">
         {tabButton(tabs[0])}
         {tabButton(tabs[1])}
         <button type="button" aria-label="Add something" onClick={() => setAddOpen(true)} disabled={!createEvent} className="-mt-[18px] flex h-[56px] w-[56px] items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
@@ -612,11 +746,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         // around it to swipe (Me, the drives alone, follows the same week).
         onOpenDay: (date) => {
           setAskOpen(false)
-          setTab('family')
-          const i = week.findIndex((p) => p.date.toDateString() === date.toDateString())
-          setFarDay(i >= 0 || !planDay ? null : date)
-          setDayIndex(i >= 0 ? i : null)
-          setMeIndex(null)
+          openDay(date)
         },
         // A saved plan's project or To do (P3.25; board 12d).
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },
@@ -651,8 +781,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
 
       {handOff && tripActions && (
-        <div className="absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setHandOff(null)}>
-          <section {...handOffSwipe} aria-label="Hand off" className="absolute bottom-0 left-0 flex max-h-[85%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+        <div className="phone-scrim absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setHandOff(null)}>
+          <section {...handOffSwipe} aria-label="Hand off" className="phone-sheet absolute bottom-0 left-0 flex max-h-[85%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-phone-detail text-wall-ink-2">{handOff.trip.title}</div>

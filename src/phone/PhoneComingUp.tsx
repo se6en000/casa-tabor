@@ -82,8 +82,8 @@ function PhoneIdeas({ ideas, onEdit, onClose }: { ideas: GiftIdea[]; onEdit: (id
   const field = 'h-[44px] min-w-0 flex-1 rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-phone-body text-wall-ink'
   const swipe = useSheetSwipe(onClose)
   return (
-    <div className="absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onClose}>
-      <section {...swipe} aria-label="Gift ideas" onClick={(e) => e.stopPropagation()} className="flex max-h-[90%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
+    <div className="phone-scrim absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onClose}>
+      <section {...swipe} aria-label="Gift ideas" onClick={(e) => e.stopPropagation()} className="phone-sheet flex max-h-[90%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
         <div className="flex items-center justify-between">
           <span className="font-display text-phone-heading font-bold">Gift ideas</span>
           <Answer label="Close" onClick={onClose} />

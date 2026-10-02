@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase'
 import { saveDraft } from '../wall/saveDraft'
 import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
+import { useMonthEvents } from '../hooks/useCalendarEvents'
+import { setChoreDone, useChoreDone } from '../wall/useChoreDone'
 import { useComingUp } from '../wall/useComingUp'
 import { useTodoProject, useTodos } from '../wall/useTodos'
 import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wall/useWallChecklist'
@@ -42,12 +44,19 @@ async function findSimilar(items: ScannedItem[]) {
   return out
 }
 
+/** Any day (canvas 30b): the month's events while the month is open (the sheet is only mounted then). */
+function usePhoneMonth(month: Date): WallEvent[] {
+  const { data } = useMonthEvents(month)
+  return (data ?? []) as unknown as WallEvent[]
+}
+
 export default function PhoneFrame() {
   const { profile } = useProfileSession()
   // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
   const [aroundDay, setAroundDay] = useState<Date | null>(null)
   const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
   const { now, members, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom, chores } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' }, aroundDay)
+  const choreDone = useChoreDone(now)
   // The assistant's card is told from the same engine as the wall's (board 06e).
   const planDay = useCallback(
     (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date), chores }),
@@ -70,6 +79,10 @@ export default function PhoneFrame() {
   ), [week, members, now, tripStateFor, talk.state])
   return (
     <PhoneView
+      choreDone={choreDone}
+      useMonthEvents={usePhoneMonth}
+      onRefresh={() => queryClient.invalidateQueries()}
+      tickChore={(id, date, done) => setChoreDone(queryClient, id, date, done)}
       now={now}
       viewerId={profile?.memberId ?? ''}
       members={members}

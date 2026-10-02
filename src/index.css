@@ -1289,9 +1289,62 @@ html.phone-app [role="button"] {
 html.phone-app button:active:not(:disabled),
 html.phone-app a:active,
 html.phone-app [role="button"]:active {
-  opacity: 0.55;
+  opacity: 0.7;
 }
 /* The keyboard is up: the tab bar steps aside (as an iPhone app's does). */
 html.phone-app[data-keyboard="open"] nav[aria-label="Sections"] {
   display: none;
 }
+
+/* ── The phone's motion (canvas 30, "iOS polish") ───────────────────
+   Only transform and opacity move, so the iPhone draws it all on its GPU (60–120 fps). A spring: sheets rise and
+   settle with a touch of overshoot. Off for anyone who asked for less motion. Every entrance holds only its start
+   (`backwards`): once it has played nothing is left on the element, so a sheet opened inside it isn't trapped
+   under the tab bar. */
+@media (prefers-reduced-motion: no-preference) {
+  html.phone-app .phone-sheet {
+    animation: phone-sheet-in 520ms linear(0, 0.18 7%, 0.62 20%, 0.9 32%, 1.02 44%, 1.04 52%, 1.01 68%, 1) backwards;
+  }
+  html.phone-app .phone-scrim {
+    animation: phone-fade-in 220ms ease-out backwards;
+  }
+  html.phone-app .phone-tab-in {
+    animation: phone-fade-in 200ms ease-out backwards;
+  }
+  html.phone-app .phone-day-next {
+    animation: phone-day-from-right 300ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  }
+  html.phone-app .phone-day-back {
+    animation: phone-day-from-left 300ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  }
+  html.phone-app .phone-rise > * {
+    animation: phone-rise 340ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  }
+  html.phone-app .phone-rise > *:nth-child(2) { animation-delay: 25ms; }
+  html.phone-app .phone-rise > *:nth-child(3) { animation-delay: 50ms; }
+  html.phone-app .phone-rise > *:nth-child(4) { animation-delay: 75ms; }
+  html.phone-app .phone-rise > *:nth-child(5) { animation-delay: 100ms; }
+  html.phone-app .phone-rise > *:nth-child(6) { animation-delay: 125ms; }
+  html.phone-app .phone-rise > *:nth-child(7) { animation-delay: 150ms; }
+  html.phone-app .phone-rise > *:nth-child(n + 8) { animation-delay: 175ms; }
+  html.phone-app button,
+  html.phone-app a,
+  html.phone-app [role="button"] {
+    transition: opacity 120ms ease-out, transform 160ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  }
+  html.phone-app button:active:not(:disabled),
+  html.phone-app [role="button"]:active {
+    transform: scale(0.97);
+  }
+  .phone-shimmer {
+    background: linear-gradient(100deg, rgb(0 0 0 / 0.05) 30%, rgb(255 255 255 / 0.45) 50%, rgb(0 0 0 / 0.05) 70%);
+    background-size: 300% 100%;
+    animation: phone-shimmer 1.4s ease-in-out infinite;
+  }
+}
+@keyframes phone-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes phone-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes phone-day-from-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes phone-day-from-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@keyframes phone-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes phone-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }

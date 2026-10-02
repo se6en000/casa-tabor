@@ -711,3 +711,51 @@ test('phone: a sheet dragged down from its top closes; a short drag springs back
   await drag(page, 'section[aria-label="Add something"]', box.y + 20, box.y + 220)
   await expect(sheet).toHaveCount(0)
 })
+
+// Canvas 30a (Jake, Oct 2: "an indicator of where we are time wise in the day … What's past should be obvious"):
+// today's Family list splits at NOW; what's started sits above the line (two in view, the rest folded), finished
+// ones faded; the next is lifted with how long until it; chores and to-dos tick.
+test('phone: Family — the NOW line, what’s past folded and faded, the next lifted; a chore ticks', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: /^Family/ }).first().click()
+  await expect(phone.getByText('NOW · 10:45')).toBeVisible()
+  await expect(phone.getByRole('button', { name: /earlier/ })).toBeVisible()
+  // The first thing after 10:45, with how long until it; the 10:25 to-do not done yet is late, not faded.
+  await expect(phone.getByText(/^In \d+ hr/).first()).toBeVisible()
+  await expect(phone.getByText('Late · To do')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-family-now.png')
+
+  await phone.getByRole('button', { name: /earlier/ }).click()
+  await expect(phone.getByRole('button', { name: /earlier/ })).toHaveCount(0)
+
+  const meds = phone.getByRole('checkbox', { name: 'Done: Take meds' })
+  await meds.click()
+  await expect(meds).toHaveAttribute('aria-checked', 'true')
+  await expect.poll(() => page.evaluate(() => window.__choreTicks ?? []), { timeout: 8000 }).toEqual(['+chore:meds:2026-09-25'])
+})
+
+// Canvas 30b (Jake, Oct 2: "a way to tap to open any date. Not just the 7 day window"): Any day opens the month; a
+// tap picks a day and shows its first line; Open opens it on Family, weeks away included.
+test('phone: Any day — the month, a day picked, opened on Family weeks away', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: /^Week/ }).first().click()
+  await phone.getByRole('button', { name: 'Any day' }).click()
+  const month = phone.getByRole('region', { name: 'Any day' })
+  await expect(month.getByRole('heading', { name: 'September 2026' })).toBeVisible()
+  await expect(month.getByRole('button', { name: 'Open Today' })).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-month.png')
+
+  await month.getByRole('button', { name: 'The month after' }).click()
+  await expect(month.getByRole('heading', { name: 'October 2026' })).toBeVisible()
+  await month.getByRole('button', { name: 'Thursday, October 15' }).click()
+  await month.getByRole('button', { name: 'Open Thu 15' }).click()
+  await expect(month).toHaveCount(0)
+  await expect(phone.getByRole('heading', { name: 'Everyone' })).toBeVisible()
+  await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('October 15')
+})

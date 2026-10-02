@@ -109,6 +109,8 @@ function PhoneFixturePageInner() {
   const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})
   const [checklist, setChecklist] = useState(CHECKLIST)
+  // `?chores=1` (canvas 30a): Liv's meds at 6 and trash at 8, ticked in memory.
+  const [choreDone, setChoreDone] = useState<ReadonlySet<string>>(() => new Set())
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
     // `?far=1` (any day): Jake's week around Sat, Oct 17 — weeks past the usual strip.
@@ -134,7 +136,7 @@ function PhoneFixturePageInner() {
     const date = new Date(now)
     date.setHours(0, 0, 0, 0)
     date.setDate(date.getDate() + i)
-    return buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: shown, tripState: dayState(tripState, date), ...(travel.length ? { travel } : {}) })
+    return buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: shown, tripState: dayState(tripState, date), chores: CHORES, ...(travel.length ? { travel } : {}) })
   })
   const topic = params.get('talk') ? casaTopic(
     week.flatMap((plan) => decisionsFor(plan, members as WallMember[], now, new Set(Object.keys(dayState(tripState, plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date }))),
@@ -152,6 +154,12 @@ function PhoneFixturePageInner() {
         <Route path="*" element={
           <div data-testid="phone-fixture" className="h-[844px] w-[390px] overflow-hidden">
             <PhoneView
+              choreDone={choreDone}
+              tickChore={async (id, date, done) => {
+                const key = `chore:${id}:${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+                ;(window as unknown as { __choreTicks?: string[] }).__choreTicks = [...((window as unknown as { __choreTicks?: string[] }).__choreTicks ?? []), `${done ? '+' : '-'}${key}`]
+                setChoreDone((was) => { const next = new Set(was); if (done) next.add(key); else next.delete(key); return next })
+              }}
               useEmailSettingsHook={fixtureEmailSettings}
               now={now}
               viewerId={viewerId}
@@ -239,6 +247,14 @@ function PhoneFixturePageInner() {
 // No network in the fixture: what Casa knows is seeded (the casa-memory function's answer), saved places load empty.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 seedKnown(queryClient)
+
+// `?chores=1` (canvas 30a): Liv's meds at 6 PM weekdays, trash at 8 PM Mondays and Thursdays and this Friday.
+const CHORES = new URLSearchParams(window.location.search).get('chores') === '1'
+  ? [
+    { id: 'meds', title: 'Take meds', member_id: 'liv', for_member_id: null, days_of_week: [1, 2, 3, 4, 5], time_local: '18:00:00', minutes: 5, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
+    { id: 'trash', title: 'Trash to the street', member_id: 'jake-id', for_member_id: null, days_of_week: [1, 4, 5], time_local: '20:00:00', minutes: 10, enabled: true, every_weeks: 1, starts_on: '2026-09-01' },
+  ]
+  : []
 
 export default function PhoneFixturePage() {
   return (
