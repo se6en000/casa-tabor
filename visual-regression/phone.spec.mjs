@@ -951,3 +951,17 @@ test('phone: a trip — "Jake away in Dallas · back tomorrow" on Everyone; Orde
   await expect(phone.getByRole('link', { name: 'Order an Uber' })).toHaveAttribute('href', /^https:\/\/m\.uber\.com\/ul\/\?action=setPickup/)
   await expect(phone.getByRole('button', { name: 'All day Jake in Dallas' })).toBeVisible() // your own day keeps the stay
 })
+
+// Jake, Oct 2: "i need to edit the location of anything that takes location on mobile, it should be part of the edit sheet".
+test('phone: editing an event changes its place — a saved place offered as you type', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
+  await phone.getByRole('button', { name: /Emme Practice Violin/ }).first().click()
+  const sheet = phone.getByRole('region', { name: /on the phone$/ })
+  await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
+  const place = sheet.getByPlaceholder(/Home, a place/)
+  await place.fill('Ferr')
+  await sheet.getByRole('button', { name: /Ferrin Park/ }).click()
+  await expect(place).toHaveValue('Ferrin Park')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(phone.getByText(/Ferrin Park/).first()).toBeVisible()
+})

@@ -24,6 +24,8 @@ export interface PhoneEventSheetProps {
   clashesFor?: (draft: EditDraft) => string[]
   /** Adding: the place the last event like this one was at ("Happy Tails, like last time"). */
   placeFromLastTime?: (title: string) => { name: string; address: string | null } | null
+  /** The family's saved places, offered as the place is typed (Jake, Oct 2: "edit the location of anything that takes location on mobile"). */
+  placeOptions?: Array<{ name: string; address: string }>
   view: EventView
   members: WallMember[]
   pigments: Map<string, number>
@@ -51,7 +53,7 @@ export interface PhoneEventSheetProps {
 
 const noItems = (): WallChecklistItem[] => []
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, clashesFor, placeFromLastTime }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, clashesFor, placeFromLastTime, placeOptions = [] }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -88,6 +90,11 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const clashes = isNew && kind === 'event' && !draft.allDay && clashesFor ? clashesFor(draft) : []
   const lastPlace = isNew && !draft.place.name.trim() && draft.title.trim().length >= 3 && placeFromLastTime ? placeFromLastTime(draft.title) : null
   const outing = Boolean(draft.place.name.trim()) && !/^home$/i.test(draft.place.name.trim())
+  // Saved places matching what's typed (not once one is picked: it has its address then).
+  const typed = draft.place.name.trim().toLowerCase()
+  const placeHits = typed.length >= 2 && !draft.place.address
+    ? placeOptions.filter((p) => p.name.toLowerCase().includes(typed) && p.name.toLowerCase() !== typed).slice(0, 3)
+    : []
   const drivers = members.filter((m) => m.can_drive)
   const run = async (work: () => Promise<void>, failed: string, stayOpen = false) => {
     setBusy(true)
@@ -254,7 +261,8 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
             <span className={label}>TITLE</span>
             <input value={draft.title} autoFocus={isNew} placeholder={isNew ? (kind === 'reminder' ? 'What to remember' : 'What is it?') : undefined} onChange={(e) => setDraft((d) => setTitle(d, e.target.value))} className="h-[52px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-display text-phone-heading font-semibold text-wall-ink" />
           </label>
-          {isNew && (
+          {/* Where it is, when adding and when editing (Jake, Oct 2): typed, or one of the saved places as you type. */}
+          {(isNew || kind === 'event') && (
             <label className="flex flex-col gap-[6px]">
               <span className={label}>PLACE</span>
               <input
@@ -263,6 +271,17 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                 onChange={(e) => setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null }))}
                 className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
               />
+              {placeHits.length > 0 && (
+                <span className="flex flex-col gap-[6px]">
+                  {placeHits.map((p) => (
+                    <button key={p.name} type="button" onClick={() => setDraft((d) => setPlace(d, { name: p.name, address: p.address, driveMinutes: null }))}
+                      className="flex min-h-[44px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[6px] text-left text-wall-ink">
+                      <span className="text-phone-body font-semibold">{p.name}</span>
+                      {p.address && <span className="text-phone-detail text-wall-ink-2">{p.address}</span>}
+                    </button>
+                  ))}
+                </span>
+              )}
               {lastPlace && (
                 <button type="button" onClick={() => setDraft((d) => setPlace(d, { name: lastPlace.name, address: lastPlace.address ?? '', driveMinutes: null }))}
                   className="flex min-h-[44px] items-center gap-[6px] self-start rounded-full border border-solid border-wall-brass bg-wall-brass/10 px-[14px] text-phone-detail font-semibold text-wall-brass-ink">

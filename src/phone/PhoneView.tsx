@@ -235,6 +235,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
+  // The saved places, offered as a place is typed on the form (adding or editing).
+  const placeOptions = useMemo(() => places.map((p) => ({ name: p.name, address: [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ') })).filter((p) => p.name), [places])
   const viewer = members.find((m) => m.id === viewerId) ?? null
   const today = week[0] ?? null
   // From 7 PM, "Me" and Family default to tomorrow, read from its start (everything still ahead).
@@ -826,6 +828,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {opened && (
         <PhonePushPage key={`event-${openId}`} onShift={shiftBehind} onBack={() => { setOpenId(null); setOpenMode('details') }}>
         <PhoneEventSheet
+          placeOptions={placeOptions}
           view={opened}
           members={members}
           pigments={pigments}
@@ -949,6 +952,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       )}
       {adding && (
         <PhoneEventSheet
+          placeOptions={placeOptions}
           key="new"
           view={{ event: adding, when: '', place: { name: '', address: null, driveMinutes: null }, going: [], trip: null, prep: [], repeating: false }}
           members={members}
