@@ -56,6 +56,7 @@ function reportLayout() {
     docClientHeight: document.documentElement.clientHeight, bodyRect: rect('body'), htmlRect: rect('html'),
     frame: rect('[data-phone-frame]'), nav: rect('nav[aria-label="Sections"]'),
     phoneKb: getComputedStyle(document.documentElement).getPropertyValue('--phone-kb').trim(),
+    phoneDead: getComputedStyle(document.documentElement).getPropertyValue('--phone-dead').trim(),
     keyboardAttr: document.documentElement.dataset.keyboard ?? null,
     active: document.activeElement?.tagName ?? null,
     standalone: window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true,
@@ -70,6 +71,15 @@ export function usePhoneShell() {
     const root = document.documentElement
     root.classList.add('phone-app')
     const vv = window.visualViewport
+    // iOS 26 installed on the home screen: the band at the bottom the web view never draws (screen height minus the
+    // window's, in portrait; 0 anywhere it isn't short). The tab bar floats above it rather than under it.
+    const dead = () => {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+      const gap = screen.height - window.innerHeight
+      root.style.setProperty('--phone-dead', `${standalone && window.innerWidth < window.innerHeight && gap > 20 && gap < 100 ? gap : 0}px`)
+    }
+    dead()
+    window.addEventListener('resize', dead)
     const update = () => {
       const kb = keyboardHeight(window.innerHeight, vv, isTyping(document.activeElement))
       root.style.setProperty('--phone-kb', `${kb}px`)
@@ -86,6 +96,8 @@ export function usePhoneShell() {
     document.addEventListener('focusout', update)
     return () => {
       window.clearTimeout(layoutTimer)
+      window.removeEventListener('resize', dead)
+      root.style.removeProperty('--phone-dead')
       vv?.removeEventListener('resize', update)
       vv?.removeEventListener('scroll', update)
       document.removeEventListener('focusin', update)

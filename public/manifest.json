@@ -4,8 +4,8 @@
   "description": "Family command center",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAFAF8",
-  "theme_color": "#1B2C4B",
+  "background_color": "#F1ECE3",
+  "theme_color": "#F1ECE3",
   "orientation": "portrait-primary",
   "icons": [
     {

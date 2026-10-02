@@ -1268,21 +1268,10 @@ html.phone-app #root {
   min-height: 0;
   height: 100%;
 }
-/* Installed on the home screen, iOS can report the window 59 pt shorter than the screen — the status bar's height
-   (Jake's phone, Oct 2: innerHeight 873, screen 932, 100lvh 932) — so anything pinned to the window's bottom, the
-   frame and its tab bar, stopped 59 pt above the real edge. The large-viewport unit is the true height there, so the
-   page and the frame are sized by it (in a Safari tab it could tuck the bar under Safari's own toolbar: not there). */
-@media (display-mode: standalone) {
-  html.phone-app,
-  html.phone-app body,
-  html.phone-app #root {
-    height: 100lvh;
-  }
-  html.phone-app [data-phone-frame] {
-    bottom: auto;
-    height: calc(100lvh - var(--phone-kb, 0px));
-  }
-}
+/* Installed on the home screen, iOS 26 sizes the web view 59 pt short of the screen — the status bar's height (Jake's
+   phone, Oct 2: innerHeight 873, screen 932) — and nothing below that line is drawn: a known WebKit regression
+   (bug 301108). Sizing the page to the full screen (100lvh) put the tab bar's labels into the band iOS doesn't draw,
+   so the frame stays the window, and the tab bar floats above the band (--phone-dead, phoneShell.ts). */
 /* Whatever iOS reports, nothing behind the frame shows as another colour. */
 html.phone-app,
 html.phone-app body,

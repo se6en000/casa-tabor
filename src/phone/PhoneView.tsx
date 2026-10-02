@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { stepWithin, type DayStep } from '../lib/daySwipe'
 import { useDaySwipe } from '../lib/useDaySwipe'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Check, ChevronDown, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Check, ChevronDown, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -46,6 +46,7 @@ import { usePendingTicks } from './ticks'
 import PhoneMonth from './PhoneMonth'
 import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
+import PhoneTabBar from './PhoneTabBar'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -620,23 +621,29 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     { id: 'week', label: 'Week', icon: <CalendarDays size={22} /> },
     { id: 'more', label: 'More', icon: <Grid2x2 size={22} /> },
   ]
-  const tabButton = (t: (typeof tabs)[number]) => (
-    <button
-      key={t.id}
-      type="button"
-      aria-current={tab === t.id ? 'page' : undefined}
-      // The tab you're on goes back to its start, as an iPhone tab bar does: today, and the top.
-      onClick={() => { if (t.id === tab) mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); setSlide(null); setTab(t.id); if (t.id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) } if (t.id === 'me') { setMeIndex(null); setFarDay(null) } }}
-      className={`flex h-[52px] w-[62px] flex-col items-center justify-center gap-[3px] border-0 bg-transparent p-0 text-phone-label ${tab === t.id ? 'font-bold text-wall-ink' : 'font-medium text-wall-ink-2'}`}
-    >
-      {t.icon}
-      {t.label}
-    </button>
-  )
+  // The tab you're on goes back to its start, as an iPhone tab bar does: today, and the top.
+  const pickTab = (id: Tab) => {
+    if (id === tab) mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    setSlide(null)
+    setTab(id)
+    if (id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) }
+    if (id === 'me') { setMeIndex(null); setFarDay(null) }
+  }
 
   // Swipe between days on Me and Family (Jake, 2026-09-28: "it feels natural there"): left for the
   // next day, right for the day before, within the week; stops at the ends; off while a sheet is up.
   const mainRef = useRef<HTMLElement>(null)
+  // The glass bar settles smaller while scrolling down the list, and comes back scrolling up or at the top.
+  const [barCompact, setBarCompact] = useState(false)
+  const lastScroll = useRef(0)
+  const onMainScroll = () => {
+    const y = mainRef.current?.scrollTop ?? 0
+    const down = y > lastScroll.current + 6
+    const up = y < lastScroll.current - 6
+    if (down && y > 80 && !barCompact) setBarCompact(true)
+    else if ((up || y < 40) && barCompact) setBarCompact(false)
+    if (down || up) lastScroll.current = y
+  }
   // Today's list opens scrolled to NOW (canvas 30a), a little of what's just happened above it; "↑ earlier" folds again
   // when the day or the tab changes.
   useEffect(() => {
@@ -677,7 +684,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     <div data-phone-frame className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
       {/* The list runs under the frosted tab bar (padding for it at the end); a tab fades in, a day slides in from the
           side it came from. */}
-      <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
+      <main ref={mainRef} onScroll={onMainScroll} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
         <PullToRefresh scrollRef={mainRef} onRefresh={onRefresh} />
         <div key={`${tab}|${tab === 'me' ? focus?.date.toDateString() : tab === 'family' ? shownKey : ''}`} className={(tab === 'me' || tab === 'family') && slide ? (slide === 'next' ? 'phone-day-next' : 'phone-day-back') : 'phone-tab-in'}>
           {loading && tab !== 'more' && <PhoneSkeleton />}
@@ -690,15 +697,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />}
       {monthOpen && <PhoneMonth now={now} members={members} pigments={pigments} useMonth={useMonthEvents ?? (() => shownEvents as WallEvent[])} onOpen={openDay} onClose={() => setMonthOpen(false)} />}
       {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
-      <nav aria-label="Sections" className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between border-0 border-t border-solid border-wall-stone/70 bg-wall-on-pigment/80 px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px] backdrop-blur-xl backdrop-saturate-150">
-        {tabButton(tabs[0])}
-        {tabButton(tabs[1])}
-        <button type="button" aria-label="Add something" onClick={() => setAddOpen(true)} disabled={!createEvent} className="-mt-[18px] flex h-[56px] w-[56px] items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
-          <Plus size={26} strokeWidth={2.2} />
-        </button>
-        {tabButton(tabs[2])}
-        {tabButton(tabs[3])}
-      </nav>
+      <PhoneTabBar tabs={tabs} current={tab} onTab={pickTab} onAdd={() => setAddOpen(true)} addDisabled={!createEvent} compact={barCompact} />
 
       {opened && (
         <PhoneEventSheet

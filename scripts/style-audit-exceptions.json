@@ -552,6 +552,10 @@
       {
         "path": "src/phone/PhoneMonth.tsx",
         "reason": "The phone lens: Any day (canvas 30b) — the month's day cells, ‹ › and Today/Open, styled with wall-*/phone-* tokens."
+      },
+      {
+        "path": "src/phone/PhoneTabBar.tsx",
+        "reason": "The phone lens: the glass tab bar (premium plan, Phase A) — tabs with a sliding capsule and the + action, styled with wall-*/phone-* tokens."
       }
     ]
   }

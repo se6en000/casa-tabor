@@ -695,8 +695,12 @@ test('phone: the frame never moves — the page itself can’t scroll; the bar s
     return { y: window.scrollY, top: document.scrollingElement.scrollTop, body: getComputedStyle(document.body).position }
   })
   expect(moved).toEqual({ y: 0, top: 0, body: 'fixed' })
+  // The frame reaches the bottom edge; the glass tab bar floats just above it.
+  const frame = await page.locator('[data-phone-frame]').boundingBox()
+  expect(Math.round(frame.y + frame.height)).toBe(844)
   const bar = await phone.getByRole('navigation', { name: 'Sections' }).boundingBox()
-  expect(Math.round(bar.y + bar.height)).toBe(844)
+  expect(844 - Math.round(bar.y + bar.height)).toBeGreaterThanOrEqual(6)
+  expect(844 - Math.round(bar.y + bar.height)).toBeLessThanOrEqual(16)
 })
 
 test('phone: a sheet dragged down from its top closes; a short drag springs back', async ({ page }) => {
@@ -769,7 +773,8 @@ test('phone: a short visual viewport with nothing being typed leaves the bar on 
     Object.defineProperty(window, 'visualViewport', { value: fake, configurable: true })
   })
   const phone = await open(page)
-  const bar = await phone.getByRole('navigation', { name: 'Sections' }).boundingBox()
-  expect(Math.round(bar.y + bar.height)).toBe(844)
+  const frame = await page.locator('[data-phone-frame]').boundingBox()
+  expect(Math.round(frame.y + frame.height)).toBe(844)
+  await expect(phone.getByRole('navigation', { name: 'Sections' })).toBeVisible()
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--phone-kb').trim())).toBe('0px')
 })
