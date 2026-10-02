@@ -321,7 +321,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const placeStatus = classifyPlace(event, homeAddress)
     if (placeStatus !== 'away') {
       for (const id of owners) {
-        addSegment(id, { kind: 'activity', start, end, label: event.title, placeStatus, sourceId: event.id })
+        addSegment(id, { kind: 'activity', start, end, label: event.title, placeStatus, sourceId: event.id, ...(event.event_type === 'reminder' ? { reminder: true } : {}) })
       }
       if (placeStatus === 'unknown') unplaced.push({ sourceId: event.id, title: event.title, at: start, memberIds: owners })
       continue

@@ -1837,7 +1837,7 @@ test('wall: chores on the Score — trash night on Jake’s lane, Liv’s meds o
 
 // Designer polish, approved Oct 1: today's header is one height whether or not there's a list (the screen doesn't jump
 // when the list is done), and "Hide routines" sits on the Next Move's action line instead of floating above the hours.
-test('wall: today’s header keeps its height; Hide routines on the Leaving now line', async ({ page }) => {
+test('wall: today’s header keeps its height; Hide routines on the Leaving now line, or with the hours beside THEN', async ({ page }) => {
   const measure = async (at) => {
     await page.goto(`/__wall-fixture?at=${at}`)
     await page.getByRole('region', { name: 'Next move' }).waitFor()
@@ -1852,7 +1852,10 @@ test('wall: today’s header keeps its height; Hide routines on the Leaving now 
   const plain = await measure('2026-09-25T07:12:00')
   const withList = await measure('2026-09-26T11:30:00')
   expect(plain.header).toBe(withList.header)
-  expect(Math.abs(plain.pillMid - plain.leavingMid)).toBeLessThanOrEqual(1)
+  // With THEN beside the Next Move (canvas 29), the button line ends short of the wall's edge, so the pill sits on the
+  // hours' row at the right edge instead (see the next test); with nothing after the move it's on the Leaving now line.
+  const last = await measure('2026-09-26T11:30:00')
+  expect(Math.abs(last.pillMid - last.leavingMid) <= 1 || last.pillMid > last.header).toBe(true)
 })
 
 test('wall: Hide routines ends at the wall’s right edge, with the hours', async ({ page }) => {
@@ -2226,4 +2229,34 @@ test('wall: STILL TONIGHT — from 7 PM the wall is tomorrow’s, and what’s l
   // Kelly's gym opens its sheet.
   await card.getByRole('button', { name: 'Kelly at the gym, until 9:30' }).click()
   await expect(wall.getByRole('region', { name: /details$/ })).toBeVisible()
+})
+
+test('wall: today’s header — a one-off at home takes it from a routine run the sitter covers within 45 minutes; THEN is the next three (canvas 29e/29f)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T14:45:00&home=1')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const header = wall.getByRole('region', { name: 'Next move' })
+  await expect(header.getByText('AT HOME · 3:15')).toBeVisible()
+  await expect(header.getByText('Plumber · water heater')).toBeVisible()
+  await expect(header.getByText('Jake · 3:15 to 4:15 · about an hour')).toBeVisible()
+  const then = wall.getByRole('region', { name: 'Then' })
+  // Giselle's 3:12 pickup, passed over for the plumber, is first under THEN, marked routine.
+  await expect(then.getByRole('button').first()).toContainText('3:12')
+  await expect(then.getByRole('button').first()).toContainText('Pick up Liv')
+  await expect(then.getByRole('button').first()).toContainText('routine')
+  await expect(wall).toHaveScreenshot('header-home-race.png')
+  await header.getByRole('button', { name: 'Details' }).click()
+  await expect(wall.getByRole('region', { name: /details$/ })).toBeVisible()
+
+  // Earlier the same day: nothing one-off is close, so the next move leads; THEN shows the race coming.
+  await page.goto('/__wall-fixture?at=2026-09-25T13:15:00&home=1')
+  await expect(wall.getByRole('region', { name: 'Next move' }).getByText('NEXT MOVE · LEAVE BY 1:50')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Then' }).getByRole('button')).toHaveCount(3)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall).toHaveScreenshot('header-home-earlier.png')
+
+  // While the plumber's here, it keeps the header.
+  await page.goto('/__wall-fixture?at=2026-09-25T15:40:00&home=1')
+  await page.getByTestId('wall-fixture').click({ position: { x: 400, y: 600 } })
+  await expect(wall.getByRole('region', { name: 'Next move' }).getByText('AT HOME · NOW · UNTIL 4:15')).toBeVisible()
 })

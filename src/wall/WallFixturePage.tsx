@@ -138,6 +138,11 @@ export default function WallFixturePage() {
       { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'emme', role: 'primary' }] },
       { id: 'far-market', title: 'Green Market', start_time: new Date(2026, 9, 18, 9, 0).toISOString(), end_time: new Date(2026, 9, 18, 11, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'kelly', role: 'primary' }] },
     ] as unknown as WallEvent[] : []),
+    // `?home=1` (canvas 29): at home this afternoon — the plumber for the water heater (Jake), a video call (Kelly).
+    ...(new URLSearchParams(window.location.search).get('home') ? [
+      { id: 'home-plumber', title: 'Plumber · water heater', start_time: new Date(2026, 8, 25, 15, 15).toISOString(), end_time: new Date(2026, 8, 25, 16, 15).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
+      { id: 'home-call', title: 'Video call with Towid', start_time: new Date(2026, 8, 25, 16, 0).toISOString(), end_time: new Date(2026, 8, 25, 16, 30).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'kelly', role: 'primary' }] },
+    ] as unknown as WallEvent[] : []),
     // `?gym=1` (canvas 27c): Kelly at the gym, 7 to 9:30 tonight.
     ...(new URLSearchParams(window.location.search).get('gym') ? [{
       id: 'kelly-gym', title: 'Gym', start_time: new Date(2026, 8, 25, 19, 0).toISOString(), end_time: new Date(2026, 8, 25, 21, 30).toISOString(),

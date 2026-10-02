@@ -1,7 +1,8 @@
 import { useMemo, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
-import { selectNextMove } from './engine/nextMove'
-import { describeNextMove, weatherLine } from './header'
+import { describeNextMove, weatherLine, type NextMoveView } from './header'
+import { describeHomeLead, selectHeaderLead, thenItems } from './headerLead'
+import WallThen from './WallThen'
 import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
@@ -34,6 +35,8 @@ export interface WallLaunchProps {
   /** What came in by email and waits (canvas 14d), and opening its review. */
   emailCount?: number
   onOpenEmail?: () => void
+  /** Opens a calendar item (something at home leading the header, a line under THEN). */
+  onOpenItem?: (id: string) => void
   /** The week strip, drawn under the Score. */
   week?: ReactNode
   /** Tomorrow speaking up in the afternoon. */
@@ -56,7 +59,7 @@ export interface WallLaunchProps {
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, calling = null, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, week, tomorrow: tomorrowNote = null, prep = null }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, calling = null, onAdd, interaction, moveActions, decisionCount = 0, onOpenDecisions, emailCount = 0, onOpenEmail, onOpenItem, week, tomorrow: tomorrowNote = null, prep = null }: WallLaunchProps) {
   const packing = Boolean(prep && prep.packing.total > 0)
   // The rail shows with a list to get ready or the day's small jobs (NEXT UP, canvas 27a).
   const prepping = packing || Boolean(prep?.nextUp)
@@ -67,11 +70,23 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
   const hideRoutines = interaction?.routines?.hidden === true
   const score = useMemo(() => (plan ? buildScore(plan, members, now, { hideRoutines }) : null), [plan, members, now, hideRoutines])
   const clock = formatWallClock(now)
-  const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
+  // Who leads the header (canvas 29e/29f): the next move, or something at home — a one-off beats a routine run the
+  // sitter covers when they're within 45 minutes, and keeps the header until it's over. THEN is the next three.
+  const lead = useMemo(() => selectHeaderLead(plan, members, now), [plan, members, now])
+  const then = useMemo(() => thenItems(plan, members, lead, now), [plan, members, lead, now])
+  const homeLead = lead?.kind === 'home' ? lead : null
+  const nextMove = useMemo((): NextMoveView | null => {
+    if (!lead) return null
+    if (lead.kind === 'move') return describeNextMove(lead.move, members, now)
+    const home = describeHomeLead(lead.item, lead.now, members, now)
+    return { eyebrow: home.eyebrow, urgent: false, driverId: home.whoId, initial: home.initial, title: home.title, detail: home.detail, summary: home.title, timing: '', leaveTime: null, also: null, ring: home.ring, tripIds: [], departed: false, status: 'upcoming' }
+  }, [lead, members, now])
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null
   const weather = weatherLine(currentWeather, plan, now)
+  const onDetails = homeLead && onOpenItem ? () => onOpenItem(homeLead.item.id) : undefined
   // With a Next Move and its actions (and no TOMORROW note, which has its own row), the pill sits on the actions' line.
-  const pillInHeader = Boolean(nextMove && moveActions && !tomorrow)
+  // With THEN beside it the button line ends short of the wall's edge, so the pill goes back to the hours' row.
+  const pillInHeader = Boolean(nextMove && (homeLead ? onDetails : moveActions) && !tomorrow && then.length === 0)
 
   return (
     // With a list to get ready, the evening face's layout (Jake: "why can't it have the same layout as the night /
@@ -112,10 +127,13 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <NextMovePanel
           view={nextMove}
           pigmentIndex={driverPigment}
-          actions={moveActions}
+          actions={homeLead ? undefined : moveActions}
+          onDetails={onDetails}
+          compact={then.length > 0}
           // "Hide routines" on the Next Move's button line, not floating above the hours (polish, Oct 1).
           trailing={pillInHeader && interaction?.routines ? <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} /> : null}
         />
+        <WallThen items={then} members={members} pigmentOf={(id) => score?.lanes.find((lane) => lane.member.id === id)?.pigmentIndex ?? null} onOpen={onOpenItem} />
       </header>
 
       {tomorrow && interaction?.routines ? (

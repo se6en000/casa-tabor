@@ -630,6 +630,7 @@ export default function WallView(props: WallViewProps) {
         onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined}
         emailCount={emailCount}
         onOpenEmail={onOpenEmail}
+        onOpenItem={(id) => eventsById.has(id) && setSelectedId(id)}
         tomorrow={tomorrowNote}
         week={weekStrip}
         prep={shownToday && toggleChecklist ? {

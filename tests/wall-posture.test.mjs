@@ -34,9 +34,17 @@ test('a weekend with no school runs has no morning rush', () => {
 })
 
 test('from 7 PM until 5 AM it is evening', () => {
-  assert.equal(selectPosture(friday, at(25, 16, 30)), 'calm')
+  assert.equal(selectPosture(friday, at(25, 17, 30)), 'calm')
   assert.equal(selectPosture(friday, at(25, 19, 0)), 'evening')
   assert.equal(selectPosture(friday, at(26, 2, 0)), 'evening')
+})
+
+test('something at home wakes the full day from the hour before it until 10 minutes in (canvas 29)', () => {
+  // Emme's violin with Meredith, 4:30 to 5:15, no place: at home.
+  // Everyone's home by 3:48; at 3:55 the lesson is 35 minutes away.
+  assert.equal(selectPosture(friday, at(25, 15, 55)), 'launch')
+  assert.equal(selectPosture(friday, at(25, 16, 35)), 'launch')
+  assert.equal(selectPosture(friday, at(25, 16, 45)), 'calm')
 })
 
 test('while loading, the wall stays on the launch layout', () => {

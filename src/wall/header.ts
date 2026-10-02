@@ -61,7 +61,7 @@ function arrivalPhrase(trip: Trip): string {
   return `starts ${time}`
 }
 
-function countdown(minutes: number): { value: string; unit: string } {
+export function countdown(minutes: number): { value: string; unit: string } {
   if (minutes < MINUTES_LIMIT) return { value: String(minutes), unit: 'MIN' }
   // "1:35", never rounded: 95 minutes read as "2 HRS" looked like two hours away (Jake, 2026-09-26).
   return { value: `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`, unit: 'HRS' }

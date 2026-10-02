@@ -2,9 +2,8 @@ import type { ReactNode } from 'react'
 import type { NextMoveView } from './header'
 import { pigmentStyleFor } from './lanes'
 
-const RING_SIZE = 176
-const RING_RADIUS = 80
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+// The ring and title come down a size when THEN sits beside them (canvas 29e), so the title stays whole.
+const RING = { full: { size: 176, radius: 80 }, compact: { size: 140, radius: 63 } } as const
 
 export interface NextMoveActions {
   onLeaving: () => void
@@ -13,7 +12,16 @@ export interface NextMoveActions {
 }
 
 /** The header's one instruction: who leaves for where, and a countdown ring to the leave time. */
-export default function NextMovePanel({ view, pigmentIndex, actions, trailing = null }: { view: NextMoveView | null; pigmentIndex: number | null; actions?: NextMoveActions; trailing?: ReactNode }) {
+export default function NextMovePanel({ view, pigmentIndex, actions, trailing = null, onDetails, compact = false }: {
+  view: NextMoveView | null
+  pigmentIndex: number | null
+  actions?: NextMoveActions
+  trailing?: ReactNode
+  /** Something at home leads (canvas 29e): no Leaving now or Hand off, just its details. */
+  onDetails?: () => void
+  /** THEN is beside it: a smaller ring and title. */
+  compact?: boolean
+}) {
   if (!view) {
     return (
       <section aria-label="Next move" className="flex min-w-0 flex-1 flex-col justify-center gap-[10px]">
@@ -24,27 +32,29 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
   }
 
   const accent = view.urgent ? 'text-wall-rust' : 'text-wall-ink-2'
+  const ring = RING[compact ? 'compact' : 'full']
+  const circumference = 2 * Math.PI * ring.radius
   return (
-    <section aria-label="Next move" className="flex min-w-0 flex-1 items-center gap-[36px]">
+    <section aria-label="Next move" className={`flex min-w-0 flex-1 items-center ${compact ? 'gap-[28px]' : 'gap-[36px]'}`}>
       {view.ring && (
-        <div className="relative h-[176px] w-[176px] shrink-0">
-          <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`} aria-hidden="true">
-            <circle cx={88} cy={88} r={RING_RADIUS} fill="none" strokeWidth={6} className="stroke-wall-stone" />
+        <div className={`relative shrink-0 ${compact ? 'h-[140px] w-[140px]' : 'h-[176px] w-[176px]'}`}>
+          <svg width={ring.size} height={ring.size} viewBox={`0 0 ${ring.size} ${ring.size}`} aria-hidden="true">
+            <circle cx={ring.size / 2} cy={ring.size / 2} r={ring.radius} fill="none" strokeWidth={6} className="stroke-wall-stone" />
             <circle
-              cx={88}
-              cy={88}
-              r={RING_RADIUS}
+              cx={ring.size / 2}
+              cy={ring.size / 2}
+              r={ring.radius}
               fill="none"
               strokeWidth={6}
               strokeLinecap="round"
-              strokeDasharray={RING_CIRCUMFERENCE}
-              strokeDashoffset={RING_CIRCUMFERENCE * (1 - view.ring.fraction)}
-              transform="rotate(-90 88 88)"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - view.ring.fraction)}
+              transform={`rotate(-90 ${ring.size / 2} ${ring.size / 2})`}
               className={view.urgent ? 'stroke-wall-rust' : 'stroke-wall-brass'}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className={`font-display font-semibold leading-[0.85] lining-nums ${view.ring.value.includes(':') ? 'text-wall-countdown-long' : 'text-wall-countdown'}`}>{view.ring.value}</span>
+            <span className={`font-display font-semibold leading-[0.85] lining-nums ${compact || view.ring.value.includes(':') ? 'text-wall-countdown-long' : 'text-wall-countdown'}`}>{view.ring.value}</span>
             <span className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{view.ring.unit}</span>
           </div>
         </div>
@@ -62,10 +72,18 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
           >
             {view.initial}
           </span>
-          <span className="truncate font-display text-wall-move font-semibold leading-none">{view.title}</span>
+          <span className={`truncate font-display font-semibold leading-none ${compact ? 'text-wall-quote' : 'text-wall-move'}`}>{view.title}</span>
         </div>
         <div className="truncate text-wall-body text-wall-ink">{view.detail}</div>
-        {view.also && !actions && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
+        {view.also && !actions && !onDetails && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
+        {!actions && onDetails && (
+          <div className="mt-[2px] flex items-center gap-[12px]">
+            <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); onDetails() }}>
+              Details
+            </button>
+            {trailing && <div className="ml-auto">{trailing}</div>}
+          </div>
+        )}
         {actions && (
           <div className="mt-[2px] flex items-center gap-[12px]">
             {view.status === 'upcoming' && view.driverId && (

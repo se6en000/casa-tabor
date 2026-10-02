@@ -526,6 +526,10 @@
         "reason": "Family Wall: the chore sheet (canvas 20b) — who does it, how often, the day chips, the time steppers, Cancel/Delete/Save, part of the Wall's own component set."
       },
       {
+        "path": "src/wall/WallThen.tsx",
+        "reason": "Family Wall: THEN in today's header (canvas 29e/29f) — each of the next three opens its item. Part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallNextUp.tsx",
         "reason": "Family Wall: NEXT UP and STILL TONIGHT (canvas 27a, 27c) — a row is a tick (role checkbox) or opens who's out; the To do link. Part of the Wall's own component set."
       },

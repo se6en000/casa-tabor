@@ -122,6 +122,8 @@ export interface LaneSegment {
   travel?: 'drive' | 'wait' | 'flight' | 'away'
   /** A household chore (chores.ts): a small mark at its time. */
   chore?: boolean
+  /** A reminder, not an appointment (it's a to-do; the header leaves it to NEXT UP). */
+  reminder?: boolean
 }
 
 /** Something the family should fix or decide; feeds "Needs a decision". */

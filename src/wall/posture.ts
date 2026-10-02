@@ -1,5 +1,6 @@
 import { clockTime, placeName, rainChance, type NextMoveView } from './header.ts'
 import { selectNextMove } from './engine/nextMove.ts'
+import { homeItems } from './headerLead.ts'
 import type { DayPlan } from './engine/types'
 import { packingGroups, type WallChecklistItem } from './packing.ts'
 
@@ -38,6 +39,9 @@ export function selectPosture(plan: DayPlan | null, now: Date): Posture {
 
   const move = selectNextMove(plan, now)
   if (move?.status === 'upcoming' && move.minutesUntilLeave != null && move.minutesUntilLeave <= LAUNCH_LEAD_MIN) return 'launch'
+  // Something at home (canvas 29): the full day from the hour before it until 10 minutes in (then Calm may come back;
+  // a two-hour call shouldn't hold the full day).
+  if (homeItems(plan, now).some((h) => h.start.getTime() - t <= LAUNCH_LEAD_MIN * 60_000 && t - h.start.getTime() <= 10 * 60_000)) return 'launch'
   return 'calm'
 }
 
