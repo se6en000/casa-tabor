@@ -47,6 +47,7 @@ import PhoneSkeleton from './PhoneSkeleton'
 import PhoneTabBar from './PhoneTabBar'
 import PhoneDayPager from './PhoneDayPager'
 import PhonePushPage from './PhonePushPage'
+import { haptic } from './haptic'
 import { AnimatePresence } from 'framer-motion'
 
 // The phone (board section 05): one person's lens on the same family day the wall
@@ -266,7 +267,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
   const nowLine = (
     <div data-now-line aria-label={`Now, ${clock(now)}`} className="my-[6px] flex items-center gap-[8px]">
-      <span aria-hidden="true" className="h-[10px] w-[10px] shrink-0 rounded-full bg-wall-brass ring-4 ring-wall-brass/25" />
+      <span aria-hidden="true" className="phone-now-dot h-[10px] w-[10px] shrink-0 rounded-full bg-wall-brass ring-4 ring-wall-brass/25" />
       <span className="shrink-0 text-phone-label font-extrabold tracking-[0.14em] text-wall-brass-ink">NOW · {clock(now)}</span>
       <span aria-hidden="true" className="h-[2px] flex-1 rounded-full bg-wall-brass" />
     </div>
@@ -437,7 +438,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${past ? 'bg-wall-stone' : pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
           <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
             <span className={`text-phone-body font-semibold ${ticked ? 'text-wall-ink-2 line-through' : ''}`}>{i.title}</span>
-            {(i.sub || next || late) && <span className={`text-phone-detail ${next ? 'font-semibold text-wall-brass-ink' : late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{next ? [untilWords(i.at, now), i.sub].filter(Boolean).join(' · ') : late ? `Late · ${i.sub}` : i.sub}</span>}
+            {(i.sub || next || late) && <span className={`text-phone-detail ${next ? 'font-semibold text-wall-brass-ink' : late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{next ? <><span key={untilWords(i.at, now)} className="phone-roll">{untilWords(i.at, now)}</span>{i.sub ? ` · ${i.sub}` : ''}</> : late ? `Late · ${i.sub}` : i.sub}</span>}
             {keptFromOf(keepFrom, i.id).length > 0 && (
               <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
                 <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
@@ -451,10 +452,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             role="checkbox"
             aria-checked={ticked}
             aria-label={`Done: ${i.title}`}
-            onClick={() => (i.kind === 'chore' && choreDone.has(tickKey) ? void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false) : ticks.toggle(tickKey))}
+            onClick={() => { haptic(); if (i.kind === 'chore' && choreDone.has(tickKey)) void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false); else ticks.toggle(tickKey) }}
             className="flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
           >
-            <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+            <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'phone-tick-pop border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : 'border-wall-ink-2'}`}>
               {ticked && <Check size={16} strokeWidth={3} />}
             </span>
           </button>
@@ -650,6 +651,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   ]
   // The tab you're on goes back to its start, as an iPhone tab bar does: today, and the top.
   const pickTab = (id: Tab) => {
+    if (id !== tab) haptic()
     if (id === tab) scroller()?.scrollTo({ top: 0, behavior: 'smooth' })
     setTab(id)
     if (id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) }
@@ -661,6 +663,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const mainRef = useRef<HTMLElement>(null)
   // The glass bar settles smaller while scrolling down the list, and comes back scrolling up or at the top.
   const [barCompact, setBarCompact] = useState(false)
+  // Scrolled past the big title: a small one in a frosted bar at the top (premium plan, Phase B).
+  const [tucked, setTucked] = useState(false)
   const lastScroll = useRef(0)
   // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
   const loading = week.length === 0 || members.length === 0
@@ -675,10 +679,14 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const activeRef = useRef<HTMLElement | null>(null)
   const setActivePage = useCallback((el: HTMLElement | null) => { activeRef.current = el; setActivePageState(el) }, [])
   const scroller = () => (paged ? activeRef.current : mainRef.current)
+  const tuckedDay = shownDays[pagerAt]?.date ?? now
+  const tuckedWhen = sameDay(tuckedDay, now) ? 'Today' : tuckedDay.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const tuckedTitle = tab === 'me' ? `${viewer?.name ?? 'Your'} · ${tuckedWhen}` : tab === 'family' ? `Everyone · ${tuckedWhen}` : tab === 'week' ? (weekView === 'todo' ? 'To do' : weekView === 'coming' ? 'Coming up' : 'The week') : 'More'
   const onMainScroll = () => {
     const y = scroller()?.scrollTop ?? 0
     const down = y > lastScroll.current + 6
     const up = y < lastScroll.current - 6
+    if ((y > 64) !== tucked) setTucked(y > 64)
     if (down && y > 80 && !barCompact) setBarCompact(true)
     else if ((up || y < 40) && barCompact) setBarCompact(false)
     if (down || up) lastScroll.current = y
@@ -703,9 +711,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   useEffect(() => {
     if (!activePage) return
     lastScroll.current = activePage.scrollTop
+    const sync = window.requestAnimationFrame(() => onMainScrollRef.current())
     const on = () => onMainScrollRef.current()
     activePage.addEventListener('scroll', on, { passive: true })
-    return () => activePage.removeEventListener('scroll', on)
+    return () => { window.cancelAnimationFrame(sync); activePage.removeEventListener('scroll', on) }
   }, [activePage])
   usePhoneShell()
   const handOffSwipe = useSheetSwipe(() => setHandOff(null))
@@ -730,7 +739,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             key={tab}
             count={shownDays.length}
             index={pagerAt}
-            onIndex={(i) => (tab === 'me' ? setMeIndex(i) : setDayIndex(i))}
+            onIndex={(i) => { haptic(); if (tab === 'me') setMeIndex(i); else setDayIndex(i) }}
             onActivePage={setActivePage}
             pageClassName={PAGE_PAD}
             renderPage={(i) => (Math.abs(i - pagerAt) <= 1 ? (
@@ -751,6 +760,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </>
         )}
       </main>
+      <div aria-hidden={!tucked} className={`phone-tucked pointer-events-none absolute inset-x-0 top-0 z-10 flex h-[48px] items-center justify-center border-0 border-b border-solid border-wall-stone/70 bg-phone-ground/80 backdrop-blur-xl backdrop-saturate-150 ${tucked ? 'opacity-100' : '-translate-y-[8px] opacity-0'}`}>
+        <span className="font-display text-phone-heading font-bold text-wall-ink">{tuckedTitle}</span>
+      </div>
       <PhoneTabBar tabs={tabs} current={tab} onTab={pickTab} onAdd={() => setAddOpen(true)} addDisabled={!createEvent} compact={barCompact} />
       </div>
       <AnimatePresence>

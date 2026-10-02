@@ -814,3 +814,19 @@ test('phone: an event pushes in; a drag from the left edge takes it back; a shee
   await expect(page.locator('.phone-behind-sheet')).toHaveCount(1)
   await page.keyboard.press('Escape')
 })
+
+// Phase B (premium plan): scrolled past the big title, a small one shows in a frosted bar at the top.
+test('phone: scrolling down tucks the title into a small frosted bar', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await phone.getByRole('button', { name: /^Week/ }).first().click()
+  await phone.getByRole('group', { name: 'Week, Coming up or To do' }).getByRole('button', { name: 'To do' }).click()
+  const bar = page.locator('.phone-tucked')
+  await expect(bar).toHaveClass(/opacity-0/)
+  // The To do list scrolls in the page itself (main).
+  const scrolled = await page.evaluate(() => { const m = document.querySelector('main'); m.scrollTo({ top: 240 }); m.dispatchEvent(new Event('scroll', { bubbles: true })); return m.scrollTop })
+  expect(scrolled).toBeGreaterThan(64)
+  await expect(bar).toHaveClass(/opacity-100/)
+  await expect(bar).toContainText('To do')
+})

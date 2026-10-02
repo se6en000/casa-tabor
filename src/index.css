@@ -1365,3 +1365,33 @@ html.phone-app .phone-behind-sheet {
   transform: scale(0.94) translateY(10px);
   border-radius: 22px;
 }
+
+/* ── The phone's details (premium plan, Phase B) ──────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  /* A tick: the box springs, the check draws itself. */
+  html.phone-app .phone-tick-pop {
+    animation: phone-tick-pop 380ms linear(0, 0.6 18%, 1.12 42%, 0.97 66%, 1) both;
+  }
+  html.phone-app .phone-tick-pop path,
+  html.phone-app .phone-tick-pop polyline {
+    stroke-dasharray: 24;
+    animation: phone-tick-draw 260ms 80ms ease-out both;
+  }
+  /* A number rolls up to its new value ("In 25 min" → "In 24 min"). */
+  html.phone-app .phone-roll {
+    display: inline-block;
+    animation: phone-roll-in 320ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+  /* The NOW dot breathes. */
+  html.phone-app .phone-now-dot {
+    animation: phone-breathe 3.2s ease-in-out infinite;
+  }
+  /* The tucked title bar slides in. */
+  html.phone-app .phone-tucked {
+    transition: opacity 220ms ease-out, transform 260ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  }
+}
+@keyframes phone-tick-pop { from { transform: scale(0.6); } to { transform: scale(1); } }
+@keyframes phone-tick-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+@keyframes phone-roll-in { from { opacity: 0; transform: translateY(55%); } to { opacity: 1; transform: none; } }
+@keyframes phone-breathe { 0%, 100% { box-shadow: 0 0 0 4px rgb(168 132 80 / 0.25); } 50% { box-shadow: 0 0 0 8px rgb(168 132 80 / 0.08); } }
