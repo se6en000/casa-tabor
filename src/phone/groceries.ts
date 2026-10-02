@@ -33,6 +33,9 @@ const LABELS: Record<GroceryCategoryKey, string> = {
 
 export interface Aisle { key: string; label: string; items: ShopItem[] }
 
+/** Every aisle in store order, for moving an item to the right one (hold and drag, Jake Oct 2). */
+export const ALL_AISLES: Array<{ key: string; label: string }> = GROCERY_CATEGORY_KEYS.map((key) => ({ key, label: LABELS[key] }))
+
 /** The aisles in store order, what's left in each (and what was ticked a moment ago, still in place), and what's done. */
 export function aisles(items: ShopItem[], held: Set<string>): { groups: Aisle[]; done: ShopItem[] } {
   const byName = (a: ShopItem, b: ShopItem) => a.name.localeCompare(b.name)

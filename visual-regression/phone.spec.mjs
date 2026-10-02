@@ -91,6 +91,9 @@ test('phone: More opens the rest of Casa', async ({ page }) => {
   await expect(sheet.getByRole('link', { name: /Settings/ })).toBeVisible()
   await expect(sheet.getByRole('link', { name: /See the Wall/ })).toBeVisible()
   await expect(sheet.getByRole('link', { name: /Meals/ })).toHaveCount(0)
+  // Switch person (Jake, Oct 2: "a logoff ability on mobile so I can test the different profiles").
+  await sheet.getByRole('button', { name: /Switch person/ }).click()
+  expect(await page.evaluate(() => window.__signedOut)).toBe(true)
 })
 
 test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evening)', async ({ page }) => {
@@ -905,4 +908,33 @@ test('phone: the form — the place from last time, a clash warned, who’s driv
   expect(args.title).toBe('Pet grooming')
   expect(args.location).toBe('12 Pet Way, Jupiter, FL')
   expect(args.driver_name).toBe('Jake')
+})
+
+// Jake, Oct 2: "on mobile, hold and drag items on grocery to move to the right category".
+test('phone: Groceries — hold an item and let go on the right aisle; or tap one after the hold', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00')
+  await phone.getByRole('button', { name: 'Groceries' }).click()
+  const list = phone.getByRole('region', { name: 'Groceries' })
+  const yogurt = list.getByRole('button', { name: 'Greek yogurt, 2' })
+  const box = await yogurt.boundingBox()
+  await page.mouse.move(box.x + 40, box.y + box.height / 2)
+  await page.mouse.down()
+  const move = phone.getByRole('region', { name: 'Move Greek yogurt' })
+  await expect(move).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-groceries-move.png')
+  const pantry = await move.getByRole('button', { name: 'To pantry' }).boundingBox()
+  await page.mouse.move(pantry.x + pantry.width / 2, pantry.y + pantry.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await expect(move).toHaveCount(0)
+  await expect(list.getByRole('heading', { name: 'PANTRY' })).toBeVisible()
+  // Held and let go elsewhere: the aisles stay up to tap one; the item wasn't ticked.
+  const bananas = list.getByRole('button', { name: 'Bananas' })
+  const b = await bananas.boundingBox()
+  await page.mouse.move(b.x + 40, b.y + b.height / 2)
+  await page.mouse.down()
+  await expect(phone.getByRole('region', { name: 'Move Bananas' })).toBeVisible()
+  await page.mouse.up()
+  await phone.getByRole('region', { name: 'Move Bananas' }).getByRole('button', { name: 'To other' }).click()
+  await expect(list.getByRole('heading', { name: 'OTHER' })).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Bananas' })).toHaveAttribute('aria-pressed', 'false')
 })

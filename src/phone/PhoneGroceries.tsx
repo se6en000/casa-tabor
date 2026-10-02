@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Check, ChevronLeft, Mic, Plus } from 'lucide-react'
 import { useFieldDictation } from '../hooks/useFieldDictation'
-import { aisles, amountOf, planAdds, type ShopItem } from './groceries'
+import { ALL_AISLES, aisles, amountOf, planAdds, type ShopItem } from './groceries'
 import { haptic } from './haptic'
 import { primeKeyboard, useSheetSwipe } from './phoneShell'
 
@@ -18,7 +18,12 @@ export interface PhoneGroceriesData {
   tick: (id: string, checked: boolean) => Promise<void> | void
   add: (item: { name: string; quantity: string | null; unit: string | null; category: string }) => Promise<void> | void
   clearDone: () => Promise<void> | void
+  /** Into the right aisle (hold and drag): saved as a correction, so it's filed there next time. */
+  move?: (id: string, category: string) => Promise<void> | void
 }
+
+/** How long a press is before it lifts the item to move (a tap ticks it). */
+export const LIFT_MS = 450
 
 /** How long ticked items stay in place after the last tick. */
 export const HOLD_MS = 2500
@@ -39,7 +44,48 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
   const { groups, done } = useMemo(() => aisles(data.items, held), [data.items, held])
   const left = data.items.filter((i) => !i.checked).length
 
+  // Hold and drag to the right aisle (Jake, Oct 2: "hold and drag items on grocery to move to the right category"): a
+  // hold lifts the item and the aisles slide up; let go on one — or tap one — and it moves there.
+  const [lifted, setLifted] = useState<ShopItem | null>(null)
+  const [over, setOver] = useState<string | null>(null)
+  const press = useRef<{ id: string; x: number; y: number; timer: number; lifted: boolean } | null>(null)
+  const swallowTap = useRef(false)
+  const aisleAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest('[data-aisle-key]') as HTMLElement | null)?.dataset.aisleKey ?? null
+  const moveTo = (item: ShopItem, key: string) => {
+    setLifted(null)
+    setOver(null)
+    if (key !== item.category) { haptic(); void data.move?.(item.id, key) }
+  }
+  const pressHandlers = (item: ShopItem) => data.move ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      swallowTap.current = false
+      // The let-go comes back to this row wherever it happens (a finger does this anyway; a mouse needs asking).
+      ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+      const p = { id: item.id, x: e.clientX, y: e.clientY, timer: 0, lifted: false }
+      p.timer = window.setTimeout(() => { p.lifted = true; swallowTap.current = true; haptic(); setLifted(item) }, LIFT_MS)
+      press.current = p
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const p = press.current
+      if (!p) return
+      if (!p.lifted && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { window.clearTimeout(p.timer); press.current = null; return }
+      if (p.lifted) setOver(aisleAt(e.clientX, e.clientY))
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const p = press.current
+      press.current = null
+      if (!p) return
+      window.clearTimeout(p.timer)
+      if (!p.lifted) return
+      const key = aisleAt(e.clientX, e.clientY)
+      if (key) moveTo(item, key) // else the aisles stay up: tap one
+    },
+    onPointerCancel: () => { const p = press.current; press.current = null; if (p) window.clearTimeout(p.timer) },
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  } : {}
+
   const tap = (item: ShopItem) => {
+    if (swallowTap.current) { swallowTap.current = false; return }
     haptic()
     if (item.checked) {
       void data.tick(item.id, false)
@@ -62,7 +108,8 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         aria-pressed={item.checked}
         aria-label={`${item.name}${amount ? `, ${amount}` : ''}${item.checked ? ', got it' : ''}`}
         onClick={() => tap(item)}
-        className={`flex min-h-[56px] w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[8px] text-left text-wall-ink ${quiet ? 'opacity-50' : ''}`}
+        {...pressHandlers(item)}
+        className={`flex min-h-[56px] w-full select-none items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[8px] text-left text-wall-ink ${quiet ? 'opacity-50' : ''} ${lifted?.id === item.id ? 'rounded-[12px] bg-wall-brass/15 px-[8px] shadow-[0_6px_18px_rgba(38,34,29,0.2)]' : ''}`}
       >
         <span className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.75px] border-solid border-wall-ink-2'}`}>
           {item.checked && <Check size={16} strokeWidth={3} />}
@@ -133,6 +180,25 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         </button>
       )}
       {adding && <GroceryAdd data={data} onClose={() => setAdding(false)} />}
+      {lifted && (
+        <section aria-label={`Move ${lifted.name}`} className="phone-sheet absolute inset-x-0 bottom-0 z-40 flex flex-col gap-[10px] rounded-t-[22px] bg-phone-ground px-[16px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))] pt-[12px] shadow-[0_-12px_40px_rgba(38,34,29,0.2)]">
+          <div className="flex items-center justify-between gap-[10px]">
+            <span className="font-display text-phone-heading font-semibold text-wall-ink">Move {lifted.name} to…</span>
+            <button type="button" onClick={() => { setLifted(null); setOver(null) }} className="flex h-[44px] items-center rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">Cancel</button>
+          </div>
+          <div className="grid grid-cols-2 gap-[8px]">
+            {ALL_AISLES.map((a) => {
+              const here = a.key === lifted.category || (a.key === 'other' && !ALL_AISLES.some((x) => x.key === lifted.category))
+              return (
+                <button key={a.key} type="button" data-aisle-key={a.key} aria-label={`To ${a.label.toLowerCase()}`} disabled={here} onClick={() => moveTo(lifted, a.key)}
+                  className={`flex h-[46px] items-center justify-center rounded-[12px] px-[8px] text-phone-label font-bold tracking-[0.1em] ${over === a.key ? 'border-2 border-solid border-wall-ink bg-wall-brass/20 text-wall-ink' : here ? 'border border-dashed border-wall-stone bg-transparent text-wall-ink-2' : 'border border-solid border-wall-stone bg-wall-on-pigment text-wall-ink'}`}>
+                  {a.label}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
     </section>
   )
 }

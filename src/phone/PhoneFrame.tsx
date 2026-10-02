@@ -63,7 +63,7 @@ function usePhoneMonth(month: Date): WallEvent[] {
 }
 
 export default function PhoneFrame() {
-  const { profile } = useProfileSession()
+  const { profile, signOut } = useProfileSession()
   // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
   const [aroundDay, setAroundDay] = useState<Date | null>(null)
   const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
@@ -130,6 +130,7 @@ export default function PhoneFrame() {
       contacts={contacts}
       places={places}
       groceries={groceries}
+      onSignOut={signOut}
       pastPlaces={pastPlaces}
       todos={isJake && todos.data ? { list: todos.data, act: todos.act, useProject: useTodoProject } : null}
     />

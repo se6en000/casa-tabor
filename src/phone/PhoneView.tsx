@@ -2,7 +2,7 @@ import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Check, ChevronDown, ChevronRight, ListChecks, Lock, Mail, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sparkles, Sun, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sparkles, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -127,6 +127,8 @@ export interface PhoneViewProps {
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
   comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; ideas?: GiftIdea[]; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
+  /** Sign out, to open the phone as someone else (Jake, Oct 2: "a logoff ability on mobile so I can test the different profiles"). */
+  onSignOut?: () => void
   /** Past events with a place, newest first: "Happy Tails, like last time" on the form (step 5). */
   pastPlaces?: PastPlace[]
   /** Groceries (canvas 33d): the shared list, live; the frame's own hook, or the fixture's. */
@@ -188,7 +190,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -911,6 +913,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               <span className="flex flex-1 flex-col gap-[2px]"><span className="text-phone-body font-bold">Settings</span><span className="text-phone-detail text-wall-ink-2">Family, calendars, voice</span></span>
               <ChevronRight size={18} aria-hidden="true" className="text-wall-ink-2" />
             </Link>
+            {onSignOut && initialRow(<LogOut size={20} />, 'Switch person', 'Sign out · open Casa as someone else', () => { setInitialOpen(false); onSignOut() })}
             <Link to="/wall" className="mt-[12px] flex h-[48px] items-center justify-center gap-[10px] rounded-full border border-solid border-wall-ink-2 text-phone-body font-semibold text-wall-ink no-underline">
               <Monitor size={18} /> See the Wall
             </Link>

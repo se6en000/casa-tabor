@@ -27,7 +27,6 @@ test('only events-range queries are persisted, not the rest of the app', () => {
     ['ai_conversations'],
     ['grocery_items'],
     ['event-transportation-plans'],
-    ['saved_places'],
   ]) {
     assert.equal(shouldPersistQuery({ queryKey: key }), false, `${JSON.stringify(key)} must not be persisted`)
   }
@@ -39,6 +38,14 @@ test('the phone’s day data is persisted with the events', () => {
     assert.equal(shouldPersistQuery({ queryKey: key }), true, `${JSON.stringify(key)} should be persisted`)
   }
   assert.equal(shouldPersistQuery({ queryKey: ['todo-project', 'x'] }), false)
+})
+
+// Jake, Oct 2 ("so theres no delay when switching or loading the app"): the phone's lists are kept too — Groceries, the
+// people and places, the "like last time" places — so every tab draws at once (and offline) and refreshes behind.
+test('the phone’s lists are persisted too, so no tab waits', () => {
+  for (const key of [['grocery'], ['grocery-history'], ['contact-directory'], ['saved_places'], ['phone-past-places']]) {
+    assert.equal(shouldPersistQuery({ queryKey: key }), true, `${JSON.stringify(key)} should be persisted`)
+  }
 })
 
 test('the cache buster is a real version string, not left empty (must be bumped whenever the persisted event shape changes)', () => {
@@ -68,4 +75,9 @@ test('App wires PersistQueryClientProvider with the scoped persister, buster and
   assert.match(app, /buster:\s*EVENTS_CACHE_BUSTER/)
   assert.match(app, /maxAge:\s*EVENTS_CACHE_MAX_AGE_MS/)
   assert.match(app, /shouldDehydrateQuery:\s*shouldPersistQuery/)
+})
+
+test('what was restored is refreshed behind it, so a restored list is never left stale', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /onSuccess=\{\(\) => \{ void queryClient\.invalidateQueries\(\{ predicate: \(q\) => shouldPersistQuery\(q\) \}\) \}\}/)
 })

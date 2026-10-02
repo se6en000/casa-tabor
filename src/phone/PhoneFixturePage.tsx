@@ -199,6 +199,7 @@ function PhoneFixturePageInner() {
                 editIdea: async (id, idea) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }}
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               todos={viewerId === 'jake-id' ? todos : null}
+              onSignOut={() => { (window as unknown as { __signedOut?: boolean }).__signedOut = true }}
               pastPlaces={[{ title: 'Milo grooming', location_name: 'Happy Tails', address: '12 Pet Way, Jupiter, FL', start_time: '2026-08-20T14:00:00Z' }]}
               groceries={{
                 items: groceryItems,
@@ -207,6 +208,7 @@ function PhoneFixturePageInner() {
                 tick: (id, checked) => setGroceryItems((list) => list.map((i) => (i.id === id ? { ...i, checked } : i))),
                 add: (item) => setGroceryItems((list) => [...list, { id: `g-added-${list.length}`, checked: false, ...item }]),
                 clearDone: () => setGroceryItems((list) => list.filter((i) => !i.checked)),
+                move: (id, category) => setGroceryItems((list) => list.map((i) => (i.id === id ? { ...i, category } : i))),
               }}
               checklist={checklist}
               scan={async (files) => { (window as unknown as { __scanFiles?: string[] }).__scanFiles = files.map((f) => f.name); return params.get('scan') === 'trip' ? SCANNED_TRIP : SCANNED }}

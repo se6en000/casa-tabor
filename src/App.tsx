@@ -371,6 +371,9 @@ export default function App() {
             maxAge: EVENTS_CACHE_MAX_AGE_MS,
             dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
           }}
+          // What was restored is the last-known copy: it's drawn at once, then refreshed behind it (some lists, like
+          // Groceries, never refetch on their own when opened).
+          onSuccess={() => { void queryClient.invalidateQueries({ predicate: (q) => shouldPersistQuery(q) }) }}
         >
           <PinGate>
             <BrowserRouter>

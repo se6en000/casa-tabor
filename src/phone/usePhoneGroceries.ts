@@ -19,7 +19,7 @@ export function usePhoneGroceries(): PhoneGroceriesData {
   const { data: history = [] } = useQuery({ queryKey: ['grocery-history'], queryFn: fetchGroceryHistory, staleTime: 60 * 60_000 })
   const items: ShopItem[] = useMemo(() => list.items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unit: i.unit, category: i.category, checked: i.checked })), [list.items])
   const usual = useMemo(() => usuals(history, items), [history, items])
-  const { toggleItem, addItem, clearChecked, defaultListId } = list
+  const { toggleItem, addItem, clearChecked, updateItemCategory, defaultListId } = list
   return {
     items,
     usual,
@@ -30,5 +30,10 @@ export function usePhoneGroceries(): PhoneGroceriesData {
       await addItem.mutateAsync({ list_id: defaultListId, name: item.name, quantity: item.quantity, unit: item.unit, category: item.category, checked: false, notes: null })
     },
     clearDone: () => clearChecked.mutateAsync(),
+    // As the grocery page's drag does: a correction by hand, so the categoriser files it there next time.
+    move: async (id, category) => {
+      const item = list.items.find((i) => i.id === id)
+      await updateItemCategory.mutateAsync({ id, category, fromCategory: item?.category, itemName: item?.name, reviewedByUser: true })
+    },
   }
 }
