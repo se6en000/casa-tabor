@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { deviceKeyboardHere } from './keyboardMode'
 import { Mic } from 'lucide-react'
 import { voiceFinal } from './assistant'
@@ -22,13 +23,40 @@ export interface WallKeyboardProps {
   /** The screen already shows what's being typed (a strip above the keyboard); otherwise, while
    * listening, the keyboard shows the words itself as they're heard. */
   showsValue?: boolean
+  /** Esc on a computer: let it go (where there's a Cancel); otherwise Esc keeps what's typed. */
+  onCancel?: () => void
+}
+
+// The last thing pressed (a field, a step's title, "+ Add here"): on a computer the words are typed right there, in a
+// box over it (Jake, 2026-10-01: "I want to use the keyboard to input and modify text, not this kicker panel"). Kept
+// from the press itself, since a Mac doesn't give a clicked button the focus.
+let lastPressed: { el: HTMLElement; at: number } | null = null
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => { if (e.target instanceof HTMLElement) lastPressed = { el: e.target, at: Date.now() } }, true)
+}
+
+interface InPlace { left: number; top: number; width: number; height: number; fontSize: number; fontFamily: string; fontWeight: string }
+
+/** Where to type: over the field just pressed, in its own size and face (screen pixels, the stage's scale applied). */
+function fieldPressed(): InPlace | null {
+  if (typeof window === 'undefined' || !lastPressed || Date.now() - lastPressed.at > 2000) return null
+  const el = lastPressed.el.closest('button, [role="button"], label, div') as HTMLElement | null
+  if (!el || el.closest('[aria-label="Keyboard"]')) return null
+  const r = el.getBoundingClientRect()
+  if (r.width === 0 || r.height === 0) return null
+  const scale = el.offsetWidth ? r.width / el.offsetWidth : 1
+  const cs = window.getComputedStyle(el)
+  const width = Math.min(Math.max(r.width, 520 * scale), window.innerWidth - r.left - 12)
+  return { left: r.left, top: r.top, width, height: Math.max(r.height, 52 * scale), fontSize: parseFloat(cs.fontSize) * scale, fontFamily: cs.fontFamily, fontWeight: cs.fontWeight }
 }
 
 const joined = (base: string, said: string) => (base.trim() ? `${base.trimEnd()} ${said}` : said.charAt(0).toUpperCase() + said.slice(1))
 
-export default function WallKeyboard({ value, onChange, onDone, showsValue = false }: WallKeyboardProps) {
+export default function WallKeyboard({ value, onChange, onDone, showsValue = false, onCancel }: WallKeyboardProps) {
   // Off the kiosk, the device's own keyboard types (Jake, 2026-09-29): a slim bar, not Casa's keys.
   const [device] = useState(deviceKeyboardHere)
+  // Read once, when typing starts (the pressed field is still on screen then).
+  const [inPlace] = useState(() => (deviceKeyboardHere() ? fieldPressed() : null))
   const [shift, setShift] = useState(value.length === 0)
   const [symbols, setSymbols] = useState(false)
   const useSpeech = useContext(WallSpeechContext)
@@ -70,7 +98,31 @@ export default function WallKeyboard({ value, onChange, onDone, showsValue = fal
     setShift(false)
   }
   const rows = symbols ? SYMBOL_ROWS : LETTER_ROWS
+  const finished = useRef(false)
   const done = () => { if (listening) void speech.stop(); onDone() }
+  // The box in place finishes once: Enter, then its leaving (a blur), would otherwise add a step twice.
+  const doneOnce = () => { if (finished.current) return; finished.current = true; done() }
+
+  if (device && inPlace) {
+    // Typed right where it was pressed: Enter or a click elsewhere keeps it, Esc too.
+    return createPortal(
+      <input
+        aria-label="Type here"
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && onCancel) { e.preventDefault(); finished.current = true; onCancel(); return }
+          if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); doneOnce() }
+        }}
+        onBlur={doneOnce}
+        onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+        className="fixed z-50 box-border rounded-[10px] border-2 border-solid border-wall-brass-ink bg-wall-on-pigment px-[12px] text-wall-ink shadow-[0_8px_24px] shadow-wall-ink/20 outline-none"
+        style={{ left: inPlace.left, top: inPlace.top, width: inPlace.width, height: inPlace.height, fontSize: inPlace.fontSize, fontFamily: inPlace.fontFamily, fontWeight: inPlace.fontWeight }}
+      />,
+      document.body,
+    )
+  }
 
   if (device) {
     return (

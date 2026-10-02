@@ -10,6 +10,7 @@ import {
 import { OUTLINE, QUIET, SIZES, SOLID, type Surface } from './surface'
 import WallDatePicker from './WallDatePicker'
 import WallKeyboard from './WallKeyboard'
+import { deviceKeyboardHere } from './keyboardMode'
 
 // The routine editor (canvas 16d), on the wall and the phone: where, days and hours, the days that differ, who
 // drives, the school year, and days off. Nothing is saved until Save; days off go with it.
@@ -131,7 +132,9 @@ export default function RoutineEditor({ surface, personName, routine: initial, i
   }
 
   // ── A text field: the phone's own keyboard; on the wall, the wall keyboard along the bottom.
-  const typed = (label: string, onDone: () => void) => surface === 'phone'
+  // On a computer, the field takes the computer's own keys (Jake, 2026-10-01), as on the phone.
+  const computer = deviceKeyboardHere()
+  const typed = (label: string, onDone: () => void) => surface === 'phone' || computer
     ? <input aria-label={label} autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onDone() }} className={`${s.field} w-full border border-solid border-wall-ink-2 bg-wall-on-pigment text-wall-ink outline-none`} />
     : <div className={`${s.field} flex items-center border border-solid border-wall-ink-2 bg-wall-on-pigment text-wall-ink`}>{text || <span className="text-wall-ink-2">{label}</span>}</div>
 
@@ -157,7 +160,7 @@ export default function RoutineEditor({ surface, personName, routine: initial, i
             </button>
           )}
         </div>
-        {surface === 'wall' && <WallKeyboard value={text} onChange={setText} onDone={() => text.trim() && choose({ name: text, address: '' })} />}
+        {surface === 'wall' && !computer && <WallKeyboard value={text} onChange={setText} onDone={() => text.trim() && choose({ name: text, address: '' })} />}
       </div>
     )
   }
@@ -230,7 +233,7 @@ export default function RoutineEditor({ surface, personName, routine: initial, i
           {picking === 'title'
             ? <div className="flex flex-col gap-[8px]">{typed('Piano, Huskies practice…', finishTitle)}<button type="button" onClick={finishTitle} className={`${s.pill} ${SOLID} self-start`}>Done</button></div>
             : <div className="flex items-center gap-[12px]"><span className={`${s.line} flex-1`}>{routine.title}</span><button type="button" onClick={() => startTyping('title')} className={`${s.pill} ${OUTLINE}`}>Change</button></div>}
-          {picking === 'title' && surface === 'wall' && <WallKeyboard value={text} onChange={setText} onDone={finishTitle} />}
+          {picking === 'title' && surface === 'wall' && !computer && <WallKeyboard value={text} onChange={setText} onDone={finishTitle} />}
         </div>
       )}
 

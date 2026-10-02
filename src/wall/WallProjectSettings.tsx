@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import WallChooser from './WallChooser'
 import WallDatePicker from './WallDatePicker'
 import WallKeyboard from './WallKeyboard'
+import { deviceKeyboardHere } from './keyboardMode'
 import WallNumberPad from './WallNumberPad'
 import { Field, Pill, Toggle } from './WallStepPanel'
 import { moneyText, type ProjectDetail } from './projectModel'
@@ -153,11 +154,12 @@ export default function WallProjectSettings({ detail, now, onEdit, onBack, onDel
       )}
       {typing && (
         <>
-          <div className="absolute bottom-[430px] left-0 z-30 flex h-[84px] w-[1920px] items-center gap-[24px] bg-wall-on-pigment px-[44px]">
+          {/* With Casa's keyboard, what's typed shows above it; on a computer it's typed in place (WallKeyboard). */}
+          {!deviceKeyboardHere() && <div className="absolute bottom-[430px] left-0 z-30 flex h-[84px] w-[1920px] items-center gap-[24px] bg-wall-on-pigment px-[44px]">
             <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{typing.what === 'name' ? 'SOMEONE NEW · THEIR NAME' : `WHAT ${typing.name?.toUpperCase()} DOES · E.G. PAINTER (EMPTY FOR FAMILY)`}</span>
             <span className="font-display text-wall-date font-semibold">{typing.value}<span className="text-wall-brass">|</span></span>
-          </div>
-          <WallKeyboard showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
+          </div>}
+          <WallKeyboard key={`${typing.what}:${typing.name ?? ''}`} showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} onCancel={() => setTyping(null)} />
         </>
       )}
     </div>

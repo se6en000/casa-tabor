@@ -302,6 +302,10 @@
       {
         "path": "src/phone/PhoneAssistantCard.tsx",
         "reason": "Phone (Family Wall family): the assistant card's lane preview (board 06e) positions the person's day and the draft on a timeline from event times at runtime."
+      },
+      {
+        "path": "src/wall/WallKeyboard.tsx",
+        "reason": "Family Wall: on a computer, the typing box sits exactly over the field that was pressed — its place, size and font are read from that field at runtime (Jake, 2026-10-01: type in place, not in a bar)."
       }
     ],
     "nativeControlRecreations": [

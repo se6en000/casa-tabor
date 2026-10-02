@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import type { WallMember } from './engine/types'
 import type { WallChore } from './engine/chores'
@@ -6,6 +6,7 @@ import { choreTime, nextChoreDates } from './choreText'
 import { pigmentStyleFor } from './lanes'
 import { OUTLINE, SIZES, SOLID, type Surface } from './surface'
 import WallKeyboard from './WallKeyboard'
+import { deviceKeyboardHere } from './keyboardMode'
 
 // A chore's sheet (canvas 20b; Jake, 2026-10-01: "need to edit chores", and kids' chores like "change the cat litter
 // every 4 weeks"): what it is, who does it, how often, which days, what time, and the dates it works out to. On the
@@ -35,6 +36,7 @@ export interface ChoreEditorProps {
 
 export default function ChoreEditor({ surface, chore: initial, isNew, members, pigmentOf, now, onSave, onRemove, onCancel }: ChoreEditorProps) {
   const s = SIZES[surface]
+  const computer = useMemo(() => deviceKeyboardHere(), [])
   const [chore, setChore] = useState(initial)
   const [typing, setTyping] = useState(isNew && !initial.title)
   const [saving, setSaving] = useState(false)
@@ -61,11 +63,19 @@ export default function ChoreEditor({ surface, chore: initial, isNew, members, p
       <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">CHORE</span>
       {typing ? (
         <div className="flex flex-col gap-[8px] py-[8px]">
+          {computer ? (
+            // On a computer the field takes the computer's own keys (Jake, 2026-10-01).
+            <input autoFocus aria-label="The chore" value={chore.title} placeholder="Trash to the street, feed the cat…"
+              onChange={(e) => setChore((c) => ({ ...c, title: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Enter' && chore.title.trim()) setTyping(false) }}
+              className={`${s.field} border border-solid border-wall-ink-2 bg-wall-on-pigment font-display text-wall-heading text-wall-ink outline-none placeholder:text-wall-ink-2`} />
+          ) : (
           <div className={`${s.field} flex items-center border border-solid border-wall-ink-2 bg-wall-on-pigment font-display text-wall-heading`}>
             {chore.title || <span className="text-wall-ink-2">Trash to the street, feed the cat…</span>}
           </div>
+          )}
           <button type="button" onClick={() => chore.title.trim() && setTyping(false)} className={`${s.pill} ${SOLID} self-start`}>Done</button>
-          {surface === 'wall' && <WallKeyboard value={chore.title} onChange={(title) => setChore((c) => ({ ...c, title }))} onDone={() => chore.title.trim() && setTyping(false)} />}
+          {surface === 'wall' && !computer && <WallKeyboard value={chore.title} onChange={(title) => setChore((c) => ({ ...c, title }))} onDone={() => chore.title.trim() && setTyping(false)} />}
         </div>
       ) : (
         <div className="flex items-center gap-[12px] py-[8px]">

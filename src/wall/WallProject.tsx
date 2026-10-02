@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useRef, useState, type PointerEvent as React
 import WallChooser from './WallChooser'
 import { SEGMENT, type SegmentKind } from './projectStyle'
 import WallKeyboard from './WallKeyboard'
+import { deviceKeyboardHere } from './keyboardMode'
 import WallNumberPad from './WallNumberPad'
 import WallProjectSettings from './WallProjectSettings'
 import WallStepPanel, { EffortChoices, Pill, type StepInput } from './WallStepPanel'
@@ -407,12 +408,13 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
       )}
       {typing && (
         <>
-          <div className="absolute bottom-[430px] left-0 z-30 flex h-[84px] w-[1920px] items-center gap-[24px] bg-wall-on-pigment px-[44px]" onClick={(e) => e.stopPropagation()}>
+          {/* With Casa's keyboard, what's typed shows above it; on a computer it's typed in place (WallKeyboard). */}
+          {!deviceKeyboardHere() && <div className="absolute bottom-[430px] left-0 z-30 flex h-[84px] w-[1920px] items-center gap-[24px] bg-wall-on-pigment px-[44px]" onClick={(e) => e.stopPropagation()}>
             <span className="shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{TYPING_LABEL[typing.what]}</span>
             <span className="min-w-0 truncate font-display text-wall-date font-semibold">{typing.value}<span className="text-wall-brass">|</span></span>
             <button type="button" onClick={() => setTyping(null)} className="ml-auto h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
-          </div>
-          <WallKeyboard showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} />
+          </div>}
+          <WallKeyboard key={`${typing.what}:${typing.stepId ?? ''}`} showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} onCancel={() => setTyping(null)} />
         </>
       )}
     </section>

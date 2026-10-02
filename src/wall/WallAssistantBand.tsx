@@ -531,7 +531,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       <>
         <section
           aria-label="Report a problem"
-          className={`absolute left-0 z-10 flex w-[1920px] flex-col gap-[20px] rounded-t-[32px] bg-wall-ink px-[64px] py-[40px] font-body text-wall-on-pigment ${typing ? 'bottom-[430px] rounded-b-[32px]' : 'bottom-0'}`}
+          className={`absolute left-0 z-10 flex w-[1920px] flex-col gap-[20px] rounded-t-[32px] bg-wall-ink px-[64px] py-[40px] font-body text-wall-on-pigment ${typing && !computer ? 'bottom-[430px] rounded-b-[32px]' : 'bottom-0'}`}
           onClick={(event) => {
             event.stopPropagation()
             lastTouch.current = Date.now()
@@ -566,6 +566,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </section>
         {typing && (
           <WallKeyboard
+            key={typing}
             value={typing === 'expected' ? expected : happened}
             onChange={(v) => (typing === 'expected' ? setExpected(v) : setHappened(v))}
             onDone={() => setTyping(null)}

@@ -689,20 +689,21 @@ test('wall: a gift idea can be corrected on the keyboard, or removed', async ({ 
 
 // Overnight queue (2), Jake 2026-09-29: "on a desktop, I want to use the native keyboard … not the Casa
 // version". Off the kiosk, a slim bar with a real field takes the typing; Enter is done.
-test('wall: on a desktop, the computer’s keyboard types — a slim bar, not Casa’s keys', async ({ page }) => {
+test('wall: on a desktop, the computer’s keyboard types — in place, not Casa’s keys', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&keyboard=device')
   await page.getByRole('button', { name: /^Coming up: / }).click()
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   const sheet = page.getByRole('region', { name: 'Gift ideas' })
   await sheet.getByRole('button', { name: 'Change “A fly-fishing reel”' }).click()
-  const keyboard = page.getByRole('region', { name: 'Keyboard' })
-  await expect(keyboard.getByRole('button', { name: 'q', exact: true })).toHaveCount(0)
-  await expect(keyboard.getByRole('textbox', { name: 'Type here' })).toBeFocused()
+  // Typed right over the idea (Jake, 2026-10-01: "not this kicker panel"): no keys, no bar.
+  await expect(page.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
+  const box = page.getByRole('textbox', { name: 'Type here' })
+  await expect(box).toBeFocused()
   await page.keyboard.press('End')
   await page.keyboard.type(' (Orvis)')
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-device-keyboard.png')
   await page.keyboard.press('Enter')
-  await expect(keyboard).toHaveCount(0)
+  await expect(box).toHaveCount(0)
   await expect(sheet.getByRole('button', { name: 'Change “A fly-fishing reel (Orvis)”' })).toBeVisible()
 })
 
@@ -2131,4 +2132,41 @@ test('wall assistant: an answer with a list is tiles — in the band, and in the
   await expect(band.getByText('how about saturday')).toBeVisible()
   await expect(band.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
   await expect(wall).toHaveScreenshot('panel-tiles.png')
+})
+
+// Jake, 2026-10-01: "on a desktop I want to use the keyboard to input and modify text, not this kicker panel … find all
+// the places this happens". On a computer, a pressed field is typed in place — a box right over it, no bar at the foot.
+test('wall on a computer: text is typed in place — a step’s title, a new step, an event’s title — never the bar', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects&keyboard=device')
+  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await page.getByRole('button', { name: 'Open project' }).click()
+  const project = page.getByRole('region', { name: 'Paint the house — project' })
+  await expect(project).toBeVisible()
+  // A step's title: typed over it.
+  await project.getByRole('button', { name: /^Open Choose the painter/ }).first().click()
+  await page.getByRole('button', { name: 'Edit the step’s title' }).click()
+  const box = page.getByRole('textbox', { name: 'Type here' })
+  await expect(box).toBeFocused()
+  await expect(page.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
+  await expect(page.getByText('THE STEP', { exact: true })).toHaveCount(0)
+  await box.fill('Choose the painter and lock dates')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('type-in-place.png')
+  await box.press('Enter')
+  await expect(box).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Edit the step’s title' })).toHaveText('Choose the painter and lock dates')
+  // Esc lets a new step go.
+  await project.getByRole('button', { name: '+ Add a step' }).click()
+  await page.getByRole('textbox', { name: 'Type here' }).fill('nothing')
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('nothing', { exact: true })).toHaveCount(0)
+
+  // A new event's title is a field of its own.
+  await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&keyboard=device')
+  await page.getByRole('button', { name: 'Add something' }).first().click()
+  const title = page.getByRole('textbox', { name: 'Title' })
+  await expect(title).toBeFocused()
+  await page.keyboard.insertText('Dentist for Liv')
+  await expect(title).toHaveValue('Dentist for Liv')
+  await expect(page.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
 })

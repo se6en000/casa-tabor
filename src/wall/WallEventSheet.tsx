@@ -104,7 +104,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const [mode, setMode] = useState<Mode>(isNew || props.startOn === 'who' ? 'edit' : 'details')
   const [tab, setTab] = useState<'when' | 'who'>(props.startOn === 'who' ? 'who' : 'when')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
-  const [keyboard, setKeyboard] = useState<KeyboardTarget>(isNew ? 'title' : null)
+  const [keyboard, setKeyboard] = useState<KeyboardTarget>(isNew && !deviceKeyboardHere() ? 'title' : null)
   // A line being typed for the get & pack list.
   const [itemText, setItemText] = useState('')
   const [itemError, setItemError] = useState<string | null>(null)
@@ -519,6 +519,13 @@ export default function WallEventSheet(props: WallEventSheetProps) {
             <>
             <div className="flex flex-col gap-[8px]">
               <span className={`${eyebrow} text-wall-ink-2`}>TITLE</span>
+              {computer ? (
+                // On a computer the title takes the computer's own keys (Jake, 2026-10-01).
+                <input aria-label="Title" autoFocus={isNew} value={draft.title} placeholder="What is it?"
+                  onChange={(e) => { touch(); const v = e.target.value; setDraft((d) => setTitle(d, v)) }}
+                  onFocus={() => setKeyboard(null)}
+                  className="min-h-[72px] rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px] font-display text-wall-date font-semibold text-wall-ink outline-none" />
+              ) : (
               <button
                 type="button"
                 onClick={() => setKeyboard('title')}
@@ -530,6 +537,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                   {keyboard === 'title' && <span aria-hidden="true" className="ml-[3px] inline-block h-[32px] w-[3px] translate-y-[5px] bg-wall-ink" />}
                 </span>
               </button>
+              )}
               {was('title')}
             </div>
 
@@ -823,6 +831,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
       {keyboard && (
         <WallKeyboard
+          key={keyboard}
           value={keyboardValue}
           onChange={onKeyboardChange}
           onDone={keyboard === 'item' ? () => void addItem() : keyboard === 'keptName' ? () => void renameKept() : () => setKeyboard(null)}
