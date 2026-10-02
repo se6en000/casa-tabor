@@ -110,7 +110,7 @@ export default function PhoneFrame() {
       }}
       findSimilar={findSimilar}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
-      assistant={({ onClose, onOpenEvent, onOpenPlace, onOpenDay, opening }) => <PhoneAssistant opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} onOpenDay={onOpenDay} />}
+      assistant={({ onClose, onOpenEvent, onOpenPlace, onOpenDay, opening, onForm, onScan }) => <PhoneAssistant onForm={onForm} onScan={onScan} opening={opening} events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} onOpenPlace={onOpenPlace} onOpenDay={onOpenDay} />}
       planDay={planDay}
       aroundEvents={aroundEvents}
       onFocusDay={onFocusDay}

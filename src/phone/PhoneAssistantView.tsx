@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Bug, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
+import { ArrowUp, Bug, Camera, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
 import type { WhichOne } from '../wall/assistant'
@@ -48,11 +48,14 @@ export interface PhoneAssistantViewProps {
   onPickDriver?: (name: string) => void
   /** A plan on screen (P3.25; board 12e): shown in the card's place. */
   planSlot?: ReactNode
+  /** Casa opened from its button (canvas 32f): the old form one tap away ("Use the form"), and Scan beside the box. */
+  onForm?: () => void
+  onScan?: () => void
 }
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null, onForm, onScan }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -108,7 +111,10 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     <section aria-label="Ask Casa" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={reporting ? backToTalk : saying ? () => setSaying(false) : onClose} className={round}><ChevronLeft size={20} /></button>
-        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : saying ? 'What can I say?' : 'Ask Casa'}</h1>
+        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : saying ? 'What can I say?' : 'Casa'}</h1>
+        {!reporting && !saying && onForm && (
+          <button type="button" onClick={onForm} className="flex h-[44px] shrink-0 items-center border-0 bg-transparent px-[4px] text-phone-detail font-semibold text-wall-ink-2 underline underline-offset-[3px]">Use the form</button>
+        )}
         {!reporting && !saying && (
           <button type="button" aria-label="What can I say?" onClick={() => setSaying(true)} className={`${round} text-wall-brass-ink`}><CircleHelp size={20} /></button>
         )}
@@ -224,6 +230,9 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             className="flex shrink-0 items-end gap-[8px] border-0 border-t border-solid border-wall-stone bg-phone-ground px-[16px] pb-[max(14px,calc(env(safe-area-inset-bottom)+6px))] pt-[10px]"
             onSubmit={(e) => { e.preventDefault(); submit(text) }}
           >
+            {onScan && (
+              <button type="button" aria-label="Scan it" onClick={onScan} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><Camera size={20} /></button>
+            )}
             <input
               aria-label="Ask Casa"
               value={mic?.listening && mic.interim ? mic.interim : text}

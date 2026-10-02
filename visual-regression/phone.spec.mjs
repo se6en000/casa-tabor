@@ -14,9 +14,12 @@ const open = async (page, at = '2026-09-25T07:12:00', viewer = 'jake-id') => {
   await page.evaluate(() => document.fonts.ready)
   return phone
 }
+// Your own day: the Me chip on Today (canvas 32b; Today opens on Everyone).
+const me = (phone) => phone.getByRole('button', { name: 'Me', exact: true }).click()
 
 test('phone: Me — the next move first (leave by), what others have covered, your day', async ({ page }) => {
   const phone = await open(page)
+  await me(phone)
   const next = phone.getByRole('region', { name: 'Your next move' })
   await expect(next.getByText('LEAVE BY 7:25')).toBeVisible()
   await expect(next.getByText('Palm Beach Public')).toBeVisible()
@@ -30,6 +33,7 @@ test('phone: Me — the next move first (leave by), what others have covered, yo
 
 test('phone: Leaving now puts the move on the road (with undo); Hand off offers who is free', async ({ page }) => {
   const phone = await open(page)
+  await me(phone)
   const next = phone.getByRole('region', { name: 'Your next move' })
   await next.getByRole('button', { name: 'Leaving now' }).click()
   await expect(next.getByText('ON THE ROAD')).toBeVisible()
@@ -39,11 +43,12 @@ test('phone: Leaving now puts the move on the road (with undo); Hand off offers 
   const sheet = phone.getByRole('region', { name: 'Hand off' })
   await expect(sheet.getByRole('button', { name: /Kelly/ })).toBeVisible()
   await sheet.getByRole('button', { name: /Giselle/ }).click()
-  await expect(phone.getByText('Nothing for you to drive today.')).toBeVisible() // it's Giselle's now
+  await expect(phone.getByRole('region', { name: 'Your next move' })).toHaveCount(0) // it's Giselle's now
 })
 
 test('phone: hidden from the honoree — on Jake\'s phone, not on Kelly\'s', async ({ page }) => {
   let phone = await open(page, '2026-09-26T07:30:00', 'jake-id')
+  await me(phone)
   const kept = phone.getByRole('region', { name: 'Kept from someone' })
   await expect(kept.getByText(/HIDDEN FROM KELLY/)).toBeVisible()
   await expect(kept.getByRole('button', { name: 'Birthday card' })).toBeVisible()
@@ -54,13 +59,13 @@ test('phone: hidden from the honoree — on Jake\'s phone, not on Kelly\'s', asy
 
 test('phone: Family lists everyone\'s day and filters by person; Week opens a day', async ({ page }) => {
   const phone = await open(page)
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByText('Bak Middle School')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-family.png')
   await phone.getByRole('button', { name: 'Emme', exact: true }).click()
   await expect(phone.getByText('Bak Middle School')).toHaveCount(0)
   await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await expect(phone).toHaveScreenshot('phone-week.png')
   await phone.getByRole('button', { name: /TOMORROW/ }).click()
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
@@ -68,26 +73,30 @@ test('phone: Family lists everyone\'s day and filters by person; Week opens a da
 
 test('phone: More opens the rest of Casa', async ({ page }) => {
   const phone = await open(page)
-  await phone.getByRole('button', { name: 'More' }).click()
-  // Groceries is the phone's own list now (canvas 33d); Meals and the rest are still the web pages.
-  await expect(phone.getByRole('button', { name: /Groceries/ })).toBeVisible()
-  await expect(phone.getByRole('link', { name: /Meals/ })).toBeVisible()
-  await expect(phone.getByRole('link', { name: /See the Wall/ })).toBeVisible()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
+  // Behind your initial (32h): all that's left of More. Meals, Music and the Briefing stay on the wall and the web.
+  const sheet = phone.getByRole('region', { name: 'You, people and settings' })
+  await expect(sheet.getByRole('button', { name: /People and places/ })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /Email/ })).toBeVisible()
+  await expect(sheet.getByRole('link', { name: /Settings/ })).toBeVisible()
+  await expect(sheet.getByRole('link', { name: /See the Wall/ })).toBeVisible()
+  await expect(sheet.getByRole('link', { name: /Meals/ })).toHaveCount(0)
 })
 
 test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evening)', async ({ page }) => {
   const phone = await open(page, '2026-09-25T20:15:00', 'jake-id')
-  await expect(phone.getByRole('heading', { name: "Jake's tomorrow" })).toBeVisible()
+  await me(phone)
+  await expect(phone.getByRole('heading', { name: 'Your tomorrow' })).toBeVisible()
   const next = phone.getByRole('region', { name: 'Your next move' })
   await expect(next.getByText('LEAVE BY 11:56')).toBeVisible()
   await expect(phone.getByRole('region', { name: 'Kept from someone' }).getByRole('button', { name: 'Birthday card' })).toBeVisible()
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
 })
 
 test('phone: an event — details, the trip, get & pack; Edit a time and save; Delete after a yes', async ({ page }) => {
   const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
   const sheet = phone.getByRole('region', { name: /Softball: Huskies @ RPB Cascade on the phone/ })
   await expect(sheet.getByText('SAT · 12:30 – 2:30 PM')).toBeVisible()
@@ -119,7 +128,7 @@ test('phone: an event — details, the trip, get & pack; Edit a time and save; D
 
 test('phone: Hand off from an event gives the trip to someone else', async ({ page }) => {
   const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
   await phone.getByRole('button', { name: 'Hand off' }).click()
   await phone.getByRole('region', { name: 'Hand off' }).getByRole('button', { name: /Kelly/ }).click()
@@ -128,8 +137,8 @@ test('phone: Hand off from an event gives the trip to someone else', async ({ pa
 
 test('phone: + → Type it adds an event on the day being looked at, with who is going', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Type it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Use the form' }).click()
   const sheet = phone.getByRole('region', { name: /on the phone/ })
   await expect(sheet.getByRole('button', { name: 'Add it' })).toBeDisabled()
   await sheet.getByRole('textbox').first().fill('Haircut')
@@ -138,16 +147,18 @@ test('phone: + → Type it adds an event on the day being looked at, with who is
   await expect(phone).toHaveScreenshot('phone-add.png')
   await sheet.getByRole('button', { name: 'Add it' }).click()
   await expect(phone.getByRole('region', { name: /on the phone/ })).toHaveCount(0)
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByRole('button', { name: /Haircut/ })).toBeVisible()
 })
 
 test('phone: the next-move card — Directions first, the right words mid-trip, Edit opens straight into editing', async ({ page }) => {
   let phone = await open(page, '2026-09-25T07:38:00', 'jake-id')
+  await me(phone)
   let card = phone.getByRole('region', { name: 'Your next move' })
   await expect(card.getByText('THERE NOW · BACK BY 7:45')).toBeVisible() // not "leave by 7:25" at 7:38
   await expect(card.getByRole('button', { name: 'Leaving now' })).toHaveCount(0)
   phone = await open(page, '2026-09-26T09:00:00', 'jake-id')
+  await me(phone)
   card = phone.getByRole('region', { name: 'Your next move' })
   await expect(card.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', /destination=Ferrin%20Park%20Field%201/)
   await expect(phone).toHaveScreenshot('phone-card.png')
@@ -157,7 +168,7 @@ test('phone: the next-move card — Directions first, the right words mid-trip, 
 
 test('phone: People — find someone, then call, text or drive there', async ({ page }) => {
   const phone = await open(page)
-  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
   await phone.getByRole('button', { name: /People/ }).click()
   const people = phone.getByRole('region', { name: 'People' })
   await people.getByRole('searchbox', { name: 'Find a person' }).fill('coach')
@@ -171,8 +182,8 @@ test('phone: People — find someone, then call, text or drive there', async ({ 
 
 test('phone: + → Scan it reads a flyer into ticked drafts; only what stays ticked is added', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   const sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
   await expect(sheet.getByText('Sun, Sep 27 · 11:00 AM – 3:00 PM')).toBeVisible()
@@ -186,18 +197,17 @@ test('phone: + → Scan it reads a flyer into ticked drafts; only what stays tic
   await expect(phone).toHaveScreenshot('phone-scan-added.png')
   await sheet.getByRole('button', { name: 'Done' }).click()
   await expect(phone.getByRole('region', { name: 'Scan it' })).toHaveCount(0)
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: /^SUN/ }).click()
   await expect(phone.getByRole('button', { name: /PTO Fall Festival/ })).toBeVisible()
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: /^TUE/ }).click()
   await expect(phone.getByText('Picture Day')).toHaveCount(0)
 })
 
 test('phone: + → Say it asks the assistant; a change waits for a yes; the bug icon sends the conversation', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
   const ask = phone.getByRole('region', { name: 'Ask Casa' })
   await ask.getByRole('button', { name: /Who’s driving Liv tomorrow/ }).click() // an example, to start
   await expect(ask.getByText(/Kelly drives Liv/)).toBeVisible()
@@ -218,14 +228,14 @@ test('phone: + → Say it asks the assistant; a change waits for a yes; the bug 
   expect(reports[0].lines.map((l) => l.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
   await ask.getByRole('button', { name: 'Back', exact: true }).first().click()
   await ask.getByRole('button', { name: 'Back' }).first().click()
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: /TOMORROW/ }).click()
   await expect(phone.getByRole('button', { name: /Jaida watching the kids/ })).toBeVisible()
 })
 
 test('phone: Keep from… — a celebration suggests it; kept, it is marked for everyone else', async ({ page }) => {
   const phone = await open(page, '2026-09-26T07:30:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await phone.getByRole('button', { name: /Kelly's Birthday/ }).click()
   const sheet = phone.getByRole('region', { name: /Kelly's Birthday on the phone/ })
   await expect(sheet.getByText('Everyone can see it, and it’s on the wall.')).toBeVisible()
@@ -241,14 +251,14 @@ test('phone: Keep from… — a celebration suggests it; kept, it is marked for 
 
 test("phone: Giselle's lens — the kids' things and what she drives, not Jake's and Kelly's own", async ({ page }) => {
   let phone = await open(page, '2026-09-25T10:00:00', 'giselle')
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-giselle-family.png')
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: /^THU/ }).click()
   await expect(phone.getByText('Book club at the Harrisons')).toHaveCount(0)
   phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: /^THU/ }).click()
   await expect(phone.getByText('Book club at the Harrisons')).toBeVisible()
 })
@@ -259,8 +269,7 @@ const askScene = async (page, scene) => {
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
   return { phone, ask: phone.getByRole('region', { name: 'Ask Casa' }) }
 }
 
@@ -301,28 +310,6 @@ test('phone: Ask Casa — an answer that offers something gets a one-tap yes', a
   await expect(ask.getByText('Yes, do that', { exact: true })).toBeVisible()
 })
 
-test('phone: Week › Coming up — what needs planning, answers take an item off, gift ideas never on the phone of the person they are for (board 07b)', async ({ page }) => {
-  const phone = await open(page)
-  await phone.getByRole('button', { name: 'Week' }).click()
-  await phone.getByRole('button', { name: 'Coming up' }).click()
-  await expect(phone.getByRole('heading', { name: 'Coming up' })).toBeVisible()
-  await expect(phone.getByText('4 to plan · 1 to start now')).toBeVisible()
-  await expect(phone.getByText('Plan by Sep 21 · late · in 3 days')).toBeVisible()
-  await expect(phone.getByText('Gift ideas: That ceramic class in Delray')).toBeVisible()
-  await expect(page).toHaveScreenshot('phone-coming-up.png')
-  await phone.getByRole('region', { name: 'START NOW' }).getByRole('button', { name: 'Done' }).click()
-  await expect(phone.getByText('EDS Air Conditioning appointment')).toHaveCount(0)
-  await expect(phone.getByText('3 to plan')).toBeVisible()
-  await phone.getByRole('button', { name: 'This week' }).click()
-  await expect(phone.getByRole('heading', { name: 'The week' })).toBeVisible()
-
-  const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
-  await kellys.getByRole('button', { name: 'Week' }).click()
-  await kellys.getByRole('button', { name: 'Coming up' }).click()
-  await expect(kellys.getByText('Kelly’s birthday')).toBeVisible()
-  await expect(kellys.getByText(/ceramic class/)).toHaveCount(0)
-})
-
 test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them by topic (boards 07e/07f)', async ({ page }) => {
   const { phone, ask } = await askScene(page, 'thinking')
   await expect(ask.getByText('Thinking…')).toBeVisible()
@@ -334,7 +321,7 @@ test('phone: Ask Casa — a tip while Casa thinks; "What can I say?" lists them 
   for (const topic of ['Calendar', 'Coming up', 'Gift ideas', 'Groceries & recipes', 'Talking to Casa']) await expect(ask.getByRole('region', { name: topic })).toBeAttached()
   await expect(phone).toHaveScreenshot('phone-what-can-i-say.png')
   await ask.getByRole('button', { name: 'Back' }).click()
-  await expect(ask.getByRole('heading', { name: 'Ask Casa' })).toBeVisible()
+  await expect(ask.getByRole('heading', { name: 'Casa', exact: true })).toBeVisible()
 })
 
 // P3.25 phase 1: on a longer think, what Casa is looking up replaces "Thinking…" and the tip.
@@ -363,26 +350,6 @@ test('phone: Ask Casa — a plan: the draft in the conversation, Set it up, unti
   await expect(saved.getByText('Emme — light-up jellyfish is undone')).toBeVisible()
 })
 
-// Jake, 2026-09-29: "on gift ideas, allow me to edit them, some brands don't get translated well."
-test('phone: gift ideas can be corrected by typing; Kelly’s phone never shows hers', async ({ page }) => {
-  const phone = await open(page, '2026-09-25T07:12:00', 'jake-id')
-  await phone.getByRole('button', { name: 'Week' }).click()
-  await phone.getByRole('button', { name: 'Coming up' }).click()
-  await phone.getByRole('button', { name: 'Gift ideas · 2' }).click()
-  const sheet = phone.getByRole('region', { name: 'Gift ideas' })
-  await sheet.getByRole('textbox', { name: 'Gift idea for Carl' }).fill('An Orvis fly-fishing reel')
-  await sheet.getByRole('button', { name: 'Save' }).click()
-  await expect(sheet.getByRole('textbox', { name: 'Gift idea for Carl' })).toHaveValue('An Orvis fly-fishing reel')
-  await expect(sheet.getByRole('button', { name: 'Save' })).toHaveCount(0)
-  await expect(phone).toHaveScreenshot('phone-gift-ideas.png')
-
-  const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
-  await kellys.getByRole('button', { name: 'Week' }).click()
-  await kellys.getByRole('button', { name: 'Coming up' }).click()
-  await kellys.getByRole('button', { name: 'Gift ideas · 1' }).click()
-  await expect(kellys.getByText('That ceramic class in Delray')).toHaveCount(0)
-})
-
 // Swipe between days on Me and Family (2026-09-28: "it feels natural there").
 const phoneSwipe = (page, from, to) => page.evaluate(([from, to]) => {
   const el = document.elementFromPoint(from[0], from[1])
@@ -397,8 +364,7 @@ test('phone: Casa opens a far day on Family; its week swipes; a tab comes back t
   await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=open-day&far=1')
   const phone = page.getByTestId('phone-fixture')
   await page.evaluate(() => document.fonts.ready)
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
   const ask = phone.getByRole('region', { name: 'Ask Casa' })
   await ask.getByRole('button', { name: 'Open Saturday, Oct 17' }).click()
   await expect(ask).toBeHidden()
@@ -408,7 +374,7 @@ test('phone: Casa opens a far day on Family; its week swipes; a tab comes back t
   await phoneSwipe(page, [320, 400], [120, 410])
   await expect(phone.getByText('Sunday, October 18')).toBeVisible()
   await expect(phone.getByText('Green Market').first()).toBeVisible()
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByText('Friday, September 25')).toBeVisible()
 })
 
@@ -446,8 +412,7 @@ test('phone: "Anything from email?" — the review in Ask Casa, one at a time, t
 test('phone: "Keep me posted" lines in Ask Casa — Add it on the dated one, Got it', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=email&email=posted')
   const phone = page.getByTestId('phone-fixture')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
   const review = phone.getByRole('region', { name: 'Ask Casa' }).getByRole('region', { name: 'From email' })
   await expect(review.getByText('KEEP ME POSTED · SALLY ROZANSKI · 3 THIS WEEK')).toBeVisible()
   await review.getByRole('button', { name: 'Add it' }).click()
@@ -459,7 +424,7 @@ test('phone: Settings › Email — keep me posted, what’s quiet with Bring ba
   await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id')
   const phone = page.getByTestId('phone-fixture')
   await page.evaluate(() => document.fonts.ready)
-  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
   await phone.getByRole('button', { name: /Email Keep me posted/ }).click()
   const settings = phone.getByRole('region', { name: 'Email settings' })
   await expect(settings.getByText('Sally Rozanski')).toBeVisible()
@@ -488,15 +453,16 @@ const toPage = async (page, n) => page.evaluate((i) => {
 }, n)
 test('phone: swiping Me and Family moves the day; tapping Me comes back to today', async ({ page }) => {
   const phone = await open(page)
-  await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
+  await me(phone)
+  await expect(phone.getByRole('heading', { name: 'Your day' })).toBeVisible()
   await toPage(page, 1)
-  await expect(phone.getByRole('heading', { name: "Jake's tomorrow" })).toBeVisible()
+  await expect(phone.getByRole('heading', { name: 'Your tomorrow' })).toBeVisible()
   await toPage(page, 2)
-  await expect(phone.getByRole('heading', { name: "Jake's Sunday" })).toBeVisible()
-  await phone.getByRole('button', { name: 'Me', exact: true }).click()
-  await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
+  await expect(phone.getByRole('heading', { name: 'Your Sunday' })).toBeVisible()
+  await phone.getByRole('button', { name: 'Today' }).click()
+  await expect(phone.getByRole('heading', { name: 'Your day' })).toBeVisible()
 
-  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: 'Today' }).click()
   await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('Friday, September 25')
   await toPage(page, 1)
   await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('Saturday, September 26')
@@ -508,8 +474,8 @@ test('phone: swiping Me and Family moves the day; tapping Me comes back to today
 // never a second copy; what to bring or wear is packing for its event, not a 12 AM reminder.
 test('phone: Scan it — something already on the calendar gets what’s new added to it, not a second copy', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:00:00&similar=1', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   const sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
   await expect(sheet.getByText(/Already on your calendar: PTO Fall Festival · 11:00 AM\. I’ll add what’s new to it\./)).toBeVisible()
@@ -523,8 +489,8 @@ test('phone: Scan it — something already on the calendar gets what’s new add
 
 test('phone: Scan it — what to wear and bring is packing for the field trip, on it whether it’s new or already there', async ({ page }) => {
   let phone = await open(page, '2026-09-29T19:00:00&scan=trip', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   let sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
   await expect(sheet.getByText('PACK THE NIGHT BEFORE')).toBeVisible()
@@ -538,8 +504,8 @@ test('phone: Scan it — what to wear and bring is packing for the field trip, o
 
   // The school's field trip already on the calendar: the flyer's details go onto it, with the packing.
   phone = await open(page, '2026-09-29T19:00:00&scan=trip&similar=trip', 'jake-id')
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Scan it/ }).click()
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  await phone.getByRole('region', { name: 'Ask Casa' }).getByRole('button', { name: 'Scan it' }).click()
   sheet = phone.getByRole('region', { name: 'Scan it' })
   await sheet.locator('input[type=file]').first().setInputFiles({ name: 'flyer.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fake') })
   await expect(sheet.getByText(/Already on your calendar: Field trip · .*I’ll add what’s new to it\./)).toBeVisible()
@@ -553,7 +519,7 @@ test('phone: Scan it — what to wear and bring is packing for the field trip, o
 // To do on the phone (P3.22 step 7; the wall's canvas 10a–10d in one column): Week › To do, Jake's only.
 const openTodoPhone = async (page) => {
   const phone = await open(page, '2026-09-25T13:10:00')
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: 'To do', exact: true }).click()
   await expect(phone.getByRole('heading', { name: 'To do' })).toBeVisible()
   return phone
@@ -573,7 +539,7 @@ test('phone: Week › To do — the projects shelf, Next up with what it takes, 
   await expect(phone.getByText('Look for a cable to fix the pool')).toBeVisible()
   // Kelly's phone has no To do.
   const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
-  await kellys.getByRole('button', { name: 'Week' }).click()
+  await kellys.getByRole('button', { name: 'Calendar' }).click()
   await expect(kellys.getByRole('button', { name: 'To do', exact: true })).toHaveCount(0)
 })
 
@@ -582,7 +548,7 @@ test('phone: Week › To do — the projects shelf, Next up with what it takes, 
 test('phone: a closed project — CLOSED in its parent, a banner with Reopen on its page', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&closedInside=1')
   const phone = page.getByTestId('phone-fixture')
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: 'To do', exact: true }).click()
   await phone.getByRole('button', { name: 'Open Paint the house' }).click()
   const paint = phone.getByRole('region', { name: 'Paint the house — project' })
@@ -600,7 +566,7 @@ test('phone: a closed project — CLOSED in its parent, a banner with Reopen on 
 test('phone: a project opens Ask Casa talking about it', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&ask=empty')
   const phone = page.getByTestId('phone-fixture')
-  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: 'Calendar' }).click()
   await phone.getByRole('button', { name: 'To do', exact: true }).click()
   await phone.getByRole('button', { name: 'Open Paint the house' }).click()
   await phone.getByRole('region', { name: 'Paint the house — project' }).getByRole('button', { name: 'Talk to Casa' }).click()
@@ -643,7 +609,7 @@ test('phone: a project — Now, Then, the project inside; a step’s details wit
 
 test('phone: People › Family › Owen — his routines and what Casa knows; a parent edits, a child only reads (canvas 16c)', async ({ page }) => {
   let phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
-  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
   await phone.getByRole('button', { name: /People/ }).click()
   await phone.getByRole('group', { name: 'Family' }).getByRole('button', { name: /Owen/ }).click()
   const page16 = phone.getByRole('region', { name: 'Owen’s page' })
@@ -656,7 +622,7 @@ test('phone: People › Family › Owen — his routines and what Casa knows; a 
   await expect(phone).toHaveScreenshot('phone-routine-edit.png')
 
   phone = await open(page, '2026-09-25T10:00:00', 'liv')
-  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
   await phone.getByRole('button', { name: /People/ }).click()
   await phone.getByRole('group', { name: 'Family' }).getByRole('button', { name: /Owen/ }).click()
   await expect(phone.getByRole('region', { name: 'Owen’s page' }).getByText('School · Palm Beach Public')).toBeVisible()
@@ -712,26 +678,26 @@ test('phone: the frame never moves — the page itself can’t scroll; the bar s
 
 test('phone: a sheet dragged down from its top closes; a short drag springs back', async ({ page }) => {
   const phone = await open(page)
-  await phone.getByRole('button', { name: 'Add something' }).click()
-  const sheet = phone.getByRole('region', { name: 'Add something' })
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
+  const sheet = phone.getByRole('region', { name: 'You, people and settings' })
   await expect(sheet).toBeVisible()
   const box = await sheet.boundingBox()
-  await drag(page, 'section[aria-label="Add something"]', box.y + 20, box.y + 60)
+  await drag(page, 'section[aria-label="You, people and settings"]', box.y + 20, box.y + 60)
   await page.waitForTimeout(300)
   await expect(sheet).toBeVisible()
-  await drag(page, 'section[aria-label="Add something"]', box.y + 20, box.y + 220)
+  await drag(page, 'section[aria-label="You, people and settings"]', box.y + 20, box.y + 220)
   await expect(sheet).toHaveCount(0)
 })
 
 // Canvas 30a (Jake, Oct 2: "an indicator of where we are time wise in the day … What's past should be obvious"):
 // today's Family list splits at NOW; what's started sits above the line (two in view, the rest folded), finished
 // ones faded; the next is lifted with how long until it; chores and to-dos tick.
-test('phone: Family — the NOW line, what’s past folded and faded, the next lifted; a chore ticks', async ({ page }) => {
+test('phone: Today — the NOW line, what’s past folded and faded, the next lifted; a chore ticks on its person', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1')
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  await phone.getByRole('button', { name: /^Family/ }).first().click()
+  await phone.getByRole('button', { name: /^Today/ }).first().click()
   await expect(phone.getByText('NOW · 10:45')).toBeVisible()
   await expect(phone.getByRole('button', { name: /earlier/ })).toBeVisible()
   // The first thing after 10:45, with how long until it; the 10:25 to-do not done yet is late, not faded.
@@ -742,6 +708,9 @@ test('phone: Family — the NOW line, what’s past folded and faded, the next l
   await phone.getByRole('button', { name: /earlier/ }).click()
   await expect(phone.getByRole('button', { name: /earlier/ })).toHaveCount(0)
 
+  // Everyone leaves the chores out (Jake, 33a: "no chores shown for everyone on mobile"); a person's own day has them.
+  await expect(phone.getByRole('checkbox', { name: 'Done: Take meds' })).toHaveCount(0)
+  await phone.getByRole('button', { name: 'Liv', exact: true }).click()
   const meds = phone.getByRole('checkbox', { name: 'Done: Take meds' })
   await meds.click()
   await expect(meds).toHaveAttribute('aria-checked', 'true')
@@ -755,7 +724,7 @@ test('phone: Any day — the month, a day picked, opened on Family weeks away', 
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  await phone.getByRole('button', { name: /^Week/ }).first().click()
+  await phone.getByRole('button', { name: /^Calendar/ }).first().click()
   await phone.getByRole('button', { name: 'Any day' }).click()
   const month = phone.getByRole('region', { name: 'Any day' })
   await expect(month.getByRole('heading', { name: 'September 2026' })).toBeVisible()
@@ -792,7 +761,7 @@ test('phone: an event pushes in; a drag from the left edge takes it back; a shee
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id')
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
-  await phone.getByRole('button', { name: /^Family/ }).first().click()
+  await phone.getByRole('button', { name: /^Today/ }).first().click()
   await phone.getByRole('button', { name: /Emme Practice Violin/ }).click()
   const eventPage = phone.getByRole('region', { name: /on the phone$/ })
   await expect(eventPage).toBeVisible()
@@ -812,7 +781,7 @@ test('phone: an event pushes in; a drag from the left edge takes it back; a shee
   await expect(eventPage).toHaveCount(0)
   await expect(phone.getByRole('heading', { name: 'Everyone' })).toBeVisible()
 
-  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
   await expect(page.locator('.phone-behind-sheet')).toHaveCount(1)
   await page.keyboard.press('Escape')
 })
@@ -822,8 +791,8 @@ test('phone: scrolling down tucks the title into a small frosted bar', async ({ 
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id')
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
-  await phone.getByRole('button', { name: /^Week/ }).first().click()
-  await phone.getByRole('group', { name: 'Week, Coming up or To do' }).getByRole('button', { name: 'To do' }).click()
+  await phone.getByRole('button', { name: /^Calendar/ }).first().click()
+  await phone.getByRole('button', { name: 'To do', exact: true }).click()
   const bar = page.locator('.phone-tucked')
   await expect(bar).toHaveClass(/opacity-0/)
   // The To do list scrolls in the page itself (main).
@@ -835,8 +804,7 @@ test('phone: scrolling down tucks the title into a small frosted bar', async ({ 
 
 test('phone: Groceries — by aisle with the amount by the name; ticks wait, then leave together; add a few at once', async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:45:00')
-  await phone.getByRole('button', { name: /^More/ }).first().click()
-  await phone.getByRole('button', { name: /Groceries/ }).click()
+  await phone.getByRole('button', { name: 'Groceries' }).click()
   const list = phone.getByRole('region', { name: 'Groceries' })
   await expect(list.getByText('5 to get')).toBeVisible()
   await expect(list.getByRole('heading', { name: 'PRODUCE' })).toBeVisible()
@@ -850,7 +818,8 @@ test('phone: Groceries — by aisle with the amount by the name; ticks wait, the
   await expect(list.getByRole('heading', { name: 'PRODUCE' })).toBeHidden({ timeout: 5000 })
   await expect(list.getByRole('button', { name: /Got · 3/ })).toBeVisible()
   // Adding from the bottom: "eggs, milk" — eggs is new (dairy), milk was on already.
-  await list.getByRole('button', { name: 'Add to groceries' }).click()
+  // On Groceries the round button is + (33d).
+  await phone.getByRole('button', { name: 'Add to groceries', exact: true }).click()
   const add = phone.getByRole('region', { name: 'Add to groceries' })
   await add.getByRole('textbox', { name: 'What to add' }).fill('eggs, milk')
   await add.getByRole('button', { name: 'Add', exact: true }).click()

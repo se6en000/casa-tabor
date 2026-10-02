@@ -1302,7 +1302,8 @@ html.phone-app [role="button"]:active {
   opacity: 0.7;
 }
 /* The keyboard is up: the tab bar steps aside (as an iPhone app's does). */
-html.phone-app[data-keyboard="open"] nav[aria-label="Sections"] {
+html.phone-app[data-keyboard="open"] nav[aria-label="Sections"],
+html.phone-app[data-keyboard="open"] [data-phone-action] {
   display: none;
 }
 /* …and a sheet sitting on the keyboard drops the home-indicator gap it keeps at the screen's edge. */

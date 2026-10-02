@@ -73,7 +73,7 @@ const SCANNED_TRIP = {
 }
 
 // Say it, scripted: a question gets an answer; "add …" gets a draft that waits for a yes.
-function FixtureAssistant({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
+function FixtureAssistant({ onClose, onAdd, onForm, onScan }: { onClose: () => void; onAdd: () => void; onForm?: () => void; onScan?: () => void }) {
   const [lines, setLines] = useState<PhoneLine[]>([])
   const [pending, setPending] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -97,6 +97,8 @@ function FixtureAssistant({ onClose, onAdd }: { onClose: () => void; onAdd: () =
       onCancel={() => { setPending(null); setNote('Okay, nothing changed.') }}
       onReport={async (report) => { (window as unknown as { __phoneReports: unknown[] }).__phoneReports = [...((window as unknown as { __phoneReports?: unknown[] }).__phoneReports ?? []), { ...report, lines }] }}
       onClose={onClose}
+      onForm={onForm}
+      onScan={onScan}
     />
   )
 }
@@ -199,7 +201,7 @@ function PhoneFixturePageInner() {
                 : params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
               planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
               aroundEvents={shown}
-              assistant={({ onClose, onOpenEvent, onOpenDay, opening }) => askTurn ? (
+              assistant={({ onClose, onOpenEvent, onOpenDay, opening, onForm, onScan }) => askTurn ? (
                 // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
                 <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
                   <PhoneAssistant
@@ -213,12 +215,16 @@ function PhoneFixturePageInner() {
                     useEmail={fixtureEmail as never}
                     useTurn={askTurn}
                     opening={opening}
+                    onForm={onForm}
+                    onScan={onScan}
                     lookupDrive={async () => 24}
                   />
                 </ProfileSessionContext.Provider>
               ) : (
                 <FixtureAssistant
                   onClose={onClose}
+                  onForm={onForm}
+                  onScan={onScan}
                   onAdd={() => setEvs((list) => [...list, {
                     id: 'jaida-sat', title: 'Jaida watching the kids', event_type: 'event', all_day: false,
                     start_time: new Date('2026-09-26T12:00:00').toISOString(), end_time: new Date('2026-09-26T15:00:00').toISOString(),

@@ -20,6 +20,15 @@ export function keyboardHeight(innerHeight: number, viewport: { height: number; 
   return kb > 80 ? kb : 0
 }
 
+/**
+ * The window's full height, to measure the keyboard against. While typing, iOS shrinks the window to the visual viewport
+ * for a moment as the keyboard comes up (Jake's iPhone, Oct 2: 873 → 460, then back), so a shorter window then is ignored;
+ * with nothing typed it's the window as it is (a turn to landscape).
+ */
+export function fullHeight(was: number, innerHeight: number, typing: boolean): number {
+  return typing ? Math.max(was, innerHeight) : innerHeight
+}
+
 /** A field the keyboard is for. */
 export function isTyping(el: Element | null): boolean {
   if (!el) return false
@@ -31,7 +40,11 @@ export function isTyping(el: Element | null): boolean {
  * What the phone itself says about its screen, sent once a session (Jake's phone, Oct 2: the bar sat ~60 pt above
  * the bottom edge and the cause wasn't visible from here). Lands in ai_drawer_debug_events as "phone_layout".
  */
+/** The screenshot fixture's runs aren't anyone's phone: they never write to the live debug log. */
+const testRun = () => (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_VISUAL_TEST_MODE === 'true'
+
 function reportLayout() {
+  if (testRun()) return
   try {
     if (sessionStorage.getItem('casa-phone-layout-sent')) return
     sessionStorage.setItem('casa-phone-layout-sent', '1')
@@ -86,6 +99,7 @@ function sampleKeyboard(why: string) {
   })
 }
 function startKeyboardTrace() {
+  if (testRun()) return
   try { if (sessionStorage.getItem('casa-phone-keyboard-sent')) kbTrace.sent = true } catch { /* send anyway */ }
   if (kbTrace.sent || kbTrace.on) return
   kbTrace.on = true
@@ -137,20 +151,32 @@ export function usePhoneShell() {
     }
     dead()
     window.addEventListener('resize', dead)
+    let full = window.innerHeight
+    let settle = 0
     const update = (e?: Event) => {
-      if (e?.type === 'focusin' && isTyping(document.activeElement)) startKeyboardTrace()
+      const typing = isTyping(document.activeElement)
+      if (e?.type === 'focusin' && typing) startKeyboardTrace()
       sampleKeyboard(e?.type ?? 'start')
       if (e?.type === 'focusout') endKeyboardTrace()
-      const kb = keyboardHeight(window.innerHeight, vv, isTyping(document.activeElement))
+      full = fullHeight(full, window.innerHeight, typing)
+      const kb = keyboardHeight(full, vv, typing)
       root.style.setProperty('--phone-kb', `${kb}px`)
       if (kb) root.dataset.keyboard = 'open'
       else delete root.dataset.keyboard
-      // iOS scrolls the locked page to show a field; put it back so nothing behind the sheet moves.
-      if (window.scrollY) window.scrollTo(0, 0)
+      // iOS scrolls the locked page to show a field; put it back so nothing behind the sheet moves, then measure again.
+      if (window.scrollY) { window.scrollTo(0, 0); requestAnimationFrame(() => update()) }
+      // The keyboard's own animation doesn't always end with a viewport event: look again every frame for a moment.
+      if (e?.type === 'focusin' || e?.type === 'focusout') {
+        const until = performance.now() + 900
+        const again = () => { update(); if (performance.now() < until) settle = requestAnimationFrame(again) }
+        cancelAnimationFrame(settle)
+        settle = requestAnimationFrame(again)
+      }
     }
     update()
     vv?.addEventListener('resize', update)
     vv?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
     // Leaving a field drops the keyboard: back to full height at once, not on the viewport's next event.
     document.addEventListener('focusin', update)
     document.addEventListener('focusout', update)
@@ -158,8 +184,10 @@ export function usePhoneShell() {
       window.clearTimeout(layoutTimer)
       window.removeEventListener('resize', dead)
       root.style.removeProperty('--phone-dead')
+      cancelAnimationFrame(settle)
       vv?.removeEventListener('resize', update)
       vv?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
       document.removeEventListener('focusin', update)
       document.removeEventListener('focusout', update)
       root.classList.remove('phone-app')

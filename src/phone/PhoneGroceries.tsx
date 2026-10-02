@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Check, ChevronLeft, Mic, Plus } from 'lucide-react'
 import { useFieldDictation } from '../hooks/useFieldDictation'
 import { aisles, amountOf, planAdds, type ShopItem } from './groceries'
@@ -23,8 +23,10 @@ export interface PhoneGroceriesData {
 /** How long ticked items stay in place after the last tick. */
 export const HOLD_MS = 2500
 
-export default function PhoneGroceries({ data, onBack, adding, setAdding }: {
+export default function PhoneGroceries({ data, onBack, adding, setAdding, corner }: {
   data: PhoneGroceriesData
+  /** Top right of the title: your initial, on the tab. */
+  corner?: ReactNode
   /** Opened as a page (from More): a back button, and its own + in the corner. */
   onBack?: () => void
   adding: boolean
@@ -73,16 +75,22 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding }: {
     )
   }
 
+  // As a tab it makes no layer of its own, so the add sheet rises over the tab bar's round button too.
   return (
-    <section aria-label="Groceries" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
+    <section aria-label="Groceries" className={`absolute inset-0 flex flex-col bg-phone-ground font-body text-wall-ink ${onBack ? 'z-20' : ''}`}>
       {onBack && (
         <div className="flex shrink-0 items-center gap-[12px] px-[20px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
           <button type="button" aria-label="Back" onClick={onBack} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         </div>
       )}
       <div data-phone-scroll className="flex-1 overflow-y-auto overscroll-y-contain px-[20px] pb-[140px] pt-[14px]">
-        <div className="text-phone-detail text-wall-ink-2">{data.loading ? 'Loading…' : left === 0 ? 'Nothing to get' : `${left} to get`}</div>
-        <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Groceries</h1>
+        <div className="flex items-start justify-between gap-[12px]">
+          <div className="min-w-0">
+            <div className="text-phone-detail text-wall-ink-2">{data.loading ? 'Loading…' : left === 0 ? 'Nothing to get' : `${left} to get`}</div>
+            <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Groceries</h1>
+          </div>
+          {corner}
+        </div>
         {groups.map((g) => (
           <div key={g.key} className="flex flex-col">
             <h2 className="m-0 pb-[4px] pt-[16px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">{g.label}</h2>

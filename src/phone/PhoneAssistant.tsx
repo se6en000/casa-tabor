@@ -21,7 +21,7 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, onForm, onScan, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -33,6 +33,9 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   onOpenPlace?: (open: PlanOpen) => void
   /** Open a day on Me (Casa's show_day, or an answer about one day). */
   onOpenDay?: (date: Date) => void
+  /** The form and Scan, from Casa's own button (canvas 32f). */
+  onForm?: () => void
+  onScan?: () => void
   /** What came in by email (a stand-in in the fixture). */
   useEmail?: typeof useEmailOffers
   /** Words said first (a project's "Talk to Casa", P3.25). */
@@ -123,6 +126,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   return (
     <>
     <PhoneAssistantView
+      onForm={onForm}
+      onScan={onScan}
       planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : answer?.emailReview && email.data ? <PhoneEmailReview data={email.data} act={email.act} /> : null}
       lines={lines}
       thinking={thinking}
