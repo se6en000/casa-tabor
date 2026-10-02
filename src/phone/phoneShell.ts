@@ -66,6 +66,13 @@ function reportLayout() {
 }
 
 export function usePhoneShell() {
+  // Instant start (premium plan, Phase C): the app's code cached on the phone by the service worker, so it opens
+  // without waiting on the network (the day itself comes from the saved cache, eventsCachePersister.ts). Only here: the
+  // wall's kiosk isn't changed.
+  useEffect(() => {
+    if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
+    void navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {})
+  }, [])
   useEffect(() => {
     const layoutTimer = window.setTimeout(reportLayout, 2000)
     const root = document.documentElement
@@ -120,7 +127,7 @@ export function usePhoneShell() {
  * A sheet that follows the finger down from its top and closes past SWIPE_CLOSE_PX, as an iPhone sheet does. Only
  * from the top of its own scroll, and only a mostly vertical drag, so lists inside still scroll and pills still tap.
  */
-export function useSheetSwipe(onClose: () => void) {
+export function useSheetSwipe(onClose: () => void, { handle }: { handle?: number } = {}) {
   const start = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   const sheet = (e: TouchEvent<HTMLElement>) => e.currentTarget
   const reset = (el: HTMLElement) => {
@@ -130,7 +137,9 @@ export function useSheetSwipe(onClose: () => void) {
   return {
     onTouchStart: (e: TouchEvent<HTMLElement>) => {
       const t = e.touches[0]
-      start.current = sheet(e).scrollTop <= 0 ? { x: t.clientX, y: t.clientY, dragging: false } : null
+      // `handle`: only a drag that starts within this many px of the sheet's top (a tall sheet whose inside scrolls).
+      const onHandle = handle == null || t.clientY - sheet(e).getBoundingClientRect().top <= handle
+      start.current = onHandle && sheet(e).scrollTop <= 0 ? { x: t.clientX, y: t.clientY, dragging: false } : null
     },
     onTouchMove: (e: TouchEvent<HTMLElement>) => {
       const s = start.current

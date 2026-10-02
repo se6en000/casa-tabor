@@ -666,7 +666,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const loading = week.length === 0 || members.length === 0
   // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
   const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || (todos && projectId))
-  const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo)
+  const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || askOpen)
   // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
   const paged = !loading && (tab === 'me' || tab === 'family')
   const familyAt = Math.min(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), Math.max(0, shownDays.length - 1))
@@ -709,6 +709,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   }, [activePage])
   usePhoneShell()
   const handOffSwipe = useSheetSwipe(() => setHandOff(null))
+  const closeAsk = () => { setAskOpen(false); setAskOpening(null) }
+  const askSwipe = useSheetSwipe(closeAsk, { handle: 56 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
   const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
@@ -812,7 +814,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </PhonePushPage>
         )}
       </AnimatePresence>
-      {askOpen && assistant?.({
+      {/* Ask Casa rises as a tall sheet (premium plan): the screen behind shrinks back; drag its handle down to close. */}
+      {askOpen && assistant && (
+        <div className="phone-scrim absolute inset-0 z-30 bg-wall-ink/30" onClick={closeAsk}>
+          <div {...askSwipe} onClick={(e) => e.stopPropagation()} className="phone-sheet absolute inset-x-0 bottom-0 top-[10px] overflow-hidden rounded-t-[26px] bg-phone-ground shadow-[0_-12px_40px_rgba(38,34,29,0.18)]">
+            <div aria-hidden="true" className="absolute left-1/2 top-[6px] z-30 h-[5px] w-[38px] -translate-x-1/2 rounded-full bg-wall-stone" />
+            {assistant?.({
         onClose: () => { setAskOpen(false); setAskOpening(null) },
         opening: askOpening,
         onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) },
@@ -825,6 +832,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         // A saved plan's project or To do (P3.25; board 12d).
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') { setTab('week'); setWeekView('todo') } },
       })}
+          </div>
+        </div>
+      )}
       {scanOpen && scan && createEvent && (
         <PhoneScanSheet members={members} pigments={pigments} scan={scan} createEvent={createEvent} applyPlan={applyPlan} findSimilar={findSimilar} onClose={() => setScanOpen(false)} />
       )}

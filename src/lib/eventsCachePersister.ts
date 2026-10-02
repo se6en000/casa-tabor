@@ -42,7 +42,7 @@ export const eventsCachePersister = createAsyncStoragePersister({
 // would make an old persisted entry structurally disagree with the current
 // code. An unbumped buster after such a change is the one real footgun of
 // this feature: stale-shaped data silently rendering against new code.
-export const EVENTS_CACHE_BUSTER = 'events-cache-v1'
+export const EVENTS_CACHE_BUSTER = 'events-cache-v2' // v2 (2026-10-02): the phone's day data joins the events
 
 // Bounded so a genuinely old snapshot (kiosk unplugged for days) gets
 // discarded outright rather than shown as if current. In practice this
@@ -52,6 +52,14 @@ export const EVENTS_CACHE_BUSTER = 'events-cache-v1'
 // this is a backstop, not the primary staleness mechanism.
 export const EVENTS_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 // 24 hours
 
+/**
+ * Besides the events: what the phone needs to draw a day the moment it opens (premium plan, Phase C "instant start";
+ * Jake, Oct 2) — the family, their routines and days off, the chores and their ticks, and the to-do list. All small;
+ * each is refetched in the background as soon as the app is open, so this only ever shows the last-known day first.
+ */
+const DAY_KEYS = new Set(['family-members', 'member-availability-rules', 'member-availability-exceptions', 'household-chores', 'household-chore-done', 'todos'])
+
 export function shouldPersistQuery(query: Pick<Query, 'queryKey'>): boolean {
-  return query.queryKey[0] === 'events'
+  const head = query.queryKey[0]
+  return head === 'events' || (typeof head === 'string' && DAY_KEYS.has(head))
 }

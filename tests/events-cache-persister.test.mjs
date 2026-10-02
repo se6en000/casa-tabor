@@ -33,6 +33,14 @@ test('only events-range queries are persisted, not the rest of the app', () => {
   }
 })
 
+// Instant start on the phone (Oct 2): the small data a day is drawn from is kept too, so it opens on the last-known day.
+test('the phone’s day data is persisted with the events', () => {
+  for (const key of [['family-members'], ['member-availability-rules', 'a,b'], ['member-availability-exceptions', 'a,b'], ['household-chores'], ['household-chore-done', '2026-10-01'], ['todos']]) {
+    assert.equal(shouldPersistQuery({ queryKey: key }), true, `${JSON.stringify(key)} should be persisted`)
+  }
+  assert.equal(shouldPersistQuery({ queryKey: ['todo-project', 'x'] }), false)
+})
+
 test('the cache buster is a real version string, not left empty (must be bumped whenever the persisted event shape changes)', () => {
   assert.equal(typeof EVENTS_CACHE_BUSTER, 'string')
   assert.ok(EVENTS_CACHE_BUSTER.length > 0)
