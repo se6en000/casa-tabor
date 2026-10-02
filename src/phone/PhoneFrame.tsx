@@ -11,7 +11,7 @@ import { useFamilyDay } from '../wall/useFamilyDay'
 import { useMonthEvents } from '../hooks/useCalendarEvents'
 import { setChoreDone, useChoreDone } from '../wall/useChoreDone'
 import { useComingUp } from '../wall/useComingUp'
-import { useTodoProject, useTodos } from '../wall/useTodos'
+import { useTodoProject, useTodoProjectsAhead, useTodos } from '../wall/useTodos'
 import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wall/useWallChecklist'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
@@ -68,6 +68,7 @@ export default function PhoneFrame() {
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
   const isJake = members.find((m) => m.id === profile?.memberId)?.name === 'Jake'
   const todos = useTodos({ enabled: isJake, surface: 'phone' })
+  useTodoProjectsAhead(isJake ? (todos.data?.projects ?? []).map((p) => p.id) : [])
   // "Casa wants to talk to you" (canvas 21c): the same one thing as the wall's band, from this week's decisions.
   const talk = useCasaTalk()
   const topic = useMemo(() => casaTopic(

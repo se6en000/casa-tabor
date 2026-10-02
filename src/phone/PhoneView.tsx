@@ -121,7 +121,18 @@ export interface PhoneViewProps {
 /** A project on the phone, loaded (the hook lives here, so it only runs while one is open). */
 function ProjectOnPhone({ id, todos, today, onBack, onOpenProject, onTalk }: { id: string; todos: NonNullable<PhoneViewProps['todos']>; today: string; onBack: () => void; onOpenProject: (id: string) => void; onTalk?: (say: string) => void }) {
   const { data } = todos.useProject(id)
-  if (!data) return null
+  // Still on its way: the page's shape, so the push slides a page in, not an empty dim (Jake's phone, Oct 2).
+  if (!data) {
+    const title = todos.list.projects.find((p) => p.id === id)?.title ?? ''
+    return (
+      <section aria-label={`${title || 'Project'} — loading`} className="absolute inset-0 z-30 flex flex-col gap-[14px] bg-phone-ground px-[20px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))] font-body text-wall-ink">
+        <button type="button" onClick={onBack} className="flex h-[44px] items-center gap-[4px] self-start border-0 bg-transparent p-0 text-phone-body font-semibold text-wall-ink">‹ To do</button>
+        <span className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">PROJECT</span>
+        <h1 className="m-0 font-display text-phone-title font-bold">{title}</h1>
+        <PhoneSkeleton />
+      </section>
+    )
+  }
   return <PhoneProject detail={data} today={today} onEdit={(op, args) => todos.act({ action: 'project_edit', id, op, args })} onBack={onBack} onOpenProject={onOpenProject} onTalk={onTalk ? () => onTalk(`Let’s work on the ${data.project.title} project.`) : undefined} />
 }
 

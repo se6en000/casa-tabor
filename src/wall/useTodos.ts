@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { TodoAction, TodoList, TodoProjectDetail } from './todos'
@@ -43,15 +43,31 @@ export function useTodos({ enabled = true, surface = 'wall' }: { enabled?: boole
   return { data: query.data ?? null, act }
 }
 
+const fetchProject = async (id: string): Promise<TodoProjectDetail> => {
+  const { data, error } = await supabase.functions.invoke('todos', { body: { action: 'project', id } })
+  if (error) throw error
+  return data as TodoProjectDetail
+}
+
 /** One project with all its steps (the project screen). */
 export function useTodoProject(id: string | null) {
   return useQuery({
     queryKey: ['todo-project', id],
     enabled: Boolean(id),
-    queryFn: async (): Promise<TodoProjectDetail> => {
-      const { data, error } = await supabase.functions.invoke('todos', { body: { action: 'project', id } })
-      if (error) throw error
-      return data as TodoProjectDetail
-    },
+    queryFn: () => fetchProject(id!),
   })
+}
+
+/**
+ * The shelf's projects fetched ahead, so tapping one opens at once (Jake's phone, Oct 2: a project took ~2.5 s to
+ * arrive and its page slid in empty). Already fresh ones aren't fetched again.
+ */
+export function useTodoProjectsAhead(ids: string[]) {
+  const queryClient = useQueryClient()
+  const key = ids.join('|')
+  useEffect(() => {
+    for (const id of key ? key.split('|') : []) {
+      void queryClient.prefetchQuery({ queryKey: ['todo-project', id], queryFn: () => fetchProject(id), staleTime: 60_000 })
+    }
+  }, [key, queryClient])
 }
