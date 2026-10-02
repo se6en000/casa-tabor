@@ -46,6 +46,8 @@ import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
 import PhoneTabBar from './PhoneTabBar'
 import PhoneDayPager from './PhoneDayPager'
+import PhonePushPage from './PhonePushPage'
+import { AnimatePresence } from 'framer-motion'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -170,6 +172,12 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // "↑ 4 earlier" opened on today's list (canvas 30a): for the day it was opened on; another day folds again.
   const [earlierFor, setEarlierFor] = useState<string | null>(null)
   const [monthOpen, setMonthOpen] = useState(false)
+  const behindRef = useRef<HTMLDivElement>(null)
+  // A pushed page slides the screen behind a third of the way with it (PhonePushPage).
+  const shiftBehind = useCallback((px: number) => {
+    const el = behindRef.current
+    if (el) el.style.transform = Math.abs(px) > 0.5 ? `translateX(${px.toFixed(1)}px)` : ''
+  }, [])
   const ticks = usePendingTicks((key) => {
     if (key.startsWith('todo:')) void todos?.act({ action: 'done', id: key.slice('todo:'.length) })
     else {
@@ -645,6 +653,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const lastScroll = useRef(0)
   // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
   const loading = week.length === 0 || members.length === 0
+  // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
+  const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || (todos && projectId))
+  const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo)
   // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
   const paged = !loading && (tab === 'me' || tab === 'family')
   const familyAt = Math.min(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), Math.max(0, shownDays.length - 1))
@@ -695,7 +706,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
     // the top clears the notch / status bar and the tab bar clears the home indicator. With the keyboard up the frame
     // ends at its top (--phone-kb, phoneShell.ts), so a sheet or Ask Casa's line sits above it, never under it.
-    <div data-phone-frame className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
+    <div data-phone-frame className={`fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden font-body text-wall-ink transition-colors duration-500 ${sheetUp && !pushOpen ? 'bg-wall-ink' : 'bg-phone-ground'}`}>
+      {/* The screen behind pages and sheets: slid aside under a pushed page, shrunk back under a sheet. */}
+      <div ref={behindRef} className={`absolute inset-0 flex flex-col overflow-hidden bg-phone-ground transition-[transform,border-radius] duration-500 ease-[cubic-bezier(0.2,0.9,0.25,1)] ${sheetUp && !pushOpen ? 'phone-behind-sheet' : ''}`}>
       {/* Me and Family: a pager of whole days you drag with your thumb (premium plan, Phase A). The other tabs: one page
           that fades in, running under the frosted tab bar. */}
       <main ref={mainRef} onScroll={paged ? undefined : onMainScroll} className={`flex-1 ${paged ? 'overflow-hidden' : `touch-pan-y overflow-y-auto overscroll-contain ${PAGE_PAD}`}`}>
@@ -725,14 +738,22 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </>
         )}
       </main>
-      {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />}
+      <PhoneTabBar tabs={tabs} current={tab} onTab={pickTab} onAdd={() => setAddOpen(true)} addDisabled={!createEvent} compact={barCompact} />
+      </div>
+      <AnimatePresence>
+        {todos && projectId && (
+          <PhonePushPage key={`project-${projectId}`} onShift={shiftBehind} onBack={() => setProjectId(null)}>
+            <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />
+          </PhonePushPage>
+        )}
+      </AnimatePresence>
       {monthOpen && <PhoneMonth now={now} members={members} pigments={pigments} useMonth={useMonthEvents ?? (() => shownEvents as WallEvent[])} onOpen={openDay} onClose={() => setMonthOpen(false)} />}
       {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
-      <PhoneTabBar tabs={tabs} current={tab} onTab={pickTab} onAdd={() => setAddOpen(true)} addDisabled={!createEvent} compact={barCompact} />
 
+      <AnimatePresence>
       {opened && (
+        <PhonePushPage key={`event-${openId}`} onShift={shiftBehind} onBack={() => { setOpenId(null); setOpenMode('details') }}>
         <PhoneEventSheet
-          key={openId}
           view={opened}
           members={members}
           pigments={pigments}
@@ -751,9 +772,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           suggestKeepFrom={opened.event ? keepFromSuggestion(opened.event, members, keepFrom) : []}
           onKeepFrom={setKeptFrom ? (ids) => setKeptFrom(openId!, ids) : undefined}
         />
+        </PhonePushPage>
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {peopleOpen && (
+        <PhonePushPage key="people" onShift={shiftBehind} onBack={() => setPeopleOpen(false)}>
         <PhonePeople
           contacts={contacts}
           places={places}
@@ -766,8 +791,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             canEdit: members.find((m) => m.id === viewerId)?.role === 'parent',
           }}
         />
+        </PhonePushPage>
       )}
-      {emailSettingsOpen && <PhoneEmailSettings onClose={() => setEmailSettingsOpen(false)} useSettings={useEmailSettingsHook} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {emailSettingsOpen && (
+          <PhonePushPage key="email-settings" onShift={shiftBehind} onBack={() => setEmailSettingsOpen(false)}>
+            <PhoneEmailSettings onClose={() => setEmailSettingsOpen(false)} useSettings={useEmailSettingsHook} />
+          </PhonePushPage>
+        )}
+      </AnimatePresence>
       {askOpen && assistant?.({
         onClose: () => { setAskOpen(false); setAskOpening(null) },
         opening: askOpening,

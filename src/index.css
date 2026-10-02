@@ -1358,3 +1358,10 @@ html.phone-app[data-keyboard="open"] nav[aria-label="Sections"] {
 @keyframes phone-day-from-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
 @keyframes phone-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes phone-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* Under a sheet the screen behind shrinks back with rounded corners, as iOS does (premium plan, Phase A); the frame's
+   dark ground shows round it. */
+html.phone-app .phone-behind-sheet {
+  transform: scale(0.94) translateY(10px);
+  border-radius: 22px;
+}

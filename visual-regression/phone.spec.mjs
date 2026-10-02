@@ -783,3 +783,34 @@ test('phone: a short visual viewport with nothing being typed leaves the bar on 
   await expect(phone.getByRole('navigation', { name: 'Sections' })).toBeVisible()
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--phone-kb').trim())).toBe('0px')
 })
+
+// Push and pop (premium plan, Phase A): an event's page comes in from the right; dragged from the left edge past a
+// third of the width it goes back, a short drag springs home. Under a sheet the screen behind shrinks back.
+test('phone: an event pushes in; a drag from the left edge takes it back; a sheet shrinks the screen behind', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await phone.getByRole('button', { name: /^Family/ }).first().click()
+  await phone.getByRole('button', { name: /Emme Practice Violin/ }).click()
+  const eventPage = phone.getByRole('region', { name: /on the phone$/ })
+  await expect(eventPage).toBeVisible()
+  await page.waitForTimeout(700)
+  // A short drag springs home.
+  await page.mouse.move(6, 420)
+  await page.mouse.down()
+  await page.mouse.move(60, 420, { steps: 6 })
+  await page.mouse.up()
+  await page.waitForTimeout(700)
+  await expect(eventPage).toBeVisible()
+  // Past a third of the width: back to Family.
+  await page.mouse.move(6, 420)
+  await page.mouse.down()
+  await page.mouse.move(250, 420, { steps: 12 })
+  await page.mouse.up()
+  await expect(eventPage).toHaveCount(0)
+  await expect(phone.getByRole('heading', { name: 'Everyone' })).toBeVisible()
+
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await expect(page.locator('.phone-behind-sheet')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+})

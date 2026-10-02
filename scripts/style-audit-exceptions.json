@@ -310,6 +310,10 @@
       {
         "path": "src/phone/PullToRefresh.tsx",
         "reason": "The phone lens: pull to refresh (canvas 30) — the mark's height, turn and fade follow the finger at runtime."
+      },
+      {
+        "path": "src/phone/PhonePushPage.tsx",
+        "reason": "The phone lens: push and pop (premium plan, Phase A) — the page's position and the dim behind it follow the thumb at runtime (framer-motion values)."
       }
     ],
     "nativeControlRecreations": [
