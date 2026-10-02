@@ -201,3 +201,14 @@ test('an answer with shape: a lead line, then options as tiles (name and one lin
   assert.deepEqual([plain.lead, plain.items.length], ['Yes, Kelly has Gym at 7:30 PM.', 0])
   assert.equal(answerShape('Only one:\n- Fruit skewers: easy').items.length, 0)
 })
+
+// Jake, 2026-10-01 (computer panel): "book it for friday" → the card → typed "yes add it" → nothing saved, nothing to
+// open. The server's reply to a typed yes only confirms the card; it isn't moving on.
+test('a typed yes: the reply that confirms the card keeps it waiting, so it saves', async () => {
+  const { pendingAction } = await import('../src/wall/assistant.ts')
+  const card = { id: 'a1', role: 'assistant', content: 'Create: Search for electricians', toolAction: { tool: 'create_event', args: {}, displayText: 'x', status: 'pending' } }
+  const yes = { id: 'u2', role: 'user', content: 'yes add it' }
+  const confirming = { id: 'a2', role: 'assistant', content: '', confirmsDraft: true }
+  assert.equal(pendingAction([card, yes, confirming])?.id, 'a1')
+  assert.equal(pendingAction([card, yes, confirming, { id: 'u3', role: 'user', content: 'what else?' }, { id: 'a3', role: 'assistant', content: 'Nothing.' }]), null)
+})

@@ -35,7 +35,9 @@ export function latestExchange(messages: AIMessage[]): { question: string | null
 export function pendingAction(messages: AIMessage[]): AIMessage | null {
   // Only the latest answer's card waits (canvas 25b; Jake, 2026-10-01: a card stayed up under the next answer after
   // he'd said "no, what food could I make…"). Saying no, or moving on to something else, lets it go.
-  const lastAnswer = [...messages].reverse().find((m) => m.role === 'assistant')
+  // A typed "yes" comes back as a reply that only confirms the card: that's the card's yes, not moving on (Jake,
+  // 2026-10-01: "yes add it" on the computer saved nothing, and there was nothing to open).
+  const lastAnswer = [...messages].reverse().find((m) => m.role === 'assistant' && !m.confirmsDraft)
   return lastAnswer?.toolAction?.status === 'pending' ? lastAnswer : null
 }
 

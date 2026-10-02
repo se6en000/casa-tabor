@@ -40,7 +40,10 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
 
   const { question, answer } = latestExchange(messages)
   const pending = pendingAction(messages)
-  const pointAt = answerEventId(answer)
+  // After a typed or spoken "yes" the server confirmed, what was just saved is what to open ("Open it", on the
+  // computer's panel and the phone as on the wall).
+  const confirmedCard = answer?.confirmsDraft ? [...messages].reverse().find((m) => m.role === 'assistant' && !m.confirmsDraft && m.toolAction) ?? null : null
+  const pointAt = answerEventId(answer) ?? answerEventId(confirmedCard)
 
   // `extra`: what the plan's Agree card chose (the unticked), sent with the yes.
   const confirm = useCallback(async (extra?: Record<string, unknown>) => {

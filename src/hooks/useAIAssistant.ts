@@ -186,7 +186,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
     ?.conversationState
   // Only the latest answer's card is still waiting (canvas 25b): once Casa has answered something else, an older
   // card isn't sent as pending, so a later "yes" can't save it.
-  const lastAnswer = [...messages].reverse().find((message) => message.role === 'assistant')
+  const lastAnswer = [...messages].reverse().find((message) => message.role === 'assistant' && !message.confirmsDraft)
   const pendingAction = lastAnswer?.toolAction?.status === 'pending' && lastAnswer.toolAction.tool !== 'confirm_talk_plan_action_intent'
     ? lastAnswer.toolAction
     : undefined
