@@ -1,3 +1,4 @@
+import { useSheetSwipe } from './phoneShell'
 import { useState, type ReactNode } from 'react'
 import {
   EFFORT_CHOICES, FITS, applyProjectEdit, arrangement, doneSteps, effortText, hoursText, moneyText, nudgeStep, placeNew, planGroups, projectStats, whoOptions,
@@ -24,9 +25,10 @@ export interface PhoneProjectProps {
 const niceDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const swipe = useSheetSwipe(onClose)
   return (
     <div className="absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onClose}>
-      <section aria-label={label} className="flex max-h-[90%] w-full flex-col gap-[12px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+      <section {...swipe} aria-label={label} className="flex max-h-[90%] w-full flex-col gap-[12px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
         {children}
       </section>
     </div>

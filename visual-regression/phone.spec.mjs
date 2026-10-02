@@ -674,3 +674,40 @@ test('phone: Casa wants to talk — on top of Me for Jake, not for Kelly; an ans
   await expect(phone.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(phone.getByRole('region', { name: 'Casa has something for you' })).toHaveCount(0)
 })
+
+// The phone as an app, pass 1 (Jake's screen recording, Oct 1: the bottom bar floated and dropped as he swiped):
+// the page under the frame can't scroll or bounce, so the bar stays on the bottom edge; a sheet dragged down closes.
+const drag = async (page, selector, from, to) => page.evaluate(([sel, y0, y1]) => {
+  const el = document.querySelector(sel)
+  const r = el.getBoundingClientRect()
+  const at = (y) => new Touch({ identifier: 1, target: el, clientX: r.left + r.width / 2, clientY: y })
+  el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [at(y0)], changedTouches: [at(y0)] }))
+  for (let y = y0; y <= y1; y += 20) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, touches: [at(y)], changedTouches: [at(y)] }))
+  el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [at(y1)] }))
+}, [selector, from, to])
+
+test('phone: the frame never moves — the page itself can’t scroll; the bar sits on the bottom edge', async ({ page }) => {
+  const phone = await open(page)
+  expect(await page.evaluate(() => document.documentElement.classList.contains('phone-app'))).toBe(true)
+  const moved = await page.evaluate(() => {
+    window.scrollTo(0, 400)
+    document.scrollingElement.scrollTop = 400
+    return { y: window.scrollY, top: document.scrollingElement.scrollTop, body: getComputedStyle(document.body).position }
+  })
+  expect(moved).toEqual({ y: 0, top: 0, body: 'fixed' })
+  const bar = await phone.getByRole('navigation', { name: 'Sections' }).boundingBox()
+  expect(Math.round(bar.y + bar.height)).toBe(844)
+})
+
+test('phone: a sheet dragged down from its top closes; a short drag springs back', async ({ page }) => {
+  const phone = await open(page)
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  const sheet = phone.getByRole('region', { name: 'Add something' })
+  await expect(sheet).toBeVisible()
+  const box = await sheet.boundingBox()
+  await drag(page, 'section[aria-label="Add something"]', box.y + 20, box.y + 60)
+  await page.waitForTimeout(300)
+  await expect(sheet).toBeVisible()
+  await drag(page, 'section[aria-label="Add something"]', box.y + 20, box.y + 220)
+  await expect(sheet).toHaveCount(0)
+})

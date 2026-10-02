@@ -1,3 +1,4 @@
+import { useSheetSwipe } from './phoneShell'
 import type { ReactNode } from 'react'
 import { Camera, Mic, Type, X } from 'lucide-react'
 
@@ -12,9 +13,10 @@ export default function PhoneAddSheet({ onType, onSay, onScan, onClose }: { onTy
       </span>
     </button>
   )
+  const swipe = useSheetSwipe(onClose)
   return (
     <div className="absolute inset-0 z-30 bg-wall-ink/35" onClick={onClose}>
-      <section aria-label="Add something" className="absolute bottom-0 left-0 flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+      <section {...swipe} aria-label="Add something" className="absolute bottom-0 left-0 flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="font-display text-phone-title font-bold text-wall-ink">Add something</div>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>

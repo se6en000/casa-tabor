@@ -1,3 +1,4 @@
+import { useSheetSwipe } from './phoneShell'
 import { useState } from 'react'
 import { timeOf, type TodoAction, type TodoItem } from '../wall/todos'
 import { Answer } from './PhoneTodo'
@@ -19,9 +20,10 @@ export default function PhoneTodoSheet({ item, onAct, onClose }: PhoneTodoSheetP
   const [time, setTime] = useState(timeOf(item) ?? '')
   const [confirm, setConfirm] = useState(false)
   const run = async (request: TodoAction) => { await onAct(request); onClose() }
+  const swipe = useSheetSwipe(onClose)
   return (
     <div className="absolute inset-0 z-40 flex items-end bg-wall-ink/30" onClick={onClose}>
-      <section aria-label={`${item.title} — edit`} className="flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+      <section {...swipe} aria-label={`${item.title} — edit`} className="flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
         <span className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">TO-DO</span>
         <input aria-label="The to-do" value={title} onChange={(e) => setTitle(e.target.value)} className={`${field} font-display text-phone-heading font-semibold`} />
         <span className="text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">WHEN</span>

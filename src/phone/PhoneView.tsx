@@ -40,6 +40,7 @@ import { blankEvent } from '../wall/editing'
 import { keepFromSuggestion, keptFrom as keptFromOf, type KeepFrom } from '../wall/audience'
 import { snoozeUntil, type CasaTopic, type TalkAnswer } from '../wall/casaTalk'
 import PhoneCasaTalk from './PhoneCasaTalk'
+import { usePhoneShell, useSheetSwipe } from './phoneShell'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -534,6 +535,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       if (next != null) setDayIndex(next)
     }
   }
+  usePhoneShell()
+  const handOffSwipe = useSheetSwipe(() => setHandOff(null))
   const sheetOpen = Boolean(openId || handOff || addOpen || peopleOpen || emailSettingsOpen || scanOpen || askOpen || adding || projectId || editingTodo)
   useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
@@ -542,8 +545,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
   return (
     // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
-    // the top clears the notch / status bar and the tab bar clears the home indicator.
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
+    // the top clears the notch / status bar and the tab bar clears the home indicator. With the keyboard up the frame
+    // ends at its top (--phone-kb, phoneShell.ts), so a sheet or Ask Casa's line sits above it, never under it.
+    <div className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
       <main ref={mainRef} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[24px] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
         {tab === 'me' && meScreen}
         {tab === 'family' && familyScreen}
@@ -648,7 +652,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
       {handOff && tripActions && (
         <div className="absolute inset-0 z-30 bg-wall-ink/35" onClick={() => setHandOff(null)}>
-          <section aria-label="Hand off" className="absolute bottom-0 left-0 flex max-h-[85%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
+          <section {...handOffSwipe} aria-label="Hand off" className="absolute bottom-0 left-0 flex max-h-[85%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-phone-detail text-wall-ink-2">{handOff.trip.title}</div>

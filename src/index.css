@@ -1250,3 +1250,48 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
   --color-wall-pigment-5: var(--color-wall-night-pigment-5);
   --color-wall-pigment-6: var(--color-wall-night-pigment-6);
 }
+
+/* ── The phone as an app (src/phone/phoneShell.ts) ─────────────────
+   While the phone screen is up the page itself never scrolls or bounces, so the pinned frame — the bottom
+   bar included — can't be dragged with it; only the phone's own middle area scrolls. Taps feel pressed,
+   with no grey flash, no callout, no stray text selection and no double-tap zoom. */
+html.phone-app,
+html.phone-app body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.phone-app #root {
+  min-height: 0;
+  height: 100%;
+}
+html.phone-app body {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+html.phone-app input,
+html.phone-app textarea,
+html.phone-app [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+html.phone-app button,
+html.phone-app a,
+html.phone-app [role="button"] {
+  touch-action: manipulation;
+  transition: opacity 120ms ease-out;
+}
+html.phone-app button:active:not(:disabled),
+html.phone-app a:active,
+html.phone-app [role="button"]:active {
+  opacity: 0.55;
+}
+/* The keyboard is up: the tab bar steps aside (as an iPhone app's does). */
+html.phone-app[data-keyboard="open"] nav[aria-label="Sections"] {
+  display: none;
+}
