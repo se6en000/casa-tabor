@@ -17,7 +17,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from '../wall/routineFixture'
 
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
-import PhoneView from './PhoneView'
+import PhoneView, { type GlanceProps } from './PhoneView'
 import type { ShopItem } from './groceries'
 import PhoneAssistantView from './PhoneAssistantView'
 import type { PhoneLine } from './assistant'
@@ -73,13 +73,25 @@ const SCANNED_TRIP = {
 }
 
 // Say it, scripted: a question gets an answer; "add …" gets a draft that waits for a yes.
-function FixtureAssistant({ onClose, onAdd, onForm, onScan }: { onClose: () => void; onAdd: () => void; onForm?: () => void; onScan?: () => void }) {
+function FixtureAssistant({ onClose, onAdd, onForm, onScan, glance }: { onClose: () => void; onAdd: () => void; onForm?: () => void; onScan?: () => void; glance?: GlanceProps }) {
   const [lines, setLines] = useState<PhoneLine[]>([])
   const [pending, setPending] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const say = (role: PhoneLine['role'], text: string) => setLines((l) => [...l, { id: `l${l.length}`, role, text }])
+  // Held to talk (34e): what the fixture "hears" while the button is held, sent when it's let go.
+  const holding = glance?.holding ?? false
+  const [wasHolding, setWasHolding] = useState(false)
+  if (holding !== wasHolding) {
+    setWasHolding(holding)
+    if (!holding) {
+      say('user', 'Who’s driving Liv tomorrow?')
+      say('assistant', 'Kelly drives Liv to Ferrin Park Field 1. Leave by 9:08 for the 9:40 game.')
+    }
+  }
   return (
     <PhoneAssistantView
+      glance={glance ? { holding, onExpand: glance.onExpand } : undefined}
+      mic={glance ? { listening: holding, interim: holding ? 'Who’s driving Liv tomorrow' : '', toggle: () => {} } : undefined}
       lines={lines}
       thinking={false}
       pending={pending}
@@ -201,7 +213,7 @@ function PhoneFixturePageInner() {
                 : params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
               planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
               aroundEvents={shown}
-              assistant={({ onClose, onOpenEvent, onOpenDay, opening, onForm, onScan }) => askTurn ? (
+              assistant={({ onClose, onOpenEvent, onOpenDay, opening, onForm, onScan, glance }) => askTurn ? (
                 // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
                 <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
                   <PhoneAssistant
@@ -217,11 +229,13 @@ function PhoneFixturePageInner() {
                     opening={opening}
                     onForm={onForm}
                     onScan={onScan}
+                    glance={glance}
                     lookupDrive={async () => 24}
                   />
                 </ProfileSessionContext.Provider>
               ) : (
                 <FixtureAssistant
+                  glance={glance}
                   onClose={onClose}
                   onForm={onForm}
                   onScan={onScan}

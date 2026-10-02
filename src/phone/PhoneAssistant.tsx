@@ -17,11 +17,12 @@ import { buildBugReport } from '../wall/bugReport'
 import { useAssistantTurn } from '../wall/useAssistantTurn'
 import { phoneTranscript } from './assistant'
 import PhoneAssistantView from './PhoneAssistantView'
+import type { GlanceProps } from './PhoneView'
 
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, onForm, onScan, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, onForm, onScan, glance, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -36,6 +37,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   /** The form and Scan, from Casa's own button (canvas 32f). */
   onForm?: () => void
   onScan?: () => void
+  /** Held to talk (34e/34f): listening while held, then the answer over the screen. */
+  glance?: GlanceProps
   /** What came in by email (a stand-in in the fixture). */
   useEmail?: typeof useEmailOffers
   /** Words said first (a project's "Talk to Casa", P3.25). */
@@ -119,6 +122,26 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   useEffect(() => {
     stopRef.current = () => void speech.stop()
   })
+  // Held to talk (34e): listening from the moment the hold starts; letting go finishes it and what was said is sent.
+  // Where the phone can't listen, letting go opens the chat to type it instead.
+  const holding = glance?.holding ?? false
+  const wasHolding = useRef(false)
+  const startRef = useRef(speech.start)
+  const finishRef = useRef(speech.finish)
+  useEffect(() => { startRef.current = speech.start; finishRef.current = speech.finish })
+  const expandRef = useRef(glance?.onExpand)
+  useEffect(() => { expandRef.current = glance?.onExpand })
+  useEffect(() => {
+    if (holding && !wasHolding.current) {
+      captured.current = ''
+      if (canListen) void startRef.current()
+    }
+    if (!holding && wasHolding.current) {
+      if (canListen) finishRef.current()
+      else expandRef.current?.()
+    }
+    wasHolding.current = holding
+  }, [holding])
 
   const lines = useMemo(() => phoneTranscript(messages), [messages])
   const thinking = loading || Boolean(answer?.streaming)
@@ -126,6 +149,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   return (
     <>
     <PhoneAssistantView
+      glance={glance ? { holding, onExpand: glance.onExpand } : undefined}
       onForm={onForm}
       onScan={onScan}
       planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : answer?.emailReview && email.data ? <PhoneEmailReview data={email.data} act={email.act} /> : null}
@@ -144,7 +168,9 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
           void speech.start()
         },
       } : undefined}
-      onOpenEvent={pointAt && events.some((e) => e.id === pointAt) ? () => onOpenEvent(pointAt) : undefined}
+      // What Casa just added comes with Open it straight away (33g, Jake: "a link will always be provided"); the event page
+      // opens as soon as the new event has loaded.
+      onOpenEvent={pointAt ? () => onOpenEvent(pointAt) : undefined}
       directions={answer?.directions ?? null}
       openDay={day && onOpenDay ? { label: `Open ${day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`, go: () => onOpenDay(day.date) } : null}
       onSend={(text) => {

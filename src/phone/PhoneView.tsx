@@ -56,6 +56,16 @@ import { AnimatePresence } from 'framer-motion'
 // The phone rearranged (UX review, canvas rows 32–34): Today, Calendar, Groceries and — Jake's alone — To do.
 type Tab = 'today' | 'calendar' | 'groceries' | 'todo'
 
+/** Casa held to talk (canvas 34e/34f): listening while held; then the answer over the screen you're on. */
+export interface GlanceProps {
+  /** The button is still held: listening. */
+  holding: boolean
+  /** Let go after sliding left: nothing is sent. */
+  cancelled: boolean
+  /** "Keep talking": the full chat, with this in it. */
+  onExpand: () => void
+}
+
 export interface PhoneTripActions {
   leaving: (tripIds: string[]) => void
   undoLeaving: (tripIds: string[]) => void
@@ -103,7 +113,7 @@ export interface PhoneViewProps {
   /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
-  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; onOpenDay?: (date: Date) => void; opening?: string | null; onForm?: () => void; onScan?: () => void }) => ReactNode
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; onOpenDay?: (date: Date) => void; opening?: string | null; onForm?: () => void; onScan?: () => void; glance?: GlanceProps }) => ReactNode
   /** Builds a day's plan from events (a far day's week, dayFocus.ts). */
   planDay?: (date: Date, events: WallEvent[]) => DayPlan
   /** The week around a far day on Me, loaded by the frame when asked with onFocusDay. */
@@ -216,6 +226,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [askOpen, setAskOpen] = useState(false)
   // Opened from a project ("Talk to Casa"): its words are said first.
   const [askOpening, setAskOpening] = useState<string | null>(null)
+  // Held to talk (34e): the answer over the screen you're on rather than the chat (34f).
+  const [glance, setGlance] = useState<{ holding: boolean; cancelled: boolean } | null>(null)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
@@ -645,7 +657,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const loading = week.length === 0 || members.length === 0
   // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
   const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || (todos && projectId))
-  const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || askOpen || initialOpen)
+  const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || (askOpen && !glance) || initialOpen)
   // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
   const paged = !loading && tab === 'today'
   const familyAt = Math.min(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), Math.max(0, shownDays.length - 1))
@@ -694,7 +706,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   }, [activePage])
   usePhoneShell()
   const handOffSwipe = useSheetSwipe(() => setHandOff(null))
-  const closeAsk = () => { setAskOpen(false); setAskOpening(null) }
+  const closeAsk = () => { setAskOpen(false); setAskOpening(null); setGlance(null) }
   const askSwipe = useSheetSwipe(closeAsk, { handle: 56 })
   const initialSwipe = useSheetSwipe(() => setInitialOpen(false))
 
@@ -751,7 +763,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         action={tab === 'groceries' && groceries
           ? { label: 'Add to groceries', icon: <Plus size={28} strokeWidth={2.2} />, onClick: () => { primeKeyboard(); setGroceryAdding(true) } }
           : assistant
-            ? { label: 'Casa', icon: <Sparkles size={26} strokeWidth={1.9} />, onClick: () => { setAskOpening(null); setAskOpen(true) } }
+            ? {
+                label: 'Casa',
+                icon: <Sparkles size={26} strokeWidth={1.9} />,
+                onClick: () => { setAskOpening(null); setGlance(null); setAskOpen(true) },
+                active: Boolean(glance?.holding),
+                hold: {
+                  start: () => { haptic(); setAskOpening(null); setGlance({ holding: true, cancelled: false }); setAskOpen(true) },
+                  end: (cancelled) => { if (cancelled) closeAsk(); else setGlance({ holding: false, cancelled: false }) },
+                },
+              }
             : { label: 'Add something', icon: <Plus size={28} strokeWidth={2.2} />, onClick: () => setAddOpen(true), disabled: !createEvent }}
       />
       </div>
@@ -819,21 +840,24 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         )}
       </AnimatePresence>
       {/* Ask Casa rises as a tall sheet (premium plan): the screen behind shrinks back; drag its handle down to close. */}
+      {/* Held to talk, the same assistant draws its answer over the screen (34f) — the same elements either way, so
+          "Keep talking" opens the chat with the conversation as it is. */}
       {askOpen && assistant && (
-        <div className="phone-scrim absolute inset-0 z-30 bg-wall-ink/30" onClick={closeAsk}>
-          <div {...askSwipe} onClick={(e) => e.stopPropagation()} className="phone-sheet absolute inset-x-0 bottom-0 top-[10px] overflow-hidden rounded-t-[26px] bg-phone-ground shadow-[0_-12px_40px_rgba(38,34,29,0.18)]">
-            <div aria-hidden="true" className="absolute left-1/2 top-[6px] z-30 h-[5px] w-[38px] -translate-x-1/2 rounded-full bg-wall-stone" />
+        <div className={glance ? 'absolute inset-0 z-30' : 'phone-scrim absolute inset-0 z-30 bg-wall-ink/30'} onClick={glance ? undefined : closeAsk}>
+          <div {...(glance ? {} : askSwipe)} onClick={(e) => e.stopPropagation()} className={glance ? 'absolute inset-0' : 'phone-sheet absolute inset-x-0 bottom-0 top-[10px] overflow-hidden rounded-t-[26px] bg-phone-ground shadow-[0_-12px_40px_rgba(38,34,29,0.18)]'}>
+            <div aria-hidden="true" className={glance ? 'hidden' : 'absolute left-1/2 top-[6px] z-30 h-[5px] w-[38px] -translate-x-1/2 rounded-full bg-wall-stone'} />
             {assistant?.({
-        onClose: () => { setAskOpen(false); setAskOpening(null) },
+        glance: glance ? { ...glance, onExpand: () => setGlance(null) } : undefined,
+        onClose: closeAsk,
         // From Casa's button (32f): the form one tap away, and Scan beside the box.
         onForm: createEvent ? () => { setAskOpen(false); setAskOpening(null); setAdding(blankEvent(tab === 'today' ? (shownDays[familyAt]?.date ?? now) : now, now, 'event')) } : undefined,
         onScan: scan && createEvent ? () => { setAskOpen(false); setAskOpening(null); setScanOpen(true) } : undefined,
         opening: askOpening,
-        onOpenEvent: (id) => { setAskOpen(false); setOpenMode('details'); setOpenId(id) },
+        onOpenEvent: (id) => { closeAsk(); setOpenMode('details'); setOpenId(id) },
         // A day Casa opened (show_day): Family on that day — everyone's day, as asked — with the week
         // around it to swipe (Me, the drives alone, follows the same week).
         onOpenDay: (date) => {
-          setAskOpen(false)
+          closeAsk()
           openDay(date)
         },
         // A saved plan's project or To do (P3.25; board 12d).

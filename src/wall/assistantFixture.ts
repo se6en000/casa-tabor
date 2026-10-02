@@ -185,7 +185,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
       question,
       answer,
       pending,
-      pointAt: answerEventId(answer),
+      pointAt: answerEventId(answer) ?? answerEventId(pending ? null : [...allMessages].reverse().find((m) => m.toolAction?.status === 'done') ?? null),
       confirm: async (extra?: Record<string, unknown>) => {
         if (!pending) return
         setWorking(true)
@@ -196,7 +196,7 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
               { id: 'i1', kind: 'project', project_id: 'p-jelly' }, { id: 'i2', kind: 'tick_step', project_id: 'p-costumes' },
               { id: 'i7', kind: 'event', event_id: 'e-trick', start: '2026-10-31T18:00:00-04:00' }, { id: 'i8', kind: 'pack', event_id: 'e-trick' },
             ] } }
-          : {}
+          : pending.toolAction?.tool === 'create_event' ? { resultEventId: 'casa-added' } : {}
         setStatus(pending.id, 'done', plan as never)
         setWorking(false)
       },

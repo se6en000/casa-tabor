@@ -284,6 +284,9 @@ test('phone: Ask Casa — the one draft, revised in place, says what just change
   // A weekday at 4:00: both parents are at work (their Work routines, canvas 16), and the card says so.
   await expect(card.getByText('Kelly · busy')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-ask-draft.png')
+  // Added, it comes with a way to open it straight away (33g, Jake: "a link will always be provided").
+  await card.getByRole('button', { name: 'Yes, add it' }).click()
+  await expect(ask.getByRole('button', { name: 'Open it' })).toBeVisible()
 })
 
 test('phone: Ask Casa — a change says before → after, and a driver can be picked on it', async ({ page }) => {
@@ -868,4 +871,43 @@ test('phone: Scan it — several photos join a tray and are read together in one
   await sheet.getByRole('button', { name: 'Read 2 photos together' }).click()
   await expect(sheet.getByText('Sun, Sep 27 · 11:00 AM – 3:00 PM')).toBeVisible()
   expect(await page.evaluate(() => window.__scanFiles)).toEqual(['page1.jpg', 'page3.jpg'])
+})
+
+// Canvas 34e/34f (Jake, Oct 2: "if you click and hold the AI button it starts to listen … or maybe it answers right there
+// as an overlay?"): held, Casa listens and shows the words; let go and the answer rises over the screen you're on.
+test('phone: hold Casa to talk — the answer over the screen; Keep talking opens the chat; slide left cancels', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
+  const casa = phone.getByRole('button', { name: 'Casa', exact: true })
+  const box = await casa.boundingBox()
+  const at = [box.x + box.width / 2, box.y + box.height / 2]
+  await page.mouse.move(...at)
+  await page.mouse.down()
+  const listening = phone.getByRole('region', { name: 'Casa is listening' })
+  await expect(listening.getByText('LISTENING · LET GO TO SEND')).toBeVisible()
+  await expect(listening.getByText('Who’s driving Liv tomorrow')).toBeVisible()
+  await expect(casa).toHaveAttribute('data-active', 'true')
+  await expect(phone).toHaveScreenshot('phone-hold-listening.png')
+  await page.mouse.up()
+  const answer = phone.getByRole('region', { name: 'Casa’s answer' })
+  await expect(answer.getByText('Kelly drives Liv to Ferrin Park Field 1. Leave by 9:08 for the 9:40 game.')).toBeVisible()
+  await expect(phone.getByRole('heading', { name: 'Everyone' })).toBeVisible() // still on Today underneath
+  await expect(phone).toHaveScreenshot('phone-hold-answer.png')
+  await answer.getByRole('button', { name: 'Keep talking' }).click()
+  const chat = phone.getByRole('region', { name: 'Ask Casa' })
+  await expect(chat.getByRole('textbox', { name: 'Ask Casa' })).toBeVisible()
+  await expect(chat.getByText('Who’s driving Liv tomorrow?')).toBeVisible()
+  await chat.getByRole('button', { name: 'Back' }).click()
+
+  // Slide left while held: nothing is sent, nothing opens.
+  await page.mouse.move(...at)
+  await page.mouse.down()
+  await expect(phone.getByRole('region', { name: 'Casa is listening' })).toBeVisible()
+  await page.mouse.move(at[0] - 120, at[1], { steps: 6 })
+  await page.mouse.up()
+  await expect(phone.getByRole('region', { name: 'Casa is listening' })).toHaveCount(0)
+  await expect(phone.getByRole('region', { name: 'Casa’s answer' })).toHaveCount(0)
+
+  // A quick tap is still the chat.
+  await casa.click()
+  await expect(phone.getByRole('region', { name: 'Ask Casa' })).toBeVisible()
 })

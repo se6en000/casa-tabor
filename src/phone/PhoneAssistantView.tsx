@@ -8,6 +8,7 @@ import type { WallMember } from '../wall/engine/types'
 import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
 import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
 import { telOf } from '../wall/WallDirections'
+import { useSheetSwipe } from './phoneShell'
 
 // Say it (board 05e): the family's assistant on the phone — the same one the wall's band
 // talks to. Type (or use the keyboard's dictation, or the mic), read the answer, and a
@@ -51,11 +52,13 @@ export interface PhoneAssistantViewProps {
   /** Casa opened from its button (canvas 32f): the old form one tap away ("Use the form"), and Scan beside the box. */
   onForm?: () => void
   onScan?: () => void
+  /** Held to talk (canvas 34e/34f): listening while held; then the answer over the screen you're on, not the chat. */
+  glance?: { holding: boolean; onExpand: () => void }
 }
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null, onForm, onScan }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null, onForm, onScan, glance }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -135,6 +138,66 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
   const dark = 'flex h-[48px] items-center justify-center rounded-full border-0 bg-wall-ink px-[20px] text-phone-body font-semibold text-wall-on-pigment disabled:opacity-40'
   const pill = 'flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-phone-body font-semibold text-wall-ink'
   const field = 'min-h-[88px] w-full resize-none rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment p-[12px] text-phone-body text-wall-ink outline-none'
+
+  const glanceSwipe = useSheetSwipe(onClose)
+  if (glance) {
+    // 34e: held — the words as they're heard, just above the button; let go to send, slide left to cancel.
+    if (glance.holding) {
+      return (
+        <section aria-label="Casa is listening" className="pointer-events-none absolute inset-0 font-body">
+          <div aria-hidden="true" className="absolute inset-x-0 bottom-[96px] top-0 bg-gradient-to-t from-wall-ink/60 to-wall-ink/15" />
+          <div className="absolute bottom-[104px] left-[16px] right-[16px] flex flex-col items-end gap-[10px]">
+            <div className="max-w-[92%] rounded-[22px] rounded-br-[6px] bg-wall-on-pigment px-[18px] py-[16px] shadow-[0_10px_30px_rgba(38,34,29,0.25)]">
+              <div className="mb-[6px] text-phone-label font-extrabold tracking-[0.16em] text-wall-brass-ink">{mic ? 'LISTENING · LET GO TO SEND' : 'LET GO TO TYPE IT'}</div>
+              <div className="font-display text-phone-heading font-semibold text-wall-ink">{mic?.interim || (mic ? 'Say it…' : 'This phone can’t listen here.')}</div>
+            </div>
+            <div className="text-phone-detail font-semibold text-wall-on-pigment">Slide left to cancel</div>
+          </div>
+        </section>
+      )
+    }
+    // 34f: what you said, Casa's answer in a line, the card it's about; Open it, or Keep talking (the chat, with this in it).
+    const lastAsked = [...lines].reverse().find((l) => l.role === 'user') ?? null
+    const reply = lastAsked ? lines.slice(lines.lastIndexOf(lastAsked) + 1).filter((l) => l.role === 'assistant').map((l) => l.text).join(' ') : ''
+    return (
+      <div className="absolute inset-0 font-body text-wall-ink">
+        <div className="phone-scrim absolute inset-x-0 bottom-[96px] top-0 bg-wall-ink/35" onClick={onClose} />
+        <section {...glanceSwipe} aria-label="Casa’s answer" className="phone-sheet absolute bottom-[96px] left-[10px] right-[10px] flex max-h-[72%] flex-col gap-[12px] overflow-y-auto overscroll-contain rounded-[26px] bg-phone-ground px-[18px] pb-[16px] pt-[10px] shadow-[0_16px_40px_rgba(38,34,29,0.3)]">
+          <div aria-hidden="true" className="mx-auto h-[5px] w-[38px] shrink-0 rounded-full bg-wall-stone" />
+          {lastAsked && <div className="max-w-[85%] self-end rounded-[18px] rounded-br-[6px] bg-wall-ink px-[14px] py-[9px] text-phone-body text-wall-on-pigment">{lastAsked.text}</div>}
+          {thinking ? (
+            <div className="flex items-center gap-[10px] text-phone-body text-wall-ink-2"><Loader2 size={18} className="animate-spin" aria-hidden="true" /> {status || 'Thinking…'}</div>
+          ) : reply ? (
+            <div className="font-display text-phone-heading font-semibold leading-snug text-wall-ink">{reply}</div>
+          ) : null}
+          {planSlot}
+          {card ? (
+            <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />
+          ) : pending && (
+            <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
+              <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
+              <div className="font-display text-phone-heading font-semibold">{pending}</div>
+              <div className="flex gap-[8px]">
+                <button type="button" onClick={onConfirm} disabled={working} className="flex h-[48px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink text-phone-body font-semibold text-wall-on-pigment">Yes, do it</button>
+                <button type="button" onClick={onCancel} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-phone-body font-semibold text-wall-ink">No</button>
+              </div>
+            </div>
+          )}
+          {which && !thinking && <PhoneWhich which={which} members={members} pigmentOf={pigmentOf} onPick={onSend} onNeither={() => onSend('Never mind')} />}
+          {note && <div className="text-phone-body font-semibold text-wall-ink">{note}</div>}
+          {directions && !thinking && (
+            <a href={directions.maps} target="_blank" rel="noreferrer" className="flex h-[48px] items-center justify-center rounded-full bg-wall-ink text-phone-body font-bold text-wall-on-pigment no-underline">Directions to {directions.name}</a>
+          )}
+          <div className="flex gap-[8px]">
+            {onOpenEvent && !pending && !thinking && <button type="button" onClick={onOpenEvent} className="flex h-[46px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink text-phone-body font-bold text-wall-on-pigment">Open it</button>}
+            {openDay && !thinking && <button type="button" onClick={openDay.go} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">{openDay.label}</button>}
+            <button type="button" onClick={glance.onExpand} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">Keep talking</button>
+          </div>
+          <div className="text-center text-phone-detail text-wall-ink-2">Swipe down to close · hold Casa again to answer</div>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <section aria-label="Ask Casa" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
