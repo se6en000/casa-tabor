@@ -27,6 +27,8 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
     hold?: { start: () => void; end: (cancelled: boolean) => void }
     /** Held and listening: brass, with rings. */
     active?: boolean
+    /** Above the shade while Casa's answer is over the screen (34f), so it can be held again. */
+    raised?: boolean
   }
   /** Scrolling down: smaller, labels tucked away. */
   compact: boolean
@@ -92,7 +94,7 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
         disabled={action.disabled}
         data-phone-action
         data-active={action.active ? 'true' : undefined}
-        className={`absolute right-[12px] ${bottom} z-20 flex touch-none select-none items-center justify-center rounded-full border-0 p-0 text-wall-on-pigment transition-[width,height,transform,background-color] duration-300 ${action.active ? 'scale-110 bg-wall-brass shadow-[0_0_30px_rgba(201,162,92,0.7)]' : 'bg-wall-ink shadow-[0_6px_18px_rgba(38,34,29,0.30)]'} ${compact ? 'h-[56px] w-[56px]' : 'h-[64px] w-[64px]'}`}
+        className={`absolute right-[12px] ${bottom} ${action.raised ? 'z-40' : 'z-20'} flex touch-none select-none items-center justify-center rounded-full border-0 p-0 text-wall-on-pigment transition-[width,height,transform,background-color] duration-300 ${action.active ? 'scale-110 bg-wall-brass shadow-[0_0_30px_rgba(201,162,92,0.7)]' : 'bg-wall-ink shadow-[0_6px_18px_rgba(38,34,29,0.30)]'} ${compact ? 'h-[56px] w-[56px]' : 'h-[64px] w-[64px]'}`}
       >
         {action.active && <span aria-hidden="true" className="absolute -inset-[14px] animate-[wall-listen-ring_2.4s_ease-out_infinite] rounded-full border-2 border-solid border-wall-brass" />}
         {action.icon}

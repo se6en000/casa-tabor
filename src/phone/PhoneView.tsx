@@ -768,6 +768,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                 icon: <Sparkles size={26} strokeWidth={1.9} />,
                 onClick: () => { setAskOpening(null); setGlance(null); setAskOpen(true) },
                 active: Boolean(glance?.holding),
+                raised: Boolean(glance) && askOpen,
                 hold: {
                   start: () => { haptic(); setAskOpening(null); setGlance({ holding: true, cancelled: false }); setAskOpen(true) },
                   end: (cancelled) => { if (cancelled) closeAsk(); else setGlance({ holding: false, cancelled: false }) },

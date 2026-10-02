@@ -145,7 +145,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     if (glance.holding) {
       return (
         <section aria-label="Casa is listening" className="pointer-events-none absolute inset-0 font-body">
-          <div aria-hidden="true" className="absolute inset-x-0 bottom-[96px] top-0 bg-gradient-to-t from-wall-ink/60 to-wall-ink/15" />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-wall-ink/60 to-wall-ink/15" />
           <div className="absolute bottom-[104px] left-[16px] right-[16px] flex flex-col items-end gap-[10px]">
             <div className="max-w-[92%] rounded-[22px] rounded-br-[6px] bg-wall-on-pigment px-[18px] py-[16px] shadow-[0_10px_30px_rgba(38,34,29,0.25)]">
               <div className="mb-[6px] text-phone-label font-extrabold tracking-[0.16em] text-wall-brass-ink">{mic ? 'LISTENING · LET GO TO SEND' : 'LET GO TO TYPE IT'}</div>
@@ -161,7 +161,8 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     const reply = lastAsked ? lines.slice(lines.lastIndexOf(lastAsked) + 1).filter((l) => l.role === 'assistant').map((l) => l.text).join(' ') : ''
     return (
       <div className="absolute inset-0 font-body text-wall-ink">
-        <div className="phone-scrim absolute inset-x-0 bottom-[96px] top-0 bg-wall-ink/35" onClick={onClose} />
+        {/* The shade goes over the tab bar too (Jake, Oct 2); Casa's own button stays above it, to hold again. */}
+        <div className="phone-scrim absolute inset-0 bg-wall-ink/35" onClick={onClose} />
         <section {...glanceSwipe} aria-label="Casa’s answer" className="phone-sheet absolute bottom-[96px] left-[10px] right-[10px] flex max-h-[72%] flex-col gap-[12px] overflow-y-auto overscroll-contain rounded-[26px] bg-phone-ground px-[18px] pb-[16px] pt-[10px] shadow-[0_16px_40px_rgba(38,34,29,0.3)]">
           <div aria-hidden="true" className="mx-auto h-[5px] w-[38px] shrink-0 rounded-full bg-wall-stone" />
           {lastAsked && <div className="max-w-[85%] self-end rounded-[18px] rounded-br-[6px] bg-wall-ink px-[14px] py-[9px] text-phone-body text-wall-on-pigment">{lastAsked.text}</div>}
