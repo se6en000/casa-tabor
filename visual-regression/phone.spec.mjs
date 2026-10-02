@@ -759,3 +759,17 @@ test('phone: Any day — the month, a day picked, opened on Family weeks away', 
   await expect(phone.getByRole('heading', { name: 'Everyone' })).toBeVisible()
   await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('October 15')
 })
+
+// Jake's phone, Oct 2, after a reload: iOS said the visible area was shorter than the window with no keyboard up; the
+// frame ended short and the bar floated over a strip of page. A gap only counts while a field is being typed in.
+test('phone: a short visual viewport with nothing being typed leaves the bar on the bottom edge', async ({ page }) => {
+  await page.addInitScript(() => {
+    const fake = new EventTarget()
+    Object.assign(fake, { height: 700, width: 390, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 })
+    Object.defineProperty(window, 'visualViewport', { value: fake, configurable: true })
+  })
+  const phone = await open(page)
+  const bar = await phone.getByRole('navigation', { name: 'Sections' }).boundingBox()
+  expect(Math.round(bar.y + bar.height)).toBe(844)
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--phone-kb').trim())).toBe('0px')
+})

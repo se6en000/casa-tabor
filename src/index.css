@@ -1268,6 +1268,12 @@ html.phone-app #root {
   min-height: 0;
   height: 100%;
 }
+/* Whatever iOS reports, nothing behind the frame shows as another colour. */
+html.phone-app,
+html.phone-app body,
+html.phone-app #root {
+  background-color: var(--color-phone-ground);
+}
 html.phone-app body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;

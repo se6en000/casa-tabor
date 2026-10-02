@@ -10,6 +10,12 @@ test('keyboard: the height under the visual viewport, nothing for a toolbar or n
   assert.equal(keyboardHeight(844, null), 0)
 })
 
+// Jake's phone, Oct 2, after a reload: a gap with nothing being typed shrank the frame and the bar floated.
+test('keyboard: no field being typed in, no keyboard — whatever the viewport says', () => {
+  assert.equal(keyboardHeight(844, { height: 700, offsetTop: 0 }, false), 0)
+  assert.equal(keyboardHeight(844, { height: 508, offsetTop: 0 }, true), 336)
+})
+
 test('a sheet closes when it’s dragged down far enough to mean it', () => {
   assert.ok(SWIPE_CLOSE_PX >= 60 && SWIPE_CLOSE_PX <= 140)
 })

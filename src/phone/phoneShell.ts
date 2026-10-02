@@ -9,11 +9,22 @@ import { useEffect, useRef, type TouchEvent } from 'react'
 /** How far a sheet is dragged down before letting go closes it. */
 export const SWIPE_CLOSE_PX = 90
 
-/** The keyboard's height from the visual viewport (0 when it's down; small differences are the toolbar). */
-export function keyboardHeight(innerHeight: number, viewport: { height: number; offsetTop: number } | null): number {
-  if (!viewport) return 0
+/**
+ * The keyboard's height from the visual viewport — only while something is being typed in. On a fresh load iOS can
+ * report the visual viewport shorter than the window with no keyboard up (Jake's phone, Oct 2: the frame stopped short
+ * and the bar floated over a strip of page), so a gap counts only when a field has focus.
+ */
+export function keyboardHeight(innerHeight: number, viewport: { height: number; offsetTop: number } | null, typing = true): number {
+  if (!viewport || !typing) return 0
   const kb = Math.round(innerHeight - viewport.height - viewport.offsetTop)
   return kb > 80 ? kb : 0
+}
+
+/** A field the keyboard is for. */
+export function isTyping(el: Element | null): boolean {
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'TEXTAREA' || (tag === 'INPUT' && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color'].includes((el as HTMLInputElement).type)) || (el as HTMLElement).isContentEditable === true
 }
 
 export function usePhoneShell() {
@@ -22,7 +33,7 @@ export function usePhoneShell() {
     root.classList.add('phone-app')
     const vv = window.visualViewport
     const update = () => {
-      const kb = keyboardHeight(window.innerHeight, vv)
+      const kb = keyboardHeight(window.innerHeight, vv, isTyping(document.activeElement))
       root.style.setProperty('--phone-kb', `${kb}px`)
       if (kb) root.dataset.keyboard = 'open'
       else delete root.dataset.keyboard
@@ -32,9 +43,14 @@ export function usePhoneShell() {
     update()
     vv?.addEventListener('resize', update)
     vv?.addEventListener('scroll', update)
+    // Leaving a field drops the keyboard: back to full height at once, not on the viewport's next event.
+    document.addEventListener('focusin', update)
+    document.addEventListener('focusout', update)
     return () => {
       vv?.removeEventListener('resize', update)
       vv?.removeEventListener('scroll', update)
+      document.removeEventListener('focusin', update)
+      document.removeEventListener('focusout', update)
       root.classList.remove('phone-app')
       root.style.removeProperty('--phone-kb')
       delete root.dataset.keyboard
