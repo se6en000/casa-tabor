@@ -159,7 +159,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
         </div>
       ) : (
         <>
-          <div className="flex flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px]">
+          <div data-ask-scroll className="flex flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[20px] pb-[16px] pt-[16px]">
             {lines.length === 0 && !thinking && (
               <div className="flex flex-col gap-[10px]">
                 <div className="font-display text-phone-heading italic text-wall-ink-2">Ask about the family’s day, or ask to add something. Nothing changes without your yes.</div>
