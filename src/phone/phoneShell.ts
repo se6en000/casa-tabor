@@ -73,10 +73,17 @@ export function usePhoneShell() {
     const vv = window.visualViewport
     // iOS 26 installed on the home screen: the band at the bottom the web view never draws (screen height minus the
     // window's, in portrait; 0 anywhere it isn't short). The tab bar floats above it rather than under it.
+    // Only when the page runs under the status bar (a top inset): with a solid status bar the window starts below it,
+    // and a window shorter than the screen by the status bar is simply right.
     const dead = () => {
       const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+      const probe = document.createElement('div')
+      probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)'
+      document.body.appendChild(probe)
+      const underStatusBar = parseFloat(getComputedStyle(probe).paddingTop) > 0
+      probe.remove()
       const gap = screen.height - window.innerHeight
-      root.style.setProperty('--phone-dead', `${standalone && window.innerWidth < window.innerHeight && gap > 20 && gap < 100 ? gap : 0}px`)
+      root.style.setProperty('--phone-dead', `${standalone && underStatusBar && window.innerWidth < window.innerHeight && gap > 20 && gap < 100 ? gap : 0}px`)
     }
     dead()
     window.addEventListener('resize', dead)
