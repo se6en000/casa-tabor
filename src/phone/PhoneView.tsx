@@ -29,7 +29,7 @@ import PhoneScanSheet from './PhoneScanSheet'
 import PhoneTodo from './PhoneTodo'
 import PhoneProject from './PhoneProject'
 import PhoneTodoSheet from './PhoneTodoSheet'
-import { todoSummary, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
+import { type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
 import type { ComingUpAction, ComingUpItem } from '../wall/comingUp'
 import type { ScannedItem } from '../utils/documentScanner'
 import type { ScanPlanItem } from './scan'
@@ -186,7 +186,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, groceries = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -371,13 +371,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {me.covered.length > 0 && (
         <section aria-label="Covered">
           <Label>COVERED · YOU DON’T NEED TO</Label>
-          {me.covered.map((c, i) => (
-            <div key={i} className="flex items-center gap-[10px] border-0 border-t border-solid border-wall-stone py-[9px] text-phone-body">
-              <Check size={16} strokeWidth={2.5} aria-hidden="true" className="shrink-0 text-wall-pigment-2" />
-              <b>{c.when}</b>
-              <span className="min-w-0 truncate">{c.driver} · {c.what}</span>
-            </div>
-          ))}
+          {/* One quiet card (34b). */}
+          <div className="flex flex-col rounded-[16px] bg-phone-card px-[14px] py-[2px]">
+            {me.covered.map((c, i) => (
+              <div key={i} className={`flex items-center gap-[10px] py-[9px] text-phone-body text-wall-ink-2 ${i ? 'border-0 border-t border-solid border-wall-stone' : ''}`}>
+                <Check size={16} strokeWidth={2.5} aria-hidden="true" className="shrink-0 text-wall-pigment-2" />
+                <b className="text-wall-ink">{c.when}</b>
+                <span className="min-w-0 truncate">{c.driver} · {c.what}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
@@ -444,9 +447,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     const late = familyToday && Boolean(tickable) && !ticked && i.kind !== 'event' && i.at.getTime() < now.getTime()
     const past = familyToday && isPast(i, now) && !late
     return (
-      <div key={i.id} className={`flex items-stretch gap-[12px] ${next ? '-mx-[12px] my-[2px] rounded-[16px] bg-wall-brass/12 px-[12px] py-[12px]' : 'border-0 border-t border-solid border-wall-stone py-[10px]'} ${past ? 'opacity-45' : ''}`}>
+      // A card each (34a/34b, Jake: "can these cards look like 33c?"): the next one lifted in brass, what's past faded.
+      <div key={i.id} className={`flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-on-pigment'} ${past ? 'opacity-45' : ''}`}>
         <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
-          <span className={`w-[52px] shrink-0 pt-[2px] text-phone-body font-bold ${next ? 'text-wall-brass-ink' : late ? 'text-wall-rust' : ''}`}>{i.time}</span>
+          <span className={`flex w-[48px] shrink-0 flex-col pt-[1px] leading-tight ${next ? 'text-wall-brass-ink' : late ? 'text-wall-rust' : ''}`}>
+            <span className="text-phone-body font-bold">{i.time === 'All day' ? 'All' : i.time}</span>
+            <span className="text-phone-label font-semibold text-wall-ink-2">{i.time === 'All day' ? 'day' : i.at.getHours() < 12 ? 'AM' : 'PM'}</span>
+          </span>
           <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${past ? 'bg-wall-stone' : pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
           <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
             <span className={`text-phone-body font-semibold ${ticked ? 'text-wall-ink-2 line-through' : ''}`}>{i.title}</span>
@@ -467,7 +474,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             onClick={() => { haptic(); if (i.kind === 'chore' && choreDone.has(tickKey)) void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false); else ticks.toggle(tickKey) }}
             className="flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
           >
-            <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'phone-tick-pop border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+            <span aria-hidden="true" className={`flex h-[28px] w-[28px] items-center justify-center rounded-full border-[1.75px] border-solid ${ticked ? 'phone-tick-pop border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : late ? 'border-wall-rust' : 'border-wall-ink-2'}`}>
               {ticked && <Check size={16} strokeWidth={3} />}
             </span>
           </button>
@@ -479,7 +486,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     )
   }
     return (
-      <div className="phone-rise">
+      <div className="phone-rise flex flex-col gap-[8px]">
         {items.length === 0 && <div className="py-[12px] font-display text-phone-heading italic text-wall-ink-2">Nothing on the calendar.</div>}
         {familyToday ? (
           <>
@@ -487,7 +494,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             {timeline.folded.length > 0 && (earlierFor === shownKey
               ? timeline.folded.map((i) => familyRow(i))
               : (
-                <div className="flex justify-center py-[8px]">
+                <div className="flex justify-center">
                   <button type="button" onClick={() => setEarlierFor(shownKey)} className="flex h-[36px] max-w-full items-center gap-[6px] rounded-full border-0 bg-phone-card px-[14px] text-phone-detail font-semibold text-wall-ink-2">
                     <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0" />
                     <span className="truncate">{foldLabel(timeline.folded)}</span>
@@ -602,20 +609,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     <div className="flex flex-col gap-[10px]">
       <div className="flex items-start justify-between gap-[12px]">
         <div className="flex min-w-0 flex-col">
-          <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{todoSummary(todos.list)}</span>
+          {/* Projects stay on the wall, so the line counts only what's here (34c). */}
+          <span className="whitespace-nowrap text-phone-detail text-wall-ink-2">{(() => { const late = todos.list.nextUp.filter((t) => t.overdue).length; return `${todos.list.nextUp.length} ready${late ? ` · ${late} late` : ''}` })()}</span>
           <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">To do</h1>
         </div>
         {initial}
       </div>
-      <PhoneTodo
-        list={todos.list}
-        today={phoneToday}
-        onAct={todos.act}
-        onOpenProject={setProjectId}
-        onEdit={setEditingTodo}
-        upcoming={comingUp?.items ?? []}
-        onStart={comingUp?.start ? (key) => void comingUp.start!(key).then((id) => { if (id) setProjectId(id) }) : undefined}
-      />
+      <PhoneTodo list={todos.list} onAct={todos.act} onEdit={setEditingTodo} />
     </div>
   ) : null
 

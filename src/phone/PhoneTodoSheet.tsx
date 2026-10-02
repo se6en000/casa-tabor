@@ -32,6 +32,12 @@ export default function PhoneTodoSheet({ item, onAct, onClose }: PhoneTodoSheetP
           {due && <input aria-label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className={field} />}
           {due && <Answer label="No date" onClick={() => { setDue(''); setTime('') }} />}
         </div>
+        {/* Not now (also a swipe left on its card, 34c): */}
+        <div className="flex flex-wrap items-center gap-[6px]">
+          <span className="text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">NOT NOW</span>
+          <Answer label="Tomorrow" onClick={() => void run({ action: 'snooze', id: item.id, days: 1 })} />
+          <Answer label="A week" onClick={() => void run({ action: 'snooze', id: item.id, days: 7 })} />
+        </div>
         <div className="flex flex-wrap gap-[6px] pt-[4px]">
           <Answer label="Save" primary onClick={() => void run({ action: 'update', id: item.id, patch: { ...(title.trim() && title.trim() !== item.title ? { title: title.trim() } : {}), due: due || null, time: due && time ? time : null } })} />
           <Answer label="Done — tick it off" onClick={() => void run({ action: 'done', id: item.id })} />

@@ -15,7 +15,8 @@ test('the wall and the phone say which they are', () => {
   assert.match(read('src/wall/useTodos.ts'), /body: \{ \.\.\.request, surface \}/)
   assert.match(read('src/wall/useComingUp.ts'), /action, key, surface/)
   assert.match(read('src/phone/PhoneFrame.tsx'), /useTodos\(\{ enabled: isJake, surface: 'phone' \}\)/)
-  assert.match(read('src/phone/PhoneFrame.tsx'), /useComingUp\(\{ surface: 'phone' \}\)/)
+  // Coming up left the phone (UX review, Oct 2): it stays on the wall, so the phone no longer loads it.
+  assert.doesNotMatch(read('src/phone/PhoneFrame.tsx'), /useComingUp\(/)
 })
 
 test('the report reads it back: used, never used, noise, stalled projects', () => {

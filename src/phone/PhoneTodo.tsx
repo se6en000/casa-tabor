@@ -1,28 +1,21 @@
-import { useState } from 'react'
-import type { ComingUpItem } from '../wall/comingUp'
-import { hoursText, shelfCard } from '../wall/projectModel'
-import { SEGMENT } from '../wall/projectStyle'
-import { GROUPS, sizeChips, type PastStep, type TodoAction, type TodoItem, type TodoList } from '../wall/todos'
+import { useRef, useState } from 'react'
+import { GROUPS, sizeChips, type TodoAction, type TodoItem, type TodoList } from '../wall/todos'
+import { haptic } from './haptic'
 
-// To do on the phone (FAMILY_WALL_PLAN.md P3.22 step 7, the wall's canvas 10a in one column): Week ›
-// To do on Jake's phone. The same list as the wall — a passed step asked about, the projects shelf (a
-// card each; a season coming up dashed), Next up with what each takes, everything else folded. A card
-// opens its project (PhoneProject). Answers go through the same `todos` function as the wall.
+// To do on Jake's phone (canvas 34c; Jake, Oct 2: "To do only for me … project stuff not visible, to keep it simpler").
+// Next up as cards with three gestures — the circle finishes it, a tap opens it to edit, a swipe left gives Tomorrow
+// or Later — and what it takes in one plain line; everything else folded under one card. No projects shelf or step
+// questions (they stay on the wall); a project step that's due is just a card, its project in small type. Answers go
+// through the same `todos` function as the wall.
 
 export interface PhoneTodoProps {
   list: TodoList
-  today: string
   onAct: (request: TodoAction) => Promise<void>
-  onOpenProject: (id: string) => void
   onEdit: (item: TodoItem) => void
-  upcoming?: ComingUpItem[]
-  onStart?: (key: string) => void
 }
 
-const SNOOZES = [{ label: 'Tomorrow', days: 1 }, { label: '3 days', days: 3 }, { label: 'A week', days: 7 }]
-const Nest = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 3v9a4 4 0 0 0 4 4h10" /><path d="M15 12l4 4-4 4" /></svg>
-)
+/** How far a swiped card opens: Tomorrow and Later. */
+const SWIPE_W = 148
 
 export function Answer({ label, primary = false, onClick }: { label: string; primary?: boolean; onClick: () => void }) {
   return (
@@ -33,121 +26,89 @@ export function Answer({ label, primary = false, onClick }: { label: string; pri
   )
 }
 
-const plus = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10)
-const short = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
-
-function PastRow({ step, today, onAct }: { step: PastStep; today: string; onAct: PhoneTodoProps['onAct'] }) {
-  const [moving, setMoving] = useState(false)
-  const when = step.date === plus(today, -1) ? 'yesterday' : `on ${short(step.date)}`
-  const edit = (op: string, args: Record<string, unknown>) => onAct({ action: 'project_edit', id: step.projectId, op, args: { step_id: step.id, ...args } })
-  return (
-    <div className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-stone py-[10px]">
-      <span className="text-phone-label font-bold text-wall-brass-ink">{step.project}</span>
-      <span className="text-phone-body font-semibold text-wall-ink">{step.title}</span>
-      <span className="text-phone-detail font-semibold text-wall-rust">It was {when}. Done?</span>
-      <span className="flex flex-wrap gap-[6px]">
-        <Answer label="Done" primary onClick={() => void edit('done_step', {})} />
-        <Answer label={moving ? 'Keep it' : 'Not yet'} onClick={() => setMoving((m) => !m)} />
-      </span>
-      {moving && (
-        <span className="flex flex-wrap items-center gap-[6px]">
-          <Answer label="Tomorrow" onClick={() => void edit('set_step', { cal_start: plus(today, 1) })} />
-          <Answer label="No date" onClick={() => void edit('set_step', { cal_start: '' })} />
-          <label className="flex h-[44px] items-center gap-[6px] rounded-full border border-solid border-wall-stone px-[12px] text-phone-detail text-wall-ink">
-            Pick
-            <input type="date" aria-label="Move it to" min={plus(today, 1)} onChange={(e) => e.target.value && void edit('set_step', { cal_start: e.target.value })} className="border-0 bg-transparent text-phone-detail text-wall-ink" />
-          </label>
-        </span>
-      )}
-    </div>
-  )
-}
-
-export default function PhoneTodo({ list, today, onAct, onOpenProject, onEdit, upcoming = [], onStart }: PhoneTodoProps) {
+export default function PhoneTodo({ list, onAct, onEdit }: PhoneTodoProps) {
   const [open, setOpen] = useState<string | null>(null)
-  const [snoozing, setSnoozing] = useState<string | null>(null)
-  const seasons = onStart ? upcoming.filter((i) => i.startable && i.plan) : []
+  const [foldOpen, setFoldOpen] = useState(false)
+  // A card swiped left shows Tomorrow and Later (34c); one at a time.
+  const [swiped, setSwiped] = useState<string | null>(null)
+  const drag = useRef<{ id: string; x: number; y: number; dx: number; on: boolean } | null>(null)
+  const [dragX, setDragX] = useState<{ id: string; dx: number } | null>(null)
   const groups = [
     ...(list.suggestions.length ? [{ key: 'noticed', label: 'Casa noticed', count: list.suggestions.length }] : []),
     ...GROUPS.filter((g) => g.key !== 'projects').map((g) => ({ key: g.key, label: g.label, count: list.groups[g.key].length })).filter((g) => g.count > 0),
   ]
+  const folded = groups.reduce((n, g) => n + g.count, 0)
+  const snooze = (id: string, days: number) => { setSwiped(null); void onAct({ action: 'snooze', id, days }) }
+
+  const card = (item: TodoItem) => {
+    const project = item.projectId ? list.projects.find((p) => p.id === item.projectId)?.title ?? 'A project' : null
+    const chips = sizeChips(item)
+    const late = chips.some((c) => c.late)
+    const x = dragX?.id === item.id ? dragX.dx : swiped === item.id ? -SWIPE_W : 0
+    return (
+      <div key={item.id} className="relative overflow-hidden rounded-[16px]">
+        <div aria-hidden={swiped !== item.id} className="absolute inset-y-0 right-0 flex">
+          <button type="button" tabIndex={swiped === item.id ? 0 : -1} onClick={() => snooze(item.id, 1)} className="flex w-[74px] flex-col items-center justify-center gap-[2px] border-0 bg-wall-brass p-0 text-phone-label font-bold text-wall-on-pigment">Tomorrow</button>
+          <button type="button" tabIndex={swiped === item.id ? 0 : -1} onClick={() => snooze(item.id, 7)} className="flex w-[74px] flex-col items-center justify-center gap-[2px] border-0 bg-wall-ink-2 p-0 text-phone-label font-bold text-wall-on-pigment">Later</button>
+        </div>
+        <div
+          className={`relative flex items-start gap-[12px] rounded-[16px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[12px] ${dragX?.id === item.id ? '' : 'transition-transform duration-200'}`}
+          style={{ transform: x ? `translateX(${x}px)` : undefined }}
+          onTouchStart={(e) => { const t = e.touches[0]; drag.current = { id: item.id, x: t.clientX, y: t.clientY, dx: swiped === item.id ? -SWIPE_W : 0, on: false } }}
+          onTouchMove={(e) => {
+            const d = drag.current
+            if (!d) return
+            const t = e.touches[0]
+            const dx = t.clientX - d.x + (swiped === item.id ? -SWIPE_W : 0)
+            if (!d.on && Math.abs(t.clientX - d.x) < 10) return
+            if (!d.on && Math.abs(t.clientY - d.y) > Math.abs(t.clientX - d.x)) { drag.current = null; return }
+            d.on = true
+            d.dx = Math.max(-SWIPE_W - 20, Math.min(0, dx))
+            setDragX({ id: item.id, dx: d.dx })
+          }}
+          onTouchEnd={() => {
+            const d = drag.current
+            drag.current = null
+            setDragX(null)
+            if (!d?.on) return
+            setSwiped(d.dx < -SWIPE_W / 2 ? item.id : null)
+          }}
+        >
+          <button type="button" role="checkbox" aria-checked={false} aria-label={`Done: ${item.title}`} onClick={() => { haptic(); void onAct({ action: 'done', id: item.id }) }}
+            className="-m-[7px] flex h-[44px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0">
+            <span aria-hidden="true" className={`h-[28px] w-[28px] rounded-full border-[1.75px] border-solid ${late ? 'border-wall-rust' : 'border-wall-ink-2'}`} />
+          </button>
+          <button type="button" aria-label={`Edit ${item.title}`} disabled={Boolean(item.projectId)}
+            onClick={() => { if (swiped) return setSwiped(null); onEdit(item) }}
+            className="flex min-w-0 flex-1 flex-col gap-[3px] border-0 bg-transparent p-0 text-left text-wall-ink disabled:opacity-100">
+            <span className="text-phone-body font-semibold leading-snug">{item.title}</span>
+            {project ? <span className="text-phone-detail text-wall-brass-ink">{project} · a project step</span> : item.nextStep && <span className="text-phone-detail text-wall-ink">{item.nextStep}</span>}
+            {chips.length > 0 && (
+              <span className="text-phone-detail text-wall-ink-2">
+                {chips.map((c, i) => <span key={i} className={c.late ? 'font-semibold text-wall-rust' : ''}>{i > 0 ? ' · ' : ''}{c.text}</span>)}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-[14px]">
-      {(list.pastSteps ?? []).length > 0 && (
-        <section aria-label="Was it done?" className="flex flex-col">
-          {(list.pastSteps ?? []).map((st) => <PastRow key={st.id} step={st} today={today} onAct={onAct} />)}
-        </section>
-      )}
-
-      {(list.projects.length > 0 || seasons.length > 0) && (
-        <section aria-label="Projects" className="flex flex-col gap-[8px]">
-          <h2 className="m-0 font-body text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">PROJECTS · {list.projects.length} GOING</h2>
-          {list.projects.filter((p) => p.detail).map((p) => {
-            const c = shelfCard(p.detail!, today)
-            return (
-              <button key={p.id} type="button" aria-label={`Open ${p.title}`} onClick={() => onOpenProject(p.id)}
-                className={`flex flex-col gap-[6px] rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] py-[12px] text-left text-wall-ink ${c.kind.startsWith('PAUSED') ? 'opacity-60' : ''}`}>
-                <span className="flex items-center justify-between"><span className="text-phone-label font-bold tracking-[0.12em] text-wall-ink-2">{c.kind}</span><span aria-hidden="true" className="text-phone-heading text-wall-ink-2">›</span></span>
-                <span className="font-display text-phone-heading font-bold leading-tight">{p.title}</span>
-                <span aria-hidden="true" className="flex h-[8px] gap-[3px]">{c.segments.map((k, i) => <span key={i} className={`h-[8px] flex-1 rounded-full ${SEGMENT[k]}`} />)}</span>
-                <span className="text-phone-detail text-wall-ink-2">{c.stats}</span>
-                <span className="text-phone-detail font-semibold">{c.targetLine}{c.pace && <span className={c.pace.late ? 'text-wall-rust' : 'text-wall-brass-ink'}> · {c.pace.text}</span>}</span>
-                <span className="flex flex-col border-0 border-t border-solid border-wall-stone pt-[6px]">
-                  <span className="text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">{c.nowLabel}</span>
-                  <span className="text-phone-body font-semibold">{c.now.length ? c.now.join(' · ') : c.inside ? `Waiting on ${c.inside.title}` : 'Nothing left: done?'}</span>
-                </span>
-                {/* Every active project inside (the wall swipes; the phone scrolls, so it lists them). */}
-                {c.insides.map((inside) => (
-                  <span key={inside.id} className="flex items-center gap-[8px] rounded-[12px] bg-phone-card px-[10px] py-[6px] text-wall-brass-ink">
-                    <Nest />
-                    <span className="flex min-w-0 flex-1 flex-col gap-[3px] text-wall-ink">
-                      <span className="flex justify-between gap-[6px] text-phone-label"><b className="truncate">{inside.title}</b><span className="shrink-0 text-wall-ink-2">{inside.done} of {inside.total}</span></span>
-                      <span aria-hidden="true" className="flex h-[5px] gap-[2px]">{Array.from({ length: Math.max(1, inside.total) }, (_, i) => <span key={i} className={`h-[5px] flex-1 rounded-full ${SEGMENT[i < inside.done ? 'done' : i === inside.done ? 'now' : 'later']}`} />)}</span>
-                    </span>
-                  </span>
-                ))}
-              </button>
-            )
-          })}
-          {seasons.map((i) => (
-            <button key={i.key} type="button" aria-label={`${i.title}: coming up`} onClick={() => onStart?.(i.key)}
-              className="flex flex-col gap-[6px] rounded-[18px] border-2 border-dashed border-wall-ink-2 bg-transparent px-[14px] py-[12px] text-left text-wall-ink">
-              <span className="text-phone-label font-bold tracking-[0.12em] text-wall-ink-2">SEASONAL · {i.pokeOn <= today ? 'READY TO START' : `STARTS ${short(i.pokeOn).toUpperCase()}`}</span>
-              <span className="font-display text-phone-heading font-bold leading-tight">{i.title}</span>
-              <span className="text-phone-detail text-wall-ink-2">{i.plan!.steps} steps · ~{hoursText(i.plan!.minutes)} · first: {i.plan!.first}</span>
-              <span className="text-phone-detail font-semibold text-wall-brass-ink">Tap to start it now</span>
-            </button>
-          ))}
-        </section>
-      )}
-
-      <section aria-label="Next up" className="flex flex-col">
-        <h2 className="m-0 pb-[4px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">NEXT UP</h2>
+      <section aria-label="Next up" className="flex flex-col gap-[8px]">
+        <h2 className="m-0 font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">NEXT UP</h2>
         {list.nextUp.length === 0 && <p className="m-0 font-display text-phone-heading italic text-wall-ink-2">Nothing waiting right now.</p>}
-        {list.nextUp.map((item) => {
-          const project = item.projectId ? list.projects.find((p) => p.id === item.projectId)?.title : null
-          return (
-            <div key={item.id} className="flex flex-col gap-[5px] border-0 border-t border-solid border-wall-stone py-[10px]">
-              {project && <span className="flex items-center gap-[4px] text-phone-label font-bold text-wall-brass-ink"><Nest />{project} · now</span>}
-              <button type="button" aria-label={`Edit ${item.title}`} onClick={() => (item.projectId ? onOpenProject(item.projectId) : onEdit(item))} className="border-0 bg-transparent p-0 text-left text-phone-body font-semibold text-wall-ink">{item.title}</button>
-              {item.nextStep && <span className="text-phone-detail font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
-              <span className="flex flex-wrap gap-[5px]">
-                {sizeChips(item).map((c, i) => <span key={i} className={`flex h-[26px] items-center rounded-full border border-solid px-[9px] text-phone-label font-semibold ${c.late ? 'border-wall-rust text-wall-rust' : 'border-wall-stone text-wall-ink-2'}`}>{c.text}</span>)}
-              </span>
-              <span className="flex flex-wrap gap-[6px] pt-[2px]">
-                <Answer label="Done" primary onClick={() => void onAct({ action: 'done', id: item.id })} />
-                {snoozing === item.id
-                  ? SNOOZES.map((s) => <Answer key={s.days} label={s.label} onClick={() => { setSnoozing(null); void onAct({ action: 'snooze', id: item.id, days: s.days }) }} />)
-                  : <Answer label="Not now" onClick={() => setSnoozing(item.id)} />}
-              </span>
-            </div>
-          )
-        })}
+        {list.nextUp.map(card)}
       </section>
 
-      <section aria-label="Everything else" className="flex flex-col gap-[6px]">
-        <h2 className="m-0 font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">EVERYTHING ELSE, FOLDED</h2>
-        {groups.map((g) => (
+      {folded > 0 && (
+        <section aria-label="Everything else" className="flex flex-col gap-[6px]">
+          <button type="button" aria-expanded={foldOpen} onClick={() => setFoldOpen((o) => !o)} className="flex min-h-[52px] items-center justify-between rounded-[16px] border-0 bg-phone-card px-[14px] text-left text-phone-body font-semibold text-wall-ink">
+            <span>Everything else · {folded}</span>
+            <span aria-hidden="true" className="text-phone-heading text-wall-ink-2">{foldOpen ? '⌄' : '›'}</span>
+          </button>
+          {foldOpen && groups.map((g) => (
           <div key={g.key} className={`flex flex-col rounded-[16px] bg-wall-on-pigment px-[14px] ${open === g.key ? 'border-2 border-solid border-wall-ink pb-[6px]' : 'border border-solid border-wall-stone'}`}>
             <button type="button" aria-expanded={open === g.key} onClick={() => setOpen((o) => (o === g.key ? null : g.key))} className="flex h-[52px] items-center justify-between border-0 bg-transparent p-0 text-wall-ink">
               <span className="flex items-baseline gap-[8px]"><span className={`font-display text-phone-heading font-bold ${g.key === 'noticed' ? 'text-wall-brass-ink' : ''}`}>{g.label}</span><span className="text-phone-detail text-wall-ink-2">{g.count}</span></span>
@@ -170,8 +131,10 @@ export default function PhoneTodo({ list, today, onAct, onOpenProject, onEdit, u
               </div>
             ))}
           </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
+      <p className="m-0 text-center text-phone-detail text-wall-ink-2">Tick to finish · tap to open and edit · swipe left for not now</p>
     </div>
   )
 }

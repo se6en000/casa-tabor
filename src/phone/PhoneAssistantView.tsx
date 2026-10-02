@@ -330,8 +330,20 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
               rows={1}
               aria-label="Ask Casa"
               value={shown}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(text) } }}
+              // Return on the iPhone keyboard sends at once (Jake, Oct 2: "not having to do it twice"). iOS can put the line
+              // break into the box before any key event is seen, so a line break sends whichever way it arrives.
+              onChange={(e) => {
+                const v = e.target.value
+                if (/[\r\n]/.test(v)) {
+                  const words = v.replace(/[\r\n]+/g, ' ')
+                  // While Casa is still answering, the words stay in the box (never lost); Send when it's done.
+                  if (thinking) setText(words.trim())
+                  else submit(words)
+                  return
+                }
+                setText(v)
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text) } }}
               placeholder={mic?.listening ? 'Listening…' : 'Ask or add…'}
               enterKeyHint="send"
               className="h-[48px] max-h-[140px] min-h-[48px] min-w-0 flex-1 resize-none overflow-y-auto rounded-[24px] border border-solid border-wall-stone bg-wall-on-pigment px-[16px] py-[12px] text-phone-body leading-snug text-wall-ink outline-none"

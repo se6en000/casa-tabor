@@ -314,6 +314,10 @@
       {
         "path": "src/phone/PhonePushPage.tsx",
         "reason": "The phone lens: push and pop (premium plan, Phase A) — the page's position and the dim behind it follow the thumb at runtime (framer-motion values)."
+      },
+      {
+        "path": "src/phone/PhoneTodo.tsx",
+        "reason": "The phone's To do (canvas 34c): a card follows the finger as it's swiped left for Tomorrow / Later — its translateX is computed while dragging."
       }
     ],
     "nativeControlRecreations": [

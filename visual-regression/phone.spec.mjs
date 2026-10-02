@@ -532,86 +532,30 @@ const openTodoPhone = async (page) => {
   return phone
 }
 
-test('phone: Week › To do — the projects shelf, Next up with what it takes, the rest folded (Jake’s phone only)', async ({ page }) => {
+test('phone: To do — cards: tick to finish, tap to edit, Not now; no projects (Jake’s phone only)', async ({ page }) => {
   const phone = await openTodoPhone(page)
-  await expect(phone.getByText('PROJECTS · 3 GOING')).toBeVisible()
-  await expect(phone.getByText('PROJECT · HIRED HELP')).toBeVisible()
-  await expect(phone.getByText('was due Aug 24', { exact: true })).toBeVisible()
+  // Projects stay on the wall (Jake, Oct 2: "project stuff not visible").
+  await expect(phone.getByText(/PROJECTS ·/)).toHaveCount(0)
+  await expect(phone.getByRole('button', { name: 'Open Paint the house' })).toHaveCount(0)
+  const next = phone.getByRole('region', { name: 'Next up' })
+  await expect(next.getByText('was due Aug 24')).toBeVisible()
   await expect(page).toHaveScreenshot('phone-todo.png')
-  // Done takes it off.
-  await phone.getByRole('region', { name: 'Next up' }).getByRole('button', { name: 'Done' }).first().click()
+  // The circle finishes it.
+  await next.getByRole('checkbox', { name: 'Done: Replace the outside GFI outlet' }).click()
   await expect(phone.getByText('Replace the outside GFI outlet')).toHaveCount(0)
-  // A folded group opens in place.
+  // A tap opens it to edit; Not now · Tomorrow puts it off.
+  await next.getByRole('button', { name: 'Edit Bring Gilbert to the vet' }).click()
+  const sheet = phone.getByRole('region', { name: 'Bring Gilbert to the vet — edit' })
+  await expect(sheet.getByRole('textbox', { name: 'The to-do' })).toHaveValue('Bring Gilbert to the vet')
+  await sheet.getByRole('button', { name: 'Tomorrow' }).click()
+  await expect(sheet).toHaveCount(0)
+  // Everything else folds under one card.
+  await phone.getByRole('button', { name: /^Everything else/ }).click()
   await phone.getByRole('button', { name: /^Quick ones/ }).click()
   await expect(phone.getByText('Look for a cable to fix the pool')).toBeVisible()
   // Kelly's phone has no To do.
   const kellys = await open(page, '2026-09-25T07:12:00', 'kelly')
-  await kellys.getByRole('button', { name: 'Calendar' }).click()
   await expect(kellys.getByRole('button', { name: 'To do', exact: true })).toHaveCount(0)
-})
-
-// Overnight queue (3): a closed project on the phone, as on the wall — CLOSED in its parent, and a banner
-// with Reopen on its own page.
-test('phone: a closed project — CLOSED in its parent, a banner with Reopen on its page', async ({ page }) => {
-  await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&closedInside=1')
-  const phone = page.getByTestId('phone-fixture')
-  await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: 'To do', exact: true }).click()
-  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
-  const paint = phone.getByRole('region', { name: 'Paint the house — project' })
-  await paint.getByRole('button', { name: /^\d+ done$/ }).click()
-  await expect(paint.getByText('CLOSED · MARIO’S DOING IT WITH THE PAINTING')).toBeVisible()
-  await paint.getByRole('button', { name: 'Open', exact: true }).first().click()
-  const stucco = phone.getByRole('region', { name: 'Stucco cracks: seal and patch — project' })
-  await expect(stucco.getByText('CLOSED', { exact: true })).toBeVisible()
-  await expect(stucco.getByRole('button', { name: 'Reopen' })).toBeVisible()
-  await expect(stucco.getByText(/NOT GOING · CLOSED/)).toBeVisible()
-  await expect(phone).toHaveScreenshot('phone-project-closed.png')
-})
-
-// Jake, 2026-09-29: "where is the button to invoke AI on the project screen?"
-test('phone: a project opens Ask Casa talking about it', async ({ page }) => {
-  await page.goto('/__phone-fixture?at=2026-09-25T13:10:00&viewer=jake-id&ask=empty')
-  const phone = page.getByTestId('phone-fixture')
-  await phone.getByRole('button', { name: 'Calendar' }).click()
-  await phone.getByRole('button', { name: 'To do', exact: true }).click()
-  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
-  await phone.getByRole('region', { name: 'Paint the house — project' }).getByRole('button', { name: 'Talk to Casa' }).click()
-  const ask = phone.getByRole('region', { name: 'Ask Casa' })
-  await expect(ask.getByText('Let’s work on the Paint the house project.')).toBeVisible()
-})
-
-test('phone: a project — Now, Then, the project inside; a step’s details with the phone’s own inputs; ↑ Earlier; add a step; settings', async ({ page }) => {
-  const phone = await openTodoPhone(page)
-  await phone.getByRole('button', { name: 'Open Paint the house' }).click()
-  const project = phone.getByRole('region', { name: 'Paint the house — project' })
-  await expect(project.getByText('NOW · ON YOUR PHONE · SIDE BY SIDE')).toBeVisible()
-  await expect(project.getByText(/A project inside · 1 of 4/)).toBeVisible()
-  await expect(page).toHaveScreenshot('phone-project.png')
-  // A step's details: the cost typed; ↑ Earlier.
-  await project.getByRole('button', { name: 'Open Take down shutters and house numbers' }).click()
-  const step = phone.getByRole('region', { name: 'Take down shutters and house numbers — details' })
-  await step.getByRole('textbox', { name: 'Notes' }).fill('Numbers go back after the painter')
-  await step.getByLabel('Cost').fill('25')
-  await step.getByLabel('Cost').blur()
-  await step.getByRole('button', { name: '↑ Earlier' }).click()
-  await step.getByRole('button', { name: 'Close' }).click()
-  await expect(project.getByText(/1 hr · \$25 · Me/)).toBeVisible()
-  // Add a step at the end.
-  await project.getByRole('textbox', { name: 'A new step' }).fill('Buy tarps')
-  await project.getByRole('button', { name: 'Add', exact: true }).click()
-  await expect(project.getByText('Buy tarps')).toBeVisible()
-  // Done in Now.
-  await project.getByRole('button', { name: 'Mark Pick colours: 3 sample pots done' }).click()
-  await expect(project.getByText('4 of 10')).toBeVisible()
-  // Settings: the same screen as the wall's.
-  await project.getByRole('button', { name: 'Settings' }).click()
-  const settings = phone.getByRole('region', { name: 'Project settings' })
-  await settings.getByRole('button', { name: 'Everything in Now' }).click()
-  await expect(settings.getByRole('button', { name: 'Everything in Now' })).toHaveAttribute('aria-pressed', 'true')
-  await settings.getByRole('button', { name: 'Back to the plan' }).click()
-  await project.getByRole('button', { name: '‹ To do' }).click()
-  await expect(phone.getByRole('heading', { name: 'To do' })).toBeVisible()
 })
 
 test('phone: People › Family › Owen — his routines and what Casa knows; a parent edits, a child only reads (canvas 16c)', async ({ page }) => {
@@ -800,6 +744,9 @@ test('phone: scrolling down tucks the title into a small frosted bar', async ({ 
   await expect(phone).toBeVisible()
   await phone.getByRole('button', { name: /^Calendar/ }).first().click()
   await phone.getByRole('button', { name: 'To do', exact: true }).click()
+  // Long enough to scroll: everything else open.
+  await phone.getByRole('button', { name: /^Everything else/ }).click()
+  await phone.getByRole('button', { name: /^Quick ones/ }).click()
   const bar = page.locator('.phone-tucked')
   await expect(bar).toHaveClass(/opacity-0/)
   // The To do list scrolls in the page itself (main).
@@ -851,7 +798,7 @@ test('phone: Casa — the keyboard comes up and the conversation stays on its ne
   await expect.poll(atBottom).toBe(true)
   const box = ask.getByRole('textbox', { name: 'Ask Casa' })
   const one = (await box.boundingBox()).height
-  await box.fill('Line one of a longer message\nline two\nline three\nline four')
+  await box.fill('A longer message that runs on past the width of the box, so it wraps onto a second and a third line and keeps going')
   await expect.poll(async () => (await box.boundingBox()).height).toBeGreaterThan(one + 40)
 })
 
@@ -910,4 +857,21 @@ test('phone: hold Casa to talk — the answer over the screen; Keep talking open
   // A quick tap is still the chat.
   await casa.click()
   await expect(phone.getByRole('region', { name: 'Ask Casa' })).toBeVisible()
+})
+
+// Jake, Oct 2: "an enter on the ios keyboard should immediately post the text, not having to do it twice".
+test('phone: Casa — Return on the keyboard sends at once', async ({ page }) => {
+  const { ask } = await askScene(page, 'empty')
+  const box = ask.getByRole('textbox', { name: 'Ask Casa' })
+  await box.fill('What’s on Saturday?')
+  await box.press('Enter')
+  await expect.poll(() => page.evaluate(() => (window.__casaSent ?? []).map((m) => m.text))).toEqual(['What’s on Saturday?'])
+  await expect(box).toHaveValue('')
+  // While Casa answers, a Return keeps the words in the box rather than losing them.
+  await box.fill('And Sunday?\n')
+  await expect(box).toHaveValue('And Sunday?')
+  await expect(ask.getByText('You said: What’s on Saturday?.')).toBeVisible()
+  // iOS can put the line break straight into the box: that sends too.
+  await box.fill('And Sunday?\n')
+  await expect.poll(() => page.evaluate(() => (window.__casaSent ?? []).length)).toBe(2)
 })
