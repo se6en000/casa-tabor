@@ -73,3 +73,8 @@ test('next up by day: the coming four hours and anything late — not 8 PM’s t
   // Late stays (Liv's 7 PM meds, unticked, at 9 PM on the full day).
   assert.deepEqual(titles(at(21)), ['Take meds', 'Trash to the street'])
 })
+
+test('next up: the half of the day is said when it isn’t now’s — 8 AM’s to-do on the evening card', () => {
+  const items = nextUpItems(plan, list([todo('olivia', 'Work on Olivia’s dedication page', at(8))]), new Set(), at(21, 40))
+  assert.deepEqual(items.map((i) => [i.title, i.meridiem]), [['Work on Olivia’s dedication page', 'AM'], ['Take meds', null], ['Trash to the street', null]])
+})

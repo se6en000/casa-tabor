@@ -39,7 +39,10 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, tall }: Omit<Ne
             {ticked && <Check size={20} strokeWidth={3} />}
           </span>
         )}
-      <span className={`w-[58px] shrink-0 text-right text-wall-heading font-bold tabular-nums lining-nums ${out || ticked ? 'text-wall-ink-2' : TIME[state]}`}>{formatWallClock(item.at).time}</span>
+      <span className={`min-w-[58px] shrink-0 whitespace-nowrap text-right text-wall-heading font-bold tabular-nums lining-nums ${out || ticked ? 'text-wall-ink-2' : TIME[state]}`}>
+        {formatWallClock(item.at).time}
+        {item.meridiem && <span className="ml-[4px] text-wall-label font-semibold">{item.meridiem}</span>}
+      </span>
       {member
         ? <span aria-hidden="true" className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
         : <span aria-hidden="true" className="w-[30px] shrink-0" />}
@@ -58,7 +61,7 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, tall }: Omit<Ne
       type="button"
       role="checkbox"
       aria-checked={ticked}
-      aria-label={`${formatWallClock(item.at).time}${member ? ` ${member.name}` : ''}: ${item.title}${item.tag ? `, ${item.tag}` : ''}`}
+      aria-label={`${formatWallClock(item.at).time}${item.meridiem ? ` ${item.meridiem}` : ''}${member ? ` ${member.name}` : ''}: ${item.title}${item.tag ? `, ${item.tag}` : ''}`}
       onClick={(e) => { e.stopPropagation(); onTick(item) }}
       className={shape}
     >

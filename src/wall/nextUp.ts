@@ -24,6 +24,8 @@ export interface NextUpItem {
   tag: string | null
   /** Someone out: when they're back. */
   until?: Date
+  /** "AM"/"PM" when it's in the other half of the day from now (8 AM's to-do on the evening card), else null. */
+  meridiem: string | null
 }
 
 /** Due within this long is "soon" (brass). */
@@ -32,6 +34,9 @@ export const SOON_MS = 30 * 60_000
 export const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 export const choreDoneKey = (choreId: string, date: Date) => `chore:${choreId}:${ymd(date)}`
 const sameDay = (a: Date, b: Date) => ymd(a) === ymd(b)
+
+/** The half of the day, said only when it isn't now's (live, Oct 1: "8:00 … 6:00 … 8:00" read out of order). */
+export const meridiemFor = (at: Date, now: Date) => ((at.getHours() < 12) === (now.getHours() < 12) ? null : formatWallClock(at).meridiem)
 
 export function stateAt(at: Date, now: Date): NextUpState {
   const ms = at.getTime() - now.getTime()
@@ -68,7 +73,7 @@ export function nextUpItems(plan: DayPlan | null, list: Pick<TodoList, 'nextUp' 
     for (const chore of plan.chores) {
       const key = choreDoneKey(chore.choreId, now)
       if (done.has(key)) continue
-      items.push({ key, kind: 'chore', id: chore.choreId, at: chore.at, title: chore.title, whoId: chore.doerId ?? chore.forMemberId, state: stateAt(chore.at, now), tag: tagFor(chore.at, now) })
+      items.push({ key, kind: 'chore', id: chore.choreId, at: chore.at, title: chore.title, whoId: chore.doerId ?? chore.forMemberId, state: stateAt(chore.at, now), tag: tagFor(chore.at, now), meridiem: meridiemFor(chore.at, now) })
     }
   }
   if (list) {
@@ -81,7 +86,7 @@ export function nextUpItems(plan: DayPlan | null, list: Pick<TodoList, 'nextUp' 
       if (!at || done.has(key)) continue
       const mine = words(item.title)
       if (items.some((c) => c.kind === 'chore' && c.at.getTime() === at.getTime() && [...words(c.title)].some((w) => mine.has(w)))) continue
-      items.push({ key, kind: 'todo', id: item.id, at, title: item.title, whoId: null, state: stateAt(at, now), tag: tagFor(at, now) })
+      items.push({ key, kind: 'todo', id: item.id, at, title: item.title, whoId: null, state: stateAt(at, now), tag: tagFor(at, now), meridiem: meridiemFor(at, now) })
     }
   }
   return items.sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
@@ -111,6 +116,7 @@ export function outTonight(plan: DayPlan | null, members: WallMember[], now: Dat
       state: 'later',
       tag: `until ${formatWallClock(block.end).time}`,
       until: block.end,
+      meridiem: meridiemFor(block.start, now),
     })
   }
   return out
