@@ -80,30 +80,33 @@ function reportLayout() {
 
 /**
  * The keyboard, measured on the phone (Jake, Oct 2: in Ask Casa "the keyboard makes everything jump around and can't see
- * what you are typing"). The first time a field is typed in each session, every viewport move from the tap until a
- * moment after the keyboard goes is recorded — the window, the visual viewport, the page's scroll, the frame, the field
- * and the list above it — and sent once as "phone_keyboard", so the jump is seen before anything is changed.
+ * what you are typing"). Once a session for each field (by its label: the Casa box, What to add…), every change from the
+ * tap until a moment after the keyboard goes is recorded — the window, the visual viewport, the page's scroll, the frame,
+ * the field and the list above it — and sent as "phone_keyboard". Only changes are kept, so a still screen fills nothing.
  */
-const kbTrace: { on: boolean; sent: boolean; t0: number; samples: unknown[]; stop: number | null } = { on: false, sent: false, t0: 0, samples: [], stop: null }
+const kbTrace: { on: boolean; key: string; t0: number; samples: Array<Record<string, unknown>>; last: string; stop: number | null } = { on: false, key: '', t0: 0, samples: [], last: '', stop: null }
+const fieldKey = (el: Element | null) => (el?.getAttribute('aria-label') || el?.getAttribute('placeholder') || el?.tagName || 'field').slice(0, 40)
 function sampleKeyboard(why: string) {
-  if (!kbTrace.on || kbTrace.samples.length >= 120) return
+  if (!kbTrace.on || kbTrace.samples.length >= 150) return
   const vv = window.visualViewport
   const r = (el: Element | null | undefined) => { const b = el?.getBoundingClientRect(); return b ? [Math.round(b.top), Math.round(b.bottom)] : null }
   const field = document.activeElement
   const list = field?.closest('section')?.querySelector('[data-ask-scroll], .overflow-y-auto') as HTMLElement | null
-  kbTrace.samples.push({
-    t: Math.round(performance.now() - kbTrace.t0), why,
+  const sample = {
     ih: window.innerHeight, vh: vv ? Math.round(vv.height) : null, vt: vv ? Math.round(vv.offsetTop) : null, sy: Math.round(window.scrollY),
     kb: document.documentElement.style.getPropertyValue('--phone-kb'), frame: r(document.querySelector('[data-phone-frame]')),
     field: r(field), tag: field?.tagName ?? null, list: list ? { top: Math.round(list.scrollTop), h: list.scrollHeight, ch: list.clientHeight } : null,
-  })
+  }
+  const same = JSON.stringify(sample)
+  if (same === kbTrace.last && why !== 'focusout' && why !== 'after') return
+  kbTrace.last = same
+  kbTrace.samples.push({ t: Math.round(performance.now() - kbTrace.t0), why, ...sample })
 }
 function startKeyboardTrace() {
-  if (testRun()) return
-  try { if (sessionStorage.getItem('casa-phone-keyboard-sent')) kbTrace.sent = true } catch { /* send anyway */ }
-  if (kbTrace.sent || kbTrace.on) return
-  kbTrace.on = true
-  kbTrace.t0 = performance.now()
+  if (testRun() || kbTrace.on) return
+  const key = fieldKey(document.activeElement)
+  try { if (sessionStorage.getItem(`casa-phone-keyboard:${key}`)) return } catch { /* send anyway */ }
+  Object.assign(kbTrace, { on: true, key, t0: performance.now(), samples: [], last: '' })
   // Every frame for the first 1.2 s: the keyboard's own animation.
   const until = kbTrace.t0 + 1200
   const tick = () => { sampleKeyboard('frame'); if (performance.now() < until) requestAnimationFrame(tick) }
@@ -115,10 +118,9 @@ function endKeyboardTrace() {
   kbTrace.stop = window.setTimeout(() => {
     sampleKeyboard('after')
     kbTrace.on = false
-    kbTrace.sent = true
-    try { sessionStorage.setItem('casa-phone-keyboard-sent', '1') } catch { /* fine */ }
-    const samples = kbTrace.samples
-    void import('../lib/remoteVoiceTrace').then(({ sendBugReport }) => sendBugReport({ event: 'phone_keyboard', detail: `${samples.length} samples · ua ${navigator.userAgent.slice(0, 60)}`, page: '/phone', payload: { samples, screen: { w: screen.width, h: screen.height }, ua: navigator.userAgent } })).catch(() => {})
+    const { key, samples } = kbTrace
+    try { sessionStorage.setItem(`casa-phone-keyboard:${key}`, '1') } catch { /* fine */ }
+    void import('../lib/remoteVoiceTrace').then(({ sendBugReport }) => sendBugReport({ event: 'phone_keyboard', detail: `${key} · ${samples.length} changes`, page: '/phone', payload: { field: key, samples, screen: { w: screen.width, h: screen.height }, ua: navigator.userAgent } })).catch(() => {})
   }, 1500)
 }
 
