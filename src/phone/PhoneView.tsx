@@ -1,8 +1,6 @@
 import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { stepWithin, type DayStep } from '../lib/daySwipe'
-import { useDaySwipe } from '../lib/useDaySwipe'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, CalendarDays, Check, ChevronDown, ChefHat, Grid2x2, Lock, Mail, MapPin, Monitor, Music, Navigation, Newspaper, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
@@ -47,6 +45,7 @@ import PhoneMonth from './PhoneMonth'
 import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
 import PhoneTabBar from './PhoneTabBar'
+import PhoneDayPager from './PhoneDayPager'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -157,6 +156,8 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
 }
 
 const NO_TICKS: ReadonlySet<string> = new Set()
+/** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
+const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
 export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], comingUp = null, todos = null, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
@@ -169,8 +170,6 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // "↑ 4 earlier" opened on today's list (canvas 30a): for the day it was opened on; another day folds again.
   const [earlierFor, setEarlierFor] = useState<string | null>(null)
   const [monthOpen, setMonthOpen] = useState(false)
-  // Which way the last day change went, so the new day slides in from that side (canvas 30, motion).
-  const [slide, setSlide] = useState<'next' | 'back' | null>(null)
   const ticks = usePendingTicks((key) => {
     if (key.startsWith('todo:')) void todos?.act({ action: 'done', id: key.slice('todo:'.length) })
     else {
@@ -215,19 +214,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const focus = shownDays[meAt] ?? today
   const aroundKey = needsAroundFetch(farDay, now) && farDay ? farDay.toDateString() : ''
   useEffect(() => { onFocusDay?.(aroundKey ? new Date(aroundKey) : null) }, [aroundKey, onFocusDay])
-  const meWhen = focus ? dayWhen(focus.date, now) : 'today'
-  const onToday = !focus || focus.date.toDateString() === now.toDateString()
-  const onTomorrow = Boolean(focus) && focus!.date.toDateString() === new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
-  const meWeekday = focus ? focus.date.toLocaleDateString('en-US', { weekday: 'long' }) : ''
-  const focusNow = useMemo(() => {
-    if (onToday || !focus) return now
-    const start = new Date(focus.date)
-    start.setHours(0, 0, 0, 0)
-    return start
-  }, [onToday, focus, now])
-  const me = useMemo(() => meView({ viewerId, plan: focus, members, events: shownEvents, checklist, now: focusNow }), [viewerId, focus, members, shownEvents, checklist, focusNow])
   const lanePeople = members.filter((m) => m.show_on_home_sidebar !== false)
-  const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
   const eventIds = useMemo(() => new Set(events.map((e) => e.id)), [events])
   const openable = (id: string | undefined | null) => Boolean(id && eventIds.has(id))
   // The day plan an event sits in (its trip, or its blocks), for its sheet.
@@ -265,7 +252,17 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <span aria-hidden="true" className="h-[2px] flex-1 rounded-full bg-wall-brass" />
     </div>
   )
-  const meScreen = (
+  // Me for any day of the strip (the day pager draws a page per day; premium plan, Phase A).
+  const meScreenFor = (meAt: number) => {
+    const focus = shownDays[meAt] ?? today
+    const meWhen = focus ? dayWhen(focus.date, now) : 'today'
+    const onToday = !focus || focus.date.toDateString() === now.toDateString()
+    const onTomorrow = Boolean(focus) && focus!.date.toDateString() === new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
+    const meWeekday = focus ? focus.date.toLocaleDateString('en-US', { weekday: 'long' }) : ''
+    const focusNow = onToday || !focus ? now : new Date(focus.date.getFullYear(), focus.date.getMonth(), focus.date.getDate())
+    const me = meView({ viewerId, plan: focus, members, events: shownEvents, checklist, now: focusNow })
+    const tripOf = (move: PhoneMove) => focus?.trips.find((t) => t.id === move.tripIds[0]) ?? null
+    return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-center justify-between">
         <div>
@@ -366,41 +363,42 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         </section>
       )}
 
-      {me.justYours.length > 0 && (
-        <section aria-label="Just yours">
-          <Label>JUST YOURS</Label>
-          {me.justYours.map((j, n) => {
-            // The NOW line before the first one still ahead, on today (canvas 30a).
-            const lineHere = onToday && j.at > now && (n === 0 || me.justYours[n - 1].at <= now)
-            return (
-              <Fragment key={j.id}>
-                {lineHere && nowLine}
-                <button type="button" onClick={() => setOpenId(j.id)} className={`flex w-full items-baseline gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[10px] text-left text-phone-body text-wall-ink ${onToday && j.at <= now ? 'opacity-45' : ''}`}>
-                  <span className="w-[56px] shrink-0 text-phone-detail font-bold">{clock(j.at)}</span>
-                  <span>{j.title}</span>
-                </button>
-              </Fragment>
-            )
-          })}
-          {onToday && me.justYours.every((j) => j.at <= now) && nowLine}
-        </section>
-      )}
+      {/* Your day (Jake, Oct 2: "Anything I'm tagged in for an event, meeting, reminder for today should show up"): the
+          Family list for you — events and meetings you're in, your chores and to-dos — and your private reminders, with
+          the NOW line. */}
+      {(() => {
+        const mine = familyItems(focus, members, viewerId)
+        const ids = new Set(mine.map((i) => i.id))
+        const own: FamilyItem[] = me.justYours.filter((j) => !ids.has(j.id)).map((j) => ({
+          id: j.id, time: clock(j.at), at: j.at, end: new Date(j.at.getTime() + 15 * 60_000), title: j.title, sub: 'Just yours', people: viewerId ? [viewerId] : [], kind: 'todo' as const,
+        }))
+        const all = [...mine, ...own].sort((x, y) => Number(y.time === 'All day') - Number(x.time === 'All day') || x.at.getTime() - y.at.getTime())
+        return all.length > 0 ? (
+          <section aria-label="Your day">
+            <Label>{`YOUR DAY${onToday ? '' : ` · ${meWeekday.toUpperCase()}`}`}</Label>
+            {dayList(focus, all)}
+          </section>
+        ) : null
+      })()}
     </div>
-  )
+    )
+  }
 
   const shownDay = shownDays[dayIndex ?? (farAt >= 0 ? farAt : focusIndex)] ?? today
-  const shownKey = shownDay?.date.toDateString() ?? ''
   // A day opened from Casa or the month (canvas 30b): Family on that day, with the week around it to swipe.
   const openDay = (date: Date) => {
     setMonthOpen(false)
-    setSlide(null)
     setTab('family')
     const i = week.findIndex((p) => p.date.toDateString() === date.toDateString())
     setFarDay(i >= 0 || !planDay ? null : date)
     setDayIndex(i >= 0 ? i : null)
     setMeIndex(null)
   }
-  const items = familyItems(shownDay, members, filter)
+  // Family for any day of the strip (a page per day in the pager).
+  // A day's list (canvas 30a), on Family and on Me: what's started above the NOW line (the last two in view, the rest
+  // folded), finished faded, a late chore or to-do in rust, the next lifted; chores and to-dos tick.
+  const dayList = (shownDay: DayPlan | null, items: FamilyItem[]) => {
+    const shownKey = shownDay?.date.toDateString() ?? ''
   // Today's list splits at NOW (canvas 30a): started above the line (the last two in view), finished faded, the next
   // lifted with how long until it; chores and to-dos get ticks.
   const familyToday = Boolean(shownDay && sameDay(shownDay.date, now))
@@ -448,7 +446,34 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       </div>
     )
   }
-  const familyScreen = (
+    return (
+      <div className="phone-rise">
+        {items.length === 0 && <div className="py-[12px] font-display text-phone-heading italic text-wall-ink-2">Nothing on the calendar.</div>}
+        {familyToday ? (
+          <>
+            {timeline.allDay.map((i) => familyRow(i))}
+            {timeline.folded.length > 0 && (earlierFor === shownKey
+              ? timeline.folded.map((i) => familyRow(i))
+              : (
+                <div className="flex justify-center py-[8px]">
+                  <button type="button" onClick={() => setEarlierFor(shownKey)} className="flex h-[36px] max-w-full items-center gap-[6px] rounded-full border-0 bg-phone-card px-[14px] text-phone-detail font-semibold text-wall-ink-2">
+                    <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0" />
+                    <span className="truncate">{foldLabel(timeline.folded)}</span>
+                  </button>
+                </div>
+              ))}
+            {timeline.before.map((i) => familyRow(i))}
+            {nowLine}
+            {timeline.after.map((i) => familyRow(i))}
+          </>
+        ) : items.map((i) => familyRow(i))}
+      </div>
+    )
+  }
+  const familyScreenFor = (dayAt: number) => {
+    const shownDay = shownDays[dayAt] ?? today
+    const items = familyItems(shownDay, members, filter)
+    return (
     <div className="flex flex-col gap-[14px]">
       <div>
         <button type="button" aria-label="Any day" onClick={() => setMonthOpen(true)} className="flex min-h-[28px] items-center gap-[4px] border-0 bg-transparent p-0 text-phone-detail text-wall-ink-2">
@@ -471,32 +496,15 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           </button>
         ))}
       </div>
-      <div className="phone-rise">
-        {items.length === 0 && <div className="py-[12px] font-display text-phone-heading italic text-wall-ink-2">Nothing on the calendar.</div>}
-        {familyToday ? (
-          <>
-            {timeline.allDay.map((i) => familyRow(i))}
-            {timeline.folded.length > 0 && (earlierFor === shownKey
-              ? timeline.folded.map((i) => familyRow(i))
-              : (
-                <div className="flex justify-center py-[8px]">
-                  <button type="button" onClick={() => setEarlierFor(shownKey)} className="flex h-[36px] max-w-full items-center gap-[6px] rounded-full border-0 bg-phone-card px-[14px] text-phone-detail font-semibold text-wall-ink-2">
-                    <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0" />
-                    <span className="truncate">{foldLabel(timeline.folded)}</span>
-                  </button>
-                </div>
-              ))}
-            {timeline.before.map((i) => familyRow(i))}
-            {nowLine}
-            {timeline.after.map((i) => familyRow(i))}
-          </>
-        ) : items.map((i) => familyRow(i))}
-      </div>
+      {dayList(shownDay, items)}
     </div>
-  )
+    )
+  }
 
   const phoneToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const days = weekDays(week, members, [], now, checklist)
+  // The week's tiles count events only, at home and away — not school, work or chores (Jake, Oct 2: "so the dots mean
+  // something"); the first out is the first trip that isn't a routine run.
+  const days = weekDays(week, members, [], now, checklist, { eventsOnly: true })
   const comingUpItems = comingUp ? forViewer(comingUp.items, viewerId) : []
   // This week · Coming up · To do — the wall's order (days, then Coming up, then To do), on its own row.
   const views = (['week', 'coming', 'todo'] as const).filter((v) => v === 'week' || (v === 'coming' ? comingUp : todos))
@@ -555,7 +563,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <button
           key={d.key}
           type="button"
-          onClick={() => { setSlide(null); setFarDay(null); setDayIndex(i); setTab('family') }}
+          onClick={() => { setFarDay(null); setDayIndex(i); setTab('family') }}
           className={`flex min-h-[64px] w-full items-center gap-[14px] rounded-[16px] bg-transparent px-[14px] py-[10px] text-left text-wall-ink ${i === focusIndex ? 'border-2 border-solid border-wall-ink' : 'border border-solid border-wall-stone'}`}
         >
           <span className="flex w-[80px] flex-col">
@@ -623,8 +631,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   ]
   // The tab you're on goes back to its start, as an iPhone tab bar does: today, and the top.
   const pickTab = (id: Tab) => {
-    if (id === tab) mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-    setSlide(null)
+    if (id === tab) scroller()?.scrollTo({ top: 0, behavior: 'smooth' })
     setTab(id)
     if (id === 'family' && tab !== 'week') { setDayIndex(null); setFarDay(null) }
     if (id === 'me') { setMeIndex(null); setFarDay(null) }
@@ -636,43 +643,50 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // The glass bar settles smaller while scrolling down the list, and comes back scrolling up or at the top.
   const [barCompact, setBarCompact] = useState(false)
   const lastScroll = useRef(0)
+  // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
+  const loading = week.length === 0 || members.length === 0
+  // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
+  const paged = !loading && (tab === 'me' || tab === 'family')
+  const familyAt = Math.min(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), Math.max(0, shownDays.length - 1))
+  const pagerAt = tab === 'me' ? meAt : familyAt
+  const [activePage, setActivePageState] = useState<HTMLElement | null>(null)
+  const activeRef = useRef<HTMLElement | null>(null)
+  const setActivePage = useCallback((el: HTMLElement | null) => { activeRef.current = el; setActivePageState(el) }, [])
+  const scroller = () => (paged ? activeRef.current : mainRef.current)
   const onMainScroll = () => {
-    const y = mainRef.current?.scrollTop ?? 0
+    const y = scroller()?.scrollTop ?? 0
     const down = y > lastScroll.current + 6
     const up = y < lastScroll.current - 6
     if (down && y > 80 && !barCompact) setBarCompact(true)
     else if ((up || y < 40) && barCompact) setBarCompact(false)
     if (down || up) lastScroll.current = y
   }
+  const onMainScrollRef = useRef(onMainScroll)
+  useEffect(() => { onMainScrollRef.current = onMainScroll })
   // Today's list opens scrolled to NOW (canvas 30a), a little of what's just happened above it; "↑ earlier" folds again
   // when the day or the tab changes.
   useEffect(() => {
     if (tab !== 'family' && tab !== 'me') return
     const frame = window.requestAnimationFrame(() => {
-      const main = mainRef.current
+      const main = activePage
       const line = main?.querySelector<HTMLElement>('[data-now-line]')
-      if (!main || !line) return
+      // Once per page: a page already scrolled is left where it was.
+      if (!main || !line || main.scrollTop > 0) return
       const top = line.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop
       main.scrollTo({ top: Math.max(0, top - main.clientHeight * 0.38) })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [tab, shownKey, filter])
-  const swipeDay = (step: DayStep) => {
-    setSlide(step === 1 ? 'next' : 'back')
-    if (tab === 'me') {
-      const next = stepWithin(meAt, step, shownDays.length - 1)
-      if (next != null) setMeIndex(next)
-    } else if (tab === 'family') {
-      const next = stepWithin(dayIndex ?? (farAt >= 0 ? farAt : focusIndex), step, shownDays.length - 1)
-      if (next != null) setDayIndex(next)
-    }
-  }
+  }, [tab, activePage, filter])
+  // The tab bar settles smaller scrolling down the page in view, too.
+  useEffect(() => {
+    if (!activePage) return
+    lastScroll.current = activePage.scrollTop
+    const on = () => onMainScrollRef.current()
+    activePage.addEventListener('scroll', on, { passive: true })
+    return () => activePage.removeEventListener('scroll', on)
+  }, [activePage])
   usePhoneShell()
   const handOffSwipe = useSheetSwipe(() => setHandOff(null))
-  // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
-  const loading = week.length === 0 || members.length === 0
-  const sheetOpen = Boolean(monthOpen || openId || handOff || addOpen || peopleOpen || emailSettingsOpen || scanOpen || askOpen || adding || projectId || editingTodo)
-  useDaySwipe(mainRef, swipeDay, { enabled: week.length > 1 && (tab === 'me' || tab === 'family') && !sheetOpen, minDistance: 70 })
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
   const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
@@ -682,17 +696,34 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // the top clears the notch / status bar and the tab bar clears the home indicator. With the keyboard up the frame
     // ends at its top (--phone-kb, phoneShell.ts), so a sheet or Ask Casa's line sits above it, never under it.
     <div data-phone-frame className="fixed inset-x-0 top-0 bottom-[var(--phone-kb,0px)] flex flex-col overflow-hidden bg-phone-ground font-body text-wall-ink">
-      {/* The list runs under the frosted tab bar (padding for it at the end); a tab fades in, a day slides in from the
-          side it came from. */}
-      <main ref={mainRef} onScroll={onMainScroll} className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]">
-        <PullToRefresh scrollRef={mainRef} onRefresh={onRefresh} />
-        <div key={`${tab}|${tab === 'me' ? focus?.date.toDateString() : tab === 'family' ? shownKey : ''}`} className={(tab === 'me' || tab === 'family') && slide ? (slide === 'next' ? 'phone-day-next' : 'phone-day-back') : 'phone-tab-in'}>
-          {loading && tab !== 'more' && <PhoneSkeleton />}
-          {!loading && tab === 'me' && meScreen}
-          {!loading && tab === 'family' && familyScreen}
-          {!loading && tab === 'week' && weekScreen}
-          {tab === 'more' && moreScreen}
-        </div>
+      {/* Me and Family: a pager of whole days you drag with your thumb (premium plan, Phase A). The other tabs: one page
+          that fades in, running under the frosted tab bar. */}
+      <main ref={mainRef} onScroll={paged ? undefined : onMainScroll} className={`flex-1 ${paged ? 'overflow-hidden' : `touch-pan-y overflow-y-auto overscroll-contain ${PAGE_PAD}`}`}>
+        {paged ? (
+          <PhoneDayPager
+            key={tab}
+            count={shownDays.length}
+            index={pagerAt}
+            onIndex={(i) => (tab === 'me' ? setMeIndex(i) : setDayIndex(i))}
+            onActivePage={setActivePage}
+            pageClassName={PAGE_PAD}
+            renderPage={(i) => (Math.abs(i - pagerAt) <= 1 ? (
+              <>
+                {i === pagerAt && <PullToRefresh scrollRef={activeRef} onRefresh={onRefresh} />}
+                {tab === 'me' ? meScreenFor(i) : familyScreenFor(i)}
+              </>
+            ) : <PhoneSkeleton />)}
+          />
+        ) : (
+          <>
+            <PullToRefresh scrollRef={mainRef} onRefresh={onRefresh} />
+            <div key={tab} className="phone-tab-in">
+              {loading && tab !== 'more' && <PhoneSkeleton />}
+              {!loading && tab === 'week' && weekScreen}
+              {tab === 'more' && moreScreen}
+            </div>
+          </>
+        )}
       </main>
       {todos && projectId && <ProjectOnPhone id={projectId} todos={todos} today={phoneToday} onBack={() => setProjectId(null)} onOpenProject={setProjectId} onTalk={assistant ? (say) => { setProjectId(null); setAskOpening(say); setAskOpen(true) } : undefined} />}
       {monthOpen && <PhoneMonth now={now} members={members} pigments={pigments} useMonth={useMonthEvents ?? (() => shownEvents as WallEvent[])} onOpen={openDay} onClose={() => setMonthOpen(false)} />}

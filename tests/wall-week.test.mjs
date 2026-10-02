@@ -79,3 +79,20 @@ test('with routines hidden, a tile\'s dots and "first out" leave out school, wor
   // The photobook pickup has no address and violin is at home: with the school runs hidden there's no trip at all.
   assert.equal(hidden.firstOut, 'No trips')
 })
+
+// The phone's tiles (Jake, Oct 2: "don't show routine, chore info. Only the events (home and away). So the dots mean
+// something"): school, work, chores and reminders add no dot.
+test('week tiles, events only: no dot for school, work, a chore or a reminder', async () => {
+  const { buildDayPlan } = await import('../src/wall/engine/dayPlan.ts')
+  const { weekDays } = await import('../src/wall/week.ts')
+  const { events, members, routines } = await import('./fixtures/wall-day-2026-09-25.mjs')
+  const chores = [{ id: 'meds', title: 'Take meds', member_id: 'liv', for_member_id: null, days_of_week: [5], time_local: '18:00:00', minutes: 5, enabled: true, every_weeks: 1, starts_on: '2026-09-01' }]
+  const plan = buildDayPlan({ date: new Date(2026, 8, 25), members, routines, events, chores })
+  const [all] = weekDays([plan], members, [], new Date(2026, 8, 25, 7), [], {})
+  const [mine] = weekDays([plan], members, [], new Date(2026, 8, 25, 7), [], { eventsOnly: true })
+  assert.ok(all.memberIds.includes('liv') && all.memberIds.includes('kelly'))
+  // Liv has only school and her meds; Kelly only work: no dots. Emme has her violin lesson (an event): a dot.
+  assert.equal(mine.memberIds.includes('liv'), false)
+  assert.equal(mine.memberIds.includes('kelly'), false)
+  assert.equal(mine.memberIds.includes('emme'), true)
+})

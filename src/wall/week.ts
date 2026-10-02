@@ -42,15 +42,16 @@ function lastEnd(plan: DayPlan, sourceId: string): number {
  * dots in the tiles") — a dot only for someone with something besides school, work and the regular runs, and the
  * first trip that's left.
  */
-export function weekDays(week: DayPlan[], members: WallMember[], decisions: Array<{ date: Date }>, now: Date, checklist: WallChecklistItem[] = [], options: { hideRoutines?: boolean } = {}): WeekDay[] {
-  const hide = options.hideRoutines === true
+export function weekDays(week: DayPlan[], members: WallMember[], decisions: Array<{ date: Date }>, now: Date, checklist: WallChecklistItem[] = [], options: { hideRoutines?: boolean; eventsOnly?: boolean } = {}): WeekDay[] {
+  const hide = options.hideRoutines === true || options.eventsOnly === true
   return week.map((plan) => {
     const firstLeave = shownTrips(plan.trips, hide)
       .map((trip) => trip.leaveAt)
       .filter((leave): leave is Date => Boolean(leave))
       .sort((a, b) => a.getTime() - b.getTime())[0]
     const memberIds = members
-      .filter((m) => plan.activeMemberIds.has(m.id) && (!hide || shownSegments(plan.lanes.get(m.id) ?? [], plan.trips, true).length > 0))
+      // `eventsOnly` (the phone, Jake Oct 2: "so the dots mean something"): routines hidden and reminders not counted.
+      .filter((m) => plan.activeMemberIds.has(m.id) && (!hide || shownSegments(plan.lanes.get(m.id) ?? [], plan.trips, true).filter((s) => !(options.eventsOnly && s.reminder)).length > 0))
       .map((m) => m.id)
     const isToday = dayKey(plan.date) === dayKey(now)
     const next = new Date(now)

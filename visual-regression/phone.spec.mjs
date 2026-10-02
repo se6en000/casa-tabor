@@ -15,7 +15,7 @@ const open = async (page, at = '2026-09-25T07:12:00', viewer = 'jake-id') => {
   return phone
 }
 
-test('phone: Me — the next move first (leave by), what others have covered, just yours', async ({ page }) => {
+test('phone: Me — the next move first (leave by), what others have covered, your day', async ({ page }) => {
   const phone = await open(page)
   const next = phone.getByRole('region', { name: 'Your next move' })
   await expect(next.getByText('LEAVE BY 7:25')).toBeVisible()
@@ -23,7 +23,8 @@ test('phone: Me — the next move first (leave by), what others have covered, ju
   await expect(next.getByText('Drop off Emme & Owen')).toBeVisible()
   const covered = phone.getByRole('region', { name: 'Covered' })
   await expect(covered.getByText('Kelly · Drop off Liv')).toBeVisible()
-  await expect(phone.getByRole('region', { name: 'Just yours' }).getByText('Pick up Photobook for Liv')).toBeVisible()
+  // Your day (Jake, Oct 2: "Anything I'm tagged in … should show up"): everything Jake is in today, his reminders too.
+  await expect(phone.getByRole('region', { name: 'Your day' }).getByText('Pick up Photobook for Liv')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-me.png')
 })
 
@@ -476,25 +477,29 @@ test('phone: Settings › Email — keep me posted, what’s quiet with Bring ba
   ])
 })
 
-test('phone: swiping Me and Family moves the day; a scroll does not; tapping Me comes back to today', async ({ page }) => {
+// Days you can throw (premium plan, Phase A): Me and Family are a native pager of whole days — a swipe is the
+// scroller's own, so the test scrolls the pager a page and checks the day settles; tapping Me comes back to today.
+const toPage = async (page, n) => page.evaluate((i) => {
+  const row = document.querySelector('[data-day-pager]')
+  row.scrollTo({ left: i * row.clientWidth, behavior: 'instant' })
+  row.dispatchEvent(new Event('scrollend'))
+}, n)
+test('phone: swiping Me and Family moves the day; tapping Me comes back to today', async ({ page }) => {
   const phone = await open(page)
   await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
-  await phoneSwipe(page, [320, 400], [120, 410])
+  await toPage(page, 1)
   await expect(phone.getByRole('heading', { name: "Jake's tomorrow" })).toBeVisible()
-  await phoneSwipe(page, [320, 400], [120, 400])
-  await expect(phone.getByRole('heading', { name: "Jake's Sunday" })).toBeVisible()
-  await phoneSwipe(page, [200, 600], [220, 200])
+  await toPage(page, 2)
   await expect(phone.getByRole('heading', { name: "Jake's Sunday" })).toBeVisible()
   await phone.getByRole('button', { name: 'Me', exact: true }).click()
   await expect(phone.getByRole('heading', { name: "Jake's day" })).toBeVisible()
 
   await phone.getByRole('button', { name: 'Family' }).click()
-  await expect(phone.getByText('Friday, September 25')).toBeVisible()
-  await phoneSwipe(page, [320, 400], [120, 400])
-  await expect(phone.getByText('Saturday, September 26')).toBeVisible()
-  await phoneSwipe(page, [120, 400], [320, 400])
-  await phoneSwipe(page, [120, 400], [320, 400])
-  await expect(phone.getByText('Friday, September 25')).toBeVisible()
+  await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('Friday, September 25')
+  await toPage(page, 1)
+  await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('Saturday, September 26')
+  await toPage(page, 0)
+  await expect(phone.getByRole('button', { name: 'Any day' })).toContainText('Friday, September 25')
 })
 
 // P3.24 by improving Scan it (Jake, 2026-09-30): a match already on the calendar gets what's new added to it,
