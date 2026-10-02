@@ -138,3 +138,26 @@ test('Calendar: a day’s real events only — school, chores and to-dos stay of
   assert.ok(fri.every((i) => i.kind === 'event'))
   assert.deepEqual(agendaItems(saturday, members).map((i) => i.id).includes('softball'), true)
 })
+
+// Jake, Oct 2: "for mobile, all that needs to be shown is the flight up and back and the hotel if there is one (probably
+// as an all day). we dont need the other events that hold the "away" dotted line on the kiosk". The wall keeps them.
+import { buildTrips } from '../src/wall/engine/travel.ts'
+import { tripEvents, members as tripMembers, routines as tripRoutines } from './fixtures/wall-trip-2026-10-07.mjs'
+
+test('a trip on the phone: the flights and the stay, not the airport wait or the away blocks', () => {
+  const travel = buildTrips(tripEvents, tripMembers, { 'jake-id': { airportMinutes: 60, way: 'uber' } })
+  const out = buildDayPlan({ date: new Date(2026, 9, 7), members: tripMembers, routines: tripRoutines, events: tripEvents, travel })
+  const back = buildDayPlan({ date: new Date(2026, 9, 8), members: tripMembers, routines: tripRoutines, events: tripEvents, travel })
+  const day1 = familyItems(out, tripMembers, 'jake-id', tripEvents)
+  const titles = day1.map((i) => i.title)
+  assert.ok(!titles.some((t) => /^At DJT|^Away/.test(t)), titles.join(' | '))
+  const stay = day1.find((i) => i.time === 'All day')
+  assert.equal(stay.title, 'Jake in Dallas')
+  assert.equal(stay.sub, 'Courtyard by Marriott Dallas Allen · Day 1 of 2')
+  const flight = day1.find((i) => i.id === 'f1419')
+  assert.equal(flight.title, 'Flight 1419 → DFW')
+  assert.equal(flight.sub, 'Leave 12:58 · Uber to DJT')
+  const day2 = familyItems(back, tripMembers, 'jake-id', tripEvents)
+  assert.ok(!day2.some((i) => /^Away|^Off the plane/.test(i.title)), day2.map((i) => i.title).join(' | '))
+  assert.equal(day2.find((i) => i.id === 'f2640').sub, 'Lands 6:34 · Uber home')
+})

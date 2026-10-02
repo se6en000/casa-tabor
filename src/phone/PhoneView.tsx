@@ -408,7 +408,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           Family list for you — events and meetings you're in, your chores and to-dos — and your private reminders, with
           the NOW line. */}
       {(() => {
-        const mine = familyItems(focus, members, viewerId)
+        const mine = familyItems(focus, members, viewerId, shownEvents as WallEvent[])
         const ids = new Set(mine.map((i) => i.id))
         const own: FamilyItem[] = me.justYours.filter((j) => !ids.has(j.id)).map((j) => ({
           id: j.id, time: clock(j.at), at: j.at, end: new Date(j.at.getTime() + 15 * 60_000), title: j.title, sub: 'Just yours', people: viewerId ? [viewerId] : [], kind: 'todo' as const,
@@ -531,7 +531,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     const title = !filter ? 'Everyone' : mine ? `Your ${whenWord}` : person ? `${person.name}’s ${whenWord}` : 'Everyone'
     // Everyone is the big picture: no chores and no routines — school, work, the standing runs (Jake, Oct 2: "I do see
     // palm beach public and Bak for Liv which are all school routines"). A person's own day has them.
-    const items = familyItems(shownDay, members, filter).filter((i) => filter !== null || (i.kind !== 'chore' && !i.routine))
+    const items = familyItems(shownDay, members, filter, shownEvents as WallEvent[]).filter((i) => filter !== null || (i.kind !== 'chore' && !i.routine))
     const chipPeople = [
       { id: null as string | null, name: 'Everyone' },
       ...(viewer && lanePeople.some((m) => m.id === viewer.id) ? [{ id: viewer.id as string | null, name: 'Me' }] : []),
@@ -608,7 +608,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       </div>
       <div className="-mt-[6px] text-phone-detail text-wall-ink-2">The next 7 days · events only</div>
       {week.map((plan, i) => {
-        const items = agendaItems(plan, members)
+        const items = agendaItems(plan, members, shownEvents as WallEvent[])
         const today = sameDay(plan.date, now)
         const tomorrow = sameDay(plan.date, new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
         const name = today ? 'Today' : tomorrow ? 'Tomorrow' : plan.date.toLocaleDateString('en-US', { weekday: 'long' })

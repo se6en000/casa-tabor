@@ -131,7 +131,7 @@ export interface FamilyItem {
  * not its runs), when it starts, where, who drives, and who is in it. `filterId` keeps
  * only what that person is in.
  */
-export function familyItems(plan: DayPlan | null, members: WallMember[], filterId: string | null): FamilyItem[] {
+export function familyItems(plan: DayPlan | null, members: WallMember[], filterId: string | null, events: WallEvent[] = []): FamilyItem[] {
   if (!plan) return []
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
   const order = (ids: string[]) => members.map((m) => m.id).filter((id) => ids.includes(id))
@@ -141,6 +141,9 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
     for (const s of segments) {
       // Work hours are the wall's (where someone is); on a phone's list they'd be every day's noise.
       if (s.kind === 'drive' || s.work) continue
+      // A trip on the phone is its flights and the stay (Jake, Oct 2): the wait at the airport, the time away and
+      // "off the plane" hold the wall's dotted line, and on a phone they're confusing.
+      if (s.travel === 'wait' || s.travel === 'away') continue
       // Children at the same place for the same hours (two school routines) are one line.
       const key = s.kind === 'at_place' ? `place|${s.label}|${s.start.getTime()}|${s.end.getTime()}` : s.sourceId
       const existing = items.get(key)
@@ -150,6 +153,15 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
       }
       const trip = tripFor.get(s.sourceId)
       const kind = s.chore ? 'chore' : s.reminder ? 'todo' : 'event'
+      if (s.travel === 'flight') {
+        // The flight says how you get there or home: "Leave 12:58 · Uber to DJT", "Lands 6:34 · Uber home".
+        const legs = segments.filter((x) => x.sourceId === s.sourceId && x.travel === 'drive')
+        const before = legs.find((x) => x.end <= s.start)
+        const after = legs.find((x) => x.start >= s.end)
+        const sub = before ? `Leave ${clockTime(before.start)} · ${before.label}` : after ? `Lands ${clockTime(s.end)} · ${after.label}` : `Lands ${clockTime(s.end)}`
+        items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: `Flight ${s.label}`, sub, people: [memberId], kind })
+        continue
+      }
       const sub = kind === 'chore' ? 'Chore'
         : kind === 'todo' ? 'To do'
         : s.kind === 'at_place'
@@ -175,8 +187,12 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
     items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, end: n.end, title: n.title, sub: 'No one yet', people: [], kind: n.sourceId.startsWith('chore:') ? 'chore' : 'event' })
   }
   // All-day items head the day; one for nobody in particular is for everyone.
+  // A trip's stay says where ("Courtyard by Marriott Dallas Allen · Day 1 of 2").
+  const stayOf = (a: DayPlan['allDay'][number]) => a.trip
+    ? [events.find((e) => e.id === a.sourceId)?.location_name ?? '', `Day ${a.trip.dayIndex} of ${a.trip.dayCount}`].filter(Boolean).join(' · ')
+    : ''
   const allDay: FamilyItem[] = plan.allDay.map((a) => ({
-    id: a.sourceId, time: 'All day', at: plan.date, end: new Date(plan.date.getFullYear(), plan.date.getMonth(), plan.date.getDate() + 1), kind: 'event' as const, title: a.title, sub: '', people: order(a.memberIds),
+    id: a.sourceId, time: 'All day', at: plan.date, end: new Date(plan.date.getFullYear(), plan.date.getMonth(), plan.date.getDate() + 1), kind: 'event' as const, title: a.title, sub: stayOf(a), people: order(a.memberIds),
   }))
   const timed = [...items.values()].sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
   const mine = (i: FamilyItem) => !filterId || i.people.includes(filterId)
@@ -235,6 +251,6 @@ export function eventView(input: { eventId: string; plan: DayPlan | null; events
 }
 
 /** Calendar (canvas 33c): a day's real appointments — no school or work, no chores or to-dos. */
-export function agendaItems(plan: DayPlan | null, members: WallMember[]): FamilyItem[] {
-  return familyItems(plan, members, null).filter((i) => i.kind === 'event' && !i.routine)
+export function agendaItems(plan: DayPlan | null, members: WallMember[], events: WallEvent[] = []): FamilyItem[] {
+  return familyItems(plan, members, null, events).filter((i) => i.kind === 'event' && !i.routine)
 }
