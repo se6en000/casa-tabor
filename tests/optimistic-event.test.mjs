@@ -86,3 +86,16 @@ test('an edit holds over a refresh that lands mid-save, then the server’s copy
   await qc.fetchQuery({ queryKey: key, queryFn: async () => [{ id: 'a', title: 'Server place' }], staleTime: 0 })
   assert.equal(qc.getQueryData(key)[0].title, 'Server place')
 })
+
+import { showAdded } from '../src/lib/optimisticEvent.ts'
+
+test('an add lands only in the calendar’s ranges — never in the packing list or the trip legs kept under “events”', () => {
+  const qc = new QueryClient()
+  qc.setQueryData(['events', 'rolling', 'x'], [{ id: 'a' }])
+  qc.setQueryData(['events', 'wall-checklist', 'e1'], [{ id: 'c1', event_id: 'e1', label: 'Glove' }])
+  qc.setQueryData(['events', 'wall-travel', 'd'], [{ id: 't1' }])
+  showAdded(qc, 'ev9', { title: 'Gym', start: '2026-10-02T23:30:00Z', end: '2026-10-03T01:00:00Z' })
+  assert.deepEqual(qc.getQueryData(['events', 'rolling', 'x']).map((e) => e.id), ['a', 'ev9'])
+  assert.deepEqual(qc.getQueryData(['events', 'wall-checklist', 'e1']).map((e) => e.id), ['c1'])
+  assert.deepEqual(qc.getQueryData(['events', 'wall-travel', 'd']).map((e) => e.id), ['t1'])
+})

@@ -106,9 +106,14 @@ export function withChanged(old: unknown, id: string, change: (e: CachedEvent) =
   return old
 }
 
-/** The calendar's cached ranges (not the reminders index or the week index, which aren't lists of a day's events). */
+/**
+ * The calendar's own cached ranges (useCalendarEvents): only these hold a day's events. Other 'events' keys are other
+ * shapes — the packing list ('wall-checklist'), the wall's trip legs, the week index — and an event must never land in
+ * them. A reminder also goes into the reminders list.
+ */
+export const RANGE_KINDS = new Set(['week', 'around', 'rolling', 'month'])
 const calendarRanges = (event?: { event_type?: unknown } | null) => ({
-  predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === 'events' && q.queryKey[1] !== 'week-index' && (q.queryKey[1] !== 'all-reminders' || event?.event_type === 'reminder'),
+  predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === 'events' && (RANGE_KINDS.has(String(q.queryKey[1])) || (q.queryKey[1] === 'all-reminders' && event?.event_type === 'reminder')),
 })
 const familyOf = (qc: QueryClient) => qc.getQueryData<FamilyLike[]>(['family-members']) ?? []
 
@@ -123,7 +128,7 @@ export function showAdded(qc: QueryClient, id: string | null | undefined, args: 
 export function showChanged(qc: QueryClient, id: string | null | undefined, args: Record<string, unknown>): void {
   if (!id) return
   const family = familyOf(qc)
-  qc.setQueriesData({ queryKey: ['events'] }, (old: unknown) => withChanged(old, id, (e) => changedEvent(e, args, family)))
+  qc.setQueriesData(calendarRanges(), (old: unknown) => withChanged(old, id, (e) => changedEvent(e, args, family)))
 }
 
 /**
