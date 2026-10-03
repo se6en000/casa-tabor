@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Bug, Camera, ChevronLeft, CircleHelp, Loader2, Mic } from 'lucide-react'
+import { ArrowUp, Bug, Camera, ChevronLeft, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
 import type { WhichOne } from '../wall/assistant'
 import type { AssistantCard } from '../wall/assistantCard'
 import type { WallMember } from '../wall/engine/types'
 import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
-import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
+import { asksForTips, isNewTip, noteSaid, tipFor, tipsByTopic } from '../wall/tips'
 import { telOf } from '../wall/WallDirections'
 import { useSheetSwipe } from './phoneShell'
 import { MAX_IMAGES, readableFiles, typedTurn, type TypedImage } from '../wall/typeLine'
@@ -57,13 +57,15 @@ export interface PhoneAssistantViewProps {
   /** Casa opened from its button (canvas 32f): the old form one tap away ("Use the form"), and Scan beside the box. */
   onForm?: () => void
   onScan?: () => void
+  /** "What can I say?" said out loud: each new number opens the list. */
+  showList?: number
   /** Held to talk (canvas 34e/34f): listening while held; then the answer over the screen you're on, not the chat. */
   glance?: { holding: boolean; onExpand: () => void }
 }
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, onPickPlace, planSlot = null, onForm, onScan, glance }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, onPickPlace, planSlot = null, onForm, onScan, glance, showList = 0 }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -72,6 +74,8 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
   // "What can I say?" (board 07f) and a tip while Casa thinks (07e), from the wall's own list.
   const [saying, setSaying] = useState(false)
+  // Said out loud (the speech side tells us): the list opens the same way.
+  useEffect(() => { if (showList) setSaying(true) }, [showList]) // eslint-disable-line react-hooks/set-state-in-effect
   const lastAsked = [...lines].reverse().find((l) => l.role === 'user')
   const noted = useRef<string | null>(null)
   useEffect(() => {
@@ -121,6 +125,9 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     setImages((was) => [...was, ...pics].slice(0, MAX_IMAGES))
   }
   const submit = (value: string) => {
+    // "What can I say?" (Jake, Oct 3: "we dont need that button on mobile either.. have it work the same on both"): the
+    // list, at once, without asking Casa.
+    if (!images.length && asksForTips(value)) { setSaying(true); setText(''); return }
     const turn = typedTurn(value, images)
     if (!turn || thinking) return
     onSend(turn.text, turn.images.length ? turn.images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
@@ -220,9 +227,6 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
         {!reporting && !saying && onForm && (
           <button type="button" onClick={onForm} className="flex h-[44px] shrink-0 items-center border-0 bg-transparent px-[4px] text-phone-detail font-semibold text-wall-ink-2 underline underline-offset-[3px]">Use the form</button>
         )}
-        {!reporting && !saying && (
-          <button type="button" aria-label="What can I say?" onClick={() => setSaying(true)} className={`${round} text-wall-brass-ink`}><CircleHelp size={20} /></button>
-        )}
         {!reporting && (
           <button type="button" aria-label="Report a problem" onClick={() => setReporting(true)} className={`${round} text-wall-ink-2`}><Bug size={18} /></button>
         )}
@@ -230,11 +234,16 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
 
       {saying && !reporting ? (
         <div className="flex flex-1 flex-col gap-[4px] overflow-y-auto overscroll-contain px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[14px]">
-          <div className="text-phone-detail text-wall-ink-2">Say it however you like — these are just the ideas. Ask “Casa, what can you do?” to hear a few.</div>
+          <div className="text-phone-detail text-wall-ink-2">Say it however you like — these are just ideas. Say “what can I say?” any time to see them again.</div>
           {tipsByTopic().map((g) => (
             <section key={g.topic} aria-label={g.topic} className="flex flex-col">
               <h2 className="m-0 mt-[12px] pb-[6px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">{g.topic.toUpperCase()}</h2>
-              {g.tips.map((t) => <div key={t.id} className="border-0 border-t border-solid border-wall-stone py-[8px] text-phone-body text-wall-ink">{t.text}</div>)}
+              {g.tips.map((t) => (
+                <div key={t.id} className="border-0 border-t border-solid border-wall-stone py-[8px] text-phone-body text-wall-ink">
+                  {t.text}
+                  {isNewTip(t) && <span className="ml-[6px] text-phone-label font-bold tracking-[0.14em] text-wall-brass-ink">NEW</span>}
+                </div>
+              ))}
             </section>
           ))}
         </div>

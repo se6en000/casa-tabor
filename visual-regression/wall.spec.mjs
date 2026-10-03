@@ -734,23 +734,48 @@ test('wall: Coming up with a long list — nothing runs under the week strip; "N
   await expect(page.getByText('EDS Air Conditioning Appointment')).toBeVisible()
 })
 
-// Tips while Casa thinks (board 07e): one fitting tip under THINKING; "What can I say?" lists them by topic.
-test('wall assistant: while Casa thinks, a tip that fits the question; "What can I say?" lists the rest (board 07e)', async ({ page }) => {
+// Tips while Casa thinks (board 07e): one fitting tip under THINKING. "What can I say?" is said, not tapped (Jake, Oct 3:
+// "can we remove what can I say?, If I say that then please show me the screen but I dont need a button").
+test('wall assistant: while Casa thinks, a tip that fits the question; saying "what can I say?" shows the whole list', async ({ page }) => {
   await band(page, 'thinking')
   const section = page.getByRole('region', { name: 'Assistant' })
-  // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
-  await section.getByRole('button', { name: 'Stop listening' }).click()
   await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
   await expect(section.getByText(/^Tip: /)).toBeVisible()
-  await expect(section.getByText(/gift idea/i).first()).toBeVisible()
+  await expect(section.getByText(/Gift idea for Kelly/).first()).toBeVisible()
+  await expect(section.getByRole('button', { name: 'What can I say?' })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-thinking-tip.png')
-  await section.getByRole('button', { name: 'What can I say?' }).click()
-  for (const topic of ['CALENDAR', 'COMING UP', 'GIFT IDEAS', 'GROCERIES & RECIPES', 'TALKING TO CASA']) await expect(section.getByText(topic, { exact: true })).toBeVisible()
-  await expect(section.getByText(/Any spirit day, give me 5 days/)).toBeVisible()
+})
+
+test('wall assistant: "what can I say?" opens the list without asking Casa; new things are marked; a tap closes it', async ({ page }) => {
+  await band(page, 'empty')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await mic(page, () => window.__mic.say('what can I say'))
+  for (const topic of ['CALENDAR', 'WHO’S DRIVING', 'TRIPS', 'GROCERIES', 'TO DO & PLANS', 'REMEMBER', 'COMING UP', 'EMAIL', 'GETTING AROUND', 'TALKING TO CASA']) await expect(section.getByText(topic, { exact: true })).toBeVisible()
+  await expect(section.getByText(/Giselle’s watching Owen 1:30 to 3:30 today/)).toBeVisible()
+  await expect(section.getByText('NEW', { exact: true }).first()).toBeVisible()
+  expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0) // not a question for Casa
+  await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-what-can-i-say.png')
-  await section.getByRole('button', { name: 'Close the list' }).click()
-  await expect(section.getByText(/^Tip: /)).toBeVisible()
+  await section.getByRole('button', { name: /tap to close/ }).click()
+  await expect(section.getByText('TRIPS', { exact: true })).toHaveCount(0)
+})
+
+// The quiet line (Jake, Oct 3: "any tips.. should be VERY subtle"; "dont hide tips after I use them"): a moment after the
+// mic opens with nothing said, one example; gone as you speak; and they never retire.
+test('wall assistant: a quiet tip after a moment of silence, gone when you speak; tips never retire', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  await page.evaluate(() => localStorage.setItem('casa-tip-usage', JSON.stringify({ 'gift-save': 9, 'cal-natural': 9 })))
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=empty&idleTip=1')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await expect(section.getByText(/^Tip: /)).toHaveCount(0)
+  await expect(section.getByText(/^Tip: “/)).toBeVisible({ timeout: 4000 })
+  await mic(page, () => window.__mic.hear('can you'))
+  await expect(section.getByText(/^Tip: /)).toHaveCount(0)
+  const { pickTip } = await import('../supabase/functions/_shared/casa-tips.mjs')
+  expect(pickTip({ question: 'birthday present for Kelly', seed: 0 }).id).toBe('gift-save') // used nine times, still offered
 })
 
 // P3.25 phase 1: while Casa looks things up for a longer think, the band says what it's doing
@@ -765,17 +790,6 @@ test('wall assistant: while Casa looks something up, the band says what (the liv
   await expect(section.getByText(/^Tip: /)).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-looking-up.png')
-})
-
-test('wall assistant: a tip retires once its ability has been used twice', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
-  await page.evaluate(() => localStorage.setItem('casa-tip-usage', JSON.stringify({ 'gift-save': 2, 'gift-list': 2 })))
-  await band(page, 'thinking')
-  const section = page.getByRole('region', { name: 'Assistant' })
-  // Live, the mic pauses once a question is sent; the fixture opens listening, so pause it.
-  await section.getByRole('button', { name: 'Stop listening' }).click()
-  await expect(section.getByText(/^Tip: /)).toBeVisible()
-  await expect(section.getByText(/gift idea/i)).toHaveCount(0)
 })
 
 // Jake, 2026-09-27: "when the AI is open in dark mode … very little differentiation between the AI

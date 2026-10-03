@@ -26,7 +26,7 @@ import WallAssistantCard from './WallAssistantCard'
 import { WallPlanAgree, WallPlanDraft, WallPlanSaved } from './WallPlan'
 import { withDependents, type PlanArgs, type PlanOpen } from './plan'
 import { pigmentStyleFor } from './lanes'
-import { noteSaid, tipFor, tipsByTopic } from './tips'
+import { asksForTips, isNewTip, noteSaid, tipFor, tipsByTopic } from './tips'
 import WallTypeLine, { type WallTypeLineHandle } from './WallTypeLine'
 import type { TypedImage } from './typeLine'
 
@@ -259,6 +259,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       if (!step.toSend) return
       setInterim('')
       setNote(null)
+      // "What can I say?" (Jake, Oct 3: "If I say that then please show me the screen but I dont need a button"): the
+      // list, at once, without asking Casa; the mic stays open.
+      if (asksForTips(step.toSend)) { setSayOpen(true); return }
       if (workingRef.current) {
         heldWhileSaving.current = [heldWhileSaving.current, step.toSend].filter(Boolean).join(' ')
         return
@@ -418,6 +421,17 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     setSayOpen(false)
   }, [question])
   const tip = useMemo(() => (state === 'THINKING' ? tipFor(question ?? null, messages.length) : null), [state, question, messages.length])
+  // The quiet line while the mic waits: two seconds of quiet in a window, then one example (each window a different one).
+  const [idleFor, setIdleFor] = useState(0)
+  useEffect(() => {
+    if (!live || interim || !windowFrom) return
+    const t = window.setTimeout(() => setIdleFor(windowFrom), 2000)
+    return () => window.clearTimeout(t)
+  }, [live, interim, windowFrom])
+  // Each window a different one, in turn (steady, so a screenshot is the same each time); the screenshot fixture shows it
+  // only where a test asks (`?idleTip=1`), since it comes after two seconds of real time.
+  const idleTipAllowed = import.meta.env.VITE_VISUAL_TEST_MODE !== 'true' || new URLSearchParams(window.location.search).get('idleTip') === '1'
+  const idleTip = idleTipAllowed && live && !interim && !sayOpen && windowFrom > 0 && idleFor === windowFrom ? tipFor(null, messages.length + (windowFrom ? 1 : 0)) : null
 
   // The LED strip (P3.14): what the band is doing, and a card's outcome as a warm or rust swell.
   const micOpen = live
@@ -757,6 +771,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               initialText={staged?.text ?? ''}
               initialImages={staged?.images ?? []}
               onSend={(text, images) => {
+                if (!images.length && asksForTips(text)) { setSayOpen(true); return }
                 stopRef.current()
                 setNote(null)
                 void send(text, images.length ? images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
@@ -929,22 +944,22 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         </div>
       ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
-        <div className="flex items-center justify-between gap-[24px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY?' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : !micOn && state !== 'LISTENING' ? 'TYPE OR PASTE' : listenerV2 ? '' : 'LISTENING'}</div>
-          <button type="button" aria-pressed={sayOpen} onClick={() => setSayOpen((open) => !open)} className="flex h-[48px] shrink-0 items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment">
-            <span aria-hidden="true" className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-night-brass text-wall-label font-bold text-wall-night-brass">?</span>
-            {sayOpen ? 'Close the list' : 'What can I say?'}
-          </button>
-        </div>
+        {/* No button for the list (Jake, Oct 3): saying "what can I say?" opens it; a tap, or the next question, closes it. */}
+        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{sayOpen ? 'WHAT CAN I SAY? · SAY IT ANY WAY YOU LIKE · TAP TO CLOSE' : shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : !micOn && state !== 'LISTENING' ? 'TYPE OR PASTE' : listenerV2 ? '' : 'LISTENING'}</div>
         {sayOpen ? (
-          <div className="grid grid-cols-5 gap-[28px]">
+          <button type="button" aria-label="What can I say — tap to close" onClick={() => setSayOpen(false)} className="grid grid-cols-5 gap-x-[28px] gap-y-[22px] border-0 bg-transparent p-0 text-left">
             {tipsByTopic().map((g) => (
-              <div key={g.topic} className="flex flex-col gap-[10px]">
-                <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{g.topic.toUpperCase()}</div>
-                {g.tips.map((t) => <div key={t.id} className="text-wall-detail text-wall-night-ink-2">{t.text}</div>)}
-              </div>
+              <span key={g.topic} className="flex flex-col gap-[8px]">
+                <span className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{g.topic.toUpperCase()}</span>
+                {g.tips.map((t) => (
+                  <span key={t.id} className="text-wall-detail text-wall-night-ink-2">
+                    {t.text}
+                    {isNewTip(t) && <span className="ml-[8px] text-wall-label font-bold tracking-[0.14em] text-wall-night-brass">NEW</span>}
+                  </span>
+                ))}
+              </span>
             ))}
-          </div>
+          </button>
         ) : (
         <>
         <div className="font-display text-wall-quote font-medium italic">
@@ -1016,7 +1031,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           // One quiet line, no card: the question stays the focus (Jake, 2026-09-27; board 07e).
           <div className="mt-auto max-w-[1180px] text-wall-detail text-wall-night-ink-2/70">Tip: {tip}</div>
         ) : (
-        <div className="mt-auto flex gap-[14px]">
+        <div className="mt-auto flex flex-col gap-[12px]">
+        {/* While the mic waits for you (Jake, Oct 3: "any tips.. should be VERY subtle"): one quiet example, after a moment
+            of quiet, gone as you speak; a different one each time. */}
+        {idleTip && <div className="max-w-[1180px] text-wall-detail text-wall-night-ink-2/60">Tip: {idleTip}</div>}
+        <div className="flex gap-[14px]">
           {offer && (
             <button type="button" className={lightPill} disabled={loading} onClick={() => { setNote(null); void send(offer.say) }}>
               {offer.label}
@@ -1038,6 +1057,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           <button type="button" className={pill} onClick={onClose}>
             Done
           </button>
+        </div>
         </div>
         )}
         </>

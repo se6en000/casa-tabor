@@ -9,6 +9,7 @@ import { useSpeechInput } from '../hooks/useSpeechInput'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
 import { answerDay, cardText, firstTime, nextStep, voiceFinal, whichOne } from '../wall/assistant'
+import { asksForTips } from '../wall/tips'
 import { assistantCard, replacedAction } from '../wall/assistantCard'
 import type { DayPlan, WallEvent, WallMember } from '../wall/engine/types'
 import { pigmentIndexes } from '../wall/score'
@@ -94,6 +95,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   const which = pending || loading ? null : whichOne(answer, events as never)
   const offer = pending || which || answer?.streaming ? null : nextStep(answer)
   const [interim, setInterim] = useState('')
+  // "What can I say?" said out loud: the list opens (no button for it).
+  const [showList, setShowList] = useState(0)
   const captured = useRef('')
   const heard = useRef('')
   const stopRef = useRef<() => void>(() => {})
@@ -110,8 +113,9 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       if (!step.toSend) return
       setInterim('')
       setNote(null)
-      void send(step.toSend)
       stopRef.current()
+      if (asksForTips(step.toSend)) { setShowList((n) => n + 1); return }
+      void send(step.toSend)
     },
     onDismiss: () => stopRef.current(),
     // A plan's spoken yes opens its Agree sheet first (board 12c).
@@ -152,6 +156,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       glance={glance ? { holding, onExpand: glance.onExpand } : undefined}
       onForm={onForm}
       onScan={onScan}
+      showList={showList}
       planSlot={plan ? <PhonePlanCard plan={plan} previous={previousPlan} working={working} onSetUp={() => setAgreeOpen(true)} /> : answer?.emailReview && email.data ? <PhoneEmailReview data={email.data} act={email.act} /> : null}
       lines={lines}
       thinking={thinking}

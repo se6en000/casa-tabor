@@ -133,7 +133,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   if (pending?.tool === 'apply_plan') sections.push(`ON SCREEN, THE PLAN, NOT SAVED YET: ${describePlan(pending.args, utcOffset)}\nA change he asks for: call set_plan again with the whole plan, changed.`)
   else if (pending) sections.push(`ON SCREEN, WAITING FOR A YES: ${describeDraft(pending, utcOffset)} — a follow-up about it changes this same card (call the same tool again with the whole corrected item).`)
   // "Casa, what can you do?" (P3.19 3c): the same list as the tips and "What can I say?".
-  sections.push(`WHAT YOU CAN DO (asked what you can do or what to say: two or three short examples from different topics, then that "What can I say?" on the screen lists them all):\n${tipsByTopic().map((g) => `${g.topic}: ${g.tips.map((t) => t.text).join(' | ')}`).join('\n')}`)
+  sections.push(`WHAT YOU CAN DO (asked what you can do or what to say: two or three short examples from different topics, then that saying "what can I say?" shows them all on the screen):\n${tipsByTopic().map((g) => `${g.topic}: ${g.tips.map((t) => t.text).join(' | ')}`).join('\n')}`)
   if (onScreenIds?.length) sections.push(`JUST DISCUSSED (in the order you named them): ${onScreenIds.map((id) => `[${id}]`).join(', ')}`)
   return sections.join('\n\n')
 }
