@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent } from '../wall/engine/types'
 import { useProfileSession } from '../contexts/useProfileSession'
@@ -27,6 +27,7 @@ import { useCasaTalk } from '../wall/useCasaTalk'
 import { usePhoneGroceries } from './usePhoneGroceries'
 import { useQuery } from '@tanstack/react-query'
 import type { PastPlace } from './drafts'
+import { primePermissionsOnLaunch } from './permissionsPrime'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 /** What's already on the calendar on the scanned days: one read for the whole span, matched in the app. */
@@ -66,6 +67,8 @@ function usePhoneMonth(month: Date): WallEvent[] {
 
 export default function PhoneFrame() {
   const { profile, signOut } = useProfileSession()
+  // The mic and location asked for at launch, so the first talk to Casa isn't held up by iPhone's question (Oct 3).
+  useEffect(() => primePermissionsOnLaunch(), [])
   // Something saved behind the screen that didn't take (an instant edit): said once, then gone.
   const [notice, setNotice] = useState<string | null>(null)
   // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
