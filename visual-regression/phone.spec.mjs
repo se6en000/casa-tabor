@@ -321,6 +321,23 @@ test('phone: Ask Casa — "which one?" as tiles, the change kept; a tap answers 
   await expect(ask.getByText('Your change is kept: → 5:00 PM')).toHaveCount(0)
 })
 
+// "Which one?" before the yes (Jake, Oct 2: "Go for which one"): the places Casa found, each with its full address;
+// a tap puts it on the card with that address, and the yes saves it.
+test('phone: Ask Casa — not sure of the place, the card asks which one before the yes', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'which-place')
+  const card = ask.getByLabel('Draft')
+  await expect(card.getByText('Not sure which one — tap it:')).toBeVisible()
+  const which = card.getByRole('group', { name: 'Which one?' })
+  await expect(which.getByRole('button')).toHaveCount(2)
+  await expect(phone).toHaveScreenshot('phone-ask-which-place.png')
+  await which.getByRole('button', { name: /Amped Fitness Signature, 2771 S Dixie Hwy/ }).click()
+  await expect(card.getByRole('group', { name: 'Which one?' })).toHaveCount(0)
+  await expect(card.getByText('Amped Fitness Signature', { exact: true })).toBeVisible()
+  await expect(card.getByText('2771 S Dixie Hwy, West Palm Beach, FL 33405')).toBeVisible()
+  await card.getByRole('button', { name: 'Yes, add it' }).click()
+  await expect(ask.getByRole('button', { name: 'Open it' })).toBeVisible()
+})
+
 test('phone: Ask Casa — an answer that offers something gets a one-tap yes', async ({ page }) => {
   const { ask } = await askScene(page, 'answer')
   await ask.getByRole('button', { name: 'Yes, do that' }).click()
@@ -792,6 +809,58 @@ test('phone: Groceries — by aisle with the amount by the name; ticks wait, the
   await expect(add.getByText(/Added eggs.*was on already/i)).toBeVisible()
   await expect(list.getByRole('button', { name: /^eggs$/i })).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-groceries-add.png')
+})
+
+// Jake, Oct 2: "a voice fast lane to add to the grocery list when we are on the grocery tab via holding the + button
+// down". Held, it listens and shows the words; let go and they're on the list — no Casa, no card. Slide left cancels.
+test('phone: Groceries — hold + and say it: on the list when you let go; slide left cancels', async ({ page }) => {
+  // The phone's recognizer, played: the words come in as they're said.
+  await page.addInitScript(() => {
+    window.__say = 'paper towels and eggs'
+    window.webkitSpeechRecognition = class {
+      start() {
+        const words = window.__say
+        const result = (text, isFinal) => { const r = [{ transcript: text }]; r.isFinal = isFinal; return r }
+        this.t1 = setTimeout(() => this.onresult?.({ resultIndex: 0, results: [result(words.split(' ').slice(0, 2).join(' '), false)] }), 80)
+        this.t2 = setTimeout(() => this.onresult?.({ resultIndex: 0, results: [result(words, true)] }), 200)
+      }
+      stop() { clearTimeout(this.t1); clearTimeout(this.t2) }
+      abort() { this.stop() }
+    }
+    window.SpeechRecognition = window.webkitSpeechRecognition
+  })
+  const phone = await open(page, '2026-09-25T10:45:00')
+  await phone.getByRole('button', { name: 'Groceries' }).click()
+  const list = phone.getByRole('region', { name: 'Groceries' })
+  const plus = phone.getByRole('button', { name: 'Add to groceries', exact: true })
+  const box = await plus.boundingBox()
+  const at = [box.x + box.width / 2, box.y + box.height / 2]
+  await page.mouse.move(...at)
+  await page.mouse.down()
+  const listening = phone.getByRole('region', { name: 'Listening for groceries' })
+  await expect(listening.getByText('paper towels and eggs')).toBeVisible()
+  await expect(plus).toHaveAttribute('data-active', 'true')
+  await expect(phone).toHaveScreenshot('phone-groceries-voice.png')
+  await page.mouse.up()
+  await expect(phone.getByRole('status', { name: 'Added by voice' })).toHaveText(/Added paper towels, eggs/i)
+  await expect(list.getByRole('button', { name: /^paper towels$/i })).toBeVisible()
+  await expect(list.getByRole('button', { name: /^eggs$/i })).toBeVisible()
+  await expect(phone.getByRole('region', { name: 'Add to groceries' })).toHaveCount(0) // no sheet, no card
+
+  // Slide left while held: nothing is added.
+  await page.evaluate(() => { window.__say = 'cookies' })
+  await page.mouse.move(...at)
+  await page.mouse.down()
+  await expect(listening.getByText('cookies')).toBeVisible()
+  await page.mouse.move(at[0] - 120, at[1], { steps: 6 })
+  await page.mouse.up()
+  await expect(listening).toHaveCount(0)
+  await page.waitForTimeout(600)
+  await expect(list.getByRole('button', { name: /^cookies$/i })).toHaveCount(0)
+
+  // A quick tap is still the add sheet.
+  await plus.click()
+  await expect(phone.getByRole('region', { name: 'Add to groceries' })).toBeVisible()
 })
 
 // Jake's iPhone, Oct 2 (phone_keyboard, "Ask Casa"): the keyboard took the conversation from 693 to 280 pt and it kept

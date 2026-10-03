@@ -820,7 +820,11 @@ Deno.serve(async (req) => {
       let resolvedAddress: string | null = null
       let resolvedLat: number | null = null
       let resolvedLng: number | null = null
-      if (normalizedLocation && similarPlacesPromise) {
+      // The place on the card when they said yes — found before the yes, or picked from "Which one?" (Jake, Oct 2):
+      // saved with the address they saw.
+      const shownAddress = normalizeOptionalText(args.address, 300)
+      if (normalizedLocation && shownAddress) resolvedAddress = shownAddress
+      if (normalizedLocation && similarPlacesPromise && !shownAddress) {
         const { data: similarPlaces } = await similarPlacesPromise
         const matchedPlace = pickBestDirectoryMatch(similarPlaces)
         if (matchedPlace) {

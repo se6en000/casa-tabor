@@ -10,7 +10,7 @@ import { pigmentStyleFor } from '../wall/lanes'
 
 const label = 'text-phone-label font-bold tracking-[0.12em] text-wall-ink-2'
 
-export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPickDriver }: {
+export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPickDriver, onPickPlace }: {
   card: AssistantCard
   members: WallMember[]
   pigmentOf: (memberId: string) => number | null
@@ -18,7 +18,10 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
   onYes: () => void
   onNo: () => void
   onPickDriver?: (name: string) => void
+  /** "Which one?" (Jake, Oct 2): the place picked here is saved with its address. */
+  onPickPlace?: (place: { name: string; address: string }) => void
 }) {
+  const choices = onPickPlace ? card.placeChoices : []
   const people = card.peopleIds.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean)
   const title = people.length > 0 && !card.title.toLowerCase().includes(String(people[0]).toLowerCase()) ? `${card.title} · ${people.join(' & ')}` : card.title
   const view = laneView(card)
@@ -61,7 +64,23 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
       <div className="grid grid-cols-2 gap-x-[12px] gap-y-[8px] text-phone-detail">
         <div><div className={label}>WHEN</div>{card.when}</div>
         <div><div className={label}>LEAVE BY</div>{card.leaveBy ? `${card.leaveBy}${card.leavesFrom ? ' · from pickup' : ''}` : card.place ? 'Drive not known yet' : 'No drive'}</div>
-        <div className="col-span-2"><div className={label}>WHERE</div>{card.place ?? 'No place yet'}</div>
+        <div className="col-span-2">
+          <div className={label}>WHERE</div>
+          <div>{card.place ?? 'No place yet'}</div>
+          {card.address && card.address !== card.place && <div className="text-wall-ink-2">{card.address}</div>}
+          {!card.address && choices.length > 0 && onPickPlace && (
+            <div role="group" aria-label="Which one?" className="mt-[6px] flex flex-col gap-[6px]">
+              <div className="text-wall-ink-2">Not sure which one — tap it:</div>
+              {choices.map((c) => (
+                <button key={`${c.name}|${c.address}`} type="button" disabled={working} aria-label={`${c.name}, ${c.address}`} onClick={() => onPickPlace(c)}
+                  className="flex min-h-[52px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-transparent px-[12px] py-[8px] text-left text-wall-ink">
+                  <span className="text-phone-detail font-semibold">{c.name}</span>
+                  <span className="text-phone-detail text-wall-ink-2">{c.address}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {drivers && (
           <div className="col-span-2">
             <div className={label}>WHO DRIVES</div>

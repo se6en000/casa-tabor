@@ -133,6 +133,7 @@ import { shouldRetryTransientLlmStatus } from '../_shared/assistant-llm-retry.mj
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
 import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared/assistant-request-safety.mjs'
 import { groceryAddedText, saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import { draftPlace } from '../_shared/event-place-resolution.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 import {
@@ -1244,6 +1245,32 @@ Deno.serve(async (req) => {
     const reminder = args.event_type === 'reminder'
     return { ...args, ...(d.people.length ? { members: d.people } : {}), ...(d.driver && !reminder && args.all_day !== true ? { driver_name: d.driver } : {}) }
   }
+  // Where the place is, before the yes (Jake, Oct 2: "Go for which one"): a sure place comes with its address, a
+  // not-sure one with up to three choices to pick from on the card ("Which one?"); no idea keeps the name as said.
+  // Never holds the card up for long: past 2.5 s the card comes without it, and the event page asks after the save.
+  const withPlace = async (tool: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const query = typeof args.location === 'string' ? args.location.trim() : ''
+    if (tool !== 'create_event' || !query || (typeof args.address === 'string' && args.address.trim())) return args
+    const look = async () => {
+      const [{ data: home }, { data: saved }, { data: fam }] = await Promise.all([
+        sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+        sb.from('saved_places').select('name, aliases, address, city, state, zip').eq('confirmed', true).limit(300),
+        sb.from('family_members').select('id, name'),
+      ])
+      const going = new Set((Array.isArray(args.members) ? args.members : []).map((n) => String(n).trim().toLowerCase()))
+      const memberIds = ((fam ?? []) as Array<{ id: string; name: string }>).filter((m) => going.has(m.name.toLowerCase())).map((m) => m.id)
+      return await draftPlace(sb, { query, homeConfig: home?.value ?? null, savedPlaces: saved ?? [], memberIds }) as { name: string; address: string } | { choices: Array<{ name: string; address: string }> } | null
+    }
+    try {
+      const place = await Promise.race([look(), new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))])
+      if (!place) return args
+      if ('choices' in place) return { ...args, place_choices: place.choices }
+      return { ...args, location: place.name, address: place.address }
+    } catch {
+      return args
+    }
+  }
+  const fillCard = async (tool: string, args: Record<string, unknown>) => withPlace(tool, await withWho(tool, args))
   const runFullAi = async (buildDisplayText: (tool: string, args: Record<string, unknown>) => string, handBack = false, startPlanning = false): Promise<{ status: number; payload: Record<string, unknown> } | null> => {
     const config = await loadLlmConfig(sb)
     const apiKey = String(config?.api_key ?? '')
@@ -1542,10 +1569,10 @@ Deno.serve(async (req) => {
       }
       if (cards.length > 1) {
         // Several changes at once (a flyer with three dates): one batch, each still needing a yes.
-        const filled = await Promise.all(cards.map(async (c) => ({ tool: c.tool, args: await withWho(c.tool, c.args) })))
+        const filled = await Promise.all(cards.map(async (c) => ({ tool: c.tool, args: await fillCard(c.tool, c.args) })))
         return { status: 200, payload: { type: 'tool_action_batch', actions: filled.map((c, i) => ({ id: `full-ai-${i}`, status: 'proposed', tool: c.tool, args: c.args, display_text: `${i === 0 && alreadyNote ? `${alreadyNote} ` : ''}${buildDisplayText(c.tool, c.args)}` })), semantic_intent: 'full_ai.batch', correlation_id: cid } }
       }
-      const card = { tool: cards[0].tool, args: await withWho(cards[0].tool, cards[0].args) }
+      const card = { tool: cards[0].tool, args: await fillCard(cards[0].tool, cards[0].args) }
       const about = events.find((e) => e.id === card.args.id) ?? null
       // A plan (P3.25 phase 3) comes with what the planning model said about it, shown above the draft.
       const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
@@ -1640,7 +1667,7 @@ Deno.serve(async (req) => {
   }
   if (turnContext?.card) {
     const { tool, about, note } = turnContext.card
-    const args = await withWho(tool, turnContext.card.args)
+    const args = await fillCard(tool, turnContext.card.args)
     return {
       status: 200,
       payload: {

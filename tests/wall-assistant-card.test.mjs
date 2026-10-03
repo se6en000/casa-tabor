@@ -102,3 +102,16 @@ test('the lane preview: a window from 8 AM that takes in the day, the draft mark
   assert.equal(view.label, '4:00 Dentist')
   assert.equal(laneView({ ...card, allDay: true }), null)
 })
+
+// "Which one?" before the yes (Jake, Oct 2): the card shows the address it found, or the places to pick from.
+test('the card carries the address it found, or the places to pick from', () => {
+  const sure = assistantCard(add({ location: 'Smile Dental', address: '1 Tooth St, West Palm Beach, FL' }), null, ctx())
+  assert.equal(sure.place, 'Smile Dental')
+  assert.equal(sure.address, '1 Tooth St, West Palm Beach, FL')
+  assert.deepEqual(sure.placeChoices, [])
+  const choices = [{ name: 'Amped Fitness Signature', address: '2771 S Dixie Hwy, West Palm Beach, FL' }, { name: 'Amped Fitness', address: '3101 PGA Blvd, Palm Beach Gardens, FL' }]
+  const unsure = assistantCard(add({ location: 'Amped Fitness', place_choices: choices }), null, ctx())
+  assert.equal(unsure.address, null)
+  assert.deepEqual(unsure.placeChoices, choices)
+  assert.deepEqual(assistantCard(add({ location: 'Amped Fitness', place_choices: null }), null, ctx()).placeChoices, [])
+})

@@ -7,6 +7,7 @@ import {
   findSavedEventPlace,
   findUsualPlace,
   isGenericPlace,
+  homeCoordinates,
   placeConfidence,
 } from '../_shared/event-place-resolution.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
@@ -24,19 +25,6 @@ interface ResolvedDestination {
   lat: number | null
   lng: number | null
   source: 'saved_place' | 'google_places' | 'usual_place'
-}
-
-/** Home's coordinates, looked up once per run of this function: searches are made around home. */
-let homeCoordsCache: { key: string; value: { lat: number; lng: number } | null } | null = null
-async function homeCoordinates(sb: ReturnType<typeof createClient>, homeConfig: { address?: string; city?: string; state?: string; zip?: string } | null) {
-  const address = homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : ''
-  if (!address) return null
-  if (homeCoordsCache?.key === address) return homeCoordsCache.value
-  const res = await sb.functions.invoke('place-search', { body: { query: address } })
-  const first = (res.data as { places?: Array<{ lat?: number; lng?: number }> } | null)?.places?.[0]
-  const value = first && Number.isFinite(first.lat) && Number.isFinite(first.lng) ? { lat: first.lat as number, lng: first.lng as number } : null
-  homeCoordsCache = { key: address, value }
-  return value
 }
 
 const CORS = {

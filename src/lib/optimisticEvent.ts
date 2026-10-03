@@ -38,7 +38,7 @@ export function optimisticEvent(id: string, args: Record<string, unknown>, famil
     has_due_date: true,
     event_type: args.event_type === 'reminder' ? 'reminder' : 'event',
     location_name: location,
-    address: null,
+    address: typeof args.address === 'string' && args.address.trim() ? args.address.trim() : null,
     lat: null,
     lng: null,
     status: 'confirmed',

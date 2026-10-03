@@ -22,13 +22,44 @@ export interface PhoneGroceriesData {
   move?: (id: string, category: string) => Promise<void> | void
 }
 
+/** The + held on Groceries: listening while held; let go adds what was said, slid off cancels. */
+export interface GroceryVoice {
+  holding: boolean
+  cancelled: boolean
+}
+
+/** A moment after letting go for the last word to land before what was heard is added. */
+export const SETTLE_MS = 350
+
+/**
+ * Put what was typed or said on the list: each new one added (in its aisle), one already got un-ticked, one already on
+ * it left be. All at once — each shows straight away and saves behind. Says what happened ("Added milk, eggs").
+ */
+function addSaid(data: PhoneGroceriesData, value: string, spoken: boolean): { said: string; saving: Promise<unknown> } | null {
+  const plan = planAdds(value, data.items, { spoken })
+  if (plan.length === 0) return null
+  const added: string[] = []
+  const already: string[] = []
+  const saving: Array<Promise<void> | void> = []
+  for (const p of plan) {
+    if (p.kind === 'new') { saving.push(data.add(p)); added.push(p.name) }
+    else if (p.kind === 'again') { saving.push(data.tick(p.id, false)); added.push(p.name) }
+    else already.push(p.name)
+  }
+  haptic()
+  return {
+    said: [added.length ? `Added ${added.join(', ')}` : '', already.length ? `${already.join(', ')} ${already.length > 1 ? 'were' : 'was'} on already` : ''].filter(Boolean).join(' · '),
+    saving: Promise.all(saving),
+  }
+}
+
 /** How long a press is before it lifts the item to move (a tap ticks it). */
 export const LIFT_MS = 450
 
 /** How long ticked items stay in place after the last tick. */
 export const HOLD_MS = 2500
 
-export default function PhoneGroceries({ data, onBack, adding, setAdding, corner }: {
+export default function PhoneGroceries({ data, onBack, adding, setAdding, corner, voice = null, onVoiceDone }: {
   data: PhoneGroceriesData
   /** Top right of the title: your initial, on the tab. */
   corner?: ReactNode
@@ -36,7 +67,18 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
   onBack?: () => void
   adding: boolean
   setAdding: (open: boolean) => void
+  /** Hold + to say it (the tab bar's button): listening while held. */
+  voice?: GroceryVoice | null
+  onVoiceDone?: () => void
 }) {
+  const [voiceSaid, setVoiceSaid] = useState<string | null>(null)
+  const voiceTimer = useRef<number | null>(null)
+  useEffect(() => () => { if (voiceTimer.current) window.clearTimeout(voiceTimer.current) }, [])
+  const showVoiceSaid = (text: string) => {
+    setVoiceSaid(text)
+    if (voiceTimer.current) window.clearTimeout(voiceTimer.current)
+    voiceTimer.current = window.setTimeout(() => setVoiceSaid(null), 3500)
+  }
   const [held, setHeld] = useState<Set<string>>(() => new Set())
   const [showDone, setShowDone] = useState(false)
   const timer = useRef<number | null>(null)
@@ -180,6 +222,24 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         </button>
       )}
       {adding && <GroceryAdd data={data} onClose={() => setAdding(false)} />}
+      {voice && (
+        <VoiceAdd
+          voice={voice}
+          onHeard={(text) => {
+            const done = text.trim() ? addSaid(data, text, true) : null
+            showVoiceSaid(done ? done.said : 'Didn’t catch that. Hold + and say it again.')
+            void done?.saving.catch(() => showVoiceSaid('Some of that didn’t save. Try adding it again.'))
+            onVoiceDone?.()
+          }}
+          onCancelled={() => onVoiceDone?.()}
+          onCantListen={() => { onVoiceDone?.(); setAdding(true) }}
+        />
+      )}
+      {voiceSaid && !voice && (
+        <div role="status" aria-label="Added by voice" className="pointer-events-none absolute bottom-[104px] left-[16px] right-[16px] z-30 rounded-[16px] bg-wall-ink px-[16px] py-[12px] text-center text-phone-body font-semibold text-wall-on-pigment shadow-[0_6px_18px_rgba(38,34,29,0.3)]">
+          {voiceSaid}
+        </div>
+      )}
       {lifted && (
         <section aria-label={`Move ${lifted.name}`} className="phone-sheet absolute inset-x-0 bottom-0 z-40 flex flex-col gap-[10px] rounded-t-[22px] bg-phone-ground px-[16px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))] pt-[12px] shadow-[0_-12px_40px_rgba(38,34,29,0.2)]">
           <div className="flex items-center justify-between gap-[10px]">
@@ -211,21 +271,11 @@ function GroceryAdd({ data, onClose }: { data: PhoneGroceriesData; onClose: () =
   useEffect(() => { input.current?.focus() }, [])
   const swipe = useSheetSwipe(onClose)
   const submit = async (value: string, spoken = false) => {
-    const plan = planAdds(value, data.items, { spoken })
-    if (plan.length === 0) return
+    const done = addSaid(data, value, spoken)
+    if (!done) return
     setText('')
-    const added: string[] = []
-    const already: string[] = []
-    // All at once: each is on the list straight away and saves behind (a failed one says so).
-    const saving: Array<Promise<void> | void> = []
-    for (const p of plan) {
-      if (p.kind === 'new') { saving.push(data.add(p)); added.push(p.name) }
-      else if (p.kind === 'again') { saving.push(data.tick(p.id, false)); added.push(p.name) }
-      else already.push(p.name)
-    }
-    void Promise.all(saving).catch(() => setSaid('Some of that didn’t save. Try adding it again.'))
-    haptic()
-    setSaid([added.length ? `Added ${added.join(', ')}` : '', already.length ? `${already.join(', ')} ${already.length > 1 ? 'were' : 'was'} on already` : ''].filter(Boolean).join(' · '))
+    void done.saving.catch(() => setSaid('Some of that didn’t save. Try adding it again.'))
+    setSaid(done.said)
   }
   const dictation = useFieldDictation({ onText: setText, onComplete: (full) => void submit(full, true) })
   const chips = data.usual.filter((n) => !planAdds(n, data.items).every((p) => p.kind === 'already')).slice(0, 8)
@@ -267,5 +317,57 @@ function GroceryAdd({ data, onClose }: { data: PhoneGroceriesData; onClose: () =
         <div role="status" className="min-h-[18px] text-phone-detail text-wall-ink-2">{said || 'Type or say a few at once; each lands in its aisle.'}</div>
       </section>
     </div>
+  )
+}
+
+/**
+ * Hold + and say it (Jake, Oct 2: "a voice fast lane to add to the grocery list … via holding the + button down"):
+ * listening from the moment the hold starts, the words as they come; let go and they're on the list, no Casa, no card.
+ * Slide off to the left to cancel. Where the phone can't listen, the add sheet opens instead.
+ */
+const canListen = () => typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+
+function VoiceAdd({ voice, onHeard, onCancelled, onCantListen }: {
+  voice: GroceryVoice
+  onHeard: (text: string) => void
+  onCancelled: () => void
+  onCantListen: () => void
+}) {
+  const [words, setWords] = useState('')
+  const finished = useRef(false)
+  const heardRef = useRef(onHeard)
+  useEffect(() => { heardRef.current = onHeard })
+  const dictation = useFieldDictation({
+    onText: setWords,
+    webSpeechFirst: true,
+    onComplete: (full) => {
+      if (finished.current) return
+      finished.current = true
+      heardRef.current(full)
+    },
+  })
+  const { start, stop } = dictation
+  useEffect(() => {
+    if (!canListen()) { onCantListen(); return }
+    finished.current = false
+    start()
+    // Gone before letting go (or React's double run in development): what was heard is dropped.
+    return () => { finished.current = true; stop() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (voice.holding) return
+    if (voice.cancelled) { const was = finished.current; finished.current = true; stop(); if (!was) onCancelled(); return }
+    const t = window.setTimeout(() => stop(), SETTLE_MS)
+    return () => window.clearTimeout(t)
+  }, [voice.holding, voice.cancelled]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <section aria-label="Listening for groceries" className="phone-sheet absolute bottom-[100px] left-[12px] right-[12px] z-30 flex flex-col gap-[6px] rounded-[20px] bg-phone-ground px-[18px] py-[16px] shadow-[0_10px_34px_rgba(38,34,29,0.28)]">
+      <div className="flex items-center gap-[8px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
+        <Mic size={16} aria-hidden="true" />
+        {voice.holding ? 'LISTENING' : 'ADDING'}
+      </div>
+      <div className="min-h-[30px] font-display text-phone-heading font-semibold text-wall-ink">{words || 'Say what to add…'}</div>
+      <div className="text-phone-detail text-wall-ink-2">Let go to add · slide left to cancel</div>
+    </section>
   )
 }

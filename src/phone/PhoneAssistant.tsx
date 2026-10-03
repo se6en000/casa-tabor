@@ -217,6 +217,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
       onPickDriver={(name) => setPendingArgs({ driver_name: name })}
+      onPickPlace={(place) => setPendingArgs({ location: place.name, address: place.address, place_choices: null })}
     />
     {agreeOpen && plan && pending && (
       <PhonePlanAgree plan={plan} working={working} onBack={() => setAgreeOpen(false)}

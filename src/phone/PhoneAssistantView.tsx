@@ -48,6 +48,8 @@ export interface PhoneAssistantViewProps {
   offer?: { label: string; say: string } | null
   members?: WallMember[]
   pigmentOf?: (memberId: string) => number | null
+  /** "Which one?" on an add's card: the place picked. */
+  onPickPlace?: (place: { name: string; address: string }) => void
   /** A change can take a driver right on the card. */
   onPickDriver?: (name: string) => void
   /** A plan on screen (P3.25; board 12e): shown in the card's place. */
@@ -61,7 +63,7 @@ export interface PhoneAssistantViewProps {
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, planSlot = null, onForm, onScan, glance }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, onPickPlace, planSlot = null, onForm, onScan, glance }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -183,7 +185,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
           ) : null}
           {planSlot}
           {card ? (
-            <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />
+            <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} onPickPlace={onPickPlace} />
           ) : pending && (
             <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
               <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
@@ -293,7 +295,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
               </div>
             )}
             {planSlot ? planSlot : card ? (
-              <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />
+              <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} onPickPlace={onPickPlace} />
             ) : pending && (
               <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
                 <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>

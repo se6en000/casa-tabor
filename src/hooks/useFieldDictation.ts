@@ -39,16 +39,22 @@ export function useFieldDictation({
   onComplete,
   autoSubmitOnSilence = false,
   silenceTimeoutMs = DEFAULT_SILENCE_TIMEOUT_MS,
+  webSpeechFirst = false,
 }: {
   onText: (fullText: string) => void
   onFinal?: (fullText: string) => void
   onComplete?: (fullText: string) => void
   autoSubmitOnSilence?: boolean
   silenceTimeoutMs?: number
+  /** A phone: the browser's own recognizer straight away (the Pi's bridge is only on the kiosk). */
+  webSpeechFirst?: boolean
 }) {
   const [listening, setListening] = useState(false)
   const activeRef = useRef(false)
-  const modeRef = useRef<DictationMode>('unknown')
+  // A phone listens with the browser's own recognizer from the first word, rather than after a failed try at the bridge.
+  const modeRef = useRef<DictationMode>(
+    webSpeechFirst && typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) ? 'webspeech' : 'unknown',
+  )
   const baseRef = useRef('')
   const committedRef = useRef('')
   const utteranceIdRef = useRef('')

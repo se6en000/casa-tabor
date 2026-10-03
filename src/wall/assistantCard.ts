@@ -37,6 +37,10 @@ export interface AssistantCard {
   /** A change that moves the time: what it was ("12:00 – 1:00 PM"). */
   before: string | null
   place: string | null
+  /** The place's address when Casa found it before the yes; null when not known. */
+  address: string | null
+  /** Casa isn't sure which place (Jake, Oct 2: "Go for which one"): up to three to pick from on the card. */
+  placeChoices: Array<{ name: string; address: string }>
   peopleIds: string[]
   /** What the latest turn changed on the card: "3:30 → 4:00", "place added", "Liv added". */
   justChanged: string[]
@@ -90,7 +94,7 @@ function draftEvent(action: CardAction, ctx: CardContext): { event: EditableEven
         start_time: start,
         end_time: end,
         location_name: place,
-        address: place,
+        address: str(a.address) || place,
         members: people.map((id, i) => ({ family_member_id: id, role: i === 0 ? 'primary' : 'attendee' })),
         // Leave-by by the app's rule (drive + buffer), as the edit sheet and a saved event have it.
         ...(place && ctx.driveMinutes != null ? { enrichment: { drive_time_mins: ctx.driveMinutes, departure_time: a.all_day === true ? null : rescheduledDepartureIso(new Date(start), ctx.driveMinutes) } } : {}),
@@ -204,6 +208,10 @@ export function assistantCard(action: CardAction | null, previous: CardAction | 
       ? `${new Date(target.start_time).toDateString() === start.toDateString() ? '' : `${dayLabel(new Date(target.start_time))} · `}${timeRange(new Date(target.start_time), new Date(target.end_time))}`
       : null,
     place: (event.location_name || event.address || '').trim() || null,
+    address: action.tool === 'create_event' ? str(action.args.address) || null : null,
+    placeChoices: Array.isArray(action.args.place_choices)
+      ? (action.args.place_choices as Array<Record<string, unknown>>).map((c) => ({ name: str(c?.name), address: str(c?.address) })).filter((c) => c.name && c.address)
+      : [],
     peopleIds: people,
     justChanged: whatChanged(previous, action, ctx.members),
     lane,

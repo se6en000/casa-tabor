@@ -138,3 +138,49 @@ export function placeConfidence(query, places, home) {
   if (scored.length > 0) return { level: 'unsure', pick: null, choices: scored.slice(0, 3).map((s) => s.place) }
   return none
 }
+
+/** Home's coordinates, looked up once per warm instance: searches are made around home. */
+let homeCoordsCache = null
+export async function homeCoordinates(sb, homeConfig) {
+  const address = homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : ''
+  if (!address) return null
+  if (homeCoordsCache?.key === address) return homeCoordsCache.value
+  const res = await sb.functions.invoke('place-search', { body: { query: address } })
+  const first = res?.data?.places?.[0]
+  const value = first && Number.isFinite(first.lat) && Number.isFinite(first.lng) ? { lat: first.lat, lng: first.lng } : null
+  homeCoordsCache = { key: address, value }
+  return value
+}
+
+/** Search for a place around home (or in home's state when home has no coordinates); the places, or null on failure. */
+export async function searchNearHome(sb, query, homeConfig) {
+  const home = await homeCoordinates(sb, homeConfig)
+  const res = await sb.functions.invoke('place-search', {
+    body: home ? { query, lat: home.lat, lng: home.lng, radius: 65000 } : { query, city: homeConfig?.state || undefined },
+  })
+  if (res?.error) return { home, places: null, error: res.error }
+  return { home, places: res?.data?.places ?? [], error: null }
+}
+
+/**
+ * Where a draft's place is, before the yes (Jake, Oct 2: "Go for which one"): a saved place by name or alias; the
+ * usual place for a kind of place ("the gym"); else a search around home — sure gives { name, address }, not sure
+ * gives { choices } (up to three) to pick from on the card, no idea gives null (the name is kept as said).
+ */
+export async function draftPlace(sb, { query, homeConfig, savedPlaces = [], memberIds = [] }) {
+  const said = String(query ?? '').trim()
+  if (!said) return null
+  const saved = findSavedEventPlace(said, savedPlaces)
+  const savedAddress = saved ? [saved.address, saved.city, saved.state, saved.zip].filter(Boolean).join(', ') : ''
+  if (saved && savedAddress) return { name: saved.name, address: savedAddress }
+  if (isGenericPlace(said)) {
+    const usual = await findUsualPlace(sb, said, memberIds)
+    return usual ? { name: usual.name, address: usual.address } : null
+  }
+  const found = await searchNearHome(sb, said, homeConfig)
+  if (!found.places) return null
+  const verdict = placeConfidence(said, found.places, found.home)
+  if (verdict.level === 'sure' && verdict.pick) return { name: verdict.pick.name, address: verdict.pick.address }
+  if (verdict.level === 'unsure') return { choices: verdict.choices.map((c) => ({ name: c.name, address: c.address })) }
+  return null
+}

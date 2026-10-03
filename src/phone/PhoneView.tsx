@@ -15,7 +15,7 @@ import { clashLines, placeFromLastTime, type PastPlace } from './drafts'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
 import PhonePeople from './PhonePeople'
-import PhoneGroceries, { type PhoneGroceriesData } from './PhoneGroceries'
+import PhoneGroceries, { type GroceryVoice, type PhoneGroceriesData } from './PhoneGroceries'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { DayOff } from '../wall/engine/dayPlan'
 
@@ -228,6 +228,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [addOpen, setAddOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [groceryAdding, setGroceryAdding] = useState(false)
+  // Hold + on Groceries to say it (Jake, Oct 2: "a voice fast lane to add to the grocery list"): straight on the list.
+  const [groceryVoice, setGroceryVoice] = useState<GroceryVoice | null>(null)
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
@@ -763,7 +765,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           that fades in, running under the frosted tab bar. */}
       <main ref={mainRef} onScroll={paged || tab === 'groceries' ? undefined : onMainScroll} className={`relative flex-1 ${paged || tab === 'groceries' ? 'overflow-hidden' : `touch-pan-y overflow-y-auto overscroll-contain ${PAGE_PAD}`}`}>
         {tab === 'groceries' && groceries ? (
-          <PhoneGroceries data={groceries} adding={groceryAdding} setAdding={setGroceryAdding} corner={initial} />
+          <PhoneGroceries data={groceries} adding={groceryAdding} setAdding={setGroceryAdding} corner={initial} voice={groceryVoice} onVoiceDone={() => setGroceryVoice(null)} />
         ) : paged ? (
           <PhoneDayPager
             key={tab}
@@ -805,7 +807,16 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         onTab={pickTab}
         compact={barCompact}
         action={tab === 'groceries' && groceries
-          ? { label: 'Add to groceries', icon: <Plus size={28} strokeWidth={2.2} />, onClick: () => { primeKeyboard(); setGroceryAdding(true) } }
+          ? {
+              label: 'Add to groceries',
+              icon: <Plus size={28} strokeWidth={2.2} />,
+              onClick: () => { primeKeyboard(); setGroceryAdding(true) },
+              active: Boolean(groceryVoice?.holding),
+              hold: {
+                start: () => { haptic(); setGroceryVoice({ holding: true, cancelled: false }) },
+                end: (cancelled) => setGroceryVoice((v) => (v ? { holding: false, cancelled } : null)),
+              },
+            }
           : assistant
             ? {
                 label: 'Casa',

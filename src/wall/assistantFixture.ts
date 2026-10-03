@@ -59,6 +59,14 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Actually make it 4'),
     said('Moved it to 4:00.', draft('create_event', dentist(local(25, 16, 0), local(25, 17, 0), { location: 'Palm Beach Pediatric Dentistry' }), 'Dentist · Liv · Fri 4:00 PM')),
   ],
+  // Not sure which place (Jake, Oct 2: "Go for which one"): the card asks before the yes.
+  'which-place': () => [
+    user('Kelly to Amped Fitness tomorrow at 9'),
+    said('Drafted it. Which Amped Fitness?', draft('create_event', { title: 'Amped Fitness', event_type: 'event', start: local(26, 9, 0), end: local(26, 10, 0), members: ['Kelly'], location: 'Amped Fitness', place_choices: [
+      { name: 'Amped Fitness Signature', address: '2771 S Dixie Hwy, West Palm Beach, FL 33405' },
+      { name: 'Amped Fitness', address: '3101 PGA Blvd, Palm Beach Gardens, FL 33410' },
+    ] }, 'Amped Fitness · Kelly')),
+  ],
   // 06b: a change, before → after, previewed on the Score.
   change: () => [
     user('What’s on Saturday?'),

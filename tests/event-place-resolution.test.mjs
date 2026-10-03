@@ -92,3 +92,35 @@ test('only a word in common is not sure; nothing in common is no idea', () => {
   assert.equal(placeConfidence('Sky Zone', [wpb('Bounce House', '9 Jump Rd')], home).level, 'none')
   assert.equal(placeConfidence('Gym', [wpb('Iron Gym', '1 A St')], home).level, 'none') // a kind of place: the usual place, never a guess
 })
+
+// Casa's draft card asks "which one?" before the yes (Jake, Oct 2: "Go for which one"): the same verdict, before saving.
+import { draftPlace } from '../supabase/functions/_shared/event-place-resolution.mjs'
+
+const fakeSb = (places, calls = []) => ({
+  functions: {
+    invoke: async (name, { body }) => {
+      calls.push(body)
+      if (body.query.includes('Main St')) return { data: { places: [{ name: 'Home', address: '1 Main St', lat: home.lat, lng: home.lng }] }, error: null }
+      return { data: { places }, error: null }
+    },
+  },
+})
+const homeConfig = { address: '1 Main St', city: 'West Palm Beach', state: 'FL' }
+
+test('the draft card: one sure place comes with its address; searched around home', async () => {
+  const calls = []
+  const r = await draftPlace(fakeSb([wpb('Smile Dental', '1 Tooth St, West Palm Beach, FL')], calls), { query: 'Smile Dental', homeConfig, savedPlaces: [] })
+  assert.deepEqual(r, { name: 'Smile Dental', address: '1 Tooth St, West Palm Beach, FL' })
+  assert.equal(calls.at(-1).lat, home.lat)
+})
+
+test('the draft card: not sure gives the choices; a saved place needs no search; no idea gives nothing', async () => {
+  const two = [wpb('Amped Fitness Signature', '2771 S Dixie Hwy, West Palm Beach, FL'), wpb('Amped Fitness', '3101 PGA Blvd, Palm Beach Gardens, FL', 0.15)]
+  const r = await draftPlace(fakeSb(two), { query: 'Amped Fitness', homeConfig, savedPlaces: [] })
+  assert.deepEqual(r.choices.map((c) => c.name), ['Amped Fitness Signature', 'Amped Fitness'])
+  const calls = []
+  const saved = await draftPlace(fakeSb([], calls), { query: 'bak', homeConfig, savedPlaces: [{ name: 'Bak Middle School', aliases: ['Bak'], address: '1 Bak Way', city: 'West Palm Beach', state: 'FL', zip: null }] })
+  assert.deepEqual(saved, { name: 'Bak Middle School', address: '1 Bak Way, West Palm Beach, FL' })
+  assert.equal(calls.length, 0)
+  assert.equal(await draftPlace(fakeSb([wpb('Bounce House', '9 Jump Rd')]), { query: 'Sky Zone', homeConfig, savedPlaces: [] }), null)
+})

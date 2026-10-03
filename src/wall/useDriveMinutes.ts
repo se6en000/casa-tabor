@@ -19,7 +19,9 @@ export function useDriveMinutes(
   events: Array<{ id: string; start_time: string }>,
   lookup: DriveLookup = routeEta,
 ): number | null {
-  const place = action && (action.tool === 'create_event' || action.tool === 'update_event') && typeof action.args.location === 'string' ? action.args.location.trim() || null : null
+  // The address when Casa found one (a name alone can be looked up as the wrong place).
+  const said = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const place = action && (action.tool === 'create_event' || action.tool === 'update_event') ? said(action.args.address) || said(action.args.location) || null : null
   const arrival = typeof action?.args.start === 'string' ? action.args.start : events.find((e) => e.id === action?.args.id)?.start_time ?? null
   const [known, setKnown] = useState<Record<string, number | null>>({})
   const key = place && arrival ? `${place}|${arrival}` : null
