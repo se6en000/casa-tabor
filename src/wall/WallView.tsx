@@ -18,7 +18,7 @@ import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
-import { eveningFocus, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
+import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
@@ -41,6 +41,7 @@ import { casaTopic, pushMessage, pushNow, snoozeUntil, type TalkAnswer } from '.
 import type { CasaTalkProps } from './useCasaTalk'
 import WallCasaTalk, { CasaCalling } from './WallCasaTalk'
 import type { ScoreInteraction } from './WallScore'
+import WallNightCalm from './WallNightCalm'
 import { comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, type NextUpItem } from './nextUp'
 import { NextUpSection, StillTonight, TONIGHT_ROOM } from './WallNextUp'
 
@@ -172,6 +173,9 @@ export default function WallView(props: WallViewProps) {
   const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
   // A touch on Calm wakes the full day until this time (5 idle minutes).
   const [awakeUntil, setAwakeUntil] = useState(0)
+  // The night Calm (canvas 36a): the evening settles NIGHT_IDLE_MS after the last touch (a touch starts it again).
+  const [touches, setTouches] = useState(0)
+  const [idle, setIdle] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   // The + sheet: a blank item on the day on show.
   const [adding, setAdding] = useState<EditableEvent | null>(null)
@@ -303,6 +307,11 @@ export default function WallView(props: WallViewProps) {
       setAwakeUntil((u) => Math.max(u, Date.now() + WAKE_MS))
     }
   }, [busy])
+  // Idle for the night: NIGHT_IDLE_MS after the last touch (each touch starts it again).
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIdle(true), NIGHT_IDLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [touches])
   // Fall back asleep exactly when the 5 idle minutes are up.
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -452,6 +461,11 @@ export default function WallView(props: WallViewProps) {
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
   const todoOpen = Boolean(todos) && todoUntil > 0 && !comingUpOpen
+  // Settled for the night: the evening on its own (no preview, no day picked, nothing open, no conversation), nobody
+  // has touched the wall for NIGHT_IDLE_MS, and nobody is on the road or leaving within the hour.
+  const nightSettled = evening && !shown.preview && !picked && !busy && !overlay && !selected && !comingUpOpen && !todoOpen
+    && !menuOpen && !adding && !personId && !tripKey && !decisionsOpen && !packingOpen
+    && idle && !eveningKeepsUp(shownToday, now)
   const openComingUp = () => { setDayPreview(null); setTodoUntil(0); setComingUpUntil(Date.now() + PREVIEW_MS) }
   const openTodo = () => { setDayPreview(null); setComingUpUntil(0); setTodoProject(null); setTodoUntil(Date.now() + PREVIEW_MS) }
   const showDay = (date: Date) => {
@@ -580,6 +594,9 @@ export default function WallView(props: WallViewProps) {
         onStart={todos && comingUp.start ? (key) => void comingUp.start!(key).then((id) => { if (id) { openTodo(); setTodoProject(id) } }) : undefined}
       />
     )
+  } else if (nightSettled) {
+    // The night Calm (canvas 36a/36b): nobody at the wall for a while in the evening.
+    face = <WallNightCalm now={now} members={members} plan={planFor(dayOnShow)} stillTonight={tonightByClock(now) ? stillTonightCard : null} />
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
     // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
     const plan = planFor(dayOnShow)
@@ -656,14 +673,17 @@ export default function WallView(props: WallViewProps) {
       // A tap that nothing else handled (a person, a count, a block stop it) wakes Calm; once awake, any touch keeps it awake.
       onClick={() => setAwakeUntil(Date.now() + WAKE_MS)}
       onPointerDownCapture={() => {
+        setIdle(false)
+        setTouches((n) => n + 1)
         if (Date.now() < awakeUntil) setAwakeUntil(Date.now() + WAKE_MS)
       }}
     >
       {face}
-      {!onLaunchFace && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
-      {!onLaunchFace && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
+      {/* After midnight the settled night shows no buttons until a touch (canvas 36b). */}
+      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
+      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
       {!onLaunchFace && calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
-      {!onLaunchFace && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
+      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
       {!selected && overlay && (
         // Over the night face the band is raised and the calendar steps back a little, so the
         // conversation reads as a layer of its own (Jake, 2026-09-27).

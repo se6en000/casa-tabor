@@ -120,3 +120,15 @@ export function tomorrowLine(tomorrow: DayPlan | null, checklist: WallChecklistI
   if (first) parts.push(`first out ${clockTime(first)}`)
   return parts.join(' · ')
 }
+
+/** How long the evening face stays up after the last touch before it settles to the night Calm (canvas 36a). */
+export const NIGHT_IDLE_MS = 10 * 60_000
+
+/** The full evening stays up while someone is on the road, or someone leaves within the hour. */
+export function eveningKeepsUp(today: DayPlan | null, now: Date): boolean {
+  if (!today) return false
+  const move = selectNextMove(today, now)
+  if (!move) return false
+  if (move.status === 'en_route') return true
+  return move.status === 'upcoming' && move.minutesUntilLeave != null && move.minutesUntilLeave <= LAUNCH_LEAD_MIN
+}
