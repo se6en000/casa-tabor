@@ -24,6 +24,8 @@ export interface AIMessage {
   directions?: { name: string; address: string; phone: string | null; maps: string }
   /** Casa opened the email review (canvas row 14). */
   emailReview?: boolean
+  /** Casa put groceries straight on the list (no card): the list is fetched again. */
+  groceryAdded?: boolean
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string

@@ -132,7 +132,7 @@ import {
 import { shouldRetryTransientLlmStatus } from '../_shared/assistant-llm-retry.mjs'
 import { resolveGrocerySemantic } from '../_shared/assistant-grocery-semantic.mjs'
 import { classifyAssistantAmbiguity, safeFullProfileToolNames } from '../_shared/assistant-request-safety.mjs'
-import { saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
+import { groceryAddedText, saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { getAgentToolByLegacyName } from '../_shared/assistant-agent-tools.mjs'
 import { isAgentWriteCompatible } from '../_shared/assistant-agent-write-compatibility.mjs'
 import {
@@ -1497,9 +1497,20 @@ Deno.serve(async (req) => {
         return { status: 200, payload: { type: 'text', text: failed.error, semantic_intent: 'full_ai.checked', correlation_id: cid } }
       }
       let cards = changes as Array<{ tool: string; args: Record<string, unknown> }>
+      // Groceries go straight on the list and are said plainly — no card, no yes (Jake, Oct 2: "Just commit it and say
+      // 'x' added to the list … If there's a mistake I'll just delete it from the list"). Anything else asked in the
+      // same breath still comes back as its card.
+      let groceryNote = ''
+      const groceryCards = cards.filter((c) => c.tool === 'add_grocery_items')
+      if (groceryCards.length) {
+        const result = await saveGroceryItems(sb, groceryCards.flatMap((c) => (Array.isArray(c.args.items) ? c.args.items : [])))
+        groceryNote = groceryAddedText(result.items ?? [])
+        cards = cards.filter((c) => c.tool !== 'add_grocery_items')
+        if (!cards.length) return { status: 200, payload: { type: 'text', text: groceryNote, write_verified: true, semantic_intent: 'full_ai.grocery_added', correlation_id: cid } }
+      }
       // A trip already on the calendar is never added again (Jake, 2026-10-01: Casa proposed his Dallas trip a second
       // time, though the work email had put it there): its days are read in full, past the three weeks Casa holds.
-      let alreadyNote = ''
+      let alreadyNote = groceryNote
       const tripCards = cards.filter((c) => c.tool === 'create_event' && tripLegOf(c.args.title, c.args.all_day === true))
       if (tripCards.length) {
         const times = tripCards.flatMap((c) => [Date.parse(String(c.args.start ?? '')), Date.parse(String(c.args.end ?? c.args.start ?? ''))]).filter(Number.isFinite)
@@ -3558,6 +3569,29 @@ Deno.serve(async (req) => {
           appendServerTrace('calendar_conflict_detected', String(normalizedAgentWriteArgs.title ?? ''), {
             calendar_preflight: preflight,
           })
+        }
+      }
+      // Groceries go straight on the list and are said plainly (Jake, Oct 2: "Just commit it and say 'x' added to the
+      // list. I don't need to confirm it with a card … most of the time it's right right off the bat"); a mistake is
+      // deleted from the list. Only planning mode still drafts it.
+      if (agentWriteData.tool === 'add_grocery_items' && !dryRun && experienceMode !== 'talk_plan') {
+        const requested = Array.isArray(normalizedAgentWriteArgs.items) ? normalizedAgentWriteArgs.items : []
+        const result = await saveGroceryItems(sb, requested)
+        const saved = (result.items ?? []) as Array<{ id: string; name: string; already_present?: boolean }>
+        const text = groceryAddedText(saved)
+        if (saved.length === 1) responseConversationState = groceryConversationState(saved[0] as never, now)
+        appendServerTrace('server_agent_write_grocery_saved', text, { saved_count: saved.length })
+        return {
+          status: 200,
+          payload: {
+            type: 'text',
+            text,
+            write_verified: true,
+            correlation_id: cid,
+            conversation_state: responseConversationState,
+            authoritative_provenance: { source: 'grocery_items', item_ids: saved.map((item) => item.id), semantic_intent: groceryFrame?.intent ?? 'grocery.add' },
+            telemetry: { ...llmTelemetry, agentic: true, agent_write_ms: agentWriteData.elapsed_ms ?? null, request_total_ms: Date.now() - requestStartMs, context_load_ms: contextLoadMs },
+          },
         }
       }
       appendServerTrace('server_agent_write_adopted', `tool=${agentWriteData.plan?.toolName ?? agentWriteData.tool}`, {

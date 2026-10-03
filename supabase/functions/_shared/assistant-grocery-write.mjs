@@ -54,3 +54,14 @@ export async function saveGroceryItems(sb, requestedItems) {
     external_sync_status: 'asynchronous',
   }
 }
+
+/** "Added Tate's cookies and milk to the list. Eggs was already on it." — what a straight-away grocery add says (Jake, Oct 2). */
+export function groceryAddedText(saved) {
+  const list = (names) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] ?? '')
+  const added = (saved ?? []).filter((item) => !item.already_present).map((item) => item.name)
+  const already = (saved ?? []).filter((item) => item.already_present).map((item) => item.name)
+  return [
+    added.length ? `Added ${list(added)} to the list.` : null,
+    already.length ? `${list(already)} ${already.length === 1 ? 'was' : 'were'} already on it.` : null,
+  ].filter(Boolean).join(' ') || 'Nothing new to add to the list.'
+}

@@ -115,6 +115,12 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     setNote('Undone. Nothing from that plan is left.')
   }, [allMessages, working, session?.id, surface, updateMessageToolStatus, queryClient])
 
+  // Groceries Casa saved straight away (Jake, Oct 2: no card for them): the list shows them now.
+  const groceryAnswer = answer?.groceryAdded ? answer.id : null
+  useEffect(() => {
+    if (groceryAnswer) void queryClient.invalidateQueries({ queryKey: ['grocery'] })
+  }, [groceryAnswer, queryClient])
+
   // A yes the server heard ("yes, change it"): save the card on screen, once. A plan's yes opens its
   // Agree card first (board 12c), so the whole list is seen before anything saves.
   const confirmedFor = useRef<string | null>(null)

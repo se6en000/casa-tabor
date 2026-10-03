@@ -39,6 +39,8 @@ interface AssistantServerPayload {
   aside?: boolean
   /** The person said yes to the card on screen: save it. */
   confirms_draft?: boolean
+  /** What the server already did ("full_ai.grocery_added": groceries saved straight away, no card). */
+  semantic_intent?: string
   code?: string
   message?: string
   text?: string
@@ -570,6 +572,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         ...(data?.show_day && typeof data.show_day.date === 'string' ? { showDay: data.show_day } : {}),
         ...(data?.directions && typeof data.directions.maps === 'string' ? { directions: data.directions } : {}),
         ...(data?.email_review === true ? { emailReview: true } : {}),
+        ...(data?.semantic_intent === 'full_ai.grocery_added' ? { groceryAdded: true } : {}),
         ...sourceMetadata,
       }
     }
