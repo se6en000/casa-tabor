@@ -2452,3 +2452,12 @@ test('wall assistant: the light fades over the follow-up window\'s last seconds;
   await mic(page, () => window.__mic.quiet())
   await expect.poll(() => page.evaluate(() => window.__earcons ?? [])).toEqual(['open', 'close'])
 })
+
+// Jake, Oct 3: "alexa should be able to open/show the grocery list page".
+test('wall assistant: "show me the grocery list" opens the Grocery page at once', async ({ page }) => {
+  await band(page, 'empty')
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+  await mic(page, () => window.__mic.say('show me the grocery list'))
+  await expect(page.getByTestId('fixture-grocery')).toBeVisible()
+  expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0)
+})

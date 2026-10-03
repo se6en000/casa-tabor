@@ -9,6 +9,8 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import { earcon } from './earcon'
+import { useNavigate } from 'react-router-dom'
+import { pageAsked } from './pageAsk'
 import { CLOSING_FADE_MS } from './led'
 import type { FamilyMember } from '../types'
 import { useSwipeDown } from './useSwipeDown'
@@ -206,6 +208,15 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // mic stays open through the save, and a sentence said meanwhile waits here until it's saved (so "move it to five"
   // finds what was just saved), then goes.
   const workingRef = useRef(false)
+  // "Show me the grocery list" (Jake, Oct 3): the page opens at once; the words never go to Casa.
+  const navigate = useNavigate()
+  const openPage = (said: string) => {
+    if (pageAsked(said) !== 'grocery') return false
+    stopRef.current()
+    onClose()
+    navigate('/wall/grocery')
+    return true
+  }
   const thinkingRef = useRef(false)
   const holdRef = useRef<() => void>(() => {})
   // The follow-up window (Jake, Oct 3: "the fading light part when the listening window is closing"): when it opened,
@@ -262,6 +273,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       // "What can I say?" (Jake, Oct 3: "If I say that then please show me the screen but I dont need a button"): the
       // list, at once, without asking Casa; the mic stays open.
       if (asksForTips(step.toSend)) { setSayOpen(true); return }
+      if (openPage(step.toSend)) return
       if (workingRef.current) {
         heldWhileSaving.current = [heldWhileSaving.current, step.toSend].filter(Boolean).join(' ')
         return
@@ -802,6 +814,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               initialImages={staged?.images ?? []}
               onSend={(text, images) => {
                 if (!images.length && asksForTips(text)) { setSayOpen(true); return }
+                if (!images.length && openPage(text)) return
                 stopRef.current()
                 setNote(null)
                 void send(text, images.length ? images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)

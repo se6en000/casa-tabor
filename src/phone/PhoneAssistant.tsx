@@ -10,6 +10,7 @@ import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
 import { answerDay, cardText, firstTime, nextStep, voiceFinal, whichOne } from '../wall/assistant'
 import { asksForTips } from '../wall/tips'
+import { pageAsked } from '../wall/pageAsk'
 import { assistantCard, replacedAction } from '../wall/assistantCard'
 import type { DayPlan, WallEvent, WallMember } from '../wall/engine/types'
 import { pigmentIndexes } from '../wall/score'
@@ -23,7 +24,7 @@ import type { GlanceProps } from './PhoneView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, onForm, onScan, glance, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, onOpenPlace, onOpenDay, onOpenGroceries, onForm, onScan, glance, useEmail = useEmailOffers, opening = null, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
   events: EventWithDetails[]
   family: FamilyMember[]
   /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
@@ -35,6 +36,8 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   onOpenPlace?: (open: PlanOpen) => void
   /** Open a day on Me (Casa's show_day, or an answer about one day). */
   onOpenDay?: (date: Date) => void
+  /** "Show me the grocery list": the Groceries tab. */
+  onOpenGroceries?: () => void
   /** The form and Scan, from Casa's own button (canvas 32f). */
   onForm?: () => void
   onScan?: () => void
@@ -115,6 +118,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       setNote(null)
       stopRef.current()
       if (asksForTips(step.toSend)) { setShowList((n) => n + 1); return }
+      if (onOpenGroceries && pageAsked(step.toSend) === 'grocery') { onOpenGroceries(); return }
       void send(step.toSend)
     },
     onDismiss: () => stopRef.current(),
@@ -179,6 +183,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       directions={answer?.directions ?? null}
       openDay={day && onOpenDay ? { label: `Open ${day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`, go: () => onOpenDay(day.date) } : null}
       onSend={(text, images) => {
+        if (!images?.length && onOpenGroceries && pageAsked(text) === 'grocery') { onOpenGroceries(); return }
         setNote(null)
         void send(text, images)
       }}

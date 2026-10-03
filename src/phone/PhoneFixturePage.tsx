@@ -219,7 +219,7 @@ function PhoneFixturePageInner() {
                 : params.get('similar') ? async () => ({ s1: { id: 'pto', title: 'PTO Fall Festival', start_time: new Date(2026, 8, 27, 11, 0).toISOString() } }) : undefined}
               planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: list, tripState: dayState(tripState, date) })}
               aroundEvents={shown}
-              assistant={({ onClose, onOpenEvent, onOpenDay, opening, onForm, onScan, glance }) => askTurn ? (
+              assistant={({ onClose, onOpenEvent, onOpenDay, onOpenGroceries, opening, onForm, onScan, glance }) => askTurn ? (
                 // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
                 <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
                   <PhoneAssistant
@@ -235,6 +235,7 @@ function PhoneFixturePageInner() {
                     opening={opening}
                     onForm={onForm}
                     onScan={onScan}
+                    onOpenGroceries={onOpenGroceries}
                     glance={glance}
                     lookupDrive={async () => 24}
                   />

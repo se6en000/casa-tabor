@@ -1126,3 +1126,13 @@ test('phone: Casa breathes at rest, and holds still while held', async ({ page }
   await expect(breath).toHaveCount(0)
   await page.mouse.up()
 })
+
+// Jake, Oct 3: "alexa should be able to open/show the grocery list page" — on the phone, the Groceries tab.
+test('phone: Casa — "show me the grocery list" opens Groceries', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'empty')
+  const box = ask.getByRole('textbox', { name: 'Ask Casa' })
+  await box.fill('show me the grocery list')
+  await box.press('Enter')
+  await expect(phone.getByRole('region', { name: 'Groceries' })).toBeVisible()
+  expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0)
+})

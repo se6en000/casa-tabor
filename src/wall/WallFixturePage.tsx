@@ -268,6 +268,7 @@ export default function WallFixturePage() {
     <MemoryRouter>
     <Routes>
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
+    <Route path="/wall/grocery" element={<div data-testid="fixture-grocery">Grocery page</div>} />
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">

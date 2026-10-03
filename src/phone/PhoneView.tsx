@@ -113,7 +113,7 @@ export interface PhoneViewProps {
   /** Scan it: what's already on the calendar on the scanned days (so a second scan doesn't double up). */
   findSimilar?: (items: ScannedItem[]) => Promise<Record<string, { id: string; title: string; start_time: string }>>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
-  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; onOpenDay?: (date: Date) => void; opening?: string | null; onForm?: () => void; onScan?: () => void; glance?: GlanceProps }) => ReactNode
+  assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void; onOpenPlace?: (open: PlanOpen) => void; onOpenDay?: (date: Date) => void; onOpenGroceries?: () => void; opening?: string | null; onForm?: () => void; onScan?: () => void; glance?: GlanceProps }) => ReactNode
   /** Builds a day's plan from events (a far day's week, dayFocus.ts). */
   planDay?: (date: Date, events: WallEvent[]) => DayPlan
   /** The week around a far day on Me, loaded by the frame when asked with onFocusDay. */
@@ -920,6 +920,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         },
         // A saved plan's project or To do (P3.25; board 12d).
         onOpenPlace: (open) => { setAskOpen(false); if (open.kind === 'project') setProjectId(open.id); else if (open.kind === 'todo') setTab('todo') },
+        // "Show me the grocery list" (Jake, Oct 3): the Groceries tab.
+        onOpenGroceries: groceries ? () => { closeAsk(); setTab('groceries') } : undefined,
       })}
           </div>
         </div>

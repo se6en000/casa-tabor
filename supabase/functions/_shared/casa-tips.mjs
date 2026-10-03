@@ -16,6 +16,7 @@ export const CASA_TIPS = [
   { id: 'drive-ask', topic: 'Who’s driving', text: '“Who’s picking up Emme tomorrow?” — ask anything about the week.', about: /\bwho('s| is)\b/i },
   { id: 'trip-add', topic: 'Trips', text: '“I’m in Dallas Wednesday to Thursday, flying” — Casa asks only what’s missing.', about: /\b(trip|travel|flying|flight|fly|hotel|away|out of town)\b/i },
   { id: 'groc-add', topic: 'Groceries', text: '“We’re out of milk and the good coffee” — straight on the list.', about: /\b(out of|milk|eggs|bread|grocer|store|need|list)\b/i, added: '2026-10-02' },
+  { id: 'groc-show', topic: 'Groceries', text: '“Show me the grocery list” — the page opens.', about: /\b(grocery list|groceries|shopping list)\b/i, added: '2026-10-03' },
   { id: 'groc-recipe', topic: 'Groceries', text: '“What do I need for chicken tacos?” — then “put those on the list.”', about: /\b(recipe|dinner|cook|make|tacos?)\b/i },
   { id: 'todo-remind', topic: 'To do & plans', text: '“Remind me to call the vet tomorrow” — on your To do.', about: /\b(remind|reminder|to do|todo|call)\b/i },
   { id: 'todo-project', topic: 'To do & plans', text: '“Make a project for painting the house” — the steps come with it.', about: /\b(project|paint|renovat|fix up)\b/i },
