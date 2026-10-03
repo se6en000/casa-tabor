@@ -365,6 +365,12 @@ function segmentContinuousPhrase(words: string[]): string[] {
   }
 
   const segments: string[] = []
+  // Words the dictionary doesn't know ("canned", "organic") describe the item after them.
+  let carry = ''
+  const push = (seg: string) => {
+    segments.push(carry ? `${carry} ${seg}` : seg)
+    carry = ''
+  }
   let i = 0
 
   while (i < words.length) {
@@ -390,7 +396,7 @@ function segmentContinuousPhrase(words: string[]): string[] {
     }
 
     if (i >= words.length) {
-      if (numPrefix.trim()) segments.push(numPrefix.trim())
+      if (numPrefix.trim()) push(numPrefix.trim())
       break
     }
 
@@ -398,7 +404,7 @@ function segmentContinuousPhrase(words: string[]): string[] {
     if (i + 4 <= words.length) {
       const quad = words.slice(i, i + 4).join(' ')
       if (COMPOUND_SET.has(quad)) {
-        segments.push(numPrefix + quad)
+        push(numPrefix + quad)
         i += 4
         continue
       }
@@ -408,7 +414,7 @@ function segmentContinuousPhrase(words: string[]): string[] {
     if (i + 3 <= words.length) {
       const tri = words.slice(i, i + 3).join(' ')
       if (COMPOUND_SET.has(tri)) {
-        segments.push(numPrefix + tri)
+        push(numPrefix + tri)
         i += 3
         continue
       }
@@ -418,7 +424,7 @@ function segmentContinuousPhrase(words: string[]): string[] {
     if (i + 2 <= words.length) {
       const pair = words.slice(i, i + 2).join(' ')
       if (COMPOUND_SET.has(pair)) {
-        segments.push(numPrefix + pair)
+        push(numPrefix + pair)
         i += 2
         continue
       }
@@ -427,7 +433,7 @@ function segmentContinuousPhrase(words: string[]): string[] {
     // Check 1-word single grocery item match
     const single = words[i]
     if (SINGLE_GROCERY_ITEMS.has(single)) {
-      segments.push(numPrefix + single)
+      push(numPrefix + single)
       i += 1
       continue
     }
@@ -448,11 +454,15 @@ function segmentContinuousPhrase(words: string[]): string[] {
 
     const unmappedSlice = words.slice(i, j).join(' ')
     if (unmappedSlice) {
-      segments.push(numPrefix + unmappedSlice)
+      carry = [carry, numPrefix + unmappedSlice].filter(Boolean).join(' ')
     }
     i = j
   }
 
+  if (carry) {
+    // Nothing known after it: it's an item of its own, or describes the one before ("milk organic").
+    segments.push(carry)
+  }
   return segments.filter(Boolean)
 }
 
@@ -537,11 +547,14 @@ export function parseGroceryVoiceBatch(transcript: string): ParsedVoiceGroceryIt
 
   const items: ParsedVoiceGroceryItem[] = []
   let counter = 1
+  // Listed with "and"s or commas, each piece is one item, kept whole (Jake, Oct 2: "canned tuna fish and canned
+  // salmon" came out as five words). Only a list said with none is split by the dictionary.
+  const listed = rawSegments.length > 1
 
   for (const rawSeg of rawSegments) {
     // Step 2: For each segment, tokenize and segment continuous speech if multiple items are present
     const tokens = normalizeSpeechTokens(rawSeg)
-    const refinedSubSegments = segmentContinuousPhrase(tokens)
+    const refinedSubSegments = listed ? [tokens.join(' ')] : segmentContinuousPhrase(tokens)
 
     for (const subSeg of refinedSubSegments) {
       const parsed = parseSingleVoiceItem(subSeg)

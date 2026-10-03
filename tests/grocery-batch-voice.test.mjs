@@ -123,3 +123,20 @@ test('parseGroceryVoiceBatch handles unpunctuated continuous speech lists (user 
   assert.equal(items5[2].quantity, '1')
   assert.equal(items5[2].unit, 'loaf')
 })
+
+// Jake, Oct 2 (hold + on the phone): "canned tuna fish and canned salmon … it treated it like just one word at a time".
+// What's said between "and"s and commas is one item each, kept whole; in a list said with no "and", a describing word
+// the dictionary doesn't know ("canned", "organic") goes with the item after it rather than standing alone.
+test('parseGroceryVoiceBatch keeps each item named between "and"s whole', () => {
+  const names = (t) => parseGroceryVoiceBatch(t).map((i) => i.name)
+  assert.deepEqual(names('canned tuna fish and canned salmon'), ['Canned Tuna Fish', 'Canned Salmon'])
+  assert.deepEqual(names('chocolate milk and peanut butter'), ['Chocolate Milk', 'Peanut Butter'])
+  assert.deepEqual(names('frozen peas, greek yogurt and tuna fish'), ['Frozen Peas', 'Greek Yogurt', 'Tuna Fish'])
+  assert.deepEqual(names('two cans of black beans and a dozen eggs').length, 2)
+})
+
+test('parseGroceryVoiceBatch: with no "and", a describing word goes with the item after it', () => {
+  const names = (t) => parseGroceryVoiceBatch(t).map((i) => i.name)
+  assert.deepEqual(names('canned salmon eggs'), ['Canned Salmon', 'Eggs'])
+  assert.deepEqual(names('milk eggs bread'), ['Milk', 'Eggs', 'Bread'])
+})
