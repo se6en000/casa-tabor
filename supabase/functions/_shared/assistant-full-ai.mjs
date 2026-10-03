@@ -151,7 +151,7 @@ export const FULL_AI_TOOLS = [
   {
     name: 'create_event',
     description: 'Propose a new calendar event or reminder (the person confirms the card).',
-    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING' }, kind: { type: 'STRING', enum: ['event', 'reminder'] } }, required: ['title', 'start'] },
+    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] } }, required: ['title', 'start'] },
   },
   {
     name: 'update_event',

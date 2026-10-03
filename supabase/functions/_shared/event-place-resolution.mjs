@@ -163,6 +163,20 @@ export async function searchNearHome(sb, query, homeConfig) {
 }
 
 /**
+ * A place said with its street address ("Starbucks Coffee Company - 226 Clematis St, West Palm Beach, FL"): the name
+ * and the address apart; an address alone is both. Null when there's no street address in it (a number, a street,
+ * then a comma and a town).
+ */
+export function splitPlaceAddress(text) {
+  const said = String(text ?? '').trim()
+  const m = said.match(/^(?:(.*?)\s*(?:\s[-–—]\s|,)\s*)?(\d+[A-Za-z]?\s+[^,\d][^,]*,\s*[^,].*)$/)
+  if (!m) return null
+  const address = m[2].trim()
+  const name = (m[1] ?? '').trim()
+  return { name: name || address.split(',')[0].trim(), address }
+}
+
+/**
  * Where a draft's place is, before the yes (Jake, Oct 2: "Go for which one"): a saved place by name or alias; the
  * usual place for a kind of place ("the gym"); else a search around home — sure gives { name, address }, not sure
  * gives { choices } (up to three) to pick from on the card, no idea gives null (the name is kept as said).
@@ -170,6 +184,8 @@ export async function searchNearHome(sb, query, homeConfig) {
 export async function draftPlace(sb, { query, homeConfig, savedPlaces = [], memberIds = [] }) {
   const said = String(query ?? '').trim()
   if (!said) return null
+  const given = splitPlaceAddress(said)
+  if (given) return given
   const saved = findSavedEventPlace(said, savedPlaces)
   const savedAddress = saved ? [saved.address, saved.city, saved.state, saved.zip].filter(Boolean).join(', ') : ''
   if (saved && savedAddress) return { name: saved.name, address: savedAddress }

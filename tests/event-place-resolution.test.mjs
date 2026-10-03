@@ -124,3 +124,20 @@ test('the draft card: not sure gives the choices; a saved place needs no search;
   assert.equal(calls.length, 0)
   assert.equal(await draftPlace(fakeSb([wpb('Bounce House', '9 Jump Rd')]), { query: 'Sky Zone', homeConfig, savedPlaces: [] }), null)
 })
+
+// Live, Oct 2: Casa wrote "Starbucks Coffee Company - 226 Clematis St, West Palm Beach, FL 33401, USA" as the place;
+// searched as a name it offered three other Starbucks. A place said with its address is that place.
+import { splitPlaceAddress } from '../supabase/functions/_shared/event-place-resolution.mjs'
+
+test('a place given with its address is split into the two, and needs no search', async () => {
+  assert.deepEqual(splitPlaceAddress('Starbucks Coffee Company - 226 Clematis St, West Palm Beach, FL 33401, USA'), { name: 'Starbucks Coffee Company', address: '226 Clematis St, West Palm Beach, FL 33401, USA' })
+  assert.deepEqual(splitPlaceAddress('Smile Dental, 1 Tooth St, West Palm Beach, FL'), { name: 'Smile Dental', address: '1 Tooth St, West Palm Beach, FL' })
+  assert.deepEqual(splitPlaceAddress('226 Clematis St, West Palm Beach, FL'), { name: '226 Clematis St', address: '226 Clematis St, West Palm Beach, FL' })
+  assert.equal(splitPlaceAddress('Amped Fitness'), null)
+  assert.equal(splitPlaceAddress('Studio 54'), null)
+  assert.equal(splitPlaceAddress('Bak Middle School of the Arts'), null)
+  const calls = []
+  const r = await draftPlace(fakeSb([], calls), { query: 'Starbucks Coffee Company - 226 Clematis St, West Palm Beach, FL 33401, USA', homeConfig, savedPlaces: [] })
+  assert.deepEqual(r, { name: 'Starbucks Coffee Company', address: '226 Clematis St, West Palm Beach, FL 33401, USA' })
+  assert.equal(calls.length, 0)
+})
