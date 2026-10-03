@@ -173,7 +173,7 @@ import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-cre
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1318,11 +1318,19 @@ Deno.serve(async (req) => {
       .map((c) => ({ id: c.id, name: c.name, aliases: c.aliases ?? [], relationship: c.relationship, phone: c.phone, email: c.email, address: c.address, place: c.place_name }))
     const recipes = (recipeRows.data ?? []) as Array<{ id: string; name: string }>
     // His open to-dos (the "To Do" list on his phone): so a repeat is noticed and a project grows from it.
-    const todoRes = await sb.from('events').select('id, title, has_due_date, start_time').eq('event_type', 'reminder').eq('record_kind', 'single')
-      .is('deleted_at', null).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(60)
+    // With its time and whether it's late, and the household's chores beside it (Jake's bug report, Oct 1: "nothing on
+    // todos or reminders?" was answered from the calendar, calling Kelly's gym a reminder, and never named a chore).
+    const [todoRes, choreRes, choreDoneRes] = await Promise.all([
+      sb.from('events').select('id, title, has_due_date, start_time, all_day').eq('event_type', 'reminder').eq('record_kind', 'single')
+        .is('deleted_at', null).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(60),
+      sb.from('household_chores').select('id, title, member_id, days_of_week, time_local, enabled, every_weeks, starts_on').eq('enabled', true),
+      sb.from('household_chore_done').select('chore_id').eq('on_date', new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)),
+    ])
     const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
-    const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string }>)
-      .map((t) => ({ id: t.id, title: t.title, due: t.has_due_date ? nyDay(t.start_time) : null }))
+    const todayNy = nyDay(now.toISOString())
+    const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string; all_day: boolean | null }>)
+      .map((t) => todoForCasa(t, now))
+    const chores = choresForCasa(choreRes.data ?? [], new Set(((choreDoneRes.data ?? []) as Array<{ chore_id: string }>).map((r) => r.chore_id)), family, todayNy)
     // His saved projects with every step (P3.25 phase 1), so "change that project" isn't answered with
     // a second one and "what's left on the roof?" is answered from the steps.
     const [projRes, stepRes, comingUpRes] = await Promise.all([
@@ -1355,7 +1363,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family) })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.

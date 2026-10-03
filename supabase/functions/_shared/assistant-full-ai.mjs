@@ -33,7 +33,10 @@ function local(iso, utcOffset) {
 
 function describeEvent(e, utcOffset) {
   const s = local(e.start_time, utcOffset)
-  const when = e.all_day ? `${s.weekday} ${s.month} ${s.day}, all day` : `${s.weekday} ${s.month} ${s.day}, ${s.clock}–${local(e.end_time, utcOffset).clock}`
+  // A to-do's midnight is its day without a time (it read "due by 12:00 AM tomorrow", Oct 3).
+  const when = e.all_day ? `${s.weekday} ${s.month} ${s.day}, all day`
+    : e.event_type === 'reminder' && s.clock === '12:00 AM' ? `${s.weekday} ${s.month} ${s.day}, no set time`
+    : `${s.weekday} ${s.month} ${s.day}, ${s.clock}–${local(e.end_time, utcOffset).clock}`
   const parts = [`[${e.id}] ${when} · ${e.title}`]
   if (e.event_type === 'reminder') parts.push('reminder')
   if (e.people?.length) parts.push(`people: ${e.people.join(', ')}`)
@@ -41,6 +44,63 @@ function describeEvent(e, utcOffset) {
   if (e.address || e.place) parts.push(`at ${e.address || e.place}`)
   if (isRoutineCopy(e.title)) parts.push('SCHOOL-RUN COPY — never change it')
   return parts.join(' · ')
+}
+
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+/** "Mon & Thu", "Mon–Fri", "every day". */
+function choreDays(days) {
+  const d = [...new Set(days ?? [])].sort((a, b) => a - b)
+  if (d.length === 7) return 'every day'
+  if (d.length >= 3 && d.every((x, i) => i === 0 || x === d[i - 1] + 1)) return `${WEEKDAY[d[0]]}–${WEEKDAY[d[d.length - 1]]}`
+  return d.map((x) => WEEKDAY[x]).join(' & ')
+}
+/** "20:00:00" → "8 PM", "18:30" → "6:30 PM". */
+function choreTime(t) {
+  const [h, m] = String(t ?? '').split(':').map(Number)
+  if (!Number.isFinite(h)) return ''
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`
+}
+/**
+ * The household's chores for Casa, from household_chores rows, the ids done today, the family and today (YYYY-MM-DD,
+ * home time). Whether one falls today follows the wall's rule (src/wall/engine/chores.ts choreOnDay): its weekday,
+ * not before it starts, and for every N weeks, weeks counted from its first time.
+ */
+export function choresForCasa(rows, doneIds, family, todayYmd) {
+  const dayOf = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)) }
+  const sundayOf = (dt) => new Date(dt.getTime() - dt.getUTCDay() * 86400e3)
+  const today = dayOf(todayYmd)
+  const falls = (c) => {
+    const days = c.days_of_week ?? []
+    if (!c.enabled || !days.includes(today.getUTCDay())) return false
+    const start = dayOf(c.starts_on ?? todayYmd)
+    if (today < start) return false
+    const first = new Date(start)
+    while (!days.includes(first.getUTCDay())) first.setTime(first.getTime() + 86400e3)
+    const weeks = Math.round((sundayOf(today).getTime() - sundayOf(first).getTime()) / (7 * 86400e3))
+    return weeks % Math.max(1, c.every_weeks || 1) === 0
+  }
+  return (rows ?? []).filter((c) => c.enabled !== false).map((c) => {
+    const today = falls(c)
+    return { title: c.title, who: (family ?? []).find((m) => m.id === c.member_id)?.name ?? null, days: c.days_of_week ?? [], time: c.time_local, every_weeks: c.every_weeks ?? 1, today, done: today && doneIds.has(c.id) }
+  })
+}
+
+/**
+ * A to-do (a reminder row) for Casa: its day and time in home time, and whether it's late. Midnight is a day without a
+ * time (the placeholder a date-only to-do carries) — it read "due by tomorrow at midnight" (Oct 3).
+ */
+export function todoForCasa(row, now, timeZone = 'America/New_York') {
+  const day = (d) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  const due = row.has_due_date ? day(new Date(row.start_time)) : null
+  const clock = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(row.start_time))
+  const time = due && row.all_day !== true && clock !== '12:00 AM' ? clock : null
+  const late = Boolean(due) && (time ? Date.parse(row.start_time) < now.getTime() : due < day(now))
+  return { id: row.id, title: row.title, due, time, late }
+}
+
+function describeChore(c) {
+  const when = [c.every_weeks > 1 ? `every ${c.every_weeks} weeks on ${choreDays(c.days)}` : choreDays(c.days), choreTime(c.time)].filter(Boolean).join(', ')
+  return `- ${[c.title, c.who, when].filter(Boolean).join(' · ')}${c.today ? ` · today, ${c.done ? 'done' : 'not done yet'}` : ''}`
 }
 
 function describeDraft(pending, utcOffset) {
@@ -99,9 +159,9 @@ function describeProject(p) {
   })].join('\n')
 }
 
-export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], projects = [], comingUp = [], planning = false, memory = [], dueThoughtId = null, speaker = null }) {
+export function buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity, home = null, places = [], contacts = [], recipes = [], todos = [], chores = [], projects = [], comingUp = [], planning = false, memory = [], dueThoughtId = null, speaker = null }) {
   const today = local(now.toISOString(), utcOffset)
-  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would — a sentence or two; when you give several options, ideas or steps, say one short lead line, then each on its own line as "- Name: one short line" (at most four), which the screen shows as tiles — from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; telling you a plan of their own or the family's with a day or a time ("I'm going to the gym at 7:30", "Owen has a playdate Saturday at 2", "we're having dinner at the Smiths' Friday at 7") is asking for it on the calendar — call create_event, don't just chat about it; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. The screen shows things for you: directions, a route or a link to go to someone or somewhere ("navigate to Alice's house", "how do I get to…") is show_directions — the route goes on the screen, so never say you can't give directions or a link; an address he tells you for someone is save_address (its card asks his yes — don't ask in words); wanting to hear from someone, or about something, from now on ("keep me posted on…", "always show me anything from Sally Rozanski", "let me know whenever the school writes about the dance") is keep_me_posted — that means their emails, even unsaid; call it right away with his own words (don't ask who someone is: the email reader knows "Owen's therapist"), and never say you'll make a card instead of making it; a day he asks about or asks to see is show_day. WHAT CASA KNOWS below is the family's memory: when he asks what Casa knows about someone or something, answer from it in a few lines — the sure facts, then what you're not sure of yet, each with where it came from; use the sure facts to know who something is for ("the softball game" is Liv's). When he tells you something about someone to keep ("Liv also does debate on Thursdays", "remember, the kids' dentist is Dr. Wanuk") or corrects it ("that's wrong, she's in 8th grade"), call remember (replaces_id for a correction) — it is saved at once, no card — then say what you saved in a few words; "forget …" is forget; "undo that" right after is undo_memory; "remember this" about something to come back to is remember with kind thought; "what did I ask you to remember?" lists the open thoughts and what he told you. An open thought marked DUE: bring it up once, in passing, at the end of your answer; and when the conversation touches an open thought's topic, mention it in passing, once. His answer to one: "let it go" is forget; "I did it" is forget with done; "make it a to-do" is add_todo, then forget with done; "plan it" is talking it through; "keep it" needs nothing. ${planning ? THINKING_WITH_HIM(homeCity) : HAND_IT_OVER}Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when. When he asks you to add or set up a big multi-step project ("make a project for painting the house", "add the roof as a project"), it is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first; wanting to do or make something, or planning something together ("let's plan Emme's costume"), without asking for the project itself, is talking it through. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Someone going away — a work trip, flying or driving ("I'm in Dallas Wednesday to Thursday", "I'm driving to Orlando for work next week") — is a trip: ask for what's missing, one short question at a time (who's going and which days; flying or driving; for each flight its number, airports and times, saved in home time ("3:30 their time" in Dallas is 4:30 here); for a drive, when they leave and when they head home), then add it with create_event calls, the traveller on each: each flight titled "Flight <number> <FROM>→<TO>" from take-off to landing, each drive "Drive to <City>" and "Drive home from <City>" from leaving to arriving, and one all-day "Trip <City>" across the days (the hotel as its place if they said). The wall works out when they leave the house and when they're home from those, and asks the family about anything they usually cover while away, so don't add drives to the airport. Before adding a trip, look at those days with find_events: a flight, drive or trip already on the calendar (the work email adds most flights) is not added again — say it's already there and add only what's missing. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
+  const intro = `You are Casa, the Tabor family's home assistant, on a wall screen in their kitchen and on their phones, usually spoken to by voice (so words can be misheard: "live" may mean Liv). Answer briefly and conversationally, the way a helpful person in the house would — a sentence or two; when you give several options, ideas or steps, say one short lead line, then each on its own line as "- Name: one short line" (at most four), which the screen shows as tiles — from the family's calendar and grocery list below, which are the truth; if something isn't there, say so. Keep track of the conversation: "that", "her", "the second one" mean what was just said. For anything not below — the weather, a place, a drive time, something on the web — use a lookup tool. When someone wants something added, changed or removed (on the calendar, the grocery list, in recipes, a gift idea for someone, or the Coming up list of things to get ready for — one item or an every-time rule), call one of your tools with exactly what they asked for; telling you a plan of their own or the family's with a day or a time ("I'm going to the gym at 7:30", "Owen has a playdate Saturday at 2", "we're having dinner at the Smiths' Friday at 7") is asking for it on the calendar — call create_event, don't just chat about it; several changes at once are several calls; nothing is saved until they say yes to the card it makes, so don't say it's done. The screen shows things for you: directions, a route or a link to go to someone or somewhere ("navigate to Alice's house", "how do I get to…") is show_directions — the route goes on the screen, so never say you can't give directions or a link; an address he tells you for someone is save_address (its card asks his yes — don't ask in words); wanting to hear from someone, or about something, from now on ("keep me posted on…", "always show me anything from Sally Rozanski", "let me know whenever the school writes about the dance") is keep_me_posted — that means their emails, even unsaid; call it right away with his own words (don't ask who someone is: the email reader knows "Owen's therapist"), and never say you'll make a card instead of making it; a day he asks about or asks to see is show_day. WHAT CASA KNOWS below is the family's memory: when he asks what Casa knows about someone or something, answer from it in a few lines — the sure facts, then what you're not sure of yet, each with where it came from; use the sure facts to know who something is for ("the softball game" is Liv's). When he tells you something about someone to keep ("Liv also does debate on Thursdays", "remember, the kids' dentist is Dr. Wanuk") or corrects it ("that's wrong, she's in 8th grade"), call remember (replaces_id for a correction) — it is saved at once, no card — then say what you saved in a few words; "forget …" is forget; "undo that" right after is undo_memory; "remember this" about something to come back to is remember with kind thought; "what did I ask you to remember?" lists the open thoughts and what he told you. An open thought marked DUE: bring it up once, in passing, at the end of your answer; and when the conversation touches an open thought's topic, mention it in passing, once. His answer to one: "let it go" is forget; "I did it" is forget with done; "make it a to-do" is add_todo, then forget with done; "plan it" is talking it through; "keep it" needs nothing. ${planning ? THINKING_WITH_HIM(homeCity) : HAND_IT_OVER}Read gift ideas back only from get_gift_ideas, and only what it returns. Never say you changed, deleted or finished something unless it went through one of your tools and he said yes to the card. His to-do list is the “To Do” list on his phone and Casa’s To do screen. Asked what's on his to-dos or reminders, answer from the TO-DO LIST — what's due today or late first, with its time, then how many are open without a date — and today's CHORES, not the calendar's events; never call a calendar event a reminder (a CALENDAR item marked reminder is one of his to-dos with a time). In his words: a reminder is something to do at a certain time (trash out at 8); a to-do is something to get done that may or may not have a date; a project is a big job with many steps. Adding to his to-do list, or a reminder with no time, is add_todo — never ask when. When he asks you to add or set up a big multi-step project ("make a project for painting the house", "add the roof as a project"), it is plan_project, proposed straight away with its steps (he changes it by talking) rather than questions first; wanting to do or make something, or planning something together ("let's plan Emme's costume"), without asking for the project itself, is talking it through. The calendar below is only today through three weeks: before saying something isn't on the calendar, or answering about any other date, call find_events (words from what they asked, and a date if they gave one). Someone going away — a work trip, flying or driving ("I'm in Dallas Wednesday to Thursday", "I'm driving to Orlando for work next week") — is a trip: ask for what's missing, one short question at a time (who's going and which days; flying or driving; for each flight its number, airports and times, saved in home time ("3:30 their time" in Dallas is 4:30 here); for a drive, when they leave and when they head home), then add it with create_event calls, the traveller on each: each flight titled "Flight <number> <FROM>→<TO>" from take-off to landing, each drive "Drive to <City>" and "Drive home from <City>" from leaving to arriving, and one all-day "Trip <City>" across the days (the hotel as its place if they said). The wall works out when they leave the house and when they're home from those, and asks the family about anything they usually cover while away, so don't add drives to the airport. Before adding a trip, look at those days with find_events: a flight, drive or trip already on the calendar (the work email adds most flights) is not added again — say it's already there and add only what's missing. Ask a short question when a request could mean more than one thing. Now it is ${today.weekday} ${today.month} ${today.day}, ${today.clock}, in ${homeCity ?? 'West Palm Beach'}; times are local, and tool times are local "YYYY-MM-DDTHH:MM".`
   const sections = [
     intro,
     // Who "I" is (Jake, Oct 3: "when Kelly is logged in and says, Im going to the gym … kelly is the attendee and driver").
@@ -116,8 +176,11 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
   // grow from what he already captured (live check 2026-09-28: "Paint the house" was added twice).
   if (todos.length) {
     const day = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
-    sections.push(`TO-DO LIST (his open to-dos; [id] first — if what he asks to add is already on it, say so instead of adding it again, and a project grows from it with from_id):\n${todos.map((t) => `- [${t.id}] ${t.title}${t.due ? ` · by ${day(t.due)}` : ''}`).join('\n')}`)
+    sections.push(`TO-DO LIST (his open to-dos; [id] first — if what he asks to add is already on it, say so instead of adding it again, and a project grows from it with from_id):\n${todos.map((t) => `- [${t.id}] ${t.title}${t.due ? ` · by ${day(t.due)}${t.time ? `, ${t.time}` : ''}${t.late ? ' (late)' : ''}` : ''}`).join('\n')}`)
   }
+  // The household's chores (Jake's bug report, Oct 1: "nothing on todos or reminders?" never mentioned the trash or
+  // Liv's meds — Casa didn't know them). Who, which days, when; today's say whether they're done.
+  if (chores.length) sections.push(`CHORES (the household's routine jobs; not on the calendar):\n${chores.map(describeChore).join('\n')}`)
   if (projects.length) {
     sections.push(`PROJECTS (saved, each with its steps in order — done, NOW (side by side when there are several), then the rest; ${planning ? 'change one with set_plan: edit_step, add_step, remove_step, or close_project to replace it' : 'to change one or its steps, call think_it_through; a saved to-do is changed by tapping it on the To do screen'}; a new plan_project card would make a second project):\n${projects.map(describeProject).join('\n')}`)
   }
