@@ -7,7 +7,7 @@ import {
   findSavedEventPlace,
   findUsualPlace,
   isGenericPlace,
-  selectConfidentEventPlace,
+  placeConfidence,
 } from '../_shared/event-place-resolution.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
@@ -24,6 +24,19 @@ interface ResolvedDestination {
   lat: number | null
   lng: number | null
   source: 'saved_place' | 'google_places' | 'usual_place'
+}
+
+/** Home's coordinates, looked up once per run of this function: searches are made around home. */
+let homeCoordsCache: { key: string; value: { lat: number; lng: number } | null } | null = null
+async function homeCoordinates(sb: ReturnType<typeof createClient>, homeConfig: { address?: string; city?: string; state?: string; zip?: string } | null) {
+  const address = homeConfig ? [homeConfig.address, homeConfig.city, homeConfig.state, homeConfig.zip].filter(Boolean).join(', ') : ''
+  if (!address) return null
+  if (homeCoordsCache?.key === address) return homeCoordsCache.value
+  const res = await sb.functions.invoke('place-search', { body: { query: address } })
+  const first = (res.data as { places?: Array<{ lat?: number; lng?: number }> } | null)?.places?.[0]
+  const value = first && Number.isFinite(first.lat) && Number.isFinite(first.lng) ? { lat: first.lat as number, lng: first.lng as number } : null
+  homeCoordsCache = { key: address, value }
+  return value
 }
 
 const CORS = {
@@ -141,9 +154,11 @@ Deno.serve(async (req) => {
       const usual = await findUsualPlace(sb, destinationQuery, memberIds)
       if (usual) resolvedDestination = { name: usual.name, address: usual.address, lat: null, lng: null, source: 'usual_place' }
     } else {
-      const cityBias = homeConfig?.state || undefined
+      // How sure (Jake, Oct 2): searched around home; one clear match near home (or in the town that was said) is
+      // filled in, several or a partial one are kept as choices to pick from ("Which one?"), nothing is written as a guess.
+      const home = await homeCoordinates(sb, homeConfig)
       const placeRes = await sb.functions.invoke('place-search', {
-        body: { query: destinationQuery, city: cityBias },
+        body: home ? { query: destinationQuery, lat: home.lat, lng: home.lng, radius: 65000 } : { query: destinationQuery, city: homeConfig?.state || undefined },
       })
       if (placeRes.error) {
         await appendEnrichmentDebug(
@@ -154,23 +169,16 @@ Deno.serve(async (req) => {
           { query: destinationQuery },
         )
       } else {
-        const match = selectConfidentEventPlace(
-          destinationQuery,
-          (placeRes.data as { places?: unknown[] } | null)?.places,
-        ) as {
-          name?: string
-          address?: string
-          lat?: number | null
-          lng?: number | null
-        } | null
-        if (match?.name && match.address) {
-          resolvedDestination = {
-            name: match.name,
-            address: match.address,
-            lat: match.lat ?? null,
-            lng: match.lng ?? null,
-            source: 'google_places',
-          }
+        const verdict = placeConfidence(destinationQuery, (placeRes.data as { places?: unknown[] } | null)?.places, home) as {
+          level: 'sure' | 'unsure' | 'none'
+          pick: { name: string; address: string; lat: number | null; lng: number | null } | null
+          choices: Array<{ name: string; address: string; lat: number | null; lng: number | null }>
+        }
+        if (verdict.level === 'sure' && verdict.pick) {
+          resolvedDestination = { name: verdict.pick.name, address: verdict.pick.address, lat: verdict.pick.lat, lng: verdict.pick.lng, source: 'google_places' }
+        } else if (verdict.level === 'unsure') {
+          await sb.from('event_enrichments').upsert({ event_id, place_choices: verdict.choices, updated_at: new Date().toISOString() }, { onConflict: 'event_id' })
+          await appendEnrichmentDebug(sb, event_id, 'event_enrichment_place_unsure', verdict.choices.map((c) => `${c.name} — ${c.address}`).join(' | '), { query: destinationQuery })
         }
       }
     }
@@ -192,6 +200,7 @@ Deno.serve(async (req) => {
       })
     }
     Object.assign(event, destinationPatch)
+    await sb.from('event_enrichments').upsert({ event_id, place_choices: null, updated_at: new Date().toISOString() }, { onConflict: 'event_id' })
     await appendEnrichmentDebug(
       sb,
       event_id,

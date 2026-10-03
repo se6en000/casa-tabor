@@ -146,6 +146,9 @@ function PhoneFixturePageInner() {
     ] as unknown as WallEvent[] : []),
     // `?trip=1` (canvas 19, 21c): Jake's Dallas trip, Oct 7–8.
     ...(params.get('trip') ? tripEvents as unknown as WallEvent[] : []),
+    // `?choose=1` (Oct 2, how sure of a place): an add the lookup wasn't sure about — two Amped Fitness gyms to pick from.
+    ...(params.get('choose') ? [{ id: 'gym-choose', title: 'Gym', start_time: new Date(2026, 8, 25, 17, 30).toISOString(), end_time: new Date(2026, 8, 25, 19, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: 'Amped Fitness', address: null, members: [{ family_member_id: 'kelly', role: 'primary' }],
+      enrichment: { place_choices: [{ name: 'Amped Fitness Signature', address: '2771 S Dixie Hwy, West Palm Beach, FL 33405' }, { name: 'Amped Fitness', address: '3101 PGA Blvd, Palm Beach Gardens, FL 33410' }] } }] as unknown as WallEvent[] : []),
   ])
   // "Casa wants to talk to you" (21c), in memory here.
   const [talkState, setTalkState] = useState<CasaTalkState>({})

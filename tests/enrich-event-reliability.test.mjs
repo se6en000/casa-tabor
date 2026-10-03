@@ -21,7 +21,8 @@ const supabaseConfig = readFileSync(
 
 test('event enrichment resolves explicit semantic locations through canonical Places search', () => {
   assert.match(source, /functions\.invoke\('place-search'/)
-  assert.match(source, /selectConfidentEventPlace/)
+  // How sure of the place (Oct 2): the confidence levels replaced the first-match pick.
+  assert.match(source, /placeConfidence\(/)
   assert.match(source, /event_enrichment_place_resolved/)
   assert.match(placeSearchSource, /places\.primaryType/)
   assert.match(placeSearchSource, /primary_type:\s*p\.primaryType/)

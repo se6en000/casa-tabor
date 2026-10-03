@@ -127,6 +127,9 @@ export interface PhoneViewProps {
   /** Coming up (board 07b): what needs planning, from the same service as the wall's. */
   comingUp?: { items: ComingUpItem[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; ideas?: GiftIdea[]; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do and projects (P3.22 step 7) — Jake's list, so only on Jake's phone. */
+  /** Something saved behind the screen that didn't take: shown once above the bar. */
+  notice?: string | null
+  onNoticeSeen?: () => void
   /** Sign out, to open the phone as someone else (Jake, Oct 2: "a logoff ability on mobile so I can test the different profiles"). */
   onSignOut?: () => void
   /** Past events with a place, newest first: "Happy Tails, like last time" on the form (step 5). */
@@ -190,7 +193,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -791,6 +794,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <div aria-hidden={!tucked} className={`phone-tucked pointer-events-none absolute inset-x-0 top-0 z-10 flex h-[48px] items-center justify-center border-0 border-b border-solid border-wall-stone/70 bg-phone-ground/80 backdrop-blur-xl backdrop-saturate-150 ${tucked ? 'opacity-100' : '-translate-y-[8px] opacity-0'}`}>
         <span className="font-display text-phone-heading font-bold text-wall-ink">{tuckedTitle}</span>
       </div>
+      {notice && (
+        <div role="alert" onClick={onNoticeSeen} className="phone-sheet absolute bottom-[96px] left-[12px] right-[12px] z-30 rounded-[16px] bg-wall-rust px-[16px] py-[12px] text-phone-body font-semibold text-wall-on-pigment shadow-[0_8px_24px_rgba(38,34,29,0.3)]">
+          {notice}
+        </div>
+      )}
       {/* Casa to the right of the bar (32j); on Groceries it adds to the list (33d). */}
       <PhoneTabBar
         tabs={tabs}

@@ -965,3 +965,32 @@ test('phone: editing an event changes its place — a saved place offered as you
   await sheet.getByRole('button', { name: 'Save' }).click()
   await expect(phone.getByText(/Ferrin Park/).first()).toBeVisible()
 })
+
+// Jake, Oct 2: "what happens if it doesn't really know the place … the confidence is like 50% or 60%": it says
+// "which one?" and offers the choices; one tap sets it.
+test('phone: not sure of a place — "which one?" on the day, the choices on the event, one tap sets it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&choose=1')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await expect(phone.getByText('Amped Fitness · which one?').first()).toBeVisible()
+  await phone.getByRole('button', { name: /Gym/ }).first().click()
+  const choose = phone.getByRole('region', { name: 'Which one?' })
+  await expect(choose.getByRole('button', { name: /Amped Fitness Signature/ })).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-place-which.png')
+  await choose.getByRole('button', { name: /Amped Fitness Signature/ }).click()
+  await expect(phone.getByRole('region', { name: 'Which one?' })).toHaveCount(0)
+  await expect(phone.getByText('Amped Fitness · which one?')).toHaveCount(0)
+})
+
+// Jake, Oct 2: "When looking for an address I need to see it in full. Not just the place's name."
+test('phone: the place on the edit sheet shows its whole address', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
+  await phone.getByRole('button', { name: /Emme Practice Violin/ }).first().click()
+  const sheet = phone.getByRole('region', { name: /on the phone$/ })
+  await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
+  const place = sheet.getByPlaceholder(/Home, a place/)
+  await place.fill('Ferr')
+  await expect(sheet.getByText('No address yet — pick one below, or Casa looks it up after you save.')).toBeVisible()
+  await sheet.getByRole('button', { name: /Ferrin Park/ }).click()
+  await expect(sheet.getByText('11921 Okeechobee Blvd, Royal Palm Beach, FL, 33411')).toBeVisible()
+})

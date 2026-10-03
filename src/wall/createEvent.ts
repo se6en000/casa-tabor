@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { getAssistantDeviceId } from '../lib/assistantTelemetry'
 import { invalidateAllCalendarQueries } from '../lib/eventMutations'
+import { showAdded } from '../lib/optimisticEvent'
 import { supabase } from '../lib/supabase'
 import { readActionResult, responseBody } from './assistantActions'
 
@@ -26,6 +27,8 @@ export async function createEventByTouch(queryClient: QueryClient, args: Record<
   })
   const result = readActionResult(await responseBody(data, error), requestArgs)
   if (result.kind !== 'done') throw new Error(result.kind === 'error' ? result.message : 'That clashes with something already on the calendar.')
+  // On the calendar at once — the form and Scan as Casa's adds (Jake, Oct 2): the fetch behind it brings the server's copy.
+  showAdded(queryClient, result.eventId, requestArgs)
   invalidateAllCalendarQueries(queryClient, result.eventId ?? '')
   // Its id, for what goes onto it next (a scanned flyer's packing, P3.24).
   return result.eventId ?? null

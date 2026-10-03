@@ -93,3 +93,48 @@ export async function findUsualPlace(sb, query, memberIds = []) {
   const past = data.map((row) => ({ ...row, member_ids: (row.event_members ?? []).map((m) => m?.family_member_id).filter(Boolean) }))
   return pickUsualPlace(query, past, memberIds)
 }
+
+const MILES_FROM_HOME = 40
+const milesBetween = (a, b) => {
+  const r = (d) => (d * Math.PI) / 180
+  const dLat = r(b.lat - a.lat)
+  const dLng = r(b.lng - a.lng)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2
+  return 3958.8 * 2 * Math.asin(Math.sqrt(h))
+}
+const stem = (w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w)
+
+/**
+ * How sure a search is of the place (Jake, Oct 2: "what happens if it doesn't really know the place … 50% or 60%"):
+ * 'sure' — one place has every word that was said in its name, near home (or in the town that was said): filled in;
+ * 'unsure' — several do, or only some words match: up to three `choices`, nothing written; 'none' — no idea.
+ * A plain kind of place ("Gym") is never sure: that's the usual place (pickUsualPlace), not a search.
+ */
+export function placeConfidence(query, places, home) {
+  const none = { level: 'none', pick: null, choices: [] }
+  if (isGenericPlace(query) || !Array.isArray(places)) return none
+  const said = normalizedTokens(query).map(stem)
+  if (said.length === 0) return none
+  const scored = []
+  for (const place of places) {
+    if (GEOGRAPHIC_PLACE_TYPES.has(String(place?.primary_type ?? '').trim())) continue
+    const address = String(place?.address ?? '').trim()
+    if (!address) continue
+    const name = new Set(normalizedTokens(place?.name).map(stem))
+    const where = new Set(normalizedTokens(address).map(stem))
+    // A word said that's the place's town ("Iron Religion Orlando") says where, not what.
+    const town = said.filter((w) => !name.has(w) && where.has(w))
+    const what = said.filter((w) => !town.includes(w))
+    if (what.length === 0) continue
+    const shared = what.filter((w) => name.has(w)).length
+    if (shared === 0) continue
+    const far = home && Number.isFinite(place?.lat) && Number.isFinite(place?.lng) && milesBetween(home, { lat: place.lat, lng: place.lng }) > MILES_FROM_HOME
+    if (far && town.length === 0) continue
+    scored.push({ place: { name: place.name, address, lat: place.lat ?? null, lng: place.lng ?? null }, strong: shared === what.length })
+  }
+  const strong = scored.filter((s) => s.strong).map((s) => s.place)
+  if (strong.length === 1) return { level: 'sure', pick: strong[0], choices: [] }
+  if (strong.length > 1) return { level: 'unsure', pick: null, choices: strong.slice(0, 3) }
+  if (scored.length > 0) return { level: 'unsure', pick: null, choices: scored.slice(0, 3).map((s) => s.place) }
+  return none
+}

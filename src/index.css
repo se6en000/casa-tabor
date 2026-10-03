@@ -1289,6 +1289,9 @@ html.phone-app textarea,
 html.phone-app [contenteditable="true"] {
   -webkit-user-select: text;
   user-select: text;
+  /* The page turns iPhone's long-press menu off; a text box needs it back, or there's no Paste (Jake, Oct 2: "I need
+     to be able to iOS paste into chat. I can't today"). */
+  -webkit-touch-callout: default;
 }
 html.phone-app button,
 html.phone-app a,

@@ -131,6 +131,8 @@ export interface EventEnrichment {
   category: string | null
   category_locked: boolean
   confidence: 'high' | 'medium' | 'low'
+  /** "Which one?": the places the lookup wasn't sure between (name, address); cleared when one is picked. */
+  place_choices?: Array<{ name: string; address: string }> | null
   enriched_by: string | null
   enriched_at: string
   created_at: string

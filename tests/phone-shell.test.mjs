@@ -35,3 +35,12 @@ test('keyboard: measured against the full height from before typing, not the win
   // Nothing typed: the window's own height again (a turn to landscape).
   assert.equal(fullHeight(full, 400, false), 400)
 })
+
+// Jake, Oct 2: "I need to be able to iOS paste into chat. I can't today." The page turns the long-press menu off; the
+// text boxes turn it back on, or iPhone never offers Paste.
+import { readFileSync } from 'node:fs'
+test('text boxes keep iPhone’s long-press menu (Paste)', () => {
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
+  const rule = css.slice(css.indexOf('html.phone-app input,'), css.indexOf('}', css.indexOf('html.phone-app input,')))
+  assert.match(rule, /-webkit-touch-callout:\s*default/)
+})

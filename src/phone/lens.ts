@@ -88,7 +88,12 @@ export function meView(input: { viewerId: string; plan: DayPlan | null; members:
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const byLeave = (a: Trip, b: Trip) => (a.leaveAt ?? a.arriveAt).getTime() - (b.leaveAt ?? b.arriveAt).getTime()
 
-  const mine = plan.trips.filter((t) => t.driverId === viewerId && upcoming(t, now)).sort(byLeave).map((t) => move(t, now))
+  // A trip to a place still being looked up, not sure, or without an address has no leave-by yet, rather than a guess.
+  const stateOf = (t: Trip) => (t.source === 'event' ? placeState(events.find((e) => e.id === t.sourceId), true) : null)
+  const mine = plan.trips.filter((t) => t.driverId === viewerId && upcoming(t, now)).sort(byLeave).map((t) => {
+    const state = stateOf(t)
+    return state ? { ...move(t, now), leaveBy: null, eyebrow: PLACE_EYEBROW[state] } : move(t, now)
+  })
   const covered = plan.trips
     .filter((t) => t.driverId && t.driverId !== viewerId && upcoming(t, now))
     .sort(byLeave)
@@ -115,6 +120,21 @@ export function meView(input: { viewerId: string; plan: DayPlan | null; members:
 
   return { next: mine[0] ?? null, moves: mine.slice(1), covered, hidden, justYours }
 }
+
+/**
+ * Where an event's place stands, when it isn't simply known (Jake, Oct 2: "what happens if it doesn't really know the
+ * place"): still being looked up, not sure between a few, or no address at all. None of them gets a guessed leave-by.
+ */
+export function placeState(event: WallEvent | undefined, outing: boolean): 'pending' | 'choose' | 'missing' | null {
+  if (!event) return null
+  const e = event as WallEvent & { _placePending?: boolean; enrichment?: { place_choices?: unknown[] | null } | null }
+  if (e._placePending) return 'pending'
+  if (e.address) return null
+  if ((e.enrichment?.place_choices ?? []).length > 0) return 'choose'
+  return outing && e.location_name ? 'missing' : null
+}
+const PLACE_WORDS = { pending: 'working out the drive…', choose: 'which one?', missing: 'add the address' } as const
+const PLACE_EYEBROW = { pending: 'WORKING OUT THE DRIVE', choose: 'WHICH PLACE?', missing: 'ADD THE ADDRESS' } as const
 
 export interface FamilyItem {
   id: string
@@ -179,7 +199,11 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
           : trip
             ? `${placeName(trip)} · ${trip.driverId ? `${nameOf(trip.driverId)} drives` : 'needs a driver'}`
             : s.placeStatus === 'home' ? 'At home' : ''
-      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: s.label, sub, people: [memberId], kind, ...(s.fromRoutine ? { routine: true } : {}) })
+      // A place still being looked up, not sure, or with no address says so (and nothing guesses the drive).
+      const ev = events.find((e) => e.id === s.sourceId)
+      const state = placeState(ev, Boolean(trip))
+      const shownSub = state ? `${ev?.location_name ?? 'The place'} · ${PLACE_WORDS[state]}` : sub
+      items.set(key, { id: s.sourceId, time: clockTime(s.start), at: s.start, end: s.end, title: s.label, sub: shownSub, people: [memberId], kind, ...(s.fromRoutine ? { routine: true } : {}) })
     }
   }
   // An outing nobody is listed for yet still shows (it needs someone).

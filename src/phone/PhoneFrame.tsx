@@ -3,9 +3,11 @@ import { buildDayPlan } from '../wall/engine/dayPlan'
 import type { WallEvent } from '../wall/engine/types'
 import { useProfileSession } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
-import { deleteCalendarEvent } from '../lib/eventMutations'
+import { deleteCalendarEvent, invalidateAllCalendarQueries } from '../lib/eventMutations'
 import { supabase } from '../lib/supabase'
 import { saveDraft } from '../wall/saveDraft'
+import { draftChanges, previewEvent } from '../wall/editing'
+import { holdWhileSaving, PLACE_PENDING, type withChanged } from '../lib/optimisticEvent'
 import { createEventByTouch } from '../wall/createEvent'
 import { useFamilyDay } from '../wall/useFamilyDay'
 import { useMonthEvents } from '../hooks/useCalendarEvents'
@@ -64,6 +66,8 @@ function usePhoneMonth(month: Date): WallEvent[] {
 
 export default function PhoneFrame() {
   const { profile, signOut } = useProfileSession()
+  // Something saved behind the screen that didn't take (an instant edit): said once, then gone.
+  const [notice, setNotice] = useState<string | null>(null)
   // A far day Casa opened on Me (dayFocus.ts): its week is loaded so it can be swiped through.
   const [aroundDay, setAroundDay] = useState<Date | null>(null)
   const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
@@ -110,7 +114,19 @@ export default function PhoneFrame() {
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
       onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
       useEventItems={useEventChecklist}
-      saveEvent={(event, draft) => saveDraft({ event, draft, members, queryClient })}
+      // An edit shows at once and the sheet closes; it saves behind (Jake, Oct 2: "experiential responsiveness"). A new
+      // place reads "working out the drive…" until its drive is back; if the save fails, the edit undoes itself and says so.
+      saveEvent={async (event, draft) => {
+        const preview = previewEvent(event, draft)
+        const placeMoved = draftChanges(event, draft).some((c) => c.field === 'place')
+        const change = (e: Parameters<Parameters<typeof withChanged>[2]>[0]) => ({ ...e, ...preview, ...(placeMoved && draft.place.name ? { [PLACE_PENDING]: true } : {}) }) as typeof e
+        void holdWhileSaving(queryClient, event.id, change, saveDraft({ event, draft, members, queryClient })).then(() => invalidateAllCalendarQueries(queryClient, event.id)).catch(() => {
+          invalidateAllCalendarQueries(queryClient, event.id)
+          setNotice(`That change to “${event.title}” didn’t save. Try it again.`)
+        })
+      }}
+      notice={notice}
+      onNoticeSeen={() => setNotice(null)}
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
       applyPlan={async (title, items) => {

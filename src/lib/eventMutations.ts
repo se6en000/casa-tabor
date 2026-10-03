@@ -726,6 +726,8 @@ export async function updateEventVenue(
         drive_time_mins: driveMins ?? null,
         departure_time: depTimeIso ?? null,
         route_summary: routeSummary ?? (driveMins ? `${driveMins} min • ${distMiles ?? 0} mi` : null),
+        // A place chosen: any "Which one?" choices are answered.
+        place_choices: null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'event_id' })
   } catch (enrichErr) {

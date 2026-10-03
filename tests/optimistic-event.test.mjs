@@ -30,7 +30,59 @@ test('into a cached range once, as a plain list or a range result', () => {
 
 test('the yes puts it there before the calendar is fetched again', () => {
   const src = readFileSync(new URL('../src/wall/useAssistantTurn.ts', import.meta.url), 'utf8')
-  const put = src.indexOf('withEvent(old, added)')
+  const put = src.indexOf("showAdded(queryClient, result.eventId, args)")
   const refetch = src.indexOf('invalidateAllCalendarQueries(queryClient, String(args.event_id')
   assert.ok(put > 0 && refetch > put)
+})
+
+// Instant everywhere (Jake, Oct 2: "there are other opportunities in the app for more experiential responsiveness"):
+// Casa's changes show at once; a place still being looked up says so rather than guessing.
+import { changedEvent, PLACE_PENDING } from '../src/lib/optimisticEvent.ts'
+
+test('a change, as it will be: time, title, people; a new place waits for its address', () => {
+  const before = { id: 'ev1', title: 'Dentist', start_time: '2026-10-05T19:30:00Z', end_time: '2026-10-05T20:30:00Z', location_name: 'Smile Dental', address: '1 Tooth St', members: [{ id: 'm1', role: 'primary', family_member: { id: 'liv', name: 'Liv' } }] }
+  const moved = changedEvent(before, { id: 'ev1', start: '2026-10-05T20:00:00Z', end: '2026-10-05T21:00:00Z', members_add: ['Kelly'] }, family)
+  assert.equal(moved.start_time, '2026-10-05T20:00:00Z')
+  assert.equal(moved.title, 'Dentist')
+  assert.equal(moved.address, '1 Tooth St') // the place didn't change
+  assert.deepEqual(moved.members.map((m) => m.family_member.id), ['liv', 'kelly'])
+  const elsewhere = changedEvent(before, { id: 'ev1', location: 'Bright Smiles', members_remove: ['Liv'] }, [...family, { id: 'liv', name: 'Liv' }])
+  assert.equal(elsewhere.location_name, 'Bright Smiles')
+  assert.equal(elsewhere.address, null)
+  assert.equal(elsewhere[PLACE_PENDING], true)
+  assert.deepEqual(elsewhere.members, [])
+})
+
+test('an add with a place it hasn’t looked up yet is marked as waiting for it', () => {
+  const e = optimisticEvent('ev3', { title: 'Gym', start: '2026-10-02T23:30:00Z', end: '2026-10-03T01:00:00Z', location: 'Amped Fitness' }, family)
+  assert.equal(e[PLACE_PENDING], true)
+  const home = optimisticEvent('ev4', { title: 'Call', start: '2026-10-02T23:30:00Z', end: '2026-10-03T01:00:00Z' }, family)
+  assert.equal(home[PLACE_PENDING], undefined)
+})
+
+test('the form and Scan put their adds there too, before the fetch', () => {
+  const src = readFileSync(new URL('../src/wall/createEvent.ts', import.meta.url), 'utf8')
+  const put = src.indexOf('showAdded(queryClient, result.eventId, requestArgs)')
+  assert.ok(put > 0 && src.indexOf('invalidateAllCalendarQueries(queryClient, result.eventId', put) > put)
+})
+
+import { QueryClient } from '@tanstack/query-core'
+import { holdWhileSaving } from '../src/lib/optimisticEvent.ts'
+
+test('an edit holds over a refresh that lands mid-save, then the server’s copy takes over', async () => {
+  const qc = new QueryClient()
+  const key = ['events', 'week', 'w1']
+  qc.setQueryData(key, [{ id: 'a', title: 'Old place' }])
+  let finish
+  const saving = new Promise((resolve) => { finish = resolve })
+  const held = holdWhileSaving(qc, 'a', (e) => ({ ...e, title: 'New place' }), saving)
+  assert.equal(qc.getQueryData(key)[0].title, 'New place')
+  // A refresh halfway through the save (the server doesn't have the change yet).
+  await qc.fetchQuery({ queryKey: key, queryFn: async () => [{ id: 'a', title: 'Old place' }], staleTime: 0 })
+  assert.equal(qc.getQueryData(key)[0].title, 'New place')
+  finish()
+  await held
+  // Saved: what the server says stands.
+  await qc.fetchQuery({ queryKey: key, queryFn: async () => [{ id: 'a', title: 'Server place' }], staleTime: 0 })
+  assert.equal(qc.getQueryData(key)[0].title, 'Server place')
 })

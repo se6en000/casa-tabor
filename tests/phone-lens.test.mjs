@@ -183,3 +183,31 @@ test('the day you leave: the move to the airport offers an Uber when that’s th
   const fri = meView({ viewerId: 'jake-id', plan: friday, members, events, checklist: [], now: at(25, 7, 12) })
   assert.equal(fri.next.uber, null)
 })
+
+// Instant adds (Jake, Oct 2): a place still being looked up says so — "Working out the drive…" — and no leave-by is
+// guessed until it's real.
+test('a place still being looked up: "Working out the drive…", and no leave-by yet', () => {
+  const pending = { id: 'gym-now', title: 'Gym', event_type: 'event', all_day: false, start_time: at(26, 15, 0).toISOString(), end_time: at(26, 16, 0).toISOString(), location_name: 'Amped Fitness', address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }], _placePending: true }
+  const plan = buildDayPlan({ date: SATURDAY, members, routines, events: [...events, pending] })
+  const item = familyItems(plan, members, 'jake-id', [...events, pending]).find((i) => i.id === 'gym-now')
+  assert.equal(item.sub, 'Amped Fitness · working out the drive…')
+  const me = meView({ viewerId: 'jake-id', plan, members, events: [...events, pending], checklist: [], now: at(26, 13, 0) })
+  const move = [me.next, ...me.moves].find((m) => m?.eventId === 'gym-now')
+  if (move) {
+    assert.equal(move.leaveBy, null)
+    assert.equal(move.eyebrow, 'WORKING OUT THE DRIVE')
+  }
+})
+
+test('not sure of the place: "which one?"; no address at all: "add the address" — and no leave-by for either', () => {
+  const unsure = { id: 'amped', title: 'Gym', event_type: 'event', all_day: false, start_time: at(26, 15, 0).toISOString(), end_time: at(26, 16, 0).toISOString(), location_name: 'Amped Fitness', address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }], enrichment: { place_choices: [{ name: 'Amped Fitness Signature', address: '2771 S Dixie Hwy' }, { name: 'Amped Fitness', address: '3101 PGA Blvd' }] } }
+  const missing = { id: 'nowhere', title: 'Pottery', event_type: 'event', all_day: false, start_time: at(26, 17, 0).toISOString(), end_time: at(26, 18, 0).toISOString(), location_name: 'Clay Studio', address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] }
+  const all = [...events, unsure, missing]
+  const plan = buildDayPlan({ date: SATURDAY, members, routines, events: all })
+  const items = familyItems(plan, members, 'jake-id', all)
+  assert.equal(items.find((i) => i.id === 'amped').sub, 'Amped Fitness · which one?')
+  assert.equal(items.find((i) => i.id === 'nowhere').sub, 'Clay Studio · add the address')
+  const me = meView({ viewerId: 'jake-id', plan, members, events: all, checklist: [], now: at(26, 13, 0) })
+  const moves = [me.next, ...me.moves].filter(Boolean)
+  assert.deepEqual(moves.filter((m) => m.eventId === 'amped' || m.eventId === 'nowhere').map((m) => [m.eventId, m.leaveBy, m.eyebrow]), [['amped', null, 'WHICH PLACE?'], ['nowhere', null, 'ADD THE ADDRESS']])
+})

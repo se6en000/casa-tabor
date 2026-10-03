@@ -118,7 +118,8 @@ const EVENT_SUMMARY_SELECT = `
     departure_time,
     drive_time_mins,
     weather_at_event,
-    weather_summary
+    weather_summary,
+    place_choices
   ),
   event_action_items (
     id,

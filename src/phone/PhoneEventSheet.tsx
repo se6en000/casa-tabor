@@ -86,6 +86,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
     <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-display font-bold text-wall-on-pigment ${size} ${pigmentStyleFor(pigments.get(id) ?? 0).solid}`}>{nameOf(id).charAt(0)}</span>
   )
   const changes = draftChanges(event, draft, members)
+  const choices = ((event as { enrichment?: { place_choices?: Array<{ name: string; address: string }> | null } | null }).enrichment?.place_choices ?? []).filter((c) => c?.name && c?.address)
   // Smarter drafts (step 5): a clash warns but never blocks; the place from last time is one tap; an outing asks who drives.
   const clashes = isNew && kind === 'event' && !draft.allDay && clashesFor ? clashesFor(draft) : []
   const lastPlace = isNew && !draft.place.name.trim() && draft.title.trim().length >= 3 && placeFromLastTime ? placeFromLastTime(draft.title) : null
@@ -150,6 +151,22 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           )}
           {view.place.address && (
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(view.place.address)}`} target="_blank" rel="noreferrer" className={`${pill} flex items-center justify-center no-underline`}>Directions</a>
+          )}
+          {/* Not sure of the place (Jake, Oct 2): the choices, one tap; or none at all: add the address. */}
+          {!view.place.address && choices.length > 0 && saveEvent && (
+            <section aria-label="Which one?" className="flex flex-col gap-[8px] rounded-[16px] bg-phone-card p-[12px]">
+              <div className={label}>WHICH ONE?</div>
+              {choices.map((c) => (
+                <button key={`${c.name}|${c.address}`} type="button" onClick={() => void run(() => saveEvent(event, setPlace(draftFromEvent(event), { name: c.name, address: c.address, driveMinutes: null })), 'That didn’t save. Try again.')}
+                  className="flex min-h-[48px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[8px] text-left text-wall-ink">
+                  <span className="text-phone-body font-semibold">{c.name}</span>
+                  <span className="text-phone-detail text-wall-ink-2">{c.address}</span>
+                </button>
+              ))}
+            </section>
+          )}
+          {!view.place.address && view.place.name && choices.length === 0 && saveEvent && !(event as { _placePending?: boolean })._placePending && (
+            <button type="button" onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }} className={`${pill} flex items-center justify-center`}>Add the address</button>
           )}
           <div>
             <div className={label}>WHO'S GOING</div>
@@ -271,6 +288,13 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                 onChange={(e) => setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null }))}
                 className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
               />
+              {/* The whole address, so it's plainly the right place (Jake, Oct 2: "I need to see it in full. Not just the
+                  place's name"). */}
+              {draft.place.address && draft.place.address !== draft.place.name ? (
+                <span className="flex items-start gap-[6px] text-phone-detail text-wall-ink-2"><MapPin size={14} aria-hidden="true" className="mt-[2px] shrink-0" />{draft.place.address}</span>
+              ) : draft.place.name.trim() && !/^home$/i.test(draft.place.name.trim()) ? (
+                <span className="text-phone-detail text-wall-ink-2">No address yet — pick one below, or Casa looks it up after you save.</span>
+              ) : null}
               {placeHits.length > 0 && (
                 <span className="flex flex-col gap-[6px]">
                   {placeHits.map((p) => (
@@ -358,7 +382,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           {isNew ? (
             <span className="text-phone-detail text-wall-ink-2">Goes on Google Calendar too.</span>
           ) : (
-            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (place, repeats) in Calendar</Link>
+            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (repeats) in Calendar</Link>
           )}
         </div>
       )}

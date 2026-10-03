@@ -59,3 +59,36 @@ test('the usual place: where this person last went for it, with an address', () 
   assert.deepEqual(pickUsualPlace('the dentist', past, ['owen']), { name: 'Smile Dental', address: '1 Tooth St' }) // nobody's own: the family's last
   assert.equal(pickUsualPlace('school', past, ['kelly']), null)
 })
+
+// How sure (Jake, Oct 2: "what happens if it doesn't really know the place … the confidence is like 50% or 60%"): sure
+// is filled in; not sure keeps up to three choices to pick from; no idea leaves the name. Nothing far from home unless
+// the place was said with its town.
+import { placeConfidence } from '../supabase/functions/_shared/event-place-resolution.mjs'
+
+const home = { lat: 26.68, lng: -80.06 } // West Palm Beach
+const wpb = (name, address, dLat = 0.02) => ({ name, address, lat: home.lat + dLat, lng: home.lng, primary_type: 'establishment' })
+
+test('sure: one place clearly by that name, near home', () => {
+  const r = placeConfidence('Smile Dental', [wpb('Smile Dental', '1 Tooth St, West Palm Beach, FL')], home)
+  assert.equal(r.level, 'sure')
+  assert.equal(r.pick.name, 'Smile Dental')
+})
+
+test('not sure: two near home by that name — both offered, neither written', () => {
+  const r = placeConfidence('Amped Fitness', [wpb('Amped Fitness Signature', '2771 S Dixie Hwy, West Palm Beach, FL'), wpb('Amped Fitness', '3101 PGA Blvd, Palm Beach Gardens, FL', 0.15)], home)
+  assert.equal(r.level, 'unsure')
+  assert.deepEqual(r.choices.map((c) => c.address), ['2771 S Dixie Hwy, West Palm Beach, FL', '3101 PGA Blvd, Palm Beach Gardens, FL'])
+})
+
+test('far from home is dropped unless the town was said', () => {
+  const orlando = { name: 'Iron Religion Gym', address: '5247 International Dr, Orlando, FL 32819, USA', lat: 28.45, lng: -81.47, primary_type: 'gym' }
+  assert.equal(placeConfidence('Iron Religion', [orlando], home).level, 'none')
+  assert.equal(placeConfidence('Iron Religion Orlando', [orlando], home).level, 'sure')
+})
+
+test('only a word in common is not sure; nothing in common is no idea', () => {
+  const r = placeConfidence('Sky Zone', [wpb('Sky High Trampoline', '9 Jump Rd, West Palm Beach, FL')], home)
+  assert.equal(r.level, 'unsure')
+  assert.equal(placeConfidence('Sky Zone', [wpb('Bounce House', '9 Jump Rd')], home).level, 'none')
+  assert.equal(placeConfidence('Gym', [wpb('Iron Gym', '1 A St')], home).level, 'none') // a kind of place: the usual place, never a guess
+})
