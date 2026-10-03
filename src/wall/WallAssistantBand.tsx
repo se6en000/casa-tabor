@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bug, Mic, X } from 'lucide-react'
+import { Bug, ChevronDown, Mic, X } from 'lucide-react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { pageAsked } from './pageAsk'
 import { CLOSING_FADE_MS } from './led'
 import type { FamilyMember } from '../types'
-import { useSwipeDown } from './useSwipeDown'
+import { useDragDown } from './useSwipeDown'
 import VoiceHalo from './VoiceHalo'
 import { inkWords, shownWords, type VoiceLineState } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
@@ -377,8 +377,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const [closeArmedAt, setCloseArmedAt] = useState(0)
   // The pill tapped open (a wake-word open with nothing heard yet).
   const [expanded, setExpanded] = useState(false)
-  // A swipe down closes the band (touch and mouse; useSwipeDown).
-  const dismiss = (how: 'tap_outside' | 'swipe_down' | 'escape') => {
+  // A swipe down closes the band (touch and mouse; useDragDown), and so does a tap on its pull tab.
+  const dismiss = (how: 'tap_outside' | 'swipe_down' | 'tab' | 'escape') => {
     const waiting = Boolean(pending?.toolAction)
     if (dismissStep({ how, waiting, armedAt: closeArmedAt, now: Date.now() }) === 'arm') {
       setCloseArmedAt(Date.now())
@@ -387,7 +387,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     emitAssistantTrace('wall_band_dismissed', voiceTrace.current, { payload: { how, open_ms: Date.now() - openedAt.current, heard_words: messages.some((m) => m.role === 'user'), waiting, via_wake: viaWake } })
     onClose()
   }
-  const swipe = useSwipeDown(() => dismiss('swipe_down'))
+  const { handlers: swipe, dragY } = useDragDown(() => dismiss('swipe_down'))
   useEffect(() => {
     if (!closeArmedAt) return
     const timer = window.setTimeout(() => setCloseArmedAt(0), 4000)
@@ -859,7 +859,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     <section
       aria-label="Assistant"
       {...swipe}
-      className={`absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] pt-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60 pb-[44px]`}
+      className={`absolute bottom-0 left-0 z-30 flex min-h-[430px] w-[1920px] touch-none gap-[56px] rounded-t-[32px] bg-wall-band px-[64px] pt-[44px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60 pb-[44px] ${dragY ? '' : 'transition-transform duration-200 ease-out'}`}
+      // It follows the hand down, and springs back if let go early (canvas 37a-3).
+      style={dragY ? { transform: `translateY(${dragY}px)` } : undefined}
       onClick={(event) => {
         event.stopPropagation()
         lastTouch.current = Date.now()
@@ -884,6 +886,17 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               </>
             : <div className="h-[3px] w-full bg-wall-night-brass/70" />}
       </div>
+      {/* The pull tab (canvas 37a-3; Jake, Oct 3: "a 'tab' on it so it makes sense that you can close it by dragging" —
+          "more of a pull down vs pull up"): hanging from the brass edge, the chevron pointing the way it goes. Pull it
+          (or anywhere on the band) down to close; a tap on it closes too. */}
+      <button
+        type="button"
+        aria-label="Close Casa — or pull down"
+        onClick={(event) => { event.stopPropagation(); dismiss('tab') }}
+        className="absolute left-1/2 top-0 flex h-[44px] w-[140px] -translate-x-1/2 cursor-grab items-center justify-center rounded-b-[24px] border-[5px] border-t-0 border-solid border-wall-night-brass bg-wall-band p-0 text-wall-night-brass active:cursor-grabbing"
+      >
+        <ChevronDown size={34} strokeWidth={2.4} aria-hidden="true" />
+      </button>
       <div className="flex w-[200px] shrink-0 flex-col items-center gap-[16px]">
         <div data-listener={listenerV2 ? haloState : undefined} className="relative flex h-[132px] w-[132px] items-center justify-center">
           {/* The new listener: a halo behind the mic that swells with your voice (canvas row 17, take two). */}

@@ -79,6 +79,8 @@ export interface GetAndPackProps {
   onToggleItem?: (item: WallChecklistItem) => void
   onOpenEvent?: (eventId: string) => void
   onSeeAll?: () => void
+  /** It runs to the wall's right edge, where "Hide routines" floats on its heading row: See all steps left of it. */
+  clearEnd?: boolean
 }
 
 const GRID = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
@@ -86,7 +88,7 @@ const SPAN = { 1: 'col-span-1', 2: 'col-span-2', 3: 'col-span-3', 4: 'col-span-4
 
 const ROW_PX = 44
 
-export function GetAndPack({ packing, lines: least, label, columns: across = 2, fill = false, inRail = false, onToggleItem, onOpenEvent, onSeeAll }: GetAndPackProps) {
+export function GetAndPack({ packing, lines: least, label, columns: across = 2, fill = false, inRail = false, onToggleItem, onOpenEvent, onSeeAll, clearEnd = false }: GetAndPackProps) {
   // Jake, 2026-10-01: "use that area to show as much as possible on the screen … only use 'see all' when the things
   // truly won't fit." Every line is a 44 px row, so the rows are the list's height over 44.
   const list = useRef<HTMLDivElement>(null)
@@ -117,7 +119,7 @@ export function GetAndPack({ packing, lines: least, label, columns: across = 2, 
               onSeeAll()
             }}
             // A quiet link like the TOMORROW note's "Open tomorrow ›": it opens the list, it isn't an action.
-            className="flex h-[44px] shrink-0 items-center gap-[4px] border-0 bg-transparent px-[4px] text-wall-detail text-wall-ink-2"
+            className={`flex h-[44px] shrink-0 items-center gap-[4px] border-0 bg-transparent px-[4px] text-wall-detail text-wall-ink-2 ${clearEnd ? 'mr-[220px]' : ''}`}
           >
             {hidden > 0 ? `See all · ${hidden} more` : 'See all'}
             <ChevronRight size={20} aria-hidden="true" />
@@ -179,7 +181,7 @@ export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, pac
         </section>
       )}
       {packing.total > 0 && (
-        <GetAndPack packing={packing} lines={3} fill inRail columns={packBoxes} label={packLabel} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} />
+        <GetAndPack packing={packing} lines={3} fill inRail columns={packBoxes} label={packLabel} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAll} clearEnd={departure === null} />
       )}
       {departure !== null && <div className="col-start-4 flex min-w-0 flex-col">{departure}</div>}
     </div>

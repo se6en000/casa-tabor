@@ -196,16 +196,20 @@ export function tapOutsideCloses(messageCount: number): boolean {
  * waiting for a yes, a tap outside first asks ("Tap again to close — the card isn't saved"); a second tap
  * within 4 seconds closes. A swipe down or Esc is on purpose, and closes.
  */
-export function dismissStep({ how, waiting, armedAt, now }: { how: 'tap_outside' | 'swipe_down' | 'escape'; waiting: boolean; armedAt: number; now: number }): 'close' | 'arm' {
+export function dismissStep({ how, waiting, armedAt, now }: { how: 'tap_outside' | 'swipe_down' | 'tab' | 'escape'; waiting: boolean; armedAt: number; now: number }): 'close' | 'arm' {
   if (how !== 'tap_outside' || !waiting) return 'close'
   return armedAt > 0 && now - armedAt <= 4000 ? 'close' : 'arm'
 }
 
-/** A swipe down on the band: at least 140 px down, more down than sideways, within 0.9 s. */
+/**
+ * A swipe down on the band: more down than sideways, and either quick (140 px within 0.9 s) or pulled far (180 px at
+ * any pace — the band follows the hand, canvas 37a-3, so a slow pull that far down means close).
+ */
 export function isSwipeDown(start: { x: number; y: number; t: number }, end: { x: number; y: number; t: number }): boolean {
   const dy = end.y - start.y
   const dx = Math.abs(end.x - start.x)
-  return dy >= 140 && dx < dy / 2 && end.t - start.t <= 900
+  if (dx >= dy / 2) return false
+  return dy >= 180 || (dy >= 140 && end.t - start.t <= 900)
 }
 
 /**

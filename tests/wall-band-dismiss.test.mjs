@@ -20,7 +20,10 @@ test('a swipe down: mostly downward, far enough, quick enough', () => {
   assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 920, y: 760, t: 300 }), false, 'too short: a tap that slid')
   assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 1200, y: 880, t: 300 }), false, 'more sideways than down')
   assert.equal(isSwipeDown({ x: 900, y: 900, t: 0 }, { x: 900, y: 700, t: 300 }), false, 'upward')
-  assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 900, y: 900, t: 2000 }), false, 'too slow: a drag')
+  // The band follows the hand now (canvas 37a-3, Jake Oct 3): a slow pull that brings it far enough down closes it too;
+  // a slow short one springs back.
+  assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 900, y: 900, t: 2000 }), true, 'a slow pull, far enough')
+  assert.equal(isSwipeDown({ x: 900, y: 700, t: 0 }, { x: 900, y: 840, t: 2000 }), false, 'a slow short pull springs back')
 })
 
 // A questionable trigger barely touches the screen (Jake, 2026-09-30: "finish the little AI band/UX for

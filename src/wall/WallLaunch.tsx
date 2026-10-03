@@ -7,7 +7,7 @@ import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
 import { AddButton, MenuButton, MicButton } from './WallMenu'
-import WallScore, { HideRoutinesPill, type ScoreInteraction } from './WallScore'
+import WallScore, { type ScoreInteraction } from './WallScore'
 import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
 import { DecisionCount, EmailCount, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
@@ -84,9 +84,6 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null
   const weather = weatherLine(currentWeather, plan, now)
   const onDetails = homeLead && onOpenItem ? () => onOpenItem(homeLead.item.id) : undefined
-  // With a Next Move and its actions (and no TOMORROW note, which has its own row), the pill sits on the actions' line.
-  // With THEN beside it the button line ends short of the wall's edge, so the pill goes back to the hours' row.
-  const pillInHeader = Boolean(nextMove && (homeLead ? onDetails : moveActions) && !tomorrow && then.length === 0)
 
   return (
     // With a list to get ready, the evening face's layout (Jake: "why can't it have the same layout as the night /
@@ -130,20 +127,12 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
           actions={homeLead ? undefined : moveActions}
           onDetails={onDetails}
           compact={then.length > 0}
-          // "Hide routines" on the Next Move's button line, not floating above the hours (polish, Oct 1).
-          trailing={pillInHeader && interaction?.routines ? <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} /> : null}
         />
         <WallThen items={then} members={members} pigmentOf={(id) => score?.lanes.find((lane) => lane.member.id === id)?.pigmentIndex ?? null} onOpen={onOpenItem} />
       </header>
 
-      {tomorrow && interaction?.routines ? (
-        // The TOMORROW note takes the room above the hours, so the Hide tap ends its row.
-        <div className="flex shrink-0 items-center gap-[16px]">
-          <div className="min-w-0 flex-1"><WallTomorrowNote note={tomorrow} /></div>
-          <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} />
-        </div>
-      ) : tomorrow && <WallTomorrowNote note={tomorrow} />}
-      <WallScore score={score} now={now} compact={prepping} interaction={(tomorrow || pillInHeader) && interaction?.routines ? { ...interaction, routines: { ...interaction.routines, elsewhere: true } } : interaction} />
+      {tomorrow && <WallTomorrowNote note={tomorrow} />}
+      <WallScore score={score} now={now} compact={prepping} interaction={interaction} />
       {prep && prepping && (
         <PrepRail
           decisions={prep.decisions}

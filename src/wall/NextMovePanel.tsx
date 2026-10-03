@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import type { NextMoveView } from './header'
 import { pigmentStyleFor } from './lanes'
 
@@ -12,11 +11,10 @@ export interface NextMoveActions {
 }
 
 /** The header's one instruction: who leaves for where, and a countdown ring to the leave time. */
-export default function NextMovePanel({ view, pigmentIndex, actions, trailing = null, onDetails, compact = false }: {
+export default function NextMovePanel({ view, pigmentIndex, actions, onDetails, compact = false }: {
   view: NextMoveView | null
   pigmentIndex: number | null
   actions?: NextMoveActions
-  trailing?: ReactNode
   /** Something at home leads (canvas 29e): no Leaving now or Hand off, just its details. */
   onDetails?: () => void
   /** THEN is beside it: a smaller ring and title. */
@@ -82,7 +80,6 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
             <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); onDetails() }}>
               Details
             </button>
-            {trailing && <div className="ml-auto">{trailing}</div>}
           </div>
         )}
         {/* No Leaving now or Hand off here (Jake, Oct 2: "that's micro management, not realistic in real life, it's just
@@ -99,8 +96,6 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
                 Choose a driver
               </button>
             )}
-            {/* A quiet link on the same line as the actions ("Hide routines"), at its right end. */}
-            {trailing && <div className="ml-auto">{trailing}</div>}
           </div>
         )}
       </div>

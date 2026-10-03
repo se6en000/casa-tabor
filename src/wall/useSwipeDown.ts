@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent, type TouchEvent } from 'react'
+import { useRef, useState, type PointerEvent, type TouchEvent } from 'react'
 import { isSwipeDown } from './assistant'
 
 /**
@@ -6,19 +6,39 @@ import { isSwipeDown } from './assistant'
  * anything" — on the wall's touchscreen Chromium takes a finger's drag over as a pan and sends pointercancel, not
  * pointerup, so the pointer alone never saw the end of the swipe. Touch is read from touch events (touchend still
  * comes); a mouse from pointer events. Put `touch-none` on the element too, so the browser doesn't claim the drag.
+ *
+ * `dragY`: how far it's being pulled down right now (canvas 37a-3, Jake Oct 3: the band follows your hand, and springs
+ * back if you let go early). Under 8 px it stays put, so a tap never wobbles it.
  */
-export function useSwipeDown(onSwipe: () => void) {
+export function useDragDown(onSwipe: () => void) {
   const start = useRef<{ x: number; y: number; t: number } | null>(null)
+  const [dragY, setDragY] = useState(0)
+  const move = (y: number) => {
+    const s = start.current
+    if (!s) return
+    const dy = y - s.y
+    setDragY(dy > 8 ? dy : 0)
+  }
   const end = (x: number, y: number) => {
     const s = start.current
     start.current = null
+    setDragY(0)
     if (s && isSwipeDown(s, { x, y, t: Date.now() })) onSwipe()
   }
-  return {
+  const handlers = {
     onPointerDown: (e: PointerEvent) => { if (e.pointerType !== 'touch') start.current = { x: e.clientX, y: e.clientY, t: Date.now() } },
+    onPointerMove: (e: PointerEvent) => { if (e.pointerType !== 'touch') move(e.clientY) },
     onPointerUp: (e: PointerEvent) => { if (e.pointerType !== 'touch') end(e.clientX, e.clientY) },
+    onPointerLeave: (e: PointerEvent) => { if (e.pointerType !== 'touch' && start.current) end(e.clientX, e.clientY) },
     onTouchStart: (e: TouchEvent) => { const p = e.touches[0]; if (p) start.current = { x: p.clientX, y: p.clientY, t: Date.now() } },
+    onTouchMove: (e: TouchEvent) => { const p = e.touches[0]; if (p) move(p.clientY) },
     onTouchEnd: (e: TouchEvent) => { const p = e.changedTouches[0]; if (p) end(p.clientX, p.clientY) },
-    onTouchCancel: () => { start.current = null },
+    onTouchCancel: () => { start.current = null; setDragY(0) },
   }
+  return { handlers, dragY }
+}
+
+/** The swipe alone, for what doesn't follow the hand (the email review). */
+export function useSwipeDown(onSwipe: () => void) {
+  return useDragDown(onSwipe).handlers
 }

@@ -1526,19 +1526,6 @@ test('wall: tapping a name opens their page beside the day — routines, what Ca
   await expect(wall.getByRole('region', { name: 'Owen’s page' })).toHaveCount(0)
 })
 
-test('wall: with the afternoon\'s TOMORROW note up, "Hide routines" sits at the end of its row, never over it', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
-  const wall = page.getByTestId('wall-fixture')
-  const note = wall.getByRole('button', { name: /TOMORROW/ })
-  const pill = wall.getByRole('button', { name: 'Hide routines' })
-  await expect(note).toBeVisible()
-  await expect(pill).toBeVisible()
-  const a = await note.boundingBox()
-  const b = await pill.boundingBox()
-  const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-  expect(overlap).toBe(false)
-})
-
 // Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
 // Take two (Jake: "too busy for our design … something smaller, like the mic"): a halo behind the mic.
 test('wall: the new listener — the mic\'s halo: it swells the moment you\'re louder than the room, settles a moment after, a held sentence fills an arc and a tap on the mic sends it', async ({ page }) => {
@@ -1871,16 +1858,75 @@ test('wall: today’s header keeps its height, with Hide routines in it or with 
   expect(plain.pillBottom).toBeGreaterThan(0)
 })
 
-test('wall: Hide routines ends at the wall’s right edge, with the hours', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  await page.getByRole('region', { name: 'Next move' }).waitFor()
+// Canvas 37a-3 (Jake, Oct 3: "a 'tab' on it so it makes sense that you can close it by dragging" — "more of a pull down vs
+// pull up"; "37a-3 for me. doesnt compete with the mic"): a tab hanging from the band's brass edge, a chevron pointing
+// down. The band follows the pull and springs back if let go early; pulled far enough, it closes; a tap on the tab too.
+test('wall: Casa’s band has a pull tab — it follows a pull, springs back when let go early, closes when pulled down or tapped', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  const band = page.getByRole('region', { name: 'Assistant' })
+  const tab = band.getByRole('button', { name: 'Close Casa — or pull down' })
+  await expect(tab).toBeVisible()
+  const t = await tab.boundingBox()
+  const b = await band.boundingBox()
+  expect(Math.abs(t.x + t.width / 2 - 960)).toBeLessThanOrEqual(2)
+  expect(Math.abs(t.y - b.y)).toBeLessThanOrEqual(1)
   await page.evaluate(() => document.fonts.ready)
-  const right = await page.evaluate(() => {
-    const pill = [...document.querySelectorAll('button')].find((b) => /Hide routines/.test(b.textContent)).getBoundingClientRect().right
-    const hours = document.querySelector('section[aria-label^="TODAY"] .w-\\[1512px\\]').getBoundingClientRect().right
-    return { pill: Math.round(pill), hours: Math.round(hours) }
-  })
-  expect(Math.abs(right.pill - right.hours)).toBeLessThanOrEqual(2)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('band-pull-tab.png', { clip: { x: 700, y: 560, width: 520, height: 180 } })
+  // A short pull: the band comes down with it, then springs back.
+  const x = t.x + t.width / 2
+  const y = t.y + t.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, y + 40, { steps: 4 })
+  await page.mouse.move(x, y + 80, { steps: 4 })
+  expect(await band.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m42)).toBeGreaterThan(60)
+  await page.mouse.up()
+  await expect(band).toBeVisible()
+  await expect.poll(() => band.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m42)).toBe(0)
+  // A long, slow pull closes it.
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  for (let d = 30; d <= 240; d += 30) { await page.mouse.move(x, y + d); await page.waitForTimeout(150) }
+  await page.mouse.up()
+  await expect(band).toHaveCount(0)
+  // A tap on the tab closes it too.
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
+  await page.getByRole('region', { name: 'Assistant' }).getByRole('button', { name: 'Close Casa — or pull down' }).click()
+  await expect(page.getByRole('region', { name: 'Assistant' })).toHaveCount(0)
+})
+
+// Canvas 37b/c (Jake, Oct 3: "hide routines is ok on the bottom right of the score, as long as it doesnt add height to
+// the screen … floats on top of the prep rail"): one home on every face — under the lanes at the right — taking no room.
+test('wall: Hide routines floats just under the lanes at the right, on every face, adding no height', async ({ page }) => {
+  test.setTimeout(120_000)
+  for (const at of ['2026-09-25T07:12:00', '2026-09-25T13:40:00', '2026-09-25T16:30:00', '2026-09-26T11:30:00', '2026-09-25T20:30:00']) {
+    await page.goto(`/__wall-fixture?at=${at}`)
+    await page.getByRole('button', { name: 'Hide routines' }).waitFor()
+    await page.evaluate(() => document.fonts.ready)
+    const m = await page.evaluate(() => {
+      const pills = [...document.querySelectorAll('button')].filter((b) => /Hide routines/.test(b.textContent))
+      const pill = pills[0].getBoundingClientRect()
+      const score = document.querySelector('[data-testid="wall-fixture"] section[aria-label*="WHO’S WHERE"], [data-testid="wall-fixture"] section[aria-label*="WHO\'S WHERE"]')
+      const s = score.getBoundingClientRect()
+      // The first thing under the lanes, the pill aside — the same with the pill gone, so it takes no room.
+      const firstBelow = () => [...document.querySelectorAll('[data-testid="wall-fixture"] *')].filter((e) => !pills[0].contains(e)).map((e) => e.getBoundingClientRect().top).filter((t) => t > s.bottom + 1).sort((a, b) => a - b)[0] ?? null
+      const below = firstBelow()
+      // Air around it (Jake: "kinda too close to other elements"): no other words within 12 px of its words.
+      const words = (root) => { const out = []; const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); while (walk.nextNode()) { const n = walk.currentNode; if (!n.textContent.trim()) continue; const r = document.createRange(); r.selectNodeContents(n); for (const q of r.getClientRects()) if (q.width && q.height) out.push({ q, text: n.textContent.trim() }) } return out }
+      const mine = words(pills[0]).map((w) => w.q)
+      const box = { l: Math.min(...mine.map((q) => q.left)) - 12, r: Math.max(...mine.map((q) => q.right)) + 12, t: Math.min(...mine.map((q) => q.top)) - 12, b: Math.max(...mine.map((q) => q.bottom)) + 12 }
+      const near = words(document.querySelector('[data-testid="wall-fixture"]')).filter((w) => !mine.some((q) => q.left === w.q.left && q.top === w.q.top) && w.q.left < box.r && w.q.right > box.l && w.q.top < box.b && w.q.bottom > box.t).map((w) => w.text)
+      pills[0].style.display = 'none'
+      const belowWithout = firstBelow()
+      return { near, count: pills.length, top: Math.round(pill.top), right: Math.round(pill.right), scoreBottom: Math.round(s.bottom), scoreRight: Math.round(s.right), below, belowWithout }
+    })
+    expect(m.count, at).toBe(1)
+    expect(m.near, at).toEqual([])
+    expect(m.top, at).toBeGreaterThanOrEqual(m.scoreBottom)
+    expect(m.top, at).toBeLessThanOrEqual(m.scoreBottom + 30)
+    expect(Math.abs(m.right - m.scoreRight), at).toBeLessThanOrEqual(4)
+    expect(m.below, at).toBe(m.belowWithout)
+  }
 })
 
 // Canvas 20a/20b (Jake, 2026-10-01: "need to edit chores", "kids chores as well, like change the cat litter every 4

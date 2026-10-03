@@ -107,8 +107,8 @@ export interface ScoreInteraction {
   onOpenDecision?: (decisionKey: string) => void
   /** The "No one yet" row: open the event to say who's on it (board 08a). */
   onAssign?: (sourceId: string) => void
-  /** "Hide routines" (canvas 16a/b): whether they're hidden, and the tap; `elsewhere` when the face draws the tap itself. */
-  routines?: { hidden: boolean; onToggle: () => void; elsewhere?: boolean }
+  /** "Hide routines" (canvas 16a/b): whether they're hidden, and the tap. */
+  routines?: { hidden: boolean; onToggle: () => void }
   /** Tap a name at the start of a lane: that person's page (canvas 16e). */
   onOpenPerson?: (memberId: string) => void
 }
@@ -176,9 +176,11 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
 
   return (
     <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}>
-      {interaction?.routines && !interaction.routines.elsewhere && (
-        // Above the right end of the hours, where every posture leaves room (canvas 16a).
-        <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} className="absolute bottom-full right-0 mb-[6px]" />
+      {interaction?.routines && (
+        // One home on every face (canvas 37b/c; Jake, Oct 3: "on the bottom right of the score, as long as it doesnt add
+        // height … floats on top of the prep rail"): just under the lanes at the right, taking no room — level with the
+        // rail's headings when there's a rail (GET & PACK's See all steps left of it; the evening's FIRST DEPARTURE ends short).
+        <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} className="absolute right-0 top-full z-10 mt-[21px]" />
       )}
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
