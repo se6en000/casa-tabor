@@ -858,6 +858,8 @@ export function useSpeechInput({
     if (activeRef.current) return
     if (IS_SAFE_MODE) return
     activeRef.current = true
+    // A fresh start hears: a hold from Casa's last think must never outlive the session it was for.
+    suppressRef.current = false
     setPhaseSync('connecting')
     utteranceIdRef.current = createUtteranceId()
     scheduleWakeSilenceTimeout()
