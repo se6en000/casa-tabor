@@ -114,6 +114,8 @@
   --text-caption--line-height: 1.4;
   --text-wall-clock: 104px;
   --text-wall-clock--line-height: 0.92;
+  --text-wall-title: 72px;
+  --text-wall-title--line-height: 1;
   --text-wall-clock-calm: 250px;
   --text-wall-clock-calm--line-height: 0.82;
   --text-wall-date-calm: 42px;

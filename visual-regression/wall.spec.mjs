@@ -2260,3 +2260,83 @@ test('wall: today’s header — a one-off at home takes it from a routine run t
   await page.getByTestId('wall-fixture').click({ position: { x: 400, y: 600 } })
   await expect(wall.getByRole('region', { name: 'Next move' }).getByText('AT HOME · NOW · UNTIL 4:15')).toBeVisible()
 })
+
+// The Grocery page, v2 (canvas 35a–35d; Jake, Oct 2: "build it, looks beautiful").
+const groceryPage = async (page, extra = '') => {
+  await page.goto(`/__wall-fixture?grocery=1${extra}`)
+  const wall = page.getByTestId('wall-fixture')
+  await expect(wall).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  return wall.getByRole('region', { name: 'Groceries' })
+}
+
+test('wall grocery: by aisle in three columns; a tick waits, then the ticked leave together; a usual is one tap', async ({ page }) => {
+  const list = await groceryPage(page)
+  await expect(list.getByRole('heading', { name: 'Groceries' })).toBeVisible()
+  await expect(list.getByText('17 to get')).toBeVisible()
+  await expect(list.getByText('On everyone’s phone and Reminders')).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-grocery.png')
+  await list.getByRole('button', { name: 'Bananas, 6' }).click()
+  await list.getByRole('button', { name: 'Apples', exact: true }).click()
+  await expect(list.getByRole('button', { name: 'Bananas, 6, got it' })).toBeVisible()
+  await expect(list.getByText('2 ticked · they’ll clear in a moment')).toBeVisible()
+  await expect(list.getByRole('button', { name: /Got · 5/ })).toBeVisible({ timeout: 5000 })
+  await expect(list.getByText('15 to get')).toBeVisible()
+  // A usual item: straight on the list, marked NEW.
+  await list.getByRole('button', { name: '+ Coffee creamer' }).click()
+  await expect(list.getByRole('status', { name: 'What was added' })).toHaveText('Added coffee creamer')
+  await expect(list.getByRole('button', { name: 'Coffee creamer', exact: true })).toContainText('NEW')
+})
+
+test('wall grocery: type a few at once, or hold the mic and say them (no card); slide away cancels', async ({ page }) => {
+  const list = await groceryPage(page, '&keyboard=device')
+  await list.getByRole('button', { name: 'Type what to add' }).click()
+  const box = page.getByRole('textbox', { name: 'Type here' })
+  await box.fill('paper towels, sriracha')
+  await box.press('Enter')
+  await expect(list.getByRole('region', { name: 'HOUSEHOLD' }).getByRole('button', { name: 'Paper towels' })).toBeVisible()
+  await expect(list.getByRole('region', { name: 'PANTRY' }).getByRole('button', { name: 'Sriracha' })).toBeVisible()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-grocery-added.png')
+
+  const mic = list.getByRole('button', { name: 'Hold to say what to add' })
+  const at = await mic.boundingBox()
+  const centre = [at.x + at.width / 2, at.y + at.height / 2]
+  await page.mouse.move(...centre)
+  await page.mouse.down()
+  await page.evaluate(() => window.__mic.hear('dog food and'))
+  const listening = list.getByRole('status', { name: 'Listening' })
+  await expect(listening.getByText('dog food and')).toBeVisible()
+  await expect(mic).toHaveAttribute('data-active', 'true')
+  await page.evaluate(() => window.__mic.say('dog food and limes'))
+  await page.mouse.up()
+  await expect(list.getByRole('region', { name: 'PET' }).getByRole('button', { name: 'Dog food' })).toBeVisible()
+  await expect(list.getByRole('region', { name: 'PRODUCE' }).getByRole('button', { name: 'Limes' })).toBeVisible()
+
+  // Slide away while held: nothing is added.
+  await page.mouse.move(...centre)
+  await page.mouse.down()
+  await page.evaluate(() => window.__mic.hear('cookies'))
+  await page.mouse.move(centre[0] - 200, centre[1], { steps: 6 })
+  await expect(listening.getByText('LET GO TO CANCEL')).toBeVisible()
+  await page.mouse.up()
+  await expect(listening).toHaveCount(0)
+  await page.waitForTimeout(1800)
+  await expect(list.getByRole('button', { name: 'Cookies' })).toHaveCount(0)
+})
+
+test('wall grocery: hold an item and its aisles take the place of Add; a tap moves it; a stale sync says so', async ({ page }) => {
+  const list = await groceryPage(page, '&stale=1')
+  await expect(list.getByText('Reminders hasn’t synced lately — is the Mac on?')).toBeVisible()
+  const soy = list.getByRole('button', { name: 'Soy sauce' })
+  const at = await soy.boundingBox()
+  await page.mouse.move(at.x + 120, at.y + at.height / 2)
+  await page.mouse.down()
+  const move = list.getByLabel('Move Soy sauce')
+  await expect(move).toBeVisible()
+  await page.mouse.up()
+  await expect(soy).toContainText('MOVING')
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wall-grocery-move.png')
+  await move.getByRole('button', { name: 'To deli' }).click()
+  await expect(list.getByRole('region', { name: 'DELI' }).getByRole('button', { name: 'Soy sauce' })).toBeVisible()
+  await expect(list.getByLabel('Add to the list')).toBeVisible()
+})

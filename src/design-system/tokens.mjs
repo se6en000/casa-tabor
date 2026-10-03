@@ -192,6 +192,8 @@ export const DESIGN_TOKENS = {
   // (16-22px). Nothing on the Wall goes below 16px.
   wallType: {
     'wall-clock': { size: '104px', lineHeight: '0.92' },
+    // A page's own title on the Wall ("Groceries", canvas 35a).
+    'wall-title': { size: '72px', lineHeight: '1' },
     'wall-clock-calm': { size: '250px', lineHeight: '0.82' },
     'wall-date-calm': { size: '42px', lineHeight: '1.1' },
     'wall-quote': { size: '44px', lineHeight: '1.1' },

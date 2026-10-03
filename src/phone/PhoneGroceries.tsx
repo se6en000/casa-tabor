@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Check, ChevronLeft, Mic, Plus } from 'lucide-react'
 import { useFieldDictation } from '../hooks/useFieldDictation'
 import { ALL_AISLES, aisles, amountOf, planAdds, type ShopItem } from './groceries'
+import { addSaid, useLiftToMove, useTickHold } from './useGroceryGestures'
 import { haptic } from './haptic'
 import { primeKeyboard, useSheetSwipe } from './phoneShell'
 
@@ -31,33 +32,8 @@ export interface GroceryVoice {
 /** A moment after letting go for the last word to land before what was heard is added. */
 export const SETTLE_MS = 350
 
-/**
- * Put what was typed or said on the list: each new one added (in its aisle), one already got un-ticked, one already on
- * it left be. All at once — each shows straight away and saves behind. Says what happened ("Added milk, eggs").
- */
-function addSaid(data: PhoneGroceriesData, value: string, spoken: boolean): { said: string; saving: Promise<unknown> } | null {
-  const plan = planAdds(value, data.items, { spoken })
-  if (plan.length === 0) return null
-  const added: string[] = []
-  const already: string[] = []
-  const saving: Array<Promise<void> | void> = []
-  for (const p of plan) {
-    if (p.kind === 'new') { saving.push(data.add(p)); added.push(p.name) }
-    else if (p.kind === 'again') { saving.push(data.tick(p.id, false)); added.push(p.name) }
-    else already.push(p.name)
-  }
-  haptic()
-  return {
-    said: [added.length ? `Added ${added.join(', ')}` : '', already.length ? `${already.join(', ')} ${already.length > 1 ? 'were' : 'was'} on already` : ''].filter(Boolean).join(' · '),
-    saving: Promise.all(saving),
-  }
-}
+export { HOLD_MS, LIFT_MS } from './useGroceryGestures'
 
-/** How long a press is before it lifts the item to move (a tap ticks it). */
-export const LIFT_MS = 450
-
-/** How long ticked items stay in place after the last tick. */
-export const HOLD_MS = 2500
 
 export default function PhoneGroceries({ data, onBack, adding, setAdding, corner, voice = null, onVoiceDone }: {
   data: PhoneGroceriesData
@@ -79,66 +55,12 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current)
     voiceTimer.current = window.setTimeout(() => setVoiceSaid(null), 3500)
   }
-  const [held, setHeld] = useState<Set<string>>(() => new Set())
   const [showDone, setShowDone] = useState(false)
-  const timer = useRef<number | null>(null)
-  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
+  const { held, tap: tick } = useTickHold(data, haptic)
   const { groups, done } = useMemo(() => aisles(data.items, held), [data.items, held])
   const left = data.items.filter((i) => !i.checked).length
-
-  // Hold and drag to the right aisle (Jake, Oct 2: "hold and drag items on grocery to move to the right category"): a
-  // hold lifts the item and the aisles slide up; let go on one — or tap one — and it moves there.
-  const [lifted, setLifted] = useState<ShopItem | null>(null)
-  const [over, setOver] = useState<string | null>(null)
-  const press = useRef<{ id: string; x: number; y: number; timer: number; lifted: boolean } | null>(null)
-  const swallowTap = useRef(false)
-  const aisleAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest('[data-aisle-key]') as HTMLElement | null)?.dataset.aisleKey ?? null
-  const moveTo = (item: ShopItem, key: string) => {
-    setLifted(null)
-    setOver(null)
-    if (key !== item.category) { haptic(); void data.move?.(item.id, key) }
-  }
-  const pressHandlers = (item: ShopItem) => data.move ? {
-    onPointerDown: (e: React.PointerEvent) => {
-      swallowTap.current = false
-      // The let-go comes back to this row wherever it happens (a finger does this anyway; a mouse needs asking).
-      ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
-      const p = { id: item.id, x: e.clientX, y: e.clientY, timer: 0, lifted: false }
-      p.timer = window.setTimeout(() => { p.lifted = true; swallowTap.current = true; haptic(); setLifted(item) }, LIFT_MS)
-      press.current = p
-    },
-    onPointerMove: (e: React.PointerEvent) => {
-      const p = press.current
-      if (!p) return
-      if (!p.lifted && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { window.clearTimeout(p.timer); press.current = null; return }
-      if (p.lifted) setOver(aisleAt(e.clientX, e.clientY))
-    },
-    onPointerUp: (e: React.PointerEvent) => {
-      const p = press.current
-      press.current = null
-      if (!p) return
-      window.clearTimeout(p.timer)
-      if (!p.lifted) return
-      const key = aisleAt(e.clientX, e.clientY)
-      if (key) moveTo(item, key) // else the aisles stay up: tap one
-    },
-    onPointerCancel: () => { const p = press.current; press.current = null; if (p) window.clearTimeout(p.timer) },
-    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-  } : {}
-
-  const tap = (item: ShopItem) => {
-    if (swallowTap.current) { swallowTap.current = false; return }
-    haptic()
-    if (item.checked) {
-      void data.tick(item.id, false)
-      setHeld((was) => { const next = new Set(was); next.delete(item.id); return next })
-      return
-    }
-    void data.tick(item.id, true)
-    setHeld((was) => new Set(was).add(item.id))
-    if (timer.current) window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => { timer.current = null; setHeld(new Set()) }, HOLD_MS)
-  }
+  const { lifted, over, cancel: cancelLift, moveTo, pressHandlers, swallowed } = useLiftToMove(data, haptic)
+  const tap = (item: ShopItem) => { if (!swallowed()) tick(item) }
   const ticking = groups.reduce((n, g) => n + g.items.filter((i) => i.checked).length, 0)
 
   const row = (item: ShopItem, quiet = false) => {
@@ -227,6 +149,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
           voice={voice}
           onHeard={(text) => {
             const done = text.trim() ? addSaid(data, text, true) : null
+            if (done) haptic()
             showVoiceSaid(done ? done.said : 'Didn’t catch that. Hold + and say it again.')
             void done?.saving.catch(() => showVoiceSaid('Some of that didn’t save. Try adding it again.'))
             onVoiceDone?.()
@@ -244,7 +167,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         <section aria-label={`Move ${lifted.name}`} className="phone-sheet absolute inset-x-0 bottom-0 z-40 flex flex-col gap-[10px] rounded-t-[22px] bg-phone-ground px-[16px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))] pt-[12px] shadow-[0_-12px_40px_rgba(38,34,29,0.2)]">
           <div className="flex items-center justify-between gap-[10px]">
             <span className="font-display text-phone-heading font-semibold text-wall-ink">Move {lifted.name} to…</span>
-            <button type="button" onClick={() => { setLifted(null); setOver(null) }} className="flex h-[44px] items-center rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">Cancel</button>
+            <button type="button" onClick={cancelLift} className="flex h-[44px] items-center rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">Cancel</button>
           </div>
           <div className="grid grid-cols-2 gap-[8px]">
             {ALL_AISLES.map((a) => {
@@ -273,6 +196,7 @@ function GroceryAdd({ data, onClose }: { data: PhoneGroceriesData; onClose: () =
   const submit = async (value: string, spoken = false) => {
     const done = addSaid(data, value, spoken)
     if (!done) return
+    haptic()
     setText('')
     void done.saving.catch(() => setSaid('Some of that didn’t save. Try adding it again.'))
     setSaid(done.said)

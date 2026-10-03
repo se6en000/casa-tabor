@@ -568,6 +568,10 @@
       {
         "path": "src/phone/PhoneGroceries.tsx",
         "reason": "The phone's Groceries (canvas 33d/33e): big tick rows, the add sheet's chips, mic and send, styled with wall-*/phone-* tokens."
+      },
+      {
+        "path": "src/wall/WallGroceries.tsx",
+        "reason": "Family Wall: the Grocery page v2 (canvas 35a–d) is part of the Wall's own component set (CLAUDE.md Wall exception): list rows that tick and lift, aisle targets, the hold-to-say mic, usual-item chips; wall-* tokens, finger-sized targets."
       }
     ]
   }

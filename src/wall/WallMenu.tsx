@@ -7,7 +7,7 @@ import { setListenerV2, useListenerV2 } from './listenerSwitch'
 // button — and a few idle minutes — bring it back to the Wall (kioskHome.ts).
 const DESTINATIONS = [
   { to: '/calendar', label: 'Calendar' },
-  { to: '/grocery', label: 'Grocery list' },
+  { to: '/wall/grocery', label: 'Grocery list' },
   { to: '/cook', label: 'Meals & kitchen' },
   { to: '/music', label: 'Music' },
   { to: '/briefing', label: 'Briefing' },

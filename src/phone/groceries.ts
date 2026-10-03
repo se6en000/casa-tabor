@@ -73,7 +73,8 @@ export function planAdds(text: string, items: ShopItem[], { spoken = false }: { 
   return parsed.map((p) => {
     const there = seen.get(sameKey(p.name))
     if (there) return there.checked ? { kind: 'again', id: there.id, name: there.name } : { kind: 'already', id: there.id, name: there.name }
-    return { kind: 'new', name: p.name, quantity: p.quantity, unit: p.unit, category: p.category }
+    // Sentence case, as people write a list ("Coffee creamer", not the parser's "Coffee Creamer").
+    return { kind: 'new', name: p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase(), quantity: p.quantity, unit: p.unit, category: p.category }
   })
 }
 

@@ -23,6 +23,7 @@ import type { ComingUpItem, GiftIdea } from './comingUp'
 import type { TodoProjectDetail } from './todos'
 import { numbered, PAINT, pstep, summary, useFixtureTodos } from './todoFixture'
 import { WallSpeechContext } from './speechContext'
+import WallGroceriesFixture from './WallGroceriesFixture'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
@@ -253,6 +254,15 @@ export default function WallFixturePage() {
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null
+  if (new URLSearchParams(window.location.search).get('grocery') === '1') {
+    return (
+      <MemoryRouter>
+        <WallSpeechContext.Provider value={useFixtureSpeech}>
+          <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]"><WallGroceriesFixture /></div>
+        </WallSpeechContext.Provider>
+      </MemoryRouter>
+    )
+  }
   return (
     <QueryClientProvider client={queryClient}>
     <MemoryRouter>
