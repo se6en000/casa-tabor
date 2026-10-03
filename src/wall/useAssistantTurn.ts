@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { showAdded, showChanged } from '../lib/optimisticEvent'
+import { showBeforeSaving } from '../lib/optimisticEvent'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAIAssistant } from '../hooks/useAIAssistant'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -56,6 +56,14 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     setNote(null)
     updateMessageToolStatus(message.id, 'loading')
     const args = action.tool === 'apply_plan' ? { ...action.args, ...extra, surface } : requestArgsFor(action.tool, action.args, events)
+    // The screen moves on the yes (Jake, Oct 3: "everything will just visually update fast so im not wondering … if it
+    // worked or not"): the card leaves and the calendar shows the add, change or delete at once; the save follows (2–3 s
+    // on the wall), and if it fails the screen goes back and says so.
+    const shown = showBeforeSaving(queryClient, action.tool, args, `saving-${message.id}`)
+    if (shown) {
+      updateMessageToolStatus(message.id, 'done')
+      setNote('Saving…')
+    }
     const { data, error } = await supabase.functions.invoke('execute-ai-action', {
       body: {
         tool: action.tool,
@@ -71,6 +79,7 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     })
     const result = readActionResult(await responseBody(data, error), args)
     setWorking(false)
+    if (result.kind !== 'done') shown?.failed()
     if (result.kind === 'conflict') {
       updateMessageToolStatus(message.id, 'pending', { args: result.args } as never)
       setNote(surface === 'wall' ? 'That clashes with something already on the calendar. Say yes, or tap Yes, to add it anyway.' : 'That clashes with something already on the calendar. Tap Yes to add it anyway.')
@@ -85,8 +94,7 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     // What was just added shows at once — on the day and behind "Open it" — rather than after the calendar is fetched
     // again while the server is busy with it (optimisticEvent.ts; Kelly's gym add, Oct 2).
     // Changes and deletes too (Jake, Oct 2: "experiential responsiveness"): the screen moves first.
-    if (action.tool === 'create_event') showAdded(queryClient, result.eventId, args)
-    if (action.tool === 'update_event') showChanged(queryClient, String(args.id ?? ''), args)
+    shown?.saved(result.eventId)
     if (action.tool === 'delete_event' && args.id) evictEventFromAllCaches(queryClient, String(args.id))
     invalidateAllCalendarQueries(queryClient, String(args.event_id ?? args.id ?? result.eventId ?? ''))
     // The to-do list and Coming up live beside the calendar: a new to-do or project shows at once.

@@ -517,14 +517,18 @@ test('wall assistant: a card waiting for a yes outlasts the quiet; a spoken no c
   await expect.poll(() => starts(page)).toBe(before + 1)
 })
 
-test('wall assistant: a spoken yes saves the card and the mic opens again; "that\'s all" closes the band', async ({ page }) => {
+// Jake, Oct 3: "if I confirm a card there seems to be a 4 second hold where she pauses listening … she essentially is just
+// stuck". A spoken yes used to close the mic for the save (2.6 s that morning) and then reconnect it (1.3 s); now the mic
+// stays open, and what's said while it saves is sent once it's saved (so "move it to five" finds the saved item).
+test('wall assistant: a spoken yes saves the card without closing the mic; what\'s said meanwhile goes once it\'s saved; "that\'s all" closes the band', async ({ page }) => {
   await band(page, 'change')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section.getByText('CHANGE · NOT SAVED YET')).toBeVisible()
   const before = await starts(page)
-  await mic(page, () => window.__mic.yes())
+  await mic(page, () => { window.__mic.yes(); window.__mic.say('and add a reminder to bring snacks') })
   await expect(section.getByText('CHANGE · NOT SAVED YET')).toHaveCount(0)
-  await expect.poll(() => starts(page)).toBe(before + 1)
+  expect(await starts(page)).toBe(before) // never closed for the save
+  await expect.poll(() => page.evaluate(() => (window.__casaSent ?? []).map((m) => m.text))).toContain('and add a reminder to bring snacks')
   await mic(page, () => window.__mic.bye())
   await expect(section).toHaveCount(0)
 })

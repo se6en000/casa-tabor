@@ -147,3 +147,40 @@ export function holdWhileSaving(qc: QueryClient, id: string, change: (e: CachedE
   })
   return saving.finally(stop)
 }
+
+/** A cached range without one event (a plain list, or a range result's `active`). */
+function withoutEvent(old: unknown, id: string): unknown {
+  if (Array.isArray(old)) return old.some((e) => e?.id === id) ? old.filter((e) => e?.id !== id) : old
+  if (old && typeof old === 'object' && Array.isArray((old as { active?: unknown[] }).active)) {
+    const typed = old as { active: Array<{ id?: string }> }
+    return typed.active.some((e) => e?.id === id) ? { ...typed, active: typed.active.filter((e) => e?.id !== id) } : old
+  }
+  return old
+}
+
+/**
+ * A yes on Casa's card shows on the calendar at once, before the save comes back (Jake, Oct 3: "everything will just
+ * visually update fast so im not wondering while looking at the screen if it worked or not"). An add goes in under a
+ * stand-in id and takes its real one when saved; a change or a delete is laid over the calendar; a save that fails puts
+ * the screen back as it was. Null for anything else (a plan says what it saved on its own card).
+ */
+export function showBeforeSaving(qc: QueryClient, tool: string, args: Record<string, unknown>, standInId = 'saving'): { saved: (eventId?: string | null) => void; failed: () => void } | null {
+  const ranges = calendarRanges(args.event_type === 'reminder' ? { event_type: 'reminder' } : null)
+  if (tool === 'create_event') {
+    showAdded(qc, standInId, args)
+    const drop = () => qc.setQueriesData(ranges, (old: unknown) => withoutEvent(old, standInId))
+    return {
+      saved: (eventId) => { drop(); showAdded(qc, eventId, args) },
+      failed: drop,
+    }
+  }
+  const id = typeof args.id === 'string' ? args.id : ''
+  if (!id || (tool !== 'update_event' && tool !== 'delete_event')) return null
+  const before = qc.getQueriesData(calendarRanges({ event_type: 'reminder' }))
+  if (tool === 'update_event') showChanged(qc, id, args)
+  else qc.setQueriesData(calendarRanges({ event_type: 'reminder' }), (old: unknown) => withoutEvent(old, id))
+  return {
+    saved: () => {},
+    failed: () => { for (const [key, data] of before) qc.setQueryData(key, data) },
+  }
+}

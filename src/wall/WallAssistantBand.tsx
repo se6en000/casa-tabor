@@ -200,6 +200,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }
   const pendingRef = useRef(pending)
   pendingRef.current = pending
+  // A yes is saving (Jake, Oct 3: "if I confirm a card there seems to be a 4 second hold where she pauses listening"): the
+  // mic stays open through the save, and a sentence said meanwhile waits here until it's saved (so "move it to five"
+  // finds what was just saved), then goes.
+  const workingRef = useRef(false)
+  useEffect(() => { workingRef.current = working }, [working])
+  const heldWhileSaving = useRef<string | null>(null)
   // A conversation has started: from here only he closes the band (quiet or noise just turn the mic off).
   const talkingRef = useRef(false)
   talkingRef.current = messages.length > 0
@@ -242,6 +248,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       if (!step.toSend) return
       setInterim('')
       setNote(null)
+      if (workingRef.current) {
+        heldWhileSaving.current = [heldWhileSaving.current, step.toSend].filter(Boolean).join(' ')
+        stopRef.current()
+        return
+      }
       void send(step.toSend)
       // The mic pauses while Casa thinks, and opens again when the answer lands (below).
       stopRef.current()
@@ -252,9 +263,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     // A spoken yes or no to the card: done, and the conversation goes on. A plan's yes opens its
     // Agree card; a yes to the Agree card saves what's ticked.
     onConfirm: () => {
-      stopRef.current()
-      if (agreeRef.current.plan && !agreeRef.current.open) { openAgree(); return }
-      if (agreeRef.current.open) { agree(agreeSkipRef.current); return }
+      if (agreeRef.current.plan && !agreeRef.current.open) { stopRef.current(); openAgree(); return }
+      if (agreeRef.current.open) { stopRef.current(); agree(agreeSkipRef.current); return }
+      // The mic stays open while it saves: no pause, and no reconnecting afterwards.
       void confirm()
     },
     onCancel: () => {
@@ -287,12 +298,20 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const busy = loading || Boolean(answer?.streaming) || working
   const wasBusy = useRef(false)
   useEffect(() => {
-    if (wasBusy.current && !busy) setRelisten((n) => n + 1)
+    if (wasBusy.current && !busy) {
+      // Said while the yes was saving: sent now that it's saved (the mic opens again after its answer).
+      const held = heldWhileSaving.current
+      heldWhileSaving.current = null
+      if (held) void send(held)
+      else setRelisten((n) => n + 1)
+    }
     wasBusy.current = busy
-  }, [busy])
+  }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Not after two asides in a row: the room is talking, so the mic stays off until he wants it.
     if (relisten === 0 || reportingRef.current || asidesRef.current >= 2 || !micWanted.current) return
+    // Still open (it stayed open through a save): nothing to reopen.
+    if (speech.listening || speech.connecting) return
     captured.current = ''
     void speech.start()
   }, [relisten]) // eslint-disable-line react-hooks/exhaustive-deps
