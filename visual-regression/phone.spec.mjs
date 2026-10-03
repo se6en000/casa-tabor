@@ -994,3 +994,20 @@ test('phone: the place on the edit sheet shows its whole address', async ({ page
   await sheet.getByRole('button', { name: /Ferrin Park/ }).click()
   await expect(sheet.getByText('11921 Okeechobee Blvd, Royal Palm Beach, FL, 33411')).toBeVisible()
 })
+
+// Jake, Oct 2: "iOS paste from a screenshot the paste bubble shows but it still doesn't actually paste" — the box only
+// took words. A pasted picture now sits above the box and goes with the message (Casa reads pictures).
+test('phone: Casa — a pasted screenshot goes with the message', async ({ page }) => {
+  const { ask } = await askScene(page, 'empty')
+  const box = ask.getByRole('textbox', { name: 'Ask Casa' })
+  await box.evaluate((el) => {
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0))
+    const dt = new DataTransfer()
+    dt.items.add(new File([png], 'screenshot.png', { type: 'image/png' }))
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  })
+  await expect(ask.getByRole('list', { name: 'Pictures to send' }).getByRole('listitem')).toHaveCount(1)
+  await ask.getByRole('button', { name: 'Send' }).click()
+  await expect.poll(() => page.evaluate(() => window.__casaSent ?? [])).toEqual([{ text: 'What’s in this?', images: 1 }])
+  await expect(ask.getByRole('list', { name: 'Pictures to send' })).toHaveCount(0)
+})

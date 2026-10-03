@@ -216,11 +216,14 @@ function GroceryAdd({ data, onClose }: { data: PhoneGroceriesData; onClose: () =
     setText('')
     const added: string[] = []
     const already: string[] = []
+    // All at once: each is on the list straight away and saves behind (a failed one says so).
+    const saving: Array<Promise<void> | void> = []
     for (const p of plan) {
-      if (p.kind === 'new') { await data.add(p); added.push(p.name) }
-      else if (p.kind === 'again') { await data.tick(p.id, false); added.push(p.name) }
+      if (p.kind === 'new') { saving.push(data.add(p)); added.push(p.name) }
+      else if (p.kind === 'again') { saving.push(data.tick(p.id, false)); added.push(p.name) }
       else already.push(p.name)
     }
+    void Promise.all(saving).catch(() => setSaid('Some of that didn’t save. Try adding it again.'))
     haptic()
     setSaid([added.length ? `Added ${added.join(', ')}` : '', already.length ? `${already.join(', ')} ${already.length > 1 ? 'were' : 'was'} on already` : ''].filter(Boolean).join(' · '))
   }

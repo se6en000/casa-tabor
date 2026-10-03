@@ -9,6 +9,8 @@ import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
 import { noteSaid, tipFor, tipsByTopic } from '../wall/tips'
 import { telOf } from '../wall/WallDirections'
 import { useSheetSwipe } from './phoneShell'
+import { MAX_IMAGES, readableFiles, typedTurn, type TypedImage } from '../wall/typeLine'
+import { toImages } from '../wall/toImages'
 
 // Say it (board 05e): the family's assistant on the phone — the same one the wall's band
 // talks to. Type (or use the keyboard's dictation, or the mic), read the answer, and a
@@ -32,7 +34,8 @@ export interface PhoneAssistantViewProps {
   openDay?: { label: string; go: () => void } | null
   /** Directions to someone (canvas 13d): Directions opens Google Maps; Call, Text. */
   directions?: { name: string; address: string; phone: string | null; maps: string } | null
-  onSend: (text: string) => void
+  /** What was typed, and any pictures pasted with it (Jake, Oct 2: pasting a screenshot did nothing). */
+  onSend: (text: string, images?: Array<{ dataUrl: string; mimeType: string }>) => void
   onConfirm: () => void
   onCancel: () => void
   onReport: (report: { categories: string[]; expected: string; happened: string }) => Promise<void>
@@ -109,11 +112,18 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     box.style.height = `${Math.max(48, Math.min(box.scrollHeight, 140))}px`
   }, [shown])
 
+  // Pictures pasted into the box (a screenshot of a text, a flyer): shown above it, sent with the words.
+  const [images, setImages] = useState<TypedImage[]>([])
+  const addPictures = async (files: File[]) => {
+    const pics = await toImages(files)
+    setImages((was) => [...was, ...pics].slice(0, MAX_IMAGES))
+  }
   const submit = (value: string) => {
-    const q = value.trim()
-    if (!q || thinking) return
-    onSend(q)
+    const turn = typedTurn(value, images)
+    if (!turn || thinking) return
+    onSend(turn.text, turn.images.length ? turn.images.map(({ dataUrl, mimeType }) => ({ dataUrl, mimeType })) : undefined)
     setText('')
+    setImages([])
   }
   const sendReport = async () => {
     setReportState('sending')
@@ -318,6 +328,18 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             )}
           </div>
 
+          {images.length > 0 && (
+            <div role="list" aria-label="Pictures to send" className="flex shrink-0 gap-[8px] overflow-x-auto border-0 border-t border-solid border-wall-stone bg-phone-ground px-[16px] pt-[10px]">
+              {images.map((img, i) => (
+                <div key={`${img.name}-${i}`} role="listitem" className="relative h-[64px] w-[64px] shrink-0 overflow-hidden rounded-[10px] border border-solid border-wall-stone">
+                  <img src={img.dataUrl} alt={`Picture ${i + 1}`} className="h-full w-full object-cover" />
+                  <button type="button" aria-label={`Remove picture ${i + 1}`} onClick={() => setImages((was) => was.filter((_, j) => j !== i))} className="absolute right-0 top-0 flex h-[44px] w-[44px] items-start justify-end border-0 bg-transparent p-[3px] text-wall-on-pigment">
+                    <span className="flex h-[20px] w-[20px] items-center justify-center rounded-full bg-wall-ink/70 text-phone-label">×</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <form
             className="flex shrink-0 items-end gap-[8px] border-0 border-t border-solid border-wall-stone bg-phone-ground px-[16px] pb-[max(14px,calc(env(safe-area-inset-bottom)+6px))] pt-[10px]"
             onSubmit={(e) => { e.preventDefault(); submit(text) }}
@@ -344,6 +366,12 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
                 setText(v)
               }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text) } }}
+              onPaste={(e) => {
+                const files = readableFiles(Array.from(e.clipboardData.files))
+                if (files.length === 0) return
+                e.preventDefault()
+                void addPictures(files)
+              }}
               placeholder={mic?.listening ? 'Listening…' : 'Ask or add…'}
               enterKeyHint="send"
               className="h-[48px] max-h-[140px] min-h-[48px] min-w-0 flex-1 resize-none overflow-y-auto rounded-[24px] border border-solid border-wall-stone bg-wall-on-pigment px-[16px] py-[12px] text-phone-body leading-snug text-wall-ink outline-none"
@@ -357,7 +385,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
                 </button>
               </span>
             )}
-            <button type="submit" aria-label="Send" disabled={!text.trim() || thinking} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment disabled:opacity-40">
+            <button type="submit" aria-label="Send" disabled={!typedTurn(text, images) || thinking} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment disabled:opacity-40">
               <ArrowUp size={20} />
             </button>
           </form>

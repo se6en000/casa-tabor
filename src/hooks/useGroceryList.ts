@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { ADDING_PREFIX, withAddedGrocery } from '../lib/groceryOptimistic'
 
 export interface GroceryItem {
   id: string
@@ -70,6 +71,8 @@ function fireGroceryInvalidation() {
     _groceryInvalidateCallbacks.forEach((cb) => cb())
   }, 500)
 }
+
+type GroceryData = Awaited<ReturnType<typeof fetchGroceryData>>
 
 async function fetchGroceryData() {
   const [{ data: lists }, { data: items }] = await Promise.all([
@@ -224,7 +227,15 @@ export function useGroceryList() {
       })
       if (error && error.code !== '23505') throw error
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
+    // On the list at once (groceryOptimistic.ts); put back if the insert fails; the fetch after brings the saved one.
+    onMutate: async (item) => {
+      await qc.cancelQueries({ queryKey: ['grocery'] })
+      const before = qc.getQueryData<GroceryData>(['grocery'])
+      qc.setQueryData<GroceryData>(['grocery'], (old) => withAddedGrocery(old as never, item, `${ADDING_PREFIX}${crypto.randomUUID()}`) as GroceryData | undefined)
+      return { before }
+    },
+    onError: (_err, _item, context) => { if (context?.before) qc.setQueryData(['grocery'], context.before) },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['grocery'] }),
   })
 
   const toggleItem = useMutation({

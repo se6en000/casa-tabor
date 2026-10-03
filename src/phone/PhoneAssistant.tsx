@@ -173,9 +173,9 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
       onOpenEvent={pointAt ? () => onOpenEvent(pointAt) : undefined}
       directions={answer?.directions ?? null}
       openDay={day && onOpenDay ? { label: `Open ${day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`, go: () => onOpenDay(day.date) } : null}
-      onSend={(text) => {
+      onSend={(text, images) => {
         setNote(null)
-        void send(text)
+        void send(text, images)
       }}
       onConfirm={() => void confirm()}
       onCancel={cancel}
