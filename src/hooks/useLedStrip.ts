@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 const SENSOR_BRIDGE = 'http://127.0.0.1:8765'
 const FEEDBACK_LOCK_MS = 2800  // how long confirm/cancel block phase sync
 
-type LedMode = 'listening' | 'processing' | 'waiting' | 'glow' | 'confirm' | 'cancel' | 'off'
+type LedMode = 'listening' | 'closing' | 'processing' | 'waiting' | 'glow' | 'confirm' | 'cancel' | 'off'
 
 /** `night`: the same moment in dim amber (the Family Wall's evening; P3.14). */
 function callLed(mode: LedMode, night = false) {
-  fetch(`${SENSOR_BRIDGE}/led/${mode}${night ? '?night=true' : ''}`, { method: 'POST' }).catch(() => {})
+  // "closing": the listening light fading out over the follow-up window's last seconds (CLOSING_FADE_MS).
+  const params = [night ? 'night=true' : '', mode === 'closing' ? 'ms=5000' : ''].filter(Boolean).join('&')
+  fetch(`${SENSOR_BRIDGE}/led/${mode}${params ? `?${params}` : ''}`, { method: 'POST' }).catch(() => {})
 }
 
 /**
@@ -67,11 +69,13 @@ export function useLedStrip() {
   const glow = useCallback(() => setPhaseMode('glow'), [setPhaseMode])
   const listening = useCallback(() => setPhaseMode('listening'), [setPhaseMode])
   const processing = useCallback(() => setPhaseMode('processing'), [setPhaseMode])
+  const closing = useCallback(() => setPhaseMode('closing'), [setPhaseMode])
   const confirm = useCallback(() => setFeedback('confirm'), [setFeedback])
   const cancel = useCallback(() => setFeedback('cancel'), [setFeedback])
 
   return useMemo(() => ({
     listening,
+    closing,
     processing,
     waiting,
     glow,
@@ -79,5 +83,5 @@ export function useLedStrip() {
     cancel,
     off,
     setNight,
-  }), [listening, processing, waiting, glow, confirm, cancel, off, setNight])
+  }), [listening, closing, processing, waiting, glow, confirm, cancel, off, setNight])
 }

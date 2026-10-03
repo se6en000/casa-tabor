@@ -181,8 +181,8 @@ export default function WallFixturePage() {
   }
   // The assistant band with a canned conversation (design section 06): `?band=add|change|which|answer`.
   const ledLog = ((window as unknown as { __led?: { mode: string; outcomes: string[] } }).__led ??= { mode: 'off', outcomes: [] })
-  const recordLed = useCallback((b: { state: BandState; micOpen: boolean }) => {
-    ledLog.mode = wallLedMode({ bandOpen: true, bandState: b.state, micOpen: b.micOpen, night: isLedNight(now), glowEnabled: true })
+  const recordLed = useCallback((b: { state: BandState; micOpen: boolean; closing?: boolean }) => {
+    ledLog.mode = wallLedMode({ bandOpen: true, bandState: b.state, micOpen: b.micOpen, closing: b.closing, night: isLedNight(now), glowEnabled: true })
   }, [ledLog, now])
   const recordOutcome = useCallback((kind: 'confirm' | 'cancel') => { ledLog.outcomes.push(kind) }, [ledLog])
   const scene = new URLSearchParams(window.location.search).get('band')

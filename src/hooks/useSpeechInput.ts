@@ -883,6 +883,21 @@ export function useSpeechInput({
   // Suppress/unsuppress without stopping the mic — used during AI loading
   const suppress  = useCallback(() => { suppressRef.current = true  }, [])
   const unsuppress = useCallback(() => { suppressRef.current = false }, [])
+  // Casa is thinking (Jake, Oct 3, after how Alexa and Google do it): the mic stays connected, so the follow-up window
+  // can open the moment the answer lands, but nothing heard now counts and the quiet clock is paused.
+  const hold = useCallback(() => {
+    suppressRef.current = true
+    stopWakeSilenceTimer()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- refs only
+  // The answer landed: a fresh follow-up window — what's heard counts again, and the quiet clock starts now.
+  const rearm = useCallback(() => {
+    if (!activeRef.current) return
+    suppressRef.current = false
+    speechStartedAtRef.current = 0
+    lastInterimRef.current = ''
+    if (phaseRef.current === 'processing') setPhaseSync('listening')
+    scheduleWakeSilenceTimeout()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- refs only
 
   // Ensure mic is running — restarts WebSpeech if it naturally ended while suppressed.
   // Reads phaseRef (not state) to avoid stale closure — ensureRunning is created once.
@@ -923,6 +938,8 @@ export function useSpeechInput({
     toggle,
     suppress,
     unsuppress,
+    hold,
+    rearm,
     ensureRunning,
     active: activeRef,
     listening: phase === 'capturing' || phase === 'listening',

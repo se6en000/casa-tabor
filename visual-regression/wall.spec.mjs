@@ -476,7 +476,8 @@ const starts = (page) => page.evaluate(() => window.__mic?.starts ?? 0)
 // Jake, 2026-09-29, planning Emme's costume: "the ai dismisses like a second after it makes a statement.
 // It's gotta stay open till we either agree or I dismiss it." Once there's a conversation, quiet, room
 // noise and asides only turn the mic off; he carries on with the mic or the wake word, or closes it.
-test('wall assistant: after an answer the mic opens again by itself; quiet or room noise only turns the mic off — the band stays', async ({ page }) => {
+// (Oct 3: the mic now stays connected through the answer and its follow-up window opens at once — no reconnecting.)
+test('wall assistant: after an answer the mic is open again by itself; quiet or room noise only turns the mic off — the band stays', async ({ page }) => {
   await band(page, 'answer')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section).toBeVisible()
@@ -485,7 +486,8 @@ test('wall assistant: after an answer the mic opens again by itself; quiet or ro
   await mic(page, () => window.__mic.say('and what about sunday'))
   await expect(section.getByText('“and what about sunday”')).toBeVisible()
   await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
-  await expect.poll(() => starts(page)).toBe(opened + 1)
+  await expect.poll(() => page.evaluate(() => window.__mic.rearms)).toBe(1)
+  expect(await starts(page)).toBe(opened)
   await expect(section.getByText('Keep talking, or')).toBeVisible()
   await mic(page, () => window.__mic.quiet())
   await expect(section.getByText('You said: and what about sunday.')).toBeVisible()
@@ -2380,4 +2382,59 @@ test('wall: after midnight the night Calm is dimmer, with no buttons until a tou
   await expect(wall).toHaveScreenshot('night-calm-late.png')
   await night.click()
   await expect(wall.getByRole('button', { name: 'Open menu' })).toBeVisible()
+})
+
+// Jake, Oct 3: "the mic looks like its listening (LED glow, vibration lines, etc) and its not actually listening … I need
+// to have REAL trust that if it looks like its listening it actually is … in general Id like for it to be ALWAYS ready".
+// The bridge takes ~1.3 s to be ready (8:52 AM that day); until then the band says so, and the strip doesn't glow.
+test('wall assistant: it looks like it\'s listening only once it is', async ({ page }) => {
+  await page.addInitScript(() => { window.__mic = { starts: 0, slow: true } })
+  await band(page, 'empty')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('One moment…')).toBeVisible()
+  await expect(section.getByText(/Go ahead/)).toHaveCount(0)
+  expect((await led(page)).mode).not.toBe('listening')
+  await mic(page, () => window.__mic.ready())
+  await expect(section.getByText(/Go ahead/).first()).toBeVisible()
+  await expect.poll(async () => (await led(page)).mode).toBe('listening')
+})
+
+// Like Alexa and Google (Jake, Oct 3: "lets go with all your recommendations"): while Casa thinks the mic stays connected
+// but held — nothing said then counts, and the light says it's thinking — so the follow-up window opens the moment the
+// answer lands, with no reconnecting; the light then fades over the window's last seconds, and a soft sound marks the
+// conversation opening and closing.
+test('wall assistant: while Casa thinks nothing counts; the follow-up window opens at once when the answer lands', async ({ page }) => {
+  await band(page, 'empty')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  const before = await starts(page)
+  const sent = await page.evaluate(() => { window.__mic.say('whats on saturday'); window.__mic.say('and sunday too'); return (window.__casaSent ?? []).map((m) => m.text) })
+  expect(sent).toEqual(['whats on saturday'])
+  await expect.poll(async () => (await led(page)).mode, { intervals: [20] }).toBe('processing')
+  await expect(section.getByText('You said: whats on saturday.')).toBeVisible()
+  await expect.poll(async () => (await led(page)).mode).toBe('listening')
+  expect(await page.evaluate(() => (window.__casaSent ?? []).map((m) => m.text))).toEqual(['whats on saturday']) // the one said while thinking didn't count
+  expect(await starts(page)).toBe(before) // never reconnected
+  expect(await page.evaluate(() => window.__mic.rearms)).toBe(1)
+  // Now it counts again.
+  await mic(page, () => window.__mic.say('and sunday too'))
+  await expect.poll(() => page.evaluate(() => (window.__casaSent ?? []).map((m) => m.text))).toEqual(['whats on saturday', 'and sunday too'])
+})
+
+test('wall assistant: the light fades over the follow-up window\'s last seconds; a soft sound opens and closes the conversation', async ({ page }) => {
+  await page.clock.install()
+  await band(page, 'empty')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__earcons ?? [])).toEqual(['open'])
+  await expect.poll(async () => (await led(page)).mode).toBe('listening')
+  await page.clock.fastForward(14_000)
+  expect((await led(page)).mode).toBe('listening')
+  await page.clock.fastForward(2_000) // the last 5 seconds of the 20-second window
+  await expect.poll(async () => (await led(page)).mode).toBe('closing')
+  // Words keep it open: no fading while you talk.
+  await mic(page, () => window.__mic.hear('what about'))
+  await expect.poll(async () => (await led(page)).mode).toBe('listening')
+  await mic(page, () => window.__mic.quiet())
+  await expect.poll(() => page.evaluate(() => window.__earcons ?? [])).toEqual(['open', 'close'])
 })

@@ -8,6 +8,8 @@ import WallDirections from './WallDirections'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
+import { earcon } from './earcon'
+import { CLOSING_FADE_MS } from './led'
 import type { FamilyMember } from '../types'
 import { useSwipeDown } from './useSwipeDown'
 import VoiceHalo from './VoiceHalo'
@@ -97,7 +99,7 @@ export interface WallAssistantBandProps {
   /** Drive minutes to a place, arriving at a time; the fixture passes a fixed one. */
   lookupDrive?: DriveLookup
   /** What the LED strip should show for the band (P3.14), and a card's outcome (saved / not). */
-  onLed?: (band: { state: BandState; micOpen: boolean }) => void
+  onLed?: (band: { state: BandState; micOpen: boolean; closing?: boolean }) => void
   /** Whether a conversation is going: the wall then holds its idle timers (a project page stays, no calm). */
   onTalking?: (talking: boolean) => void
   onOutcome?: (kind: 'confirm' | 'cancel') => void
@@ -204,6 +206,13 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // mic stays open through the save, and a sentence said meanwhile waits here until it's saved (so "move it to five"
   // finds what was just saved), then goes.
   const workingRef = useRef(false)
+  const thinkingRef = useRef(false)
+  const holdRef = useRef<() => void>(() => {})
+  // The follow-up window (Jake, Oct 3: "the fading light part when the listening window is closing"): when it opened,
+  // and the light fading over its last seconds.
+  const [windowFrom, setWindowFrom] = useState(0)
+  const [closingFor, setClosingFor] = useState(0)
+  const sessionOpen = useRef(false)
   useEffect(() => { workingRef.current = working }, [working])
   const heldWhileSaving = useRef<string | null>(null)
   // A conversation has started: from here only he closes the band (quiet or noise just turn the mic off).
@@ -224,6 +233,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const speech = useSpeech({
     onTrace: (event, payload) => emitAssistantTrace(event, voiceTrace.current, { payload: { ...payload, silence_window_ms: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS } }),
     onInterim: (text) => {
+      // Casa is thinking: the mic is held (nothing heard now counts), so nothing shows as heard either.
+      if (thinkingRef.current) return
       lastTouch.current = Date.now()
       setInterim(text)
     },
@@ -250,12 +261,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       setNote(null)
       if (workingRef.current) {
         heldWhileSaving.current = [heldWhileSaving.current, step.toSend].filter(Boolean).join(' ')
-        stopRef.current()
         return
       }
       void send(step.toSend)
-      // The mic pauses while Casa thinks, and opens again when the answer lands (below).
-      stopRef.current()
+      // While Casa thinks the mic stays connected but held — nothing heard counts, as with Alexa and Google — so the
+      // follow-up window opens the moment the answer lands (Jake, Oct 3), with no reconnecting.
+      holdRef.current()
     },
     onDismiss: () => {
       if (!reportingRef.current) onClose()
@@ -280,6 +291,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     // yes, it stays on screen — he carries on with the mic or the wake word, or closes it.
     silenceDismissMs: waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS,
     onAutoDismiss: () => {
+      // The follow-up window closed: the closing sound (the light has already faded).
+      if (sessionOpen.current) { sessionOpen.current = false; earcon('close') }
       if (planningRef.current && !reportingRef.current) { setRelisten((n) => n + 1); return }
       if (pendingRef.current || reportingRef.current || talkingRef.current) return
       onClose()
@@ -287,6 +300,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   })
 
   stopRef.current = () => void speech.stop()
+  useEffect(() => { holdRef.current = () => speech.hold?.() })
 
   // The band keeps listening (P3.13): once an answer lands (or a yes/no is done), the mic opens
   // again by itself — no wake word for every sentence — until "go away", silence, or gibberish.
@@ -295,15 +309,22 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     if (asidesInARow >= 2) stopRef.current()
   }, [asidesInARow])
 
-  const busy = loading || Boolean(answer?.streaming) || working
+  const thinking = loading || Boolean(answer?.streaming)
+  useEffect(() => {
+    thinkingRef.current = thinking
+    if (thinking) holdRef.current()
+  }, [thinking])
+  const busy = thinking || working
   const wasBusy = useRef(false)
   useEffect(() => {
     if (wasBusy.current && !busy) {
-      // Said while the yes was saving: sent now that it's saved (the mic opens again after its answer).
+      // Said while the yes was saving: sent now that it's saved.
       const held = heldWhileSaving.current
       heldWhileSaving.current = null
-      if (held) void send(held)
-      else setRelisten((n) => n + 1)
+      if (held) { holdRef.current(); void send(held) }
+      // The answer landed: a fresh follow-up window, at once (the mic never disconnected).
+      else if (speech.listening || speech.connecting) { speech.rearm?.(); window.setTimeout(() => setWindowFrom(Date.now()), 0) }
+      else window.setTimeout(() => setRelisten((n) => n + 1), 0)
     }
     wasBusy.current = busy
   }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -382,7 +403,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }, [answer, day?.open, day?.date, onOpenDay])
   useEffect(() => () => onPointAt(null), [onPointAt])
 
-  const state = bandState({ listening: speech.listening || speech.connecting, loading, answer, pending })
+  // The light is the truth (Jake, Oct 3: "if it looks like its listening it actually is"): listening only while the mic
+  // really hears and Casa isn't thinking; connecting says "One moment…".
+  const live = speech.listening && !thinking
+  const state = bandState({ listening: live, loading, answer, pending })
   // Tips while Casa thinks (board 07e): one per question, steady while it thinks; each question
   // asked is counted so a tip retires once that ability is known. "What can I say?" lists them all.
   const [sayOpen, setSayOpen] = useState(false)
@@ -396,8 +420,26 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const tip = useMemo(() => (state === 'THINKING' ? tipFor(question ?? null, messages.length) : null), [state, question, messages.length])
 
   // The LED strip (P3.14): what the band is doing, and a card's outcome as a warm or rust swell.
-  const micOpen = speech.listening || speech.connecting
-  useEffect(() => onLed?.({ state, micOpen }), [state, micOpen, onLed])
+  const micOpen = live
+  const silenceMs = waitingOnYou ? WAITING_SILENCE_MS : ANSWERED_SILENCE_MS
+  // A window opens each time the mic goes live; the first of a conversation chimes (as Alexa does at the wake word).
+  const wasLive = useRef(false)
+  useEffect(() => {
+    if (live && !wasLive.current) {
+      const t = window.setTimeout(() => setWindowFrom(Date.now()), 0)
+      if (!sessionOpen.current) { sessionOpen.current = true; earcon('open') }
+      wasLive.current = live
+      return () => window.clearTimeout(t)
+    }
+    wasLive.current = live
+  }, [live])
+  useEffect(() => {
+    if (!live || interim || !windowFrom) return
+    const t = window.setTimeout(() => setClosingFor(windowFrom), Math.max(0, windowFrom + silenceMs - CLOSING_FADE_MS - Date.now()))
+    return () => window.clearTimeout(t)
+  }, [live, interim, windowFrom, silenceMs])
+  const closing = live && !interim && windowFrom > 0 && closingFor === windowFrom
+  useEffect(() => onLed?.({ state, micOpen, closing }), [state, micOpen, closing, onLed])
   const talking = messages.length > 0
   useEffect(() => { onTalking?.(talking) }, [talking, onTalking])
   useEffect(() => () => onTalking?.(false), [onTalking])
@@ -446,6 +488,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     <VoiceHalo
       signal={speech.signal}
       micOpen={micOpen}
+      closingSince={closing ? windowFrom + silenceMs - CLOSING_FADE_MS : null}
       bridgeDown={Boolean(speech.bridgeDown)}
       thinking={loading}
       needsYes={state === 'NEEDS A YES'}
@@ -905,7 +948,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         ) : (
         <>
         <div className="font-display text-wall-quote font-medium italic">
-          {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : !micOn ? 'Type below, or paste a message or pictures.' : 'Ask about the day, or ask to add something.'}
+          {shownQuestion ? (listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`) : state === 'LISTENING' ? (listenerV2 ? 'Go ahead.' : 'Go ahead — I’m listening.') : speech.connecting && !thinking ? 'One moment…' : !micOn ? 'Type below, or paste a message or pictures.' : 'Say “Alexa”, or tap the mic.'}
         </div>
         {shape && shape.items.length > 0 ? (
           <div className="flex flex-col gap-[16px]">

@@ -9,6 +9,8 @@ import { isLedNight, wallLedMode } from './led'
 export interface BandLed {
   state: BandState | null
   micOpen: boolean
+  /** The follow-up window's last seconds: the light fades. */
+  closing?: boolean
 }
 
 /**
@@ -25,7 +27,7 @@ export function useWallLed(bandOpen: boolean, now: Date) {
     staleTime: 60_000,
   })
   const night = isLedNight(now)
-  const mode = wallLedMode({ bandOpen, bandState: band.state, micOpen: band.micOpen, night, glowEnabled: config?.led_night_glow !== false })
+  const mode = wallLedMode({ bandOpen, bandState: band.state, micOpen: band.micOpen, closing: band.closing, night, glowEnabled: config?.led_night_glow !== false })
   useEffect(() => {
     led.setNight(night)
     led[mode]()

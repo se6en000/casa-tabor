@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from 'react'
+import { CLOSING_FADE_MS } from './led'
 import { LOUD_ABOVE_ROOM, envelope, fuseProgress, stepLevel, voiceState, type VoiceLineState, type VoiceSignal } from './voiceLine'
 
 // The listener in the mic (canvas row 17, take two). Jake, 2026-09-30, after the voice line: "still just not good,
@@ -11,6 +12,8 @@ import { LOUD_ABOVE_ROOM, envelope, fuseProgress, stepLevel, voiceState, type Vo
 export interface VoiceHaloProps {
   signal: MutableRefObject<VoiceSignal> | undefined
   micOpen: boolean
+  /** The follow-up window closing (canvas: the fading light): from this time the halo fades out over CLOSING_FADE_MS. */
+  closingSince?: number | null
   bridgeDown: boolean
   thinking: boolean
   needsYes: boolean
@@ -23,12 +26,14 @@ export interface VoiceHaloProps {
 const FRAME_MS = 25
 const RING = 2 * Math.PI * 70
 
-export default function VoiceHalo({ signal, micOpen, bridgeDown, thinking, needsYes, heard, onState }: VoiceHaloProps) {
+export default function VoiceHalo({ signal, micOpen, closingSince = null, bridgeDown, thinking, needsYes, heard, onState }: VoiceHaloProps) {
   const halo = useRef<HTMLDivElement>(null)
   const glow = useRef<HTMLDivElement>(null)
   const arc = useRef<SVGCircleElement>(null)
   const inputs = useRef({ micOpen, bridgeDown, thinking, needsYes, heard })
   useEffect(() => { inputs.current = { micOpen, bridgeDown, thinking, needsYes, heard } }, [micOpen, bridgeDown, thinking, needsYes, heard])
+  const closing = useRef(closingSince)
+  useEffect(() => { closing.current = closingSince }, [closingSince])
   const report = useRef(onState)
   useEffect(() => { report.current = onState }, [onState])
 
@@ -74,14 +79,16 @@ export default function VoiceHalo({ signal, micOpen, bridgeDown, thinking, needs
       size += (targetSize - size) * (targetSize > size ? 0.7 : 0.18)
       const targetBright = next === 'voice' ? (confirmed ? 1 : 0.7) : next === 'noise' ? 0.25 : open ? 0.45 : 0
       bright += (targetBright - bright) * 0.25
+      // The follow-up window closing: everything fades out over its last seconds.
+      const fade = closing.current ? Math.max(0, 1 - (now - closing.current) / CLOSING_FADE_MS) : 1
       if (halo.current) {
         // Just outside the mic's edge even at rest, so the slow breath shows while it listens.
         halo.current.style.transform = `scale(${(1.07 + 0.3 * size).toFixed(3)})`
-        halo.current.style.opacity = (bright * (0.35 + 0.65 * Math.min(1, size * 2.5))).toFixed(3)
+        halo.current.style.opacity = (fade * bright * (0.35 + 0.65 * Math.min(1, size * 2.5))).toFixed(3)
       }
       if (glow.current) {
         glow.current.style.transform = `scale(${(1 + 0.5 * size).toFixed(3)})`
-        glow.current.style.opacity = (bright * 0.6 * size).toFixed(3)
+        glow.current.style.opacity = (fade * bright * 0.6 * size).toFixed(3)
       }
       if (arc.current) {
         const p = fuseProgress(now, s)

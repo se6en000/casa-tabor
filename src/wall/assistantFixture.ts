@@ -232,15 +232,19 @@ export function fixtureTurn(scene: string): typeof useAssistantTurn {
  */
 export function useFixtureSpeech(options: Parameters<typeof import('../hooks/useSpeechInput').useSpeechInput>[0]) {
   const [listening, setListening] = useState(false)
+  // `__mic.slow = true`: starting takes a moment (the bridge connecting), until `__mic.ready()`.
+  const [connecting, setConnecting] = useState(false)
   const latest = useRef(options)
   useEffect(() => { latest.current = options })
   const mic = (window as unknown as { __mic?: Record<string, unknown> }).__mic ??= { starts: 0 }
   // What the voice line reads (canvas row 17): the room's level, when words last came, a held sentence.
   const signal = useRef<VoiceSignal>({ level: 0, lastWordAt: 0, heldSince: 0, confidence: null, words: [], speechAt: 0 })
-  mic.say = (text: string) => { latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
+  // Held while Casa thinks (`hold`, as the real hook): what's said then doesn't count.
+  mic.say = (text: string) => { if (mic.held) return; latest.current.onFinalTranscript(text); latest.current.onFinalTranscript('__SEND__') }
   // Words heard so far, mid-sentence (what shows live while he speaks), with Deepgram's per-word confidence if given.
   mic.hear = (text: string, words?: Array<{ word: string; confidence: number }>, confidence?: number) => {
     Object.assign(signal.current, { lastWordAt: Date.now(), words: words ?? [], confidence: confidence ?? null })
+    if (mic.held) return
     latest.current.onInterim(text)
   }
   mic.level = (level: number) => { signal.current.level = level }
@@ -253,14 +257,17 @@ export function useFixtureSpeech(options: Parameters<typeof import('../hooks/use
   mic.no = () => latest.current.onCancel()
   mic.bye = () => { setListening(false); latest.current.onDismiss() }
   mic.listening = listening
+  mic.ready = () => { setConnecting(false); setListening(true) }
   return {
     listening,
     signal,
     bridgeDown: false,
-    connecting: false,
-    start: async () => { mic.starts = Number(mic.starts) + 1; setListening(true) },
+    connecting,
+    start: async () => { mic.starts = Number(mic.starts) + 1; if (mic.slow) setConnecting(true); else setListening(true) },
     stop: async () => setListening(false),
     finish: () => { mic.finished = Number(mic.finished ?? 0) + 1; setListening(false) },
+    hold: () => { mic.held = true },
+    rearm: () => { mic.held = false; mic.rearms = Number(mic.rearms ?? 0) + 1 },
   } as unknown as ReturnType<typeof import('../hooks/useSpeechInput').useSpeechInput>
 }
 

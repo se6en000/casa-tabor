@@ -1233,7 +1233,9 @@ _burst_thread: threading.Thread | None = None
 
 # Live animation state
 _led_current_pixels = [[0.0, 0.0, 0.0] for _ in range(NUM_LEDS)]
-_led_mode = "off"  # off | listening | processing
+_led_mode = "off"  # off | listening | closing | processing
+_closing_from = 0.0
+_closing_ms = 5000
 _voice_level = 0.0
 _voice_until = 0.0
 _color_lock   = threading.Lock()
@@ -1346,6 +1348,15 @@ def _frame_color_raw(mode: str, i: int, t: float, voice_env: float, night: bool)
         d = abs(i - center) / max(center, 1.0)
         ripple = 0.28 * voice_env * max(0.0, math.sin((d * 9.0) - (t * 12.0)))
         return _add(_tone(base, level, night), _tone(glint, ripple, night))
+    if mode == "closing":
+        # The follow-up window's last seconds (Jake, Oct 3: "the fading light part when the listening window is
+        # closing"): the listening light, fading to nothing over _closing_ms.
+        with _color_lock:
+            since, span = _closing_from, _closing_ms
+        left = max(0.0, 1.0 - (time.time() - since) / max(span / 1000.0, 0.1))
+        breathing = 0.5 + 0.5 * math.sin((2 * math.pi * t) / (4.2 if night else 3.4))
+        level = (0.50 + 0.22 * breathing) * left
+        return _tone(base, level, night)
     if mode == "processing":
         # Casa's turn: a dim strip with one soft light travelling along it.
         head = (t / 1.1) * NUM_LEDS
@@ -1481,6 +1492,19 @@ def led_listening(night: bool = False):
         _set_mode("listening")
         _ensure_comet_running()
     return {"ok": True, "mode": "listening"}
+
+@app.post("/led/closing")
+def led_closing(night: bool = False, ms: int = 5000):
+    """The follow-up window closing: the listening light fades to nothing over `ms`."""
+    global _closing_from, _closing_ms
+    _set_night(night)
+    with _led_lock:
+        with _color_lock:
+            _closing_from = time.time()
+            _closing_ms = max(500, min(int(ms), 20000))
+        _set_mode("closing")
+        _ensure_comet_running()
+    return {"ok": True, "mode": "closing"}
 
 @app.post("/led/processing")
 def led_processing(night: bool = False):
