@@ -1,3 +1,5 @@
+import { HEAD_AISLE, VOCABULARY, foldPhrase } from './groceryVocabulary.ts'
+
 export const GROCERY_CATEGORY_KEYS = [
   'produce',
   'dairy',
@@ -128,9 +130,33 @@ const SORTED_CATEGORY_PHRASES: Array<{ phrase: string; category: Exclude<Grocery
   )
   .sort((a, b) => b.phrase.length - a.phrase.length)
 
+// Words that say the aisle wherever they are: "frozen corn" is frozen, "canned salmon" pantry, "cat treats" pet.
+const PET_WORDS = new Set(['dog', 'cat', 'puppy', 'kitten', 'hamster', 'pet', 'litter', 'kitty'])
+const HOUSEHOLD_WORDS = new Set(['dishwasher', 'laundry', 'cleaning', 'toilet', 'trash', 'garbage', 'lint'])
+
+/**
+ * The aisle for a name (Jake, Oct 2): a known item's own aisle (groceryVocabulary.ts); "frozen …" frozen, "canned …"
+ * pantry, a pet's things pet; else the aisle of the known item it ends in ("spicy salmon cuts" → no; "organic
+ * strawberries" → produce), else the old word lists. Scored by scripts/grocery-voice-eval.mjs.
+ */
 export function inferCategoryFromName(name: string): GroceryCategoryKey {
   const normalizedName = normalizeComparableName(name)
   if (!normalizedName) return 'other'
+  const folded = foldPhrase(normalizedName).split(' ')
+  const exact = VOCABULARY.get(folded.join(' '))
+  if (exact) return exact
+  if (folded.some((w) => PET_WORDS.has(w))) return 'pet'
+  if (folded[0] === 'frozen') return 'frozen'
+  if (folded[0] === 'canned' || folded[0] === 'can') return 'pantry'
+  // "baby carrots", "baby bok choy" are produce; "baby oatmeal", "baby shampoo" are the baby aisle.
+  if (folded[0] === 'baby' && VOCABULARY.get(folded.slice(1).join(' ')) !== 'produce') return 'baby'
+  if (folded.some((w) => HOUSEHOLD_WORDS.has(w))) return 'household'
+  for (let k = 1; k < folded.length; k++) {
+    const tail = VOCABULARY.get(folded.slice(k).join(' '))
+    if (tail) return tail
+  }
+  const byHead = HEAD_AISLE[folded[folded.length - 1]]
+  if (byHead) return byHead
 
   for (const { phrase, category } of SORTED_CATEGORY_PHRASES) {
     if (hasPhraseMatch(normalizedName, phrase)) return category

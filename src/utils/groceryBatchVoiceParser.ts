@@ -1,4 +1,5 @@
 import { inferCategoryFromName, type GroceryCategoryKey } from './groceryCategorization.ts'
+import { AND_ITEMS, DESCRIBING_WORDS, FLAVORS, FLAVOR_PHRASES, FRONT_FOODS, HEAD_WORDS, PLURAL_WRITTEN, STANDALONE, VOCABULARY, foldWord, isFoodWord } from './groceryVocabulary.ts'
 
 export interface ParsedVoiceGroceryItem {
   id: string
@@ -107,194 +108,6 @@ const SPEECH_CORRECTIONS: Record<string, string> = {
   dietcoke: 'diet coke',
 }
 
-/**
- * Known multi-word compound phrases that should remain atomic and not be split.
- * Order from longer (3-4 words) to shorter (2 words) for greedy matching.
- */
-const KNOWN_COMPOUNDS: string[] = [
-  // 3-word compounds
-  'hot dog buns',
-  'hamburger buns',
-  'prosciutto di parma',
-  'mac and cheese',
-  'half and half',
-  'ice cream bars',
-  'cold brew coffee',
-  'extra virgin olive oil',
-  // 2-word bakery
-  'sourdough bread',
-  'garlic bread',
-  'pita bread',
-  'french bread',
-  'english muffins',
-  'bagel bites',
-  // 2-word meat & seafood
-  'hot dogs',
-  'hot dog',
-  'ground beef',
-  'ground turkey',
-  'ground chicken',
-  'ground pork',
-  'chicken breast',
-  'chicken breasts',
-  'chicken thighs',
-  'chicken wings',
-  'chicken tenders',
-  'chicken nuggets',
-  'salmon fillet',
-  'salmon fillets',
-  'pork chops',
-  'ribeye steak',
-  'strip steak',
-  'flank steak',
-  'breakfast sausage',
-  'italian sausage',
-  'deli turkey',
-  'deli ham',
-  'roast beef',
-  'rotisserie chicken',
-  // 2-word dairy
-  'whole milk',
-  'skim milk',
-  'oat milk',
-  'almond milk',
-  'soy milk',
-  'coconut milk',
-  'heavy cream',
-  'sour cream',
-  'cottage cheese',
-  'cream cheese',
-  'string cheese',
-  'shredded cheese',
-  'ice cream',
-  'greek yogurt',
-  'butter milk',
-  // 2-word produce
-  'apple juice',
-  'orange juice',
-  'grapefruit juice',
-  'lemon juice',
-  'lime juice',
-  'tomato juice',
-  'cranberry juice',
-  'grape juice',
-  'sparkling water',
-  'seltzer water',
-  'coconut water',
-  'cold brew',
-  'iced coffee',
-  'green tea',
-  'black tea',
-  'bell peppers',
-  'bell pepper',
-  'green onions',
-  'green onion',
-  'red onions',
-  'red onion',
-  'yellow onions',
-  'sweet potatoes',
-  'sweet potato',
-  'russet potatoes',
-  'cherry tomatoes',
-  'roma tomatoes',
-  'baby spinach',
-  'romaine lettuce',
-  'iceberg lettuce',
-  'brussels sprouts',
-  'green beans',
-  'yellow squash',
-  'butternut squash',
-  'fresh basil',
-  'fresh cilantro',
-  'fresh parsley',
-  'fresh dill',
-  'fresh mint',
-  'fresh rosemary',
-  // 2-word pantry & snacks
-  'olive oil',
-  'vegetable oil',
-  'canola oil',
-  'avocado oil',
-  'sesame oil',
-  'peanut butter',
-  'almond butter',
-  'pasta sauce',
-  'tomato sauce',
-  'tomato paste',
-  'marinara sauce',
-  'soy sauce',
-  'hot sauce',
-  'bbq sauce',
-  'barbecue sauce',
-  'maple syrup',
-  'salad dressing',
-  'chicken broth',
-  'beef broth',
-  'vegetable broth',
-  'black beans',
-  'kidney beans',
-  'pinto beans',
-  'garbanzo beans',
-  'potato chips',
-  'tortilla chips',
-  'corn chips',
-  'pita chips',
-  'granola bars',
-  'protein bars',
-  'fruit snacks',
-  'trail mix',
-  // 2-word household & care
-  'paper towels',
-  'toilet paper',
-  'trash bags',
-  'garbage bags',
-  'dish soap',
-  'dishwasher pods',
-  'laundry detergent',
-  'fabric softener',
-  'aluminum foil',
-  'plastic wrap',
-  'body wash',
-  'face wash',
-  'shaving cream',
-  'lip balm',
-  'dog food',
-  'cat food',
-  'baby wipes',
-  'baby formula',
-  'baby food',
-]
-
-/**
- * Fast lookup set of compound phrases normalized to lowercase.
- */
-const COMPOUND_SET = new Set(KNOWN_COMPOUNDS.map((c) => c.toLowerCase()))
-
-/**
- * Single-word known grocery items / staples.
- */
-const SINGLE_GROCERY_ITEMS = new Set([
-  'hamburgers', 'hamburger', 'hotdogs', 'hotdog',
-  'milk', 'eggs', 'egg', 'bread', 'butter', 'cheese',
-  'apples', 'apple', 'bananas', 'banana', 'oranges', 'orange', 'grapes', 'grape',
-  'avocados', 'avocado', 'lemons', 'lemon', 'limes', 'lime', 'onions', 'onion',
-  'garlic', 'potatoes', 'potato', 'tomatoes', 'tomato', 'carrots', 'carrot',
-  'cucumbers', 'cucumber', 'celery', 'broccoli', 'spinach', 'kale', 'lettuce',
-  'mushrooms', 'mushroom', 'zucchini', 'squash', 'asparagus', 'cauliflower',
-  'cabbage', 'peaches', 'peach', 'pears', 'pear', 'plums', 'plum', 'berries',
-  'blueberries', 'strawberries', 'raspberries', 'blackberries',
-  'chicken', 'beef', 'steak', 'pork', 'salmon', 'tuna', 'shrimp', 'turkey',
-  'bacon', 'sausage', 'ham', 'salami', 'prosciutto',
-  'rice', 'pasta', 'spaghetti', 'cereal', 'oats', 'flour', 'sugar', 'salt', 'pepper',
-  'oil', 'vinegar', 'sauce', 'soup', 'broth', 'beans', 'lentils',
-  'coffee', 'tea', 'water', 'juice', 'soda', 'beer', 'wine',
-  'chips', 'crackers', 'pretzels', 'popcorn', 'nuts', 'hummus', 'salsa', 'guacamole',
-  'shampoo', 'conditioner', 'soap', 'deodorant', 'toothpaste', 'toothbrush',
-  'diapers', 'wipes', 'bagels', 'bagel', 'croissants', 'croissant', 'muffins', 'muffin',
-  'tortillas', 'tortilla', 'pitas', 'pita', 'rolls', 'roll', 'buns', 'bun', 'cookies', 'cookie', 'sourdough',
-  'tofu', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'honey', 'jam', 'jelly',
-])
-
 function cleanPrefixAndSuffix(raw: string): string {
   let text = raw.trim()
   let prev = ''
@@ -330,7 +143,9 @@ function capitalizeWords(str: string): string {
 function normalizeSpeechTokens(text: string): string[] {
   const words = text
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    // Commas separate items; "2%" stays one word.
+    .replace(/[^a-z0-9%,\s]/g, ' ')
+    .replace(/,/g, ' , ')
     .split(/\s+/)
     .filter(Boolean)
 
@@ -344,126 +159,6 @@ function normalizeSpeechTokens(text: string): string[] {
     }
   }
   return correctedWords
-}
-
-/**
- * Greedily segments continuous, unpunctuated spoken words into distinct grocery items.
- * e.g. "hamburgers hamburger buns hot dogs hot dog buns"
- *   -> ["hamburgers", "hamburger buns", "hot dogs", "hot dog buns"]
- * e.g. "apple juice"
- *   -> ["apple juice"] (kept intact)
- * e.g. "apple juice sourdough bread cold brew"
- *   -> ["apple juice", "sourdough bread", "cold brew"]
- */
-function segmentContinuousPhrase(words: string[]): string[] {
-  if (words.length <= 1) return [words.join(' ')]
-  const phrase = words.join(' ')
-
-  // If the entire phrase is already a known compound, keep it intact
-  if (COMPOUND_SET.has(phrase)) {
-    return [phrase]
-  }
-
-  const segments: string[] = []
-  // Words the dictionary doesn't know ("canned", "organic") describe the item after them.
-  let carry = ''
-  const push = (seg: string) => {
-    segments.push(carry ? `${carry} ${seg}` : seg)
-    carry = ''
-  }
-  let i = 0
-
-  while (i < words.length) {
-    // Check for quantity/unit prefix at current position (e.g. "2 gallons of whole milk")
-    const currentWord = words[i]
-    const isNum = /^\d+(?:\.\d+)?$/.test(currentWord) || currentWord in NUMBER_WORDS
-    let numPrefix = ''
-
-    if (isNum && i + 1 < words.length) {
-      const nextWord = words[i + 1]
-      const isUnit = nextWord in UNIT_NORMALIZATIONS
-      if (isUnit) {
-        // e.g. "2 gallons" or "two cans"
-        const hasOf = i + 2 < words.length && words[i + 2] === 'of'
-        const unitOffset = hasOf ? 3 : 2
-        numPrefix = words.slice(i, i + unitOffset).join(' ') + ' '
-        i += unitOffset
-      } else {
-        // e.g. "3 avocados"
-        numPrefix = currentWord + ' '
-        i += 1
-      }
-    }
-
-    if (i >= words.length) {
-      if (numPrefix.trim()) push(numPrefix.trim())
-      break
-    }
-
-    // Try 4-word compound match
-    if (i + 4 <= words.length) {
-      const quad = words.slice(i, i + 4).join(' ')
-      if (COMPOUND_SET.has(quad)) {
-        push(numPrefix + quad)
-        i += 4
-        continue
-      }
-    }
-
-    // Try 3-word compound match
-    if (i + 3 <= words.length) {
-      const tri = words.slice(i, i + 3).join(' ')
-      if (COMPOUND_SET.has(tri)) {
-        push(numPrefix + tri)
-        i += 3
-        continue
-      }
-    }
-
-    // Try 2-word compound match
-    if (i + 2 <= words.length) {
-      const pair = words.slice(i, i + 2).join(' ')
-      if (COMPOUND_SET.has(pair)) {
-        push(numPrefix + pair)
-        i += 2
-        continue
-      }
-    }
-
-    // Check 1-word single grocery item match
-    const single = words[i]
-    if (SINGLE_GROCERY_ITEMS.has(single)) {
-      push(numPrefix + single)
-      i += 1
-      continue
-    }
-
-    // If word is not explicitly in dictionary, look ahead to see where the next known item starts
-    let j = i + 1
-    while (j < words.length) {
-      const lookahead = words[j]
-      const isLookaheadNum = /^\d+(?:\.\d+)?$/.test(lookahead) || lookahead in NUMBER_WORDS
-      if (isLookaheadNum) break
-
-      const lookaheadPair = j + 2 <= words.length ? words.slice(j, j + 2).join(' ') : ''
-      if (lookaheadPair && COMPOUND_SET.has(lookaheadPair)) break
-
-      if (SINGLE_GROCERY_ITEMS.has(lookahead)) break
-      j++
-    }
-
-    const unmappedSlice = words.slice(i, j).join(' ')
-    if (unmappedSlice) {
-      carry = [carry, numPrefix + unmappedSlice].filter(Boolean).join(' ')
-    }
-    i = j
-  }
-
-  if (carry) {
-    // Nothing known after it: it's an item of its own, or describes the one before ("milk organic").
-    segments.push(carry)
-  }
-  return segments.filter(Boolean)
 }
 
 /**
@@ -527,46 +222,184 @@ export function parseSingleVoiceItem(segment: string): Omit<ParsedVoiceGroceryIt
   return { name, quantity: null, unit: null, category }
 }
 
+/** Words that open an item but aren't part of it: "and", "add", "some", "also". */
+const LEAD_FILLER = new Set(['and', 'add', 'also', 'plus', 'some', 'then', 'oh', 'um', 'uh', 'like', 'maybe', 'get', 'grab', 'buy', 'more', 'another', 'the', 'please', 'okay', 'ok'])
+const TAIL_FILLER = new Set(['please', 'too', 'thanks', 'also'])
+const DELIMITERS = new Set(['and', 'plus', 'also', 'then', ','])
+const UNIT_OR_COUNT = (w: string) => w in UNIT_NORMALIZATIONS
+const isNumber = (w: string) => /^\d+(?:\.\d+)?$/.test(w) || (w in NUMBER_WORDS && w !== 'a' && w !== 'an')
+
+/** "2 gallons of", "a dozen", "three", "a box of": how many words at `i` say an amount (0 when none). */
+function amountLength(words: string[], i: number): number {
+  const w = words[i]
+  if (!w) return 0
+  const article = w === 'a' || w === 'an'
+  if (!isNumber(w) && !article) return 0
+  let n = 1
+  if (words[i + 1] === 'couple' || words[i + 1] === 'few') n = 2
+  if (UNIT_OR_COUNT(words[i + n] ?? '')) n += 1
+  else if (article && n === 1) return 0 // "a" alone: "an apple" is just the apple
+  if (words[i + n] === 'of') n += 1
+  return n
+}
+
+const FOOD_AISLES = new Set(['produce', 'dairy', 'meat', 'deli', 'bakery', 'frozen', 'pantry', 'beverages', 'snacks'])
+/** A word as the vocabulary knows it ("mac_and_cheese", kept whole before splitting, is "mac and cheese"). */
+const keyOf = (w: string) => w.split('_').map(foldWord).join(' ')
+const unknownWord = (w: string) => !VOCABULARY.has(keyOf(w)) && !HEAD_WORDS.has(w) && !HEAD_WORDS.has(foldWord(w)) && !DESCRIBING_WORDS.has(w) && !FLAVORS.has(w)
+
 /**
- * Splits a full voice transcript into individual parsed grocery items.
- * Handles:
- * 1. Oxford commas, semicolons, line breaks
- * 2. Conjunctions: "and", "plus", "also"
- * 3. Continuous unpunctuated lists: "hamburgers hamburger buns hot dogs hot dog buns"
- * 4. Preserving compound nouns: "apple juice", "olive oil", "sourdough bread"
+ * How good a reading of these words is as one item (lower is better; Infinity: not an item). The item is what it ends
+ * in — a known item ("ice cream", "sandwich meat"), a word that takes a food ("chips", "bars"), or a word it doesn't
+ * know — and what's in front: describing words and names ("organic", "kerrygold"), flavours ("mint chocolate chip"),
+ * foods that make it a kind of thing ("turkey bacon", "pickle chips", "bagel thins"). Plain produce and meat take only
+ * describing words and names ("red grapes", "heirloom tomatoes"), so "chicken salmon" is two; a staple ("milk",
+ * "cheese") takes no other food; another known item of two words inside it means it's a list ("steak chicken broth").
+ */
+function itemCost(words: string[]): number {
+  const n = words.length
+  if (n === 0) return Infinity
+  const keys = words.map(keyOf)
+  const knownSpan = (a: number, b: number) => VOCABULARY.has(keys.slice(a, b).join(' '))
+  if (knownSpan(0, n)) return 1
+  const head = words[n - 1]
+  const headUnknown = unknownWord(head)
+  if (n === 1) return headUnknown ? 1.8 : Infinity
+  // What it ends in: the longest known item at the end, else the last word.
+  let t = 1
+  for (let k = n - 1; k >= 1; k--) if (knownSpan(n - k, n)) { t = k; break }
+  const front = words.slice(0, n - t)
+  const tailKey = keys.slice(n - t).join(' ')
+  const tailAisle = VOCABULARY.get(tailKey)
+  const headWord = HEAD_WORDS.has(head) || HEAD_WORDS.has(foldWord(head))
+  const foodTail = headUnknown || (tailAisle ? FOOD_AISLES.has(tailAisle) : headWord)
+  const plainTail = (tailAisle === 'produce' || tailAisle === 'meat') && !headWord
+  const staple = t === 1 && (STANDALONE.has(head) || STANDALONE.has(foldWord(head)))
+  // Another known item of two words or more inside it: a list, not one item.
+  for (let a = 0; a < n - t; a++) {
+    for (let b = a + 2; b <= n - t; b++) {
+      if (knownSpan(a, b) && !(a === 0 && b === n - t && wholeFrontFits())) return Infinity
+    }
+  }
+  function wholeFrontFits(): boolean {
+    if (!foodTail || front.length < 2) return false
+    if (flavorsOnly(front)) return true
+    const frontKey = keys.slice(0, n - t).join(' ')
+    const saidSingular = foldWord(front[front.length - 1]) === front[front.length - 1]
+    const frontAisle = VOCABULARY.get(frontKey)
+    // A known item said in the singular ("chocolate chip" muffins), or produce before a word that takes it ("sweet potato fries").
+    return saidSingular && Boolean(frontAisle) && (PLURAL_WRITTEN.has(frontKey) || (frontAisle === 'produce' && headWord && tailAisle !== 'produce'))
+  }
+  if (wholeFrontFits()) return 1.55
+  let cost = 1.45
+  let foods = 0
+  for (const w of front) {
+    if (DESCRIBING_WORDS.has(w)) { cost += 0.1; continue }
+    foods += 1
+    if (unknownWord(w)) cost += 0.35 // a name or a variety: "kerrygold butter", "rainbow sprinkles"
+    else if (plainTail) return Infinity
+    else if (FLAVORS.has(w) && foodTail) cost += 0.2
+    // A known item of two words takes only describing words, names and flavours ("celery sparkling water" is two).
+    else if (t >= 2) return Infinity
+    else if (staple) return Infinity
+    else if (FRONT_FOODS.has(w) && foodTail) cost += 0.4
+    else if (isFoodWord(w) && foldWord(w) === w && !STANDALONE.has(w) && foodTail) {
+      // Said in the singular when it's usually plural ("pickle" chips) — it's describing.
+      if (PLURAL_WRITTEN.has(keyOf(w))) cost += 0.3
+      else if ((VOCABULARY.get(keyOf(w)) === 'produce' && headWord && tailAisle !== 'produce') || headUnknown) cost += 0.4
+      else cost += 0.6
+    } else return Infinity
+  }
+  // Plain produce and meat take one name at most ("heirloom tomatoes"); longer fronts of foods are less likely one item.
+  if (plainTail && foods > 1) return Infinity
+  return cost + 0.7 * Math.max(0, foods - 1)
+}
+
+/** Every word a flavour or a describing word, or a run of them ("mint chocolate chip", "peanut butter"). */
+function flavorsOnly(ws: string[]): boolean {
+  const ok: boolean[] = [true]
+  for (let i = 1; i <= ws.length; i++) {
+    ok[i] = false
+    for (let j = 0; j < i && !ok[i]; j++) {
+      if (!ok[j]) continue
+      const span = ws.slice(j, i)
+      if (span.length === 1 ? FLAVORS.has(span[0]) || DESCRIBING_WORDS.has(span[0]) : FLAVOR_PHRASES.has(span.map(foldWord).join(' '))) ok[i] = true
+    }
+  }
+  return ok[ws.length]
+}
+
+/** The best split of words said with no "and" between them into items ("milk eggs bread", "canned salmon eggs"). */
+function bestSplit(words: string[]): string[][] {
+  const n = words.length
+  const best: Array<{ cost: number; from: number }> = [{ cost: 0, from: -1 }]
+  for (let i = 1; i <= n; i++) {
+    best[i] = { cost: Infinity, from: -1 }
+    for (let j = Math.max(0, i - 7); j < i; j++) {
+      if (best[j].cost === Infinity) continue
+      const amount = amountLength(words, j)
+      if (amount >= i - j) continue
+      // A number inside an item starts the next one: "chips 2 pounds of beef".
+      const body = words.slice(j + amount, i)
+      if (body.some((w, k) => k > 0 && amountLength(body, k) > 0 && isNumber(w))) continue
+      const cost = best[j].cost + itemCost(body) + 0.001
+      if (cost < best[i].cost) best[i] = { cost, from: j }
+    }
+  }
+  if (best[n].cost === Infinity) return [words]
+  const pieces: string[][] = []
+  for (let i = n; i > 0; i = best[i].from) pieces.unshift(words.slice(best[i].from, i))
+  return pieces
+}
+
+/**
+ * Splits a full voice transcript into individual parsed grocery items (Jake, Oct 2: "canned tuna fish and canned
+ * salmon"; "it messes up on a lot"). "and", "plus" and commas separate items; between them, the words are split into
+ * the best reading as items — known ones (groceryVocabulary.ts), described ones ("frozen corn"), a food in front of a
+ * word that takes one ("turkey bacon"), and anything unknown kept whole. Amounts stay with their item.
+ * Scored by scripts/grocery-voice-eval.mjs.
  */
 export function parseGroceryVoiceBatch(transcript: string): ParsedVoiceGroceryItem[] {
   const cleaned = cleanPrefixAndSuffix(transcript)
   if (!cleaned) return []
-
-  // Step 1: Split on explicit punctuation / conjunction delimiters
-  const rawSegments = cleaned
-    .split(/\s*,\s*(?:and\s+)?|\s*;\s*|\s+(?:and|plus|also)\s+|\n+/i)
-    .map((s) => s.trim())
-    .filter(Boolean)
-
+  const words = normalizeSpeechTokens(cleaned.replace(/[,;\n]+/g, ' , ').replace(/&/g, ' and '))
+  // "mac and cheese", "half and half" keep their "and".
+  const joined: string[] = []
+  for (let i = 0; i < words.length; i++) {
+    const hit = AND_ITEMS.find((item) => {
+      const parts = item.split(' ')
+      return parts.every((p, k) => foldWord(words[i + k] ?? '') === p)
+    })
+    if (hit) {
+      const len = hit.split(' ').length
+      joined.push(words.slice(i, i + len).join('_'))
+      i += len - 1
+    } else joined.push(words[i])
+  }
+  // Pieces between "and"s and commas, each split into its items.
+  const chunks: string[][] = [[]]
+  for (const w of joined) {
+    if (DELIMITERS.has(w)) chunks.push([])
+    else chunks[chunks.length - 1].push(w)
+  }
   const items: ParsedVoiceGroceryItem[] = []
   let counter = 1
-  // Listed with "and"s or commas, each piece is one item, kept whole (Jake, Oct 2: "canned tuna fish and canned
-  // salmon" came out as five words). Only a list said with none is split by the dictionary.
-  const listed = rawSegments.length > 1
-
-  for (const rawSeg of rawSegments) {
-    // Step 2: For each segment, tokenize and segment continuous speech if multiple items are present
-    const tokens = normalizeSpeechTokens(rawSeg)
-    const refinedSubSegments = listed ? [tokens.join(' ')] : segmentContinuousPhrase(tokens)
-
-    for (const subSeg of refinedSubSegments) {
-      const parsed = parseSingleVoiceItem(subSeg)
-      if (parsed && parsed.name.length >= 2) {
-        items.push({
-          id: `staged-${Date.now()}-${counter++}`,
-          ...parsed,
-        })
-      }
+  // How people list: "milk eggs and bread" — what's after the last "and" is one item; "milk and eggs and bread" or
+  // "milk, eggs, and bread" — every piece is one. Only words with no "and" between them are split.
+  const pieces = chunks.filter((c) => c.some((w) => !LEAD_FILLER.has(w)))
+  const everyPieceOne = pieces.length >= 3
+  for (const chunk of chunks) {
+    let ws = chunk
+    while (ws.length && LEAD_FILLER.has(ws[0]) && !(ws[0] === 'more' && ws.length === 1)) ws = ws.slice(1)
+    while (ws.length && TAIL_FILLER.has(ws[ws.length - 1])) ws = ws.slice(0, -1)
+    if (!ws.length) continue
+    const unjoin = (piece: string[]) => piece.map((w) => w.replace(/_/g, ' '))
+    const onePiece = pieces.length >= 2 && (everyPieceOne || chunk === pieces[pieces.length - 1])
+    const split = onePiece && itemCost(ws.slice(amountLength(ws, 0))) < Infinity ? [ws] : bestSplit(ws)
+    for (const piece of split) {
+      const parsed = parseSingleVoiceItem(unjoin(piece).join(' '))
+      if (parsed && parsed.name.replace(/[^a-z]/gi, '').length >= 2) items.push({ id: `staged-${Date.now()}-${counter++}`, ...parsed })
     }
   }
-
   return items
 }
-
