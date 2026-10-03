@@ -20,7 +20,9 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
   /** About how many characters fit on a line (the panel is narrow), so the box grows with the words. */
   charsPerLine?: number
   placeholder?: string
-}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], charsPerLine = 90, placeholder = 'Type to Casa, or paste a message or pictures' }, ref) {
+  /** The computer's panel (Jake, Oct 3: "restoration hardware subtle elegant"): a hairline brass field, a brass send. */
+  quiet?: boolean
+}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], charsPerLine = 90, placeholder = 'Type to Casa, or paste a message or pictures', quiet = false }, ref) {
   const [text, setText] = useState(initialText)
   const [images, setImages] = useState<TypedImage[]>(initialImages)
   const [focused, setFocused] = useState(true)
@@ -90,17 +92,19 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
             e.preventDefault()
             void addFiles(files)
           }}
-          className={`min-h-[64px] min-w-0 flex-1 resize-none rounded-[18px] border-2 border-solid bg-wall-on-pigment/8 px-[22px] py-[16px] font-body text-wall-body leading-[1.4] text-wall-on-pigment outline-none placeholder:text-wall-night-ink-2 ${focused ? 'border-wall-night-brass' : 'border-wall-ink-2'}`}
+          className={quiet
+            ? `min-h-[56px] min-w-0 flex-1 resize-none rounded-[28px] border border-solid bg-wall-on-pigment/[0.04] px-[24px] py-[14px] font-body text-wall-body leading-[1.4] text-wall-on-pigment outline-none placeholder:text-wall-night-ink-2/70 ${focused ? 'border-wall-night-brass/80' : 'border-wall-night-brass/30'}`
+            : `min-h-[64px] min-w-0 flex-1 resize-none rounded-[18px] border-2 border-solid bg-wall-on-pigment/8 px-[22px] py-[16px] font-body text-wall-body leading-[1.4] text-wall-on-pigment outline-none placeholder:text-wall-night-ink-2 ${focused ? 'border-wall-night-brass' : 'border-wall-ink-2'}`}
         />
         <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = '' }} />
-        <button type="button" aria-label="Add a picture" onClick={() => picker.current?.click()} className="flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-on-pigment">
+        <button type="button" aria-label="Add a picture" onClick={() => picker.current?.click()} className={quiet ? 'flex h-[56px] w-[48px] shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-wall-night-ink-2' : 'flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-on-pigment'}>
           <Paperclip size={22} />
         </button>
-        <button type="submit" aria-label="Send" disabled={busy || !typedTurn(text, images)} className="flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-on-pigment p-0 text-wall-ink disabled:opacity-40">
+        <button type="submit" aria-label="Send" disabled={busy || !typedTurn(text, images)} className={quiet ? 'flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-night-brass p-0 text-wall-ink disabled:opacity-30' : 'flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-on-pigment p-0 text-wall-ink disabled:opacity-40'}>
           <ArrowUp size={24} />
         </button>
       </div>
-      <div className="text-wall-label text-wall-night-ink-2">Enter sends · Shift+Enter for a new line · paste a message or pictures (⌘V), or drop them here</div>
+      <div className={quiet ? 'px-[24px] text-wall-label text-wall-night-ink-2/60' : 'text-wall-label text-wall-night-ink-2'}>{quiet ? 'Enter sends · paste or drop a message or pictures' : 'Enter sends · Shift+Enter for a new line · paste a message or pictures (⌘V), or drop them here'}</div>
     </form>
   )
 })

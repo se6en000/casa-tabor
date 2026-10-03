@@ -657,8 +657,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   if (computer) {
     const convo = messages.filter((m) => m.content.trim() || m.imageDataUrls?.length)
     const lastAnswerId = [...convo].reverse().find((m) => m.role === 'assistant')?.id
-    const smallPill = 'h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-on-pigment'
-    const smallLight = 'h-[48px] rounded-full border-0 bg-wall-on-pigment px-[20px] text-wall-detail font-semibold text-wall-ink'
+    // Quiet, warm and brass (Jake, Oct 3: "seems a bit square and not restoration hardware subtle elegant"): outlined
+    // pills, the first in brass.
+    const smallPill = 'h-[46px] rounded-full border border-solid border-wall-night-ink-2/40 bg-transparent px-[20px] text-wall-detail font-medium text-wall-night-ink'
+    const smallLight = 'h-[46px] rounded-full border border-solid border-wall-night-brass/70 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-night-brass'
     return (
       <>
         <section
@@ -666,35 +668,61 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           onClick={(event) => { event.stopPropagation(); lastTouch.current = Date.now() }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); void typeLine.current?.addFiles(Array.from(e.dataTransfer.files)) }}
-          className="absolute right-0 top-0 z-30 flex h-[1080px] w-[640px] flex-col bg-wall-band font-body text-wall-on-pigment shadow-[-24px_0_60px] shadow-wall-night-ground/40"
+          className="absolute bottom-[24px] right-[24px] top-[24px] z-30 flex w-[620px] flex-col overflow-hidden rounded-[28px] border border-solid border-wall-night-brass/20 bg-wall-band font-body text-wall-on-pigment shadow-[0_24px_70px] shadow-wall-night-ground/50"
         >
-          <div className="flex items-center gap-[14px] border-0 border-b border-solid border-wall-ink-2/50 px-[28px] pb-[18px] pt-[26px]">
+          <div className="flex items-center gap-[16px] px-[32px] pb-[20px] pt-[28px]">
             <button
               type="button"
               aria-label={speech.listening ? 'Stop listening' : 'Talk'}
               onClick={() => { micWanted.current = true; setMicOn(true); if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
-              className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-2 border-solid border-wall-night-brass p-0 ${state === 'LISTENING' ? 'bg-wall-night-brass text-wall-ink' : 'bg-transparent text-wall-night-brass'}`}
+              className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-night-brass/70 p-0 ${state === 'LISTENING' ? 'bg-wall-night-brass text-wall-ink' : 'bg-transparent text-wall-night-brass'}`}
             >
-              <Mic size={22} />
+              <Mic size={21} />
             </button>
-            <span className="font-display text-wall-date font-semibold">Casa</span>
-            <span className="min-w-0 flex-1 truncate text-wall-label text-wall-night-ink-2">
-              {state === 'LISTENING' ? 'Listening…' : state === 'THINKING' ? (status ?? 'Thinking…') : state === 'NEEDS A YES' ? 'Needs a yes' : 'Type, or click the mic to talk'}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="font-display text-wall-date font-semibold leading-none">Casa</span>
+              <span className="mt-[6px] truncate text-wall-label font-semibold uppercase tracking-[0.18em] text-wall-night-brass/80">
+                {state === 'LISTENING' ? 'Listening' : state === 'THINKING' ? (status ?? 'Thinking') : state === 'NEEDS A YES' ? 'Needs a yes' : 'Type, or talk'}
+              </span>
             </span>
-            <button type="button" aria-label="Report a problem" onClick={openReport} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2"><Bug size={20} /></button>
-            <button type="button" aria-label="Close Casa" onClick={onClose} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-on-pigment"><X size={20} /></button>
+            <button type="button" aria-label="Report a problem" onClick={openReport} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-wall-night-ink-2/70"><Bug size={19} /></button>
+            <button type="button" aria-label="Close Casa" onClick={onClose} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-night-ink-2/30 bg-transparent p-0 text-wall-night-ink"><X size={19} /></button>
           </div>
-          <div ref={panelScroll} className="flex min-h-0 flex-1 touch-pan-y flex-col gap-[16px] overflow-y-auto px-[28px] py-[24px] text-wall-detail leading-[1.4]">
+          <div aria-hidden="true" className="mx-[32px] h-px bg-wall-night-brass/20" />
+          <div ref={panelScroll} className="flex min-h-0 flex-1 touch-pan-y flex-col gap-[18px] overflow-y-auto px-[32px] py-[26px] text-wall-body leading-[1.45]">
             <div className="mt-auto" />
-            {convo.length === 0 && !interim && <div className="text-wall-body text-wall-night-ink-2">Ask about the day, or ask to add something. Type below, or paste a message or pictures.</div>}
-            {convo.map((m) => {
+            {sayOpen ? (
+              // "What can I say?" (said or typed): the list, here too; a tap closes it.
+              <button type="button" aria-label="What can I say — tap to close" onClick={() => setSayOpen(false)} className="flex flex-col gap-[18px] border-0 bg-transparent p-0 text-left">
+                <span className="text-wall-label font-semibold uppercase tracking-[0.18em] text-wall-night-ink-2/70">What can I say · say it any way you like</span>
+                {tipsByTopic().map((g) => (
+                  <span key={g.topic} className="flex flex-col gap-[6px]">
+                    <span className="text-wall-label font-bold uppercase tracking-[0.18em] text-wall-night-brass">{g.topic}</span>
+                    {g.tips.map((t) => (
+                      <span key={t.id} className="text-wall-detail text-wall-night-ink-2">
+                        {t.text}
+                        {isNewTip(t) && <span className="ml-[8px] text-wall-label font-bold tracking-[0.14em] text-wall-night-brass">NEW</span>}
+                      </span>
+                    ))}
+                  </span>
+                ))}
+              </button>
+            ) : null}
+            {!sayOpen && convo.length === 0 && !interim && (
+              <div className="flex flex-col gap-[10px]">
+                <span className="font-display text-wall-date italic text-wall-night-ink">Ask about the day, or tell me what’s changed.</span>
+                <span className="text-wall-detail text-wall-night-ink-2/70">Tip: {tipFor(null, 0)}</span>
+              </div>
+            )}
+            {!sayOpen && convo.map((m) => {
               if (m.role === 'user') {
+                // What you said, as the band shows it: in your words, in italic serif, on the right — no bubble.
                 return (
-                  <div key={m.id} className="max-w-[480px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px]">
+                  <div key={m.id} className="flex max-w-[500px] flex-col items-end gap-[8px] self-end text-right">
                     {m.imageDataUrls && m.imageDataUrls.length > 0 && (
-                      <span className="mb-[8px] flex flex-wrap gap-[8px]">{m.imageDataUrls.map((src, j) => <img key={j} src={src} alt="" className="h-[64px] w-[88px] rounded-[8px] object-cover" />)}</span>
+                      <span className="flex flex-wrap justify-end gap-[8px]">{m.imageDataUrls.map((src, j) => <img key={j} src={src} alt="" className="h-[64px] w-[88px] rounded-[10px] object-cover" />)}</span>
                     )}
-                    {m.content}
+                    {m.content.trim() && <span className="font-display text-wall-date italic leading-[1.2] text-wall-night-ink">“{m.content.trim()}”</span>}
                   </div>
                 )
               }
@@ -704,18 +732,18 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
                   <div key={m.id} className="flex flex-col gap-[10px]">
                     {shaped.lead && <div>{shaped.lead}</div>}
                     {shaped.items.map((item) => (
-                      <div key={item.title} className="flex flex-col gap-[2px] rounded-[16px] bg-wall-on-pigment px-[18px] py-[14px] text-wall-ink">
-                        <span className="font-display text-wall-heading font-bold leading-tight">{item.title}</span>
-                        {item.detail && <span className="text-wall-label text-wall-ink-2">{item.detail}</span>}
+                      <div key={item.title} className="flex flex-col gap-[4px] rounded-[18px] border border-solid border-wall-night-brass/25 bg-wall-on-pigment/[0.04] px-[20px] py-[16px] text-wall-night-ink">
+                        <span className="font-display text-wall-heading font-semibold leading-tight">{item.title}</span>
+                        {item.detail && <span className="text-wall-detail text-wall-night-ink-2">{item.detail}</span>}
                       </div>
                     ))}
                     {shaped.tail && <div className="text-wall-night-ink-2">{shaped.tail}</div>}
                   </div>
                 )
               }
-              return <div key={m.id} className={m.id === lastAnswerId ? 'text-wall-on-pigment' : 'text-wall-night-ink-2'}>{bandAnswer(m.content, 2000)}</div>
+              return <div key={m.id} className={m.id === lastAnswerId ? 'text-wall-on-pigment' : 'text-wall-detail text-wall-night-ink-2/80'}>{bandAnswer(m.content, 2000)}</div>
             })}
-            {speech.listening && liveText && <div className="max-w-[480px] self-end rounded-[18px_18px_6px_18px] border border-dashed border-wall-ink-2 px-[16px] py-[12px] text-wall-night-ink-2">{liveText}</div>}
+            {speech.listening && liveText && <div className="max-w-[500px] self-end text-right font-display text-wall-date italic leading-[1.2] text-wall-night-ink-2">“{liveText}”</div>}
             {loading && <div className="text-wall-night-ink-2">{status ?? 'Thinking…'}</div>}
             {plan ? (
               <WallPlanDraft plan={plan} previous={previousPlan} working={working} onSetUp={openAgree} onKeepTalking={talkOrType} />
@@ -761,8 +789,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             )}
             {answer?.directions && <WallDirections route={answer.directions} computer />}
           </div>
-          <div className="border-0 border-t border-solid border-wall-ink-2/50 px-[28px] pb-[24px] pt-[16px]">
+          <div aria-hidden="true" className="mx-[32px] h-px bg-wall-night-brass/20" />
+          <div className="px-[28px] pb-[26px] pt-[18px]">
             <WallTypeLine
+              quiet
               key={staged?.nonce ?? 0}
               ref={typeLine}
               charsPerLine={36}

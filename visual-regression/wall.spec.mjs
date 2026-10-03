@@ -1989,7 +1989,7 @@ test('wall on a computer: Casa opens ready to type; a pasted thread and a few wo
   await page.evaluate(() => document.fonts.ready)
   const line = wall.getByRole('textbox', { name: 'Type to Casa' })
   await expect(line).toBeFocused()
-  await expect(wall.getByText('Type, or click')).toBeVisible()
+  await expect(wall.getByText('Type, or talk')).toBeVisible()
   await page.keyboard.insertText('Kim K: Reminder for Friday’s field trip!! Kids wear their PINK class shirt and bring a packed lunch, no glass. Bus leaves 9:30 sharp, back by 2:15')
   await page.keyboard.press('Shift+Enter')
   await page.keyboard.insertText('add this to Owen’s field trip')
