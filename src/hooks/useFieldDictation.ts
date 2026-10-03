@@ -107,7 +107,11 @@ export function useFieldDictation({
     }
   }, [])
 
+  // The words on screen not yet final. An iPhone keeps them unfinished until it stops (Jake, Oct 2: "It translates.
+  // Then … didn't catch that"): stopping keeps them, rather than dropping everything since the last final.
+  const interimRef = useRef('')
   const emit = useCallback((interim = '') => {
+    interimRef.current = interim
     const full = joinWords(baseRef.current, committedRef.current, interim)
     onTextRef.current(full)
     return full
@@ -122,7 +126,8 @@ export function useFieldDictation({
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopWS()
 
-    const finalFull = emit('')
+    const finalFull = emit(interimRef.current)
+    interimRef.current = ''
     onFinalRef.current?.(finalFull)
     return finalFull
   }, [stopSilenceTimer, stopWebSpeech, stopWS, emit])
@@ -289,6 +294,7 @@ export function useFieldDictation({
     if (activeRef.current || IS_SAFE_MODE) return
     baseRef.current = seed.trim()
     committedRef.current = ''
+    interimRef.current = ''
     hasSpokenRef.current = false
     activeRef.current = true
     setListening(true)
@@ -312,6 +318,7 @@ export function useFieldDictation({
   const resetBuffer = useCallback((seed = '') => {
     baseRef.current = seed.trim()
     committedRef.current = ''
+    interimRef.current = ''
     hasSpokenRef.current = false
   }, [])
 

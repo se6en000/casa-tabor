@@ -822,7 +822,8 @@ test('phone: Groceries — hold + and say it: on the list when you let go; slide
         const words = window.__say
         const result = (text, isFinal) => { const r = [{ transcript: text }]; r.isFinal = isFinal; return r }
         this.t1 = setTimeout(() => this.onresult?.({ resultIndex: 0, results: [result(words.split(' ').slice(0, 2).join(' '), false)] }), 80)
-        this.t2 = setTimeout(() => this.onresult?.({ resultIndex: 0, results: [result(words, true)] }), 200)
+        // As an iPhone does (Jake, Oct 2: "It translates. Then … didn't catch that"): the words stay unfinished until it stops.
+        this.t2 = setTimeout(() => this.onresult?.({ resultIndex: 0, results: [result(words, window.__final === true)] }), 200)
       }
       stop() { clearTimeout(this.t1); clearTimeout(this.t2) }
       abort() { this.stop() }
