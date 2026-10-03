@@ -40,6 +40,10 @@ const time = (hhmm) => (/^\d{2}:\d{2}$/.test(String(hhmm ?? '')) ? hhmm : null)
 export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' } = {}) {
   const o = offer ?? {}
   const at = (date, hhmm) => `${date}T${hhmm}:00${utcOffset}`
+  // What to wear or bring (Oct 1 bugs: Kim K.'s pink shirt and packed lunch were dropped): its event's get & pack lines,
+  // added once the event is there — `bring` rides on the action; on its own it's a "bring" action.
+  const lines = (list) => (Array.isArray(list) ? list.map((b) => String(b).trim()).filter(Boolean) : [])
+  const withBring = (action, list) => (action && lines(list).length ? { ...action, bring: lines(list) } : action)
   // New details for an event already there (the travel receipt's flight times, the festival's place): an
   // update of that event — its time and place only, so nothing he wrote in its notes is replaced.
   if (decision === 'details') {
@@ -49,16 +53,34 @@ export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' 
     if (o.date && time(c.start)) args.start = at(o.date, c.start)
     if (o.date && time(c.end)) args.end = at(o.date, c.end)
     if (typeof c.place === 'string' && c.place.trim()) args.location = c.place.trim()
-    return Object.keys(args).length > 1 ? { tool: 'update_event', args } : null
+    if (Object.keys(args).length > 1) return withBring({ tool: 'update_event', args }, o.bring)
+    return lines(o.bring).length ? { tool: 'bring', args: { event_id: o.event_id }, bring: lines(o.bring) } : null
   }
   const title = typeof o.title === 'string' && o.title.trim() ? o.title.trim() : null
   if (!title) return null
   const people = Array.isArray(o.people) ? o.people : []
+  // Already on the calendar (Jake, Oct 3: "can it tell me that so this doesn't feel like an error … offer to update it
+  // with this new information"): an update with only what the email adds, or nothing to do ('already').
+  if (o.existing?.event_id) {
+    const adds = o.existing.adds ?? {}
+    const args = { id: o.existing.event_id }
+    if (adds.place) args.location = adds.place
+    if (adds.people?.length) args.members_add = adds.people
+    if (adds.start && o.date) {
+      args.start = at(o.date, adds.start)
+      args.end = at(o.date, time(adds.end) ?? `${String(Math.min(23, Number(adds.start.slice(0, 2)) + 1)).padStart(2, '0')}${adds.start.slice(2)}`)
+      args.all_day = false
+    }
+    if (Object.keys(args).length > 1) return withBring({ tool: 'update_event', args }, adds.bring)
+    return lines(adds.bring).length ? { tool: 'bring', args: { event_id: o.existing.event_id }, bring: lines(adds.bring) } : 'already'
+  }
   if (o.kind === 'event') {
     const start = time(o.start)
-    if (!o.date || !start) return null
+    if (!o.date) return null
+    // A date and no time is a day-long thing (a spirit day, a holiday): all day. It made nothing before (Oct 3).
+    if (!start) return withBring({ tool: 'create_event', args: { title, start: at(o.date, '00:00'), end: at(o.date, '23:59'), all_day: true, event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }, o.bring)
     const end = time(o.end) ?? `${String(Math.min(23, Number(start.slice(0, 2)) + 1)).padStart(2, '0')}${start.slice(2)}`
-    return { tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, end), event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }
+    return withBring({ tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, end), event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }, o.bring)
   }
   if (o.kind === 'reminder') {
     if (!o.date) return { tool: 'add_todo', args: { title, due: null } }
@@ -69,6 +91,58 @@ export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' 
   if (o.kind === 'prep') return o.event_id ? { tool: 'add_prep_item', args: { event_id: o.event_id, label: title } } : { tool: 'add_todo', args: { title, due: o.date ?? null } }
   if (o.kind === 'shopping') return { tool: 'add_grocery_items', args: { items: [{ name: title }] } }
   return null
+}
+
+const STOP = new Set(['the', 'a', 'an', 'and', 'of', 'for', 'at', 'to', 'on', 'in', 'with', 'day', 'days', 'event'])
+const words = (t) => new Set(String(t ?? '').toLowerCase().replace(/['’]s\b/g, '').split(/[^a-z0-9]+/).filter((w) => w && !STOP.has(w)))
+
+/**
+ * The calendar event an offered event already is, if any: one on the same day whose name shares the offer's words (all
+ * of a short one's, two or more of a longer one's, most of them), the best of them; with what the email adds that it
+ * lacks — a place, people, a time for an all-day one, what to wear or bring that its list doesn't have. `events`: { id, title,
+ * start_time, all_day, location, people, bring }.
+ */
+export function alreadyThere(offer, events, timeZone = 'America/New_York') {
+  const o = offer ?? {}
+  if (o.kind !== 'event' || !o.date || !o.title) return null
+  const mine = words(o.title)
+  if (!mine.size) return null
+  const nyDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
+  const nyClock = (iso) => new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))
+  const lower = (list) => new Set((list ?? []).map((n) => String(n).toLowerCase()))
+  let best = null
+  for (const e of events ?? []) {
+    const days = e.all_day ? [nyDay(e.start_time), String(e.start_time).slice(0, 10)] : [nyDay(e.start_time)]
+    if (!days.includes(o.date)) continue
+    const theirs = words(e.title)
+    const shared = [...mine].filter((w) => theirs.has(w)).length
+    // The name alone (most of its words), or a couple of words plus the same start, place or child (Kim K.'s
+    // "Owen's Kindergarten Field Trip to Glazer Hall" is the calendar's "Field Trip: Ballet Palm Beach's … Peter and
+    // the Wolf" — the same 9:30 start).
+    const byName = shared >= Math.min(2, mine.size) && shared / mine.size >= 0.6
+    const sameStart = Boolean(time(o.start)) && !e.all_day && nyClock(e.start_time) === o.start
+    const samePlace = Boolean(o.place && e.location) && words(o.place).size > 0 && [...words(o.place)].some((w) => words(e.location).has(w))
+    const kids = lower(e.people)
+    const samePerson = (Array.isArray(o.people) ? o.people : []).some((n) => kids.has(String(n).toLowerCase()))
+    if (!byName && !(shared >= 2 && (sameStart || samePlace || samePerson)) && !(shared >= 1 && sameStart && samePerson)) continue
+    const score = shared + (sameStart ? 2 : 0) + (samePlace ? 1 : 0) + (samePerson ? 1 : 0)
+    if (!best || score > best.score) best = { e, score }
+  }
+  if (!best) return null
+  const e = best.e
+  const adds = {}
+  if (typeof o.place === 'string' && o.place.trim() && !(e.location ?? '').trim()) adds.place = o.place.trim()
+  const have = new Set((e.people ?? []).map((n) => String(n).toLowerCase()))
+  const people = (Array.isArray(o.people) ? o.people : []).filter((n) => !have.has(String(n).toLowerCase()))
+  if (people.length) adds.people = people
+  if (time(o.start) && e.all_day) {
+    adds.start = time(o.start)
+    if (time(o.end)) adds.end = time(o.end)
+  }
+  const onList = new Set((e.bring ?? []).map((b) => String(b).trim().toLowerCase()))
+  const bring = (Array.isArray(o.bring) ? o.bring : []).map((b) => String(b).trim()).filter((b) => b && !onList.has(b.toLowerCase()))
+  if (bring.length) adds.bring = bring
+  return { event_id: e.id, title: e.title, adds }
 }
 
 /** A person writing: "Add it" is a to-do to answer them. */

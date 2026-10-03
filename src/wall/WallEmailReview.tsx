@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Mail } from 'lucide-react'
 import { useSwipeDown } from './useSwipeDown'
-import { headline, herEmails, lineDay, offerLines, postedHeader, showSkippedToday, whoAndWhen, type EmailAct, type EmailAnswer, type EmailOffer, type EmailReviewData, type SkippedEmail } from './emailReview'
+import { addLabel, headline, herEmails, lineDay, offerLines, postedHeader, showSkippedToday, whoAndWhen, type EmailAct, type EmailAnswer, type EmailOffer, type EmailReviewData, type SkippedEmail } from './emailReview'
 
 // Casa reads the email, phase 2 (canvas 14a/14b, approved by Jake 2026-09-30): "What came in by email?" —
 // one email at a time, in the band's place: who wrote, why it matters, the email's own words, what Casa
@@ -62,7 +62,7 @@ export default function WallEmailReview({ data, act, onClose, computer = false, 
       setNote(result.message ?? 'That didn’t save. Nothing was changed.')
       return
     }
-    setNote(what === 'add' ? 'Added.' : what === 'later' ? 'Back tomorrow morning.' : null)
+    setNote(what === 'add' ? result.note ?? 'Added.' : what === 'later' ? 'Back tomorrow morning.' : null)
     setAt((i) => i + 1)
   }
   const addLine = async (id: string) => {
@@ -135,14 +135,17 @@ export default function WallEmailReview({ data, act, onClose, computer = false, 
               {offerLines(offer).map((line) => (
                 <div key={`${line.label}:${line.text}`} className="flex items-center gap-[24px] rounded-[18px] bg-wall-on-pigment px-[24px] py-[16px] text-wall-ink">
                   <span className="shrink-0 text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">{line.label}</span>
-                  <span className="min-w-0 flex-1 text-wall-body font-semibold">{line.text}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-wall-body font-semibold">{line.text}</span>
+                    {line.adds && <span className="text-wall-detail text-wall-ink-2">{line.adds}</span>}
+                  </span>
                   {line.when && <span className="shrink-0 text-wall-detail text-wall-ink-2">{line.when}</span>}
                 </div>
               ))}
             </div>
             {note && <div role="status" className="text-wall-body text-wall-night-brass">{note}</div>}
             <div className="mt-auto flex items-center gap-[14px]">
-              <button type="button" disabled={working} onClick={() => void answer('add')} className={lightPill}>{working ? 'Saving…' : offer.decision === 'details' ? 'Update it' : 'Add it'}</button>
+              <button type="button" disabled={working} onClick={() => void answer('add')} className={lightPill}>{working ? 'Saving…' : addLabel(offer)}</button>
               <button type="button" disabled={working} onClick={() => void answer('not_needed')} className={pill}>Not needed</button>
               <button type="button" disabled={working} onClick={() => void answer('later')} className={pill}>Later</button>
               {computer && <a href={offer.open} target="_blank" rel="noreferrer" className={`${pill} flex items-center no-underline`}>Open email</a>}

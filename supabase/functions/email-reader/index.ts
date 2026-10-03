@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   const expected = Deno.env.get('EMAIL_READER_KEY')
   if (!expected || req.headers.get('x-casa-email-reader') !== expected) return json({ error: 'Not allowed' }, 401)
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const body = await req.json().catch(() => ({})) as { message_ids?: string[]; since_hours?: number; limit?: number; rerun?: boolean; matters?: boolean }
+  const body = await req.json().catch(() => ({})) as { message_ids?: string[]; since_hours?: number; limit?: number; rerun?: boolean; matters?: boolean; dry_run?: boolean }
   const limit = Math.max(1, Math.min(Number(body.limit) || 10, 40))
 
   let q = sb.from('gmail_processed_messages').select('gmail_message_id, family_member_id, from_email, subject, email_subject, received_at, email_body, attachments')
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
     // A kept sender's mail always reaches the reader.
     const skipped = keptPostedBy(email, rules, null) ? null : firstPass(email)
     if (skipped) {
-      await sb.from('email_offers').upsert({ ...base, decision: 'skipped', reason: skipped, offers: [], person: null, model: null, error: null }, { onConflict: 'gmail_message_id' })
+      if (!body.dry_run) await sb.from('email_offers').upsert({ ...base, decision: 'skipped', reason: skipped, offers: [], person: null, model: null, error: null }, { onConflict: 'gmail_message_id' })
       results.push({ id: row.gmail_message_id, subject: email.subject, decision: 'skipped' })
       continue
     }
@@ -151,10 +151,13 @@ Deno.serve(async (req) => {
     const status = keptBy ? postedStatus(row.received_at)
       : body.matters ? (['offer', 'details', 'person'].includes(decision.decision) ? 'waiting' : 'shadow')
       : statusFor(decision.decision, row.received_at)
-    await sb.from('email_offers').upsert({ ...base, status, decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, gist: decision.gist, gist_tag: decision.gist_tag, posted_by: keptBy?.id ?? null, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
+    // A dry run (checking a change to the reader on a real email): nothing saved; the decision comes back below.
+    if (!body.dry_run) await sb.from('email_offers').upsert({ ...base, status, decision: decision.decision, reason: decision.reason, quote: decision.quote, offers: decision.offers, person: decision.person, gist: decision.gist, gist_tag: decision.gist_tag, posted_by: keptBy?.id ?? null, attachments_read: files.length, model: PLANNING_GEMINI_MODEL, error: failure }, { onConflict: 'gmail_message_id' })
     results.push({ id: row.gmail_message_id, subject: email.subject, decision: decision.decision, reason: decision.reason, offers: decision.offers, person: decision.person, attachments: files.length, error: failure })
   }
   // Counts only: what was decided stays in email_offers, which only the server reads.
   const tally = results.reduce((t: Record<string, number>, r) => ({ ...t, [String(r.decision)]: (t[String(r.decision)] ?? 0) + 1 }), {})
+  // A dry run returns what it would decide (the decision and its offers, never the email's words) to the key holder.
+  if (body.dry_run) return json({ read: results.length, results: results.map((r) => ({ subject: r.subject, decision: r.decision, offers: r.offers, error: r.error })) })
   return json({ read: results.length, decisions: tally, errors: results.filter((r) => r.error).length })
 })

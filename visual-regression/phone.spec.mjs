@@ -425,6 +425,19 @@ test('phone: "Navigate to Alice\'s house" — Directions opens Google Maps; Call
   await expect(phone).toHaveScreenshot('phone-directions.png')
 })
 
+// Jake, Oct 3 (the screenshot was the phone's): already on the calendar — said so, what the email adds, Update it.
+test('phone: an email offer already on the calendar says so, with what the email adds; Update it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=email&email=already')
+  const phone = page.getByTestId('phone-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: 'Casa' }).click()
+  const review = phone.getByRole('region', { name: 'Ask Casa' }).getByRole('region', { name: 'From email' })
+  await expect(review.getByText(/ON YOUR CALENDAR/)).toBeVisible()
+  await expect(review.getByText('The email adds: at Palm Beach Public')).toBeVisible()
+  await review.getByRole('button', { name: 'Update it' }).click()
+  await expect(phone.getByRole('region', { name: 'Ask Casa' }).getByText('Updated PTO’s Crazy Hair Day.')).toBeVisible()
+})
+
 // Casa reads the email, phase 2, on the phone (canvas 14c, approved 2026-09-30).
 test('phone: "Anything from email?" — the review in Ask Casa, one at a time, then a few it skipped', async ({ page }) => {
   const { phone, ask } = await askScene(page, 'email')

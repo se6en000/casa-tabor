@@ -971,6 +971,22 @@ test('wall: a swipe down on the band closes it; so does Esc on a computer', asyn
 
 // Casa reads the email, phase 2 (canvas row 14, approved by Jake 2026-09-30): the count on the launch face,
 // the review one email at a time, then "a few I skipped" — each answer kept as a label.
+// Jake, Oct 3 (PTO's Crazy Hair Day, "That didn't save. Nothing was changed."): one already on the calendar says so,
+// with what the email adds, and its yes is Update it — never an error.
+test('wall: an email offer already on the calendar says so, shows what the email adds, and Update it fills it in', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=already')
+  await page.getByRole('button', { name: '1 from email' }).click()
+  const review = page.getByRole('region', { name: 'From email' })
+  await expect(review.getByText('ON YOUR CALENDAR')).toBeVisible()
+  await expect(review.getByText('The email adds: at Palm Beach Public')).toBeVisible()
+  await expect(review.getByRole('button', { name: 'Add it' })).toHaveCount(0)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('email-already.png')
+  await review.getByRole('button', { name: 'Update it' }).click()
+  await expect(review.getByText('Updated PTO’s Crazy Hair Day.')).toBeVisible()
+  expect(await page.evaluate(() => window.__emailAnswers)).toEqual(['em-hair:add'])
+})
+
 test('wall: "3 FROM EMAIL" opens the review; each answer moves on; then a few it skipped', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&email=1')
   const count = page.getByRole('button', { name: '3 from email' })

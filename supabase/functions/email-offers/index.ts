@@ -9,7 +9,7 @@
 // mattering), mattered (re-read it as mattering); Settings › Email — rules, add_rule, remove_rule, bring_back,
 // text_on_wall.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { gmailLink, isExpired, kindOf, offerToAction, personToAction, postedLine, quietFor, ruleFromText, senderName, senderOf, withoutRepeats } from '../_shared/email-offers.mjs'
+import { alreadyThere, gmailLink, isExpired, kindOf, offerToAction, personToAction, postedLine, quietFor, ruleFromText, senderName, senderOf, withoutRepeats } from '../_shared/email-offers.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +85,32 @@ Deno.serve(async (req) => {
     return error ? json({ error: error.message }, 500) : json({ ok: true })
   }
 
+  // Events an offered event may already be (Jake, Oct 3: "can it tell me that so this doesn't feel like an error"): the
+  // days the offers name, a day either side, with their place and who's on them; then each offer with what it matches.
+  const calendarFor = async (offerSets: Array<Array<Record<string, unknown>>>) => {
+    const dates = offerSets.flat().filter((o) => o?.kind === 'event' && typeof o.date === 'string').map((o) => String(o.date)).sort()
+    if (!dates.length) return []
+    const from = new Date(Date.parse(`${dates[0]}T00:00:00Z`) - 86400e3).toISOString()
+    const to = new Date(Date.parse(`${dates[dates.length - 1]}T00:00:00Z`) + 2 * 86400e3).toISOString()
+    const { data: rows } = await sb.from('events').select('id, title, start_time, all_day, location_name')
+      .is('deleted_at', null).neq('status', 'cancelled').neq('event_type', 'reminder').gte('start_time', from).lt('start_time', to).limit(400)
+    const evs = (rows ?? []) as Array<{ id: string; title: string; start_time: string; all_day: boolean | null; location_name: string | null }>
+    if (!evs.length) return []
+    const [{ data: links }, { data: fam }, { data: lists }] = await Promise.all([
+      sb.from('event_members').select('event_id, family_member_id').in('event_id', evs.map((e) => e.id)),
+      sb.from('family_members').select('id, name'),
+      sb.from('event_checklist_items').select('event_id, label').in('event_id', evs.map((e) => e.id)),
+    ])
+    const nameOf = new Map(((fam ?? []) as Array<{ id: string; name: string }>).map((m) => [m.id, m.name]))
+    return evs.map((e) => ({
+      id: e.id, title: e.title, start_time: e.start_time, all_day: e.all_day === true, location: e.location_name,
+      people: ((links ?? []) as Array<{ event_id: string; family_member_id: string }>).filter((l) => l.event_id === e.id).map((l) => nameOf.get(l.family_member_id)).filter(Boolean),
+      bring: ((lists ?? []) as Array<{ event_id: string; label: string }>).filter((l) => l.event_id === e.id).map((l) => l.label),
+    }))
+  }
+  const withExisting = (decision: string, offers: Array<Record<string, unknown>>, events: unknown[]) =>
+    decision === 'offer' ? offers.map((o) => { const existing = alreadyThere(o, events); return existing ? { ...o, existing } : o }) : offers
+
   if (body.action === 'act') {
     const what = String(body.what ?? '')
     if (!body.id) return json({ error: 'Which email?' }, 400)
@@ -96,19 +122,44 @@ Deno.serve(async (req) => {
       // "Reply to" to-dos twice (2026-09-30).
       if (row.status === 'added') return json({ ok: true, saved: [], already: true })
       // A posted line with nothing to add (news, an ad) has no Add it.
-      const actions = row.decision === 'person' ? [personToAction(row.person)] : (row.offers ?? []).map((o: Record<string, unknown>) => offerToAction(o, { decision: row.decision }))
+      // Checked against the calendar now: one already there is filled in with what the email adds, never added twice.
+      const offers = withExisting(row.decision, row.offers ?? [], row.decision === 'offer' ? await calendarFor([row.offers ?? []]) : [])
+      const planned = row.decision === 'person' ? [personToAction(row.person)] : offers.map((o: Record<string, unknown>) => offerToAction(o, { decision: row.decision }))
+      const already = offers.filter((_o: Record<string, unknown>, i: number) => planned[i] === 'already').map((o: Record<string, unknown>) => String((o.existing as { title?: string } | undefined)?.title ?? o.title))
+      const actions = planned.filter((a: unknown) => a && a !== 'already')
       const saved: string[] = []
+      const updated: string[] = []
       const failed: string[] = []
-      for (const action of actions.filter(Boolean) as Array<{ tool: string; args: Record<string, unknown> }>) {
-        const { data, error } = await sb.functions.invoke('execute-ai-action', {
-          body: { tool: action.tool, args: { ...action.args, ...(action.tool === 'create_event' ? { allow_calendar_conflicts: true } : {}) }, lane: 'email', client_trace_source: 'email-review', confirmed_by_user: true, correlation_id: `email:${row.id}:${Date.now().toString(36)}` },
-        })
-        if (error || (data && (data as { success?: boolean }).success === false)) failed.push(String(action.args.title ?? action.args.label ?? action.tool))
-        else saved.push(String(action.args.title ?? action.args.label ?? (action.args.items as Array<{ name: string }> | undefined)?.[0]?.name ?? action.tool))
+      const run = (tool: string, args: Record<string, unknown>) => sb.functions.invoke('execute-ai-action', {
+        body: { tool, args: { ...args, ...(tool === 'create_event' ? { allow_calendar_conflicts: true } : {}) }, lane: 'email', client_trace_source: 'email-review', confirmed_by_user: true, correlation_id: `email:${row.id}:${Date.now().toString(36)}` },
+      })
+      for (const action of actions as Array<{ tool: string; args: Record<string, unknown>; bring?: string[] }>) {
+        // Only what to wear or bring for an event already there: its get & pack lines, no event change.
+        const { data, error } = action.tool === 'bring' ? { data: { success: true, event_id: action.args.event_id }, error: null } : await run(action.tool, action.args)
+        const eventId = String((data as { event_id?: string } | null)?.event_id ?? action.args.id ?? action.args.event_id ?? '')
+        if (!error && (data as { success?: boolean } | null)?.success !== false && action.bring?.length && eventId) {
+          for (const label of action.bring) await run('add_prep_item', { event_id: eventId, label })
+        }
+        const name = action.tool === 'update_event' || action.tool === 'bring'
+          ? (() => {
+            const id = action.args.id ?? action.args.event_id
+            const o = offers.find((x: Record<string, unknown>) => (x.existing as { event_id?: string } | undefined)?.event_id === id || x.event_id === id)
+            return String((o?.existing as { title?: string } | undefined)?.title ?? o?.title ?? 'the event')
+          })()
+          : String(action.args.title ?? action.args.label ?? (action.args.items as Array<{ name: string }> | undefined)?.[0]?.name ?? action.tool)
+        if (error || (data && (data as { success?: boolean }).success === false)) failed.push(name)
+        else ((action.tool === 'update_event' || action.tool === 'bring') && row.decision === 'offer' ? updated : saved).push(name)
       }
-      if (!saved.length) return json({ error: failed.length ? `That didn’t save: ${failed.join(', ')}` : 'Nothing in it to add' }, 422)
+      if (!saved.length && !updated.length && !already.length) return json({ error: failed.length ? `That didn’t save: ${failed.join(', ')}` : 'Nothing in it to add' }, 422)
       await sb.from('email_offers').update({ status: 'added', answered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', row.id)
-      return json({ ok: true, saved, failed })
+      // What happened, in a line (never "That didn't save" for one that was already there).
+      const note = [
+        saved.length ? `Added ${saved.join(', ')}.` : null,
+        updated.length ? `Updated ${updated.join(', ')}.` : null,
+        already.length ? `${already.join(', ')} ${already.length > 1 ? 'were' : 'was'} already on your calendar.` : null,
+        failed.length ? `Didn’t save: ${failed.join(', ')}.` : null,
+      ].filter(Boolean).join(' ')
+      return json({ ok: true, saved, updated, already, failed, note })
     }
     // Got it: the posted lines he's read.
     if (what === 'seen') {
@@ -199,6 +250,7 @@ Deno.serve(async (req) => {
   const labelOf = new Map(((keptRules ?? []) as Array<{ id: string; label: string }>).map((k) => [k.id, k.label]))
   const view = (r: { id: string; gmail_message_id: string; from_email: string | null; subject: string | null; received_at: string | null }) => ({ id: r.id, from: senderName(r.from_email), subject: r.subject, received_at: r.received_at, open: gmailLink(r.gmail_message_id) })
   const shown = withoutRepeats(live) as Offer[]
+  const calendar = await calendarFor(shown.filter((r) => r.decision === 'offer').map((r) => r.offers ?? []))
   const posted = ((postedRows ?? []) as Offer[]).map((r) => ({
     ...view(r), ...postedLine(r), kept_by: labelOf.get(r.posted_by ?? '') ?? senderName(r.from_email), sender: senderOf(r.from_email),
     decision: r.decision, reason: r.reason, quote: r.quote, offers: r.offers ?? [], person: r.person,
@@ -207,7 +259,7 @@ Deno.serve(async (req) => {
     count: shown.length + posted.length,
     posted,
     text_on_wall: (wall?.value ?? true) !== false,
-    offers: shown.map((r) => ({ ...view(r), decision: r.decision, reason: r.reason, quote: r.quote, offers: r.offers ?? [], person: r.person })),
+    offers: shown.map((r) => ({ ...view(r), decision: r.decision, reason: r.reason, quote: r.quote, offers: withExisting(r.decision, r.offers ?? [], calendar), person: r.person })),
     // The quiet ones first: those are what his Not needed is deciding, so he can say one mattered.
     skipped: [
       ...quiet.map((r) => ({ ...view(r), reason: r.quietReason })),

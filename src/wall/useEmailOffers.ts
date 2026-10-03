@@ -33,8 +33,14 @@ export function useEmailOffers() {
     // The count and the list follow the answer; the card itself moves on in the review.
     void queryClient.invalidateQueries({ queryKey: ['email-offers'] })
     if (what === 'keep_posted') void queryClient.invalidateQueries({ queryKey: ['email-settings'] })
-    if (error) return { ok: false, message: (data as { error?: string } | null)?.error ?? 'That didn’t save. Nothing was changed.' }
-    return { ok: true, offer: ((data as { offer?: EmailOffer | null } | null)?.offer ?? null) }
+    // The server's own words when it says no (it was always the generic line: on an error `data` is empty, the reason
+    // is in the response — Oct 3, "That didn't save" on an offer that was really all day).
+    if (error) {
+      const said = await (error as { context?: Response }).context?.json?.().catch(() => null) as { error?: string } | null
+      return { ok: false, message: said?.error ?? 'That didn’t save. Nothing was changed.' }
+    }
+    const reply = data as { offer?: EmailOffer | null; note?: string } | null
+    return { ok: true, note: reply?.note || undefined, offer: reply?.offer ?? null }
   }, [queryClient])
   return { data: query.data ?? null, act }
 }

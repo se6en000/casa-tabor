@@ -29,7 +29,9 @@ test('"Add it" is the card Casa already saves, for each kind', () => {
   assert.deepEqual(offerToAction({ kind: 'event', title: 'Homeaglow cleaning', date: '2026-10-21', start: '08:30', end: '11:30', place: 'Home' }),
     { tool: 'create_event', args: { title: 'Homeaglow cleaning', start: '2026-10-21T08:30:00-04:00', end: '2026-10-21T11:30:00-04:00', event_type: 'event', members: [], location: 'Home' } })
   assert.equal(offerToAction({ kind: 'event', title: 'Showcase', date: '2026-10-06', start: '17:00' }).args.end, '2026-10-06T18:00:00-04:00', 'an hour when no end is given')
-  assert.equal(offerToAction({ kind: 'event', title: 'No time', date: '2026-10-06' }), null, 'an event needs its time')
+  // A date and no time is all day (Oct 3: "That didn't save" on PTO's Crazy Hair Day — it used to make nothing).
+  assert.equal(offerToAction({ kind: 'event', title: 'No time', date: '2026-10-06' }).args.all_day, true, 'a date, no time: all day')
+  assert.equal(offerToAction({ kind: 'event', title: 'No date' }), null, 'an event needs its day')
   assert.deepEqual(offerToAction({ kind: 'reminder', title: 'Pay $15 for Liv’s debate tournament', date: '2026-10-02', people: ['Liv'] }),
     { tool: 'create_event', args: { title: 'Pay $15 for Liv’s debate tournament', start: '2026-10-02T09:00:00-04:00', end: '2026-10-02T09:00:00-04:00', event_type: 'reminder', members: ['Liv'] } })
   assert.deepEqual(offerToAction({ kind: 'todo', title: 'Sign Owen’s permission slips' }), { tool: 'add_todo', args: { title: 'Sign Owen’s permission slips', due: null } })
@@ -89,4 +91,75 @@ test('an email already added is never added again (a second screen with an older
   assert.match(fn, /if \(row\.status === 'added'\) return json\(\{ ok: true, saved: \[\], already: true \}\)/)
   const hook = fs.readFileSync(new URL('../src/wall/useEmailOffers.ts', import.meta.url), 'utf8')
   assert.match(hook, /refetchOnMount: 'always'/)
+})
+
+// Jake, Oct 3 (backlog, with a screenshot of PTO's Crazy Hair Day: "That didn't save. Nothing was changed."): "I assume
+// there is already an event there which is why it didn't save, but can it tell me that so this doesn't feel like an
+// error. Also, if there is details from this email that the current event doesn't have it should offer to update it
+// with this new information and tell me what it is." Traced: the offer was all day (a date, no time) — Add it could
+// only make timed events, so it made nothing; and the event was already there (added with Casa at 6:34 PM).
+test('an all-day offer (a date, no time) is an all-day event', async () => {
+  const { offerToAction } = await import('../supabase/functions/_shared/email-offers.mjs')
+  assert.deepEqual(offerToAction({ kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', place: 'Palm Beach Public', people: ['Emme', 'Owen'] }), {
+    tool: 'create_event',
+    args: { title: "PTO's Crazy Hair Day", start: '2026-10-30T00:00:00-04:00', end: '2026-10-30T23:59:00-04:00', all_day: true, event_type: 'event', members: ['Emme', 'Owen'], location: 'Palm Beach Public' },
+  })
+})
+
+test('already on the calendar: the event it matches, and only what the email adds that the event lacks', async () => {
+  const { alreadyThere } = await import('../supabase/functions/_shared/email-offers.mjs')
+  const offer = { kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', place: 'Palm Beach Public', people: ['Emme', 'Owen'] }
+  const events = [
+    { id: 'spirit', title: 'Science Experiments & PTO Spirit Day', start_time: '2026-10-30T00:00:00Z', all_day: true, location: null, people: [] },
+    { id: 'hair', title: "PTO's Crazy Hair Day", start_time: '2026-10-30T04:00:00Z', all_day: true, location: null, people: ['Emme', 'Owen'] },
+    { id: 'other-day', title: "PTO's Crazy Hair Day", start_time: '2026-11-06T04:00:00Z', all_day: true, location: null, people: [] },
+  ]
+  assert.deepEqual(alreadyThere(offer, events), { event_id: 'hair', title: "PTO's Crazy Hair Day", adds: { place: 'Palm Beach Public' } })
+  // Everything already there: nothing to add.
+  assert.deepEqual(alreadyThere(offer, [{ ...events[1], location: 'Palm Beach Public Elementary' }]), { event_id: 'hair', title: "PTO's Crazy Hair Day", adds: {} })
+  // A time the all-day event doesn't have.
+  assert.deepEqual(alreadyThere({ kind: 'event', title: 'Picture Day', date: '2026-10-15', start: '08:30' }, [{ id: 'p', title: 'Picture day for Owen', start_time: '2026-10-15T04:00:00Z', all_day: true, location: null, people: ['Owen'] }]),
+    { event_id: 'p', title: 'Picture day for Owen', adds: { start: '08:30' } })
+  // A different thing on the same day, sharing only "PTO" and "day": not a match.
+  assert.equal(alreadyThere({ kind: 'event', title: 'PTO Movie Night', date: '2026-10-30' }, events), null)
+  // Only events are matched (a to-do offer stays an add).
+  assert.equal(alreadyThere({ kind: 'todo', title: "PTO's Crazy Hair Day", date: '2026-10-30' }, events), null)
+})
+
+test('Add it on one already there: an update with what it adds, or nothing to do', async () => {
+  const { offerToAction } = await import('../supabase/functions/_shared/email-offers.mjs')
+  const there = { event_id: 'hair', title: "PTO's Crazy Hair Day", adds: { place: 'Palm Beach Public', people: ['Owen'] } }
+  assert.deepEqual(offerToAction({ kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', existing: there }), { tool: 'update_event', args: { id: 'hair', location: 'Palm Beach Public', members_add: ['Owen'] } })
+  assert.equal(offerToAction({ kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', existing: { ...there, adds: {} } }), 'already')
+  assert.deepEqual(offerToAction({ kind: 'event', title: 'Picture Day', date: '2026-10-15', start: '08:30', existing: { event_id: 'p', title: 'Picture day', adds: { start: '08:30' } } }),
+    { tool: 'update_event', args: { id: 'p', start: '2026-10-15T08:30:00-04:00', end: '2026-10-15T09:30:00-04:00', all_day: false } })
+})
+
+test('what to wear or bring lands on the event\'s get & pack: with a new event, an update, or on its own', async () => {
+  const { offerToAction, alreadyThere } = await import('../supabase/functions/_shared/email-offers.mjs')
+  // A new event: created, then its lines.
+  const made = offerToAction({ kind: 'event', title: 'Field Trip', date: '2026-10-01', start: '09:30', bring: ['Pink shirt', 'Packed lunch'] })
+  assert.equal(made.tool, 'create_event')
+  assert.deepEqual(made.bring, ['Pink shirt', 'Packed lunch'])
+  // Kim's email: the field trip's new end time, and its lines.
+  const kim = offerToAction({ kind: 'event', title: 'Field Trip', date: '2026-10-01', event_id: 'ft', changes: { end: '12:00' }, bring: ['Pink shirt', 'Packed lunch'] }, { decision: 'details' })
+  assert.deepEqual(kim, { tool: 'update_event', args: { id: 'ft', end: '2026-10-01T12:00:00-04:00' }, bring: ['Pink shirt', 'Packed lunch'] })
+  // Only lines, nothing else new: just the lines.
+  assert.deepEqual(offerToAction({ kind: 'event', title: 'Field Trip', date: '2026-10-01', event_id: 'ft', changes: {}, bring: ['Pink shirt'] }, { decision: 'details' }), { tool: 'bring', args: { event_id: 'ft' }, bring: ['Pink shirt'] })
+  // Already on the calendar: only the lines its list doesn't have.
+  const there = alreadyThere({ kind: 'event', title: 'Field Trip', date: '2026-10-01', bring: ['Pink shirt', 'Packed lunch'] }, [{ id: 'ft', title: 'Field Trip: Peter and the Wolf', start_time: '2026-10-01T13:30:00Z', all_day: false, location: 'Glazer Hall', people: [], bring: ['packed lunch'] }])
+  assert.deepEqual(there, { event_id: 'ft', title: 'Field Trip: Peter and the Wolf', adds: { bring: ['Pink shirt'] } })
+  assert.deepEqual(offerToAction({ kind: 'event', title: 'Field Trip', date: '2026-10-01', existing: there }), { tool: 'bring', args: { event_id: 'ft' }, bring: ['Pink shirt'] })
+})
+
+test('already there, by more than the name: the same start, or the same place or child, with a couple of words in common', async () => {
+  const { alreadyThere } = await import('../supabase/functions/_shared/email-offers.mjs')
+  const trip = { id: 'ft', title: "Field Trip: Ballet Palm Beach's production of Peter and the Wolf", start_time: '2026-10-01T13:30:00Z', all_day: false, location: null, people: ['Owen'], bring: [] }
+  // Kim K.'s reminder, as the reader read it on Oct 3: a different name, the same 9:30 start.
+  const kim = { kind: 'event', title: "Owen's Kindergarten Field Trip to Glazer Hall", date: '2026-10-01', start: '09:30', end: '12:00', place: 'Glazer Hall', people: ['Owen'], bring: ['Packed lunch'] }
+  assert.deepEqual(alreadyThere(kim, [trip]), { event_id: 'ft', title: trip.title, adds: { place: 'Glazer Hall', bring: ['Packed lunch'] } })
+  // The same child and two words in common, no time given.
+  assert.equal(alreadyThere({ ...kim, start: undefined }, [trip])?.event_id, 'ft')
+  // One word in common and nothing else: no.
+  assert.equal(alreadyThere({ kind: 'event', title: 'Trip to the dentist', date: '2026-10-01', start: '15:00' }, [trip]), null)
 })

@@ -6,6 +6,11 @@ export interface EmailOfferItem {
   date?: string
   start?: string
   place?: string
+  people?: string[]
+  /** What to wear or bring for it: its get & pack lines once added. */
+  bring?: string[]
+  /** Already on the calendar (Oct 3): that event, and what the email adds that it lacks. */
+  existing?: { event_id: string; title: string; adds: { place?: string; people?: string[]; start?: string; end?: string; bring?: string[] } }
 }
 
 export interface EmailOffer {
@@ -60,18 +65,31 @@ export interface EmailReviewData {
 
 export type EmailAnswer = 'add' | 'not_needed' | 'later' | 'mattered' | 'fine' | 'keep_posted' | 'seen'
 
-export type EmailAct = (id: string, what: EmailAnswer, ids?: string[]) => Promise<{ ok: boolean; message?: string; offer?: EmailOffer | null }>
+export type EmailAct = (id: string, what: EmailAnswer, ids?: string[]) => Promise<{ ok: boolean; message?: string; note?: string; offer?: EmailOffer | null }>
 
 const KIND: Record<EmailOfferItem['kind'], string> = { event: 'EVENT', reminder: 'REMINDER', todo: 'TO-DO', prep: 'GET & PACK', shopping: 'SHOPPING' }
 
 /** What the card says Casa would add: "EVENT · Oct 24 · 2026 Strings Festival". */
-export function offerLines(offer: EmailOffer): Array<{ label: string; text: string; when: string | null }> {
+export function offerLines(offer: EmailOffer): Array<{ label: string; text: string; when: string | null; adds?: string }> {
   if (offer.decision === 'person' && offer.person) return [{ label: 'REPLY', text: `Reply to ${offer.person.who}`, when: null }]
-  return offer.offers.map((o) => ({
-    label: offer.decision === 'details' ? 'UPDATE' : KIND[o.kind] ?? 'ADD',
-    text: o.title,
-    when: o.date ? `${new Date(`${o.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}${o.start ? ` · ${formatTime(o.start)}` : ''}` : null,
-  }))
+  return offer.offers.map((o) => {
+    const when = o.date ? `${new Date(`${o.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}${o.start && !o.existing ? ` · ${formatTime(o.start)}` : ''}` : null
+    // Already there (Jake, Oct 3: "tell me that so this doesn't feel like an error … and tell me what it is").
+    if (o.existing) {
+      const a = o.existing.adds ?? {}
+      const bits = [a.place ? `at ${a.place}` : null, a.people?.length ? a.people.join(' & ') : null, a.start ? formatTime(a.start) : null, ...(a.bring ?? [])].filter(Boolean)
+      return { label: 'ON YOUR CALENDAR', text: o.existing.title, when, adds: bits.length ? `The email adds: ${bits.join(' · ')}` : 'Nothing new in the email' }
+    }
+    const line = { label: offer.decision === 'details' ? 'UPDATE' : KIND[o.kind] ?? 'ADD', text: o.title, when }
+    return o.bring?.length ? { ...line, adds: `Wear or bring: ${o.bring.join(' · ')}` } : line
+  })
+}
+
+/** The card's yes: Add it; Update it when all it does is fill in events already there; Got it when there's nothing to do. */
+export function addLabel(offer: EmailOffer): 'Add it' | 'Update it' | 'Got it' {
+  if (offer.decision === 'details') return 'Update it'
+  if (offer.decision === 'person' || !offer.offers.length || offer.offers.some((o) => !o.existing)) return 'Add it'
+  return offer.offers.some((o) => Object.keys(o.existing?.adds ?? {}).length) ? 'Update it' : 'Got it'
 }
 
 function formatTime(hhmm: string): string {

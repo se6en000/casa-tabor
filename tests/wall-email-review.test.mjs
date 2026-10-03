@@ -35,3 +35,29 @@ test('the posted lines: one sender is named in the header; her emails open as a 
   assert.equal(herEmails([line('a', 'a@x.org'), line('b', 'b@x.org')]), null)
   assert.equal(lineDay('2026-09-28T14:00:00Z'), 'Mon')
 })
+
+// Jake, Oct 3: "can it tell me that [it's already there] so this doesn't feel like an error … offer to update it with
+// this new information and tell me what it is."
+test('an offer already on the calendar says so, with what the email adds; the button is Update it or Got it', async () => {
+  const { offerLines, addLabel } = await import('../src/wall/emailReview.ts')
+  const base = { id: 'e', from: 'PTO', subject: 'Crazy Hair Day', received_at: null, open: '', decision: 'offer', reason: null, quote: null, person: null }
+  const hair = { kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', place: 'Palm Beach Public', people: ['Emme', 'Owen'] }
+  const adds = { ...base, offers: [{ ...hair, existing: { event_id: 'h', title: "PTO's Crazy Hair Day", adds: { place: 'Palm Beach Public', people: ['Owen'], start: '08:30' } } }] }
+  assert.deepEqual(offerLines(adds), [{ label: 'ON YOUR CALENDAR', text: "PTO's Crazy Hair Day", when: 'Fri, Oct 30', adds: 'The email adds: at Palm Beach Public · Owen · 8:30 AM' }])
+  assert.equal(addLabel(adds), 'Update it')
+  const nothing = { ...base, offers: [{ ...hair, existing: { event_id: 'h', title: "PTO's Crazy Hair Day", adds: {} } }] }
+  assert.deepEqual(offerLines(nothing), [{ label: 'ON YOUR CALENDAR', text: "PTO's Crazy Hair Day", when: 'Fri, Oct 30', adds: 'Nothing new in the email' }])
+  assert.equal(addLabel(nothing), 'Got it')
+  assert.equal(addLabel({ ...base, offers: [hair] }), 'Add it')
+  assert.equal(addLabel({ ...base, offers: [hair, nothing.offers[0]] }), 'Add it', 'one new, one there: still an add')
+  assert.equal(addLabel({ ...base, decision: 'details', offers: [hair] }), 'Update it')
+})
+
+test('what to wear or bring shows under its event on the card', async () => {
+  const { offerLines } = await import('../src/wall/emailReview.ts')
+  const base = { id: 'k', from: 'Kim K.', subject: 'REMINDER: Pink Shirt & Packed Lunch Tomorrow!', received_at: null, open: '', reason: null, quote: null, person: null }
+  assert.deepEqual(offerLines({ ...base, decision: 'details', offers: [{ kind: 'event', title: 'Field Trip', date: '2026-10-01', bring: ['Pink shirt', 'Packed lunch'] }] }),
+    [{ label: 'UPDATE', text: 'Field Trip', when: 'Thu, Oct 1', adds: 'Wear or bring: Pink shirt · Packed lunch' }])
+  assert.deepEqual(offerLines({ ...base, decision: 'offer', offers: [{ kind: 'event', title: 'Field Trip', date: '2026-10-01', existing: { event_id: 'ft', title: 'Field Trip: Peter and the Wolf', adds: { bring: ['Pink shirt'] } } }] }),
+    [{ label: 'ON YOUR CALENDAR', text: 'Field Trip: Peter and the Wolf', when: 'Thu, Oct 1', adds: 'The email adds: Pink shirt' }])
+})

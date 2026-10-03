@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { headline, herEmails, lineDay, offerLines, postedHeader, whoAndWhen, type EmailAct, type EmailAnswer, type EmailOffer, type EmailReviewData, type SkippedEmail } from '../wall/emailReview'
+import { addLabel, headline, herEmails, lineDay, offerLines, postedHeader, whoAndWhen, type EmailAct, type EmailAnswer, type EmailOffer, type EmailReviewData, type SkippedEmail } from '../wall/emailReview'
 
 // Casa reads the email, phase 2, on the phone (canvas 14c, approved by Jake 2026-09-30): "Anything from
 // email?" in Ask Casa — the same review as the wall's, one email at a time, then a few it skipped.
@@ -31,7 +31,7 @@ export default function PhoneEmailReview({ data, act }: { data: EmailReviewData;
     const result = await act(offer.id, what)
     setWorking(false)
     if (!result.ok) return setNote(result.message ?? 'That didn’t save. Nothing was changed.')
-    setNote(what === 'add' ? 'Added.' : what === 'later' ? 'Back tomorrow morning.' : null)
+    setNote(what === 'add' ? result.note ?? 'Added.' : what === 'later' ? 'Back tomorrow morning.' : null)
     setAt((i) => i + 1)
   }
   const addLine = async (id: string) => {
@@ -66,10 +66,11 @@ export default function PhoneEmailReview({ data, act }: { data: EmailReviewData;
           <div key={`${line.label}:${line.text}`} className="rounded-[12px] bg-phone-ground px-[12px] py-[10px]">
             <div className={`${label} text-wall-ink-2`}>{line.label}{line.when ? ` · ${line.when}` : ''}</div>
             <div className="text-phone-body font-semibold">{line.text}</div>
+            {line.adds && <div className="text-phone-detail text-wall-ink-2">{line.adds}</div>}
           </div>
         ))}
         {note && <div role="status" className="text-phone-detail font-semibold text-wall-brass-ink">{note}</div>}
-        <button type="button" disabled={working} onClick={() => void answer('add')} className={dark}>{working ? 'Saving…' : offer.decision === 'details' ? 'Update it' : 'Add it'}</button>
+        <button type="button" disabled={working} onClick={() => void answer('add')} className={dark}>{working ? 'Saving…' : addLabel(offer)}</button>
         <div className="flex gap-[8px]">
           <button type="button" disabled={working} onClick={() => void answer('not_needed')} className={`${pill} flex-1 whitespace-nowrap`}>Not needed</button>
           <button type="button" disabled={working} onClick={() => void answer('later')} className={`${pill} flex-1 whitespace-nowrap`}>Later</button>

@@ -309,9 +309,15 @@ export const EMAIL_SCENES: Record<string, EmailReviewData> = {
     ],
   },
   textoff: { ...EMAIL_FIXTURE, text_on_wall: false },
+  // Already on the calendar (Jake, Oct 3: PTO's Crazy Hair Day — "can it tell me that … and tell me what it is").
+  already: {
+    count: 1, posted: [], skipped: [], text_on_wall: true,
+    offers: [{ id: 'em-hair', from: 'Sally Rozanski', subject: "Save the Date: PTO's Spirit Day 10/30 - Crazy Hair Day", received_at: '2026-10-02T22:01:06Z', open: 'x', decision: 'offer', reason: 'Crazy Hair Day for Emme and Owen on Oct 30.', quote: null,
+      offers: [{ kind: 'event', title: "PTO's Crazy Hair Day", date: '2026-10-30', place: 'Palm Beach Public', people: ['Emme', 'Owen'], existing: { event_id: 'ev-hair', title: "PTO's Crazy Hair Day", adds: { place: 'Palm Beach Public' } } }], person: null }],
+  },
 }
 
-/** The email scene a fixture page asked for (`?email=1|posted|ask|textoff`). */
+/** The email scene a fixture page asked for (`?email=1|posted|ask|textoff|already`). */
 export function emailScene(): EmailReviewData {
   return EMAIL_SCENES[new URLSearchParams(window.location.search).get('email') ?? '1'] ?? EMAIL_FIXTURE
 }
@@ -321,7 +327,7 @@ export function emailScene(): EmailReviewData {
 export async function fixtureEmailAct(id: string, what: string) {
   const w = window as unknown as { __emailAnswers?: string[] }
   w.__emailAnswers = [...(w.__emailAnswers ?? []), `${id}:${what}`]
-  return { ok: true, offer: id === 'sk-show' && (what === 'keep_posted' || what === 'mattered') ? SHOWCASE_OFFER : null }
+  return { ok: true, note: id === 'em-hair' && what === 'add' ? 'Updated PTO’s Crazy Hair Day.' : undefined, offer: id === 'sk-show' && (what === 'keep_posted' || what === 'mattered') ? SHOWCASE_OFFER : null }
 }
 
 /** A stand-in for useEmailOffers: the fixture's emails; answers are recorded on window.__emailAnswers. */

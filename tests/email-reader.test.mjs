@@ -74,3 +74,35 @@ test('each Gmail scan hands new mail to the shadow reader, in the background, wi
   assert.match(scan, /'x-casa-email-reader': readerKey/)
   assert.match(scan, /EdgeRuntime\?\.waitUntil/)
 })
+
+// The backlog's email items (Oct 1 bugs): Kim K.'s "REMINDER: Pink Shirt & Packed Lunch Tomorrow!" came back as the
+// Field Trip's new place and end time — the pink shirt and the lunch, the point of it, were dropped ("details" had no
+// room for them); and the first field-trip email made a separate "Pack Lunch for Field Trip" event. What to wear or
+// bring rides on its event ("bring") and lands on its get & pack; never an event of its own.
+test('what to wear or bring rides on its event; a prep offer beside its event folds into it', async () => {
+  const { readReaderDecision } = await import('../supabase/functions/_shared/email-reader.mjs')
+  const kim = readReaderDecision({ decision: 'details', reason: 'r', offers: [
+    { kind: 'event', title: 'Field Trip: Peter and the Wolf', date: '2026-10-01', event_id: 'ft', changes: { end: '12:00' }, bring: ['Pink shirt', 'Packed lunch'] },
+  ] })
+  assert.deepEqual(kim.offers[0].bring, ['Pink shirt', 'Packed lunch'])
+  const first = readReaderDecision({ decision: 'offer', reason: 'r', offers: [
+    { kind: 'event', title: 'Field Trip: Peter and the Wolf', date: '2026-10-01', start: '09:30' },
+    { kind: 'event', title: 'Pack Lunch for Field Trip', date: '2026-10-01' },
+    { kind: 'reminder', title: 'Wear a pink shirt', date: '2026-10-01' },
+    { kind: 'todo', title: 'Sign the permission slip' },
+  ] })
+  assert.deepEqual(first.offers.map((o) => o.title), ['Field Trip: Peter and the Wolf', 'Sign the permission slip'])
+  assert.deepEqual(first.offers[0].bring, ['Pack lunch', 'Wear a pink shirt'])
+  // Nothing to fold into (no event that day in the email): it stays what it is.
+  const alone = readReaderDecision({ decision: 'offer', reason: 'r', offers: [{ kind: 'reminder', title: 'Wear a pink shirt', date: '2026-10-01' }] })
+  assert.deepEqual(alone.offers.map((o) => o.title), ['Wear a pink shirt'])
+})
+
+test('the reader is told what to wear or bring goes on its event, never an event of its own', async () => {
+  const { buildReaderPrompt } = await import('../supabase/functions/_shared/email-reader.mjs')
+  const p = buildReaderPrompt({ email: { from_email: 'k@x', subject: 's', body: 'b', received_at: '2026-09-30T22:00:00Z' }, family: [], upcoming: [], today: '2026-09-30' })
+  assert.match(p, /"bring"/)
+  assert.match(p, /never (an event|its own event)/i)
+  assert.match(p, /a reminder for something already on the calendar with nothing new/i)
+  assert.match(p, /what to wear or bring[^.]*is new/i)
+})
