@@ -327,8 +327,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       {me.next ? (
         <section aria-label="Your next move" className="flex flex-col gap-[6px] rounded-[20px] bg-wall-ink p-[18px] text-wall-on-pigment">
           <div className={`text-phone-label font-bold tracking-[0.16em] ${me.next.phase === 'there' ? 'text-wall-night-brass' : 'text-wall-night-rust'}`}>{me.next.eyebrow}</div>
-          <div className="font-display text-phone-move font-semibold">{me.next.title}</div>
-          <div className="text-phone-body text-wall-stone">{me.next.summary}</div>
+          {/* The what big, the where under it (Jake, Oct 2: the event first, "the how under it"). */}
+          <div className="font-display text-phone-move font-semibold">{me.next.summary || me.next.title}</div>
+          {me.next.summary && <div className="text-phone-body text-wall-stone">To {me.next.title}</div>}
           {me.next.travelerIds.filter((id) => id !== viewerId).length > 0 && (
             <div className="flex items-center gap-[6px] text-phone-detail text-wall-stone">
               with {me.next.travelerIds.filter((id) => id !== viewerId).map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[22px] w-[22px] text-phone-label" />)}
@@ -352,12 +353,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             </a>
           )}
           <div className="flex gap-[8px]">
-            {tripActions && meAt === 0 && (me.next.departed ? (
+            {/* No Leaving now or Hand off (Jake, Oct 2: "micro management … just taking up space"); a departure already
+                marked can still be taken back. */}
+            {tripActions && meAt === 0 && me.next.departed && (
               <button type="button" onClick={() => tripActions.undoLeaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Not yet (undo)</button>
-            ) : me.next.phase !== 'there' ? (
-              <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Leaving now</button>
-            ) : null)}
-            {tripActions && <button type="button" onClick={() => askHandOff(tripOf(me.next!))} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Hand off</button>}
+            )}
             {me.next.eventId && openable(me.next.eventId) && (
               <button type="button" onClick={() => { setOpenMode('edit'); setOpenId(me.next!.eventId) }} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Edit</button>
             )}

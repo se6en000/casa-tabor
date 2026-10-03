@@ -103,3 +103,14 @@ test('a pickup that goes straight on says so, and says when it will be late', ()
   assert.match(view.summary, /^Pick up Liv, then on to CityPlace$/)
   assert.match(view.detail, /about 13 min late at CityPlace/)
 })
+
+// Jake, Oct 2 (backlog): "the what big, the how under it" — "Milo grooming" is the title, and who, where, when go
+// underneath ("Jake → Pet Supermarket · starts 9:00 · 5 min drive").
+test('the header says what it is big, and who goes where and when under it', () => {
+  const move = describe(friday, at(25, 7, 0))
+  assert.equal(move.what, 'Drop off Emme & Owen')
+  assert.equal(move.how, 'Jake → Palm Beach Public · there by 7:35 · 10 min drive')
+  const later = describe(friday, at(25, 12, 15))
+  assert.equal(later.what, 'Pick up Emme & Owen')
+  assert.match(later.how, /^Giselle → Palm Beach Public · /)
+})

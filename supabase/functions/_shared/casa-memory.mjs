@@ -66,17 +66,37 @@ export function memberFromWords(text, facts, family) {
   return hits.length === 1 ? hits[0] : null
 }
 
+/** "I", "I'm", "me", "my", "myself" in what was said (any apostrophe, or none: "im"). */
+export function saysI(said) {
+  return /(^|[^\p{L}'’])(i|i['’]?m|i['’]?ll|i['’]?ve|i['’]?d|me|my|myself)(?=$|[^\p{L}'’])/iu.test(String(said ?? ''))
+}
+
 /**
  * Who's going when he didn't say (Jake's bug report 2026-09-30 11:44: "it should assume that Jake is the person
- * who's going and Jake is the driver … they should never be unassigned"): the one person the title's words point
- * to, else whoever is speaking, else the admin. A parent going to their own thing drives.
+ * who's going and Jake is the driver … they should never be unassigned"): whoever is signed in when they say "I"
+ * (Jake, Oct 3: "when Kelly is logged in and says, Im going to the gym at 7:30 … kelly is the attendee and driver"),
+ * else the one person the title's words point to, else whoever is speaking, else the admin. Who drives, when nobody
+ * said: the one parent going; with two, the one talking.
  */
-export function defaultPeople({ title, people = [], speakerId = null, facts = [], family = [] }) {
-  if (people.length) return { people, driver: null }
-  const pointed = memberFromWords(title, facts, family)
-  const who = pointed ?? family.find((m) => m.id === speakerId) ?? family.find((m) => m.is_admin) ?? null
+export function defaultPeople({ title, said = '', people = [], speakerId = null, facts = [], family = [] }) {
+  const speaker = family.find((m) => m.id === speakerId) ?? null
+  const drives = (m) => m && m.role === 'parent' && m.can_drive !== false
+  if (people.length) {
+    const going = people.map((n) => family.find((m) => m.name.toLowerCase() === String(n).toLowerCase())).filter(drives)
+    const driver = going.length === 1 ? going[0] : going.find((m) => m.id === speakerId && saysI(said)) ?? null
+    return { people, driver: driver?.name ?? null }
+  }
+  const who = (speaker && saysI(said) ? speaker : null) ?? memberFromWords(title, facts, family) ?? speaker ?? family.find((m) => m.is_admin) ?? null
   if (!who) return { people: [], driver: null }
-  return { people: [who.name], driver: who.role === 'parent' && who.can_drive !== false ? who.name : null }
+  return { people: [who.name], driver: drives(who) ? who.name : null }
+}
+
+/** For Casa: who is talking, so "I" is them and "you" is Casa. Not signed in (the wall): "I" is the admin. */
+export function speakerLine(speakerId, family = []) {
+  const speaker = family.find((m) => m.id === speakerId)
+  if (speaker) return `WHO IS TALKING: ${speaker.name} is talking (signed in on this screen). "I", "me" and "my" mean ${speaker.name} — "I'm going to the gym at 7:30" puts ${speaker.name} on it, and ${speaker.name} drives — unless they name someone else; so "I", "my", "I've got" already say whose it is: never ask whose it is or who it's for. "he", "his" elsewhere here means whoever is talking. "you" means you, Casa.`
+  const admin = family.find((m) => m.is_admin)?.name ?? 'Jake'
+  return `WHO IS TALKING: nobody is signed in on this screen; "I", "me" and "my" mean ${admin} unless they say who they are (then them, for the rest of the conversation) — "I have a dentist appointment Tuesday at 3" is ${admin}'s, "my yoga class" is ${admin}'s: never ask whose it is or who it's for. "you" means you, Casa.`
 }
 
 // Phase 4 — open thoughts come back (design doc): at most one a day; each at most weekly; quiet after three.

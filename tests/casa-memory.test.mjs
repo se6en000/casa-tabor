@@ -94,6 +94,29 @@ test('a new event with no one on it: the one its words point to, else whoever is
   assert.deepEqual(defaultPeople({ title: 'Haircut', people: ['Owen'], speakerId: 'm-jake', facts, family: fam }), { people: ['Owen'], driver: null }, 'named people stay as said')
 })
 
+// Jake, Oct 3: "when Kelly is logged in and says, Im going to the gym at 7:30 … kelly is the attendee and driver
+// without having to say it. And the same would work for if I was logged in."
+test('"I" is whoever is signed in: they go, and a parent going drives — even when the title points at someone else', async () => {
+  const { defaultPeople } = await import('../supabase/functions/_shared/casa-memory.mjs')
+  const fam = [...family, { id: 'm-kelly', name: 'Kelly', role: 'parent', can_drive: true, is_admin: false }].map((m) => (m.id === 'm-jake' ? { ...m, can_drive: true, is_admin: true } : m))
+  const facts = [{ kind: 'fact', about_member_id: 'm-jake', confidence: 'sure', words: ['gym'] }]
+  assert.deepEqual(defaultPeople({ title: 'Gym', said: 'I’m going to the gym at 7:30', people: [], speakerId: 'm-kelly', facts, family: fam }), { people: ['Kelly'], driver: 'Kelly' })
+  assert.deepEqual(defaultPeople({ title: 'Gym', said: 'im going to the gym at 7:30', people: [], speakerId: 'm-jake', facts, family: fam }), { people: ['Jake'], driver: 'Jake' })
+  assert.deepEqual(defaultPeople({ title: 'Gym', said: 'add the gym at 7:30', people: [], speakerId: 'm-kelly', facts, family: fam }), { people: ['Jake'], driver: 'Jake' }, 'no "I": the words still point')
+  // Named by the model, with no driver: the one parent going drives.
+  assert.deepEqual(defaultPeople({ title: 'Gym', said: 'I’m going to the gym', people: ['Kelly'], speakerId: 'm-kelly', facts, family: fam }), { people: ['Kelly'], driver: 'Kelly' })
+  assert.deepEqual(defaultPeople({ title: 'Dentist', said: 'I’m taking Owen to the dentist', people: ['Kelly', 'Owen'], speakerId: 'm-kelly', facts, family: fam }), { people: ['Kelly', 'Owen'], driver: 'Kelly' })
+  assert.deepEqual(defaultPeople({ title: 'Dinner', said: 'dinner with Jake and me Friday', people: ['Jake', 'Kelly'], speakerId: 'm-kelly', facts, family: fam }), { people: ['Jake', 'Kelly'], driver: 'Kelly' }, 'two parents: the one talking')
+  assert.deepEqual(defaultPeople({ title: 'Dinner', said: 'dinner for Jake and Kelly Friday', people: ['Jake', 'Kelly'], speakerId: null, facts, family: fam }), { people: ['Jake', 'Kelly'], driver: null }, 'two parents, nobody signed in: no guess')
+})
+
+test('Casa is told who is talking: "I" is them, "you" is Casa', async () => {
+  const { speakerLine } = await import('../supabase/functions/_shared/casa-memory.mjs')
+  const fam = [{ id: 'm-kelly', name: 'Kelly', role: 'parent' }, { id: 'm-jake', name: 'Jake', role: 'parent', is_admin: true }]
+  assert.match(speakerLine('m-kelly', fam), /Kelly is talking.*"I", "me" and "my" mean Kelly.*"you" means you, Casa/s)
+  assert.match(speakerLine(null, fam), /nobody is signed in.*mean Jake/is)
+})
+
 // Phase 4: open thoughts come back — one a day at most, each at most weekly, quiet after three unanswered.
 test('which open thought is due: none if one came up in the last 20 hours; else the oldest not raised this week, fewer than three times', async () => {
   const { dueThought } = await import('../supabase/functions/_shared/casa-memory.mjs')

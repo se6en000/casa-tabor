@@ -79,7 +79,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
     if (!lead) return null
     if (lead.kind === 'move') return describeNextMove(lead.move, members, now)
     const home = describeHomeLead(lead.item, lead.now, members, now)
-    return { eyebrow: home.eyebrow, urgent: false, driverId: home.whoId, initial: home.initial, title: home.title, detail: home.detail, summary: home.title, timing: '', leaveTime: null, also: null, ring: home.ring, tripIds: [], departed: false, status: 'upcoming' }
+    return { eyebrow: home.eyebrow, urgent: false, driverId: home.whoId, initial: home.initial, title: home.title, detail: home.detail, summary: home.title, what: home.title, how: home.detail, timing: '', leaveTime: null, also: null, ring: home.ring, tripIds: [], departed: false, status: 'upcoming' }
   }, [lead, members, now])
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null
   const weather = weatherLine(currentWeather, plan, now)

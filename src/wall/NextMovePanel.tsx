@@ -72,9 +72,10 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
           >
             {view.initial}
           </span>
-          <span className={`truncate font-display font-semibold leading-none ${compact ? 'text-wall-quote' : 'text-wall-move'}`}>{view.title}</span>
+          {/* The what big, the how under it (Jake, Oct 2: "Milo grooming" first, then "Jake → Pet Supermarket · starts 9:00"). */}
+          <span className={`truncate font-display font-semibold leading-none ${compact ? 'text-wall-quote' : 'text-wall-move'}`}>{view.what ?? view.title}</span>
         </div>
-        <div className="truncate text-wall-body text-wall-ink">{view.detail}</div>
+        <div className="truncate text-wall-body text-wall-ink">{view.how ?? view.detail}</div>
         {view.also && !actions && !onDetails && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
         {!actions && onDetails && (
           <div className="mt-[2px] flex items-center gap-[12px]">
@@ -84,21 +85,18 @@ export default function NextMovePanel({ view, pigmentIndex, actions, trailing = 
             {trailing && <div className="ml-auto">{trailing}</div>}
           </div>
         )}
+        {/* No Leaving now or Hand off here (Jake, Oct 2: "that's micro management, not realistic in real life, it's just
+            taking up space" — a hand-off is a tap on the trip or a word to Casa). A trip with nobody on it still asks. */}
         {actions && (
-          <div className="mt-[2px] flex items-center gap-[12px]">
-            {view.status === 'upcoming' && view.driverId && (
-              <button type="button" className="h-[48px] rounded-full border-0 bg-wall-ink px-[24px] text-wall-detail font-semibold text-wall-on-pigment" onClick={(e) => { e.stopPropagation(); actions.onLeaving() }}>
-                Leaving now
-              </button>
-            )}
+          <div className="mt-[2px] flex min-h-[48px] items-center gap-[12px]">
             {view.status === 'en_route' && view.departed && (
               <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onUndoLeaving() }}>
                 Not yet (undo)
               </button>
             )}
-            {view.status === 'upcoming' && (
+            {view.status === 'upcoming' && !view.driverId && (
               <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onHandOff() }}>
-                {view.driverId ? 'Hand off' : 'Choose a driver'}
+                Choose a driver
               </button>
             )}
             {/* A quiet link on the same line as the actions ("Hide routines"), at its right end. */}

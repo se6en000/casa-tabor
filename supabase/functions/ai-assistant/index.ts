@@ -171,7 +171,7 @@ import {
 import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { runLookup } from './lookups.ts'
-import { defaultPeople, dueThought, mayChangeMemory, readRemember } from '../_shared/casa-memory.mjs'
+import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
@@ -1235,15 +1235,21 @@ Deno.serve(async (req) => {
   // `startPlanning`: a plan is on screen (P3.25), so the planning model answers from the start.
   // A new event with no one on it (Jake's bug report 2026-09-30 11:44: "they should never be unassigned"): whoever
   // its words point to in Casa's memory, else whoever is speaking, else the admin; a parent going drives.
+  // Who "I" is: whoever is signed in on their phone; the wall is the family's screen, so its sign-in isn't who's talking.
+  const talkerId = context?.page === 'wall' ? null : activeMemberId
+  // "I" is whoever is signed in (Jake, Oct 3): they go, and a parent going drives; named people with no driver: the
+  // one parent going drives.
   const withWho = async (tool: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
-    if (tool !== 'create_event' || (Array.isArray(args.members) && args.members.length)) return args
+    const named = Array.isArray(args.members) ? (args.members as unknown[]).map(String).filter(Boolean) : []
+    const hasDriver = typeof args.driver_name === 'string' && args.driver_name.trim() !== ''
+    if (tool !== 'create_event' || (named.length && hasDriver)) return args
     const [{ data: fam }, { data: facts }] = await Promise.all([
       sb.from('family_members').select('id, name, role, can_drive, is_admin').neq('name', 'Tabor Family').order('sort_order'),
       sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
     ])
-    const d = defaultPeople({ title: String(args.title ?? ''), people: [], speakerId: activeMemberId, facts: facts ?? [], family: fam ?? [] })
+    const d = defaultPeople({ title: String(args.title ?? ''), said: latestUserText, people: named, speakerId: talkerId, facts: facts ?? [], family: fam ?? [] })
     const reminder = args.event_type === 'reminder'
-    return { ...args, ...(d.people.length ? { members: d.people } : {}), ...(d.driver && !reminder && args.all_day !== true ? { driver_name: d.driver } : {}) }
+    return { ...args, ...(d.people.length ? { members: d.people } : {}), ...(d.driver && !hasDriver && !reminder && args.all_day !== true ? { driver_name: d.driver } : {}) }
   }
   // Where the place is, before the yes (Jake, Oct 2: "Go for which one"): a sure place comes with its address, a
   // not-sure one with up to three choices to pick from on the card ("Which one?"); no idea keeps the name as said.
@@ -1281,7 +1287,7 @@ Deno.serve(async (req) => {
     const { from, until } = fullAiWindow(now, utcOffset)
     // Everything D answers from, in its context rather than behind search tools.
     const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows, memoryRows] = await Promise.all([
-      sb.from('family_members').select('id, name, full_name, role, can_drive').order('sort_order'),
+      sb.from('family_members').select('id, name, full_name, role, can_drive, is_admin').order('sort_order'),
       sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
         .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
       sb.from('grocery_items').select('id, name, quantity, checked').is('deleted_at', null).order('checked').order('name').limit(200),
@@ -1301,7 +1307,7 @@ Deno.serve(async (req) => {
       .filter((m) => !(privacy?.value === true && onWall && m.sensitive))
     // Phase 4: at most one open thought a day comes back, at the end of an answer.
     const due = dueThought(memory, now) as { id: string } | null
-    const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null }>)
+    const family = ((familyRows.data ?? []) as Array<{ id: string; name: string; role: string | null; can_drive: boolean | null; is_admin?: boolean | null }>)
     const events = await loadReferents(sb, ((idRows.data ?? []) as Array<{ id: string }>).map((r) => r.id), family)
     const groceries = (groceryRows.data ?? []) as Array<{ id: string; name: string; quantity: string | null; checked: boolean }>
     const homeCfg = (homeRow.data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
@@ -1349,7 +1355,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.

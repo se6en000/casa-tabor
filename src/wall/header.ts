@@ -26,6 +26,10 @@ export interface NextMoveView {
   detail: string
   /** The trip in the family's words ("Pick up Emme & Owen"). */
   summary: string
+  /** The header's big line: what it is ("Milo grooming") — Jake, Oct 2: "the what big, the how under it". */
+  what?: string
+  /** Under it: who goes where, and when ("Jake → Pet Supermarket · starts 9:00 · 5 min drive"). */
+  how?: string
   /** "starts 12:30 · 29 min drive" */
   timing: string
   /** "1:50", or null when the leave time is unknown. */
@@ -105,6 +109,11 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     initial: driverName?.charAt(0) ?? '?',
     title: `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
     detail,
+    what: summary,
+    how: [
+      `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
+      ...(trip.travel ? detail.split(' · ').filter((part) => part && part !== summary && !summary.includes(part)) : [timing, late]),
+    ].filter(Boolean).join(' · '),
     timing,
     summary,
     leaveTime: trip.leaveAt ? clockTime(trip.leaveAt) : null,

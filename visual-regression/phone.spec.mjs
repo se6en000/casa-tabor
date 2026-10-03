@@ -31,19 +31,17 @@ test('phone: Me — the next move first (leave by), what others have covered, yo
   await expect(phone).toHaveScreenshot('phone-me.png')
 })
 
-test('phone: Leaving now puts the move on the road (with undo); Hand off offers who is free', async ({ page }) => {
+// Jake, Oct 2 (backlog): "the what big, the how under it", and no Leaving now / Hand off ("micro management … just taking
+// up space"); a hand-off is from the event, or by telling Casa.
+test('phone: your next move — what it is big, where under it; no Leaving now or Hand off', async ({ page }) => {
   const phone = await open(page)
   await me(phone)
   const next = phone.getByRole('region', { name: 'Your next move' })
-  await next.getByRole('button', { name: 'Leaving now' }).click()
-  await expect(next.getByText('ON THE ROAD')).toBeVisible()
-  await next.getByRole('button', { name: 'Not yet (undo)' }).click()
+  await expect(next.getByText('Drop off Emme & Owen')).toBeVisible()
+  await expect(next.getByText('To Palm Beach Public')).toBeVisible()
   await expect(next.getByText('LEAVE BY 7:25')).toBeVisible()
-  await next.getByRole('button', { name: 'Hand off' }).click()
-  const sheet = phone.getByRole('region', { name: 'Hand off' })
-  await expect(sheet.getByRole('button', { name: /Kelly/ })).toBeVisible()
-  await sheet.getByRole('button', { name: /Giselle/ }).click()
-  await expect(phone.getByRole('region', { name: 'Your next move' })).toHaveCount(0) // it's Giselle's now
+  await expect(next.getByRole('button', { name: 'Leaving now' })).toHaveCount(0)
+  await expect(next.getByRole('button', { name: 'Hand off' })).toHaveCount(0)
 })
 
 test('phone: hidden from the honoree — on Jake\'s phone, not on Kelly\'s', async ({ page }) => {

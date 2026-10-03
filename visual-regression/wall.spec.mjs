@@ -119,23 +119,19 @@ test('wall: the Who tab adds a person and changes the driver, with the change sp
   await expect(wall).toHaveScreenshot('edit-who.png')
 })
 
-test('wall: "Leaving now" puts the trip on the road (with undo), and "Hand off" gives it to someone else', async ({ page }) => {
+// Jake, Oct 2 (backlog): "the what big, the how under it" — the event is the title, who goes where and when under it —
+// and no Leaving now / Hand off in the header ("that's micro management, not realistic in real life").
+test('wall: the header says what it is big, who goes where under it; no Leaving now or Hand off', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   const wall = page.getByTestId('wall-fixture')
   const move = wall.getByRole('region', { name: 'Next move' })
   await expect(move.getByText('NEXT MOVE · LEAVE BY 7:25')).toBeVisible()
-  await expect(wall).toHaveScreenshot('next-move-actions.png')
-
-  await move.getByRole('button', { name: 'Leaving now' }).click()
-  await expect(move.getByText('ON THE ROAD · THERE BY 7:35')).toBeVisible()
-  await move.getByRole('button', { name: 'Not yet (undo)' }).click()
-  await expect(move.getByText('NEXT MOVE · LEAVE BY 7:25')).toBeVisible()
-
-  await move.getByRole('button', { name: 'Hand off' }).click()
-  const sheet = wall.getByRole('region', { name: 'Hand off' })
-  await expect(sheet.getByText('Drop off Emme & Owen')).toBeVisible()
-  await sheet.getByRole('button', { name: /^Kelly/ }).click()
-  await expect(move.getByText('Kelly → Palm Beach Public')).toBeVisible()
+  await expect(move.getByText('Drop off Emme & Owen', { exact: true })).toBeVisible()
+  await expect(move.getByText('Jake → Palm Beach Public · there by 7:35 · 10 min drive')).toBeVisible()
+  await expect(move.getByRole('button', { name: 'Leaving now' })).toHaveCount(0)
+  await expect(move.getByRole('button', { name: 'Hand off' })).toHaveCount(0)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall).toHaveScreenshot('next-move-header.png')
 })
 
 test('wall: needs a decision — the count opens the questions, and answers settle them', async ({ page }) => {
@@ -1066,7 +1062,7 @@ test('wall: a wake-word open is the small "Listening…" pill; Open grows it to 
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('wake-pill.png')
   await band.getByRole('button', { name: 'Open' }).click()
-  await expect(band.getByRole('button', { name: 'What can I say?' })).toBeVisible()
+  await expect(band.getByRole('button', { name: 'Ask something else' })).toBeVisible()
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=wake&wake=1')
   await expect(page.getByRole('region', { name: 'Assistant' }).getByText('Listening…')).toBeVisible()
   await page.mouse.click(960, 150)
@@ -1761,8 +1757,8 @@ test('wall: a trip away — leave by, the lane, the trip chip, the plane on the 
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
   const move = wall.getByRole('region', { name: 'Next move' })
-  await expect(move.getByText('Jake → DJT airport')).toBeVisible()
-  await expect(move.getByText('Uber · 15 min · at the airport by 1:13 · Flight 1419 to Dallas at 2:13')).toBeVisible()
+  await expect(move.getByText('Flight 1419 to Dallas at 2:13', { exact: true })).toBeVisible()
+  await expect(move.getByText('Jake → DJT airport · Uber · 15 min · at the airport by 1:13')).toBeVisible()
   await expect(move.getByText('NEXT MOVE · LEAVE BY 12:58')).toBeVisible()
   await expect(wall.getByText('Jake in Dallas · day 1 of 2')).toBeVisible()
   await expect(wall.getByText('1419 → DFW')).toBeVisible()
@@ -1802,7 +1798,7 @@ test('wall: the trip sheet — going and coming home in one; someone drives, mor
   await expect(sheet.getByRole('button', { name: 'Kelly' }).first()).toHaveAttribute('aria-pressed', 'true')
   await sheet.getByRole('button', { name: 'Done' }).click()
   const move = wall.getByRole('region', { name: 'Next move' })
-  await expect(move.getByText('Kelly → DJT airport')).toBeVisible()
+  await expect(move.getByText(/^Kelly → DJT airport/)).toBeVisible()
   await expect(move.getByText('NEXT MOVE · LEAVE BY 12:43')).toBeVisible()
 })
 
@@ -1813,8 +1809,8 @@ test('wall: a driving trip — the drive out, away, a car on the tiles', async (
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
   const move = wall.getByRole('region', { name: 'Next move' })
-  await expect(move.getByText('Jake → Orlando')).toBeVisible()
-  await expect(move.getByText('Drive · 3 hr 15 · In Orlando by 9:45')).toBeVisible()
+  await expect(move.getByText('In Orlando by 9:45', { exact: true })).toBeVisible()
+  await expect(move.getByText('Jake → Orlando · Drive · 3 hr 15')).toBeVisible()
   await expect(wall.getByText('Jake in Orlando · day 1 of 3')).toBeVisible()
   await expect(wall.getByText('Away · Orlando')).toBeVisible()
   await expect(wall.getByText('Away 6:30 · back Thu ~7:15')).toBeVisible()
@@ -1857,7 +1853,7 @@ test('wall: chores on the Score — trash night on Jake’s lane, Liv’s meds o
 
 // Designer polish, approved Oct 1: today's header is one height whether or not there's a list (the screen doesn't jump
 // when the list is done), and "Hide routines" sits on the Next Move's action line instead of floating above the hours.
-test('wall: today’s header keeps its height; Hide routines on the Leaving now line, or with the hours beside THEN', async ({ page }) => {
+test('wall: today’s header keeps its height, with Hide routines in it or with the hours', async ({ page }) => {
   const measure = async (at) => {
     await page.goto(`/__wall-fixture?at=${at}`)
     await page.getByRole('region', { name: 'Next move' }).waitFor()
@@ -1865,17 +1861,14 @@ test('wall: today’s header keeps its height; Hide routines on the Leaving now 
     return page.evaluate(() => {
       const header = document.querySelector('[data-testid="wall-fixture"] header').getBoundingClientRect()
       const pill = [...document.querySelectorAll('button')].find((b) => /Hide routines|Routines hidden/.test(b.textContent)).getBoundingClientRect()
-      const leaving = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Leaving now').getBoundingClientRect()
-      return { header: Math.round(header.height), pillMid: Math.round(pill.top + pill.height / 2), leavingMid: Math.round(leaving.top + leaving.height / 2) }
+      return { header: Math.round(header.height), pillBottom: Math.round(pill.bottom), headerBottom: Math.round(header.bottom) }
     })
   }
   const plain = await measure('2026-09-25T07:12:00')
   const withList = await measure('2026-09-26T11:30:00')
   expect(plain.header).toBe(withList.header)
-  // With THEN beside the Next Move (canvas 29), the button line ends short of the wall's edge, so the pill sits on the
-  // hours' row at the right edge instead (see the next test); with nothing after the move it's on the Leaving now line.
-  const last = await measure('2026-09-26T11:30:00')
-  expect(Math.abs(last.pillMid - last.leavingMid) <= 1 || last.pillMid > last.header).toBe(true)
+  // With no Leaving now line any more (Oct 3), the pill sits on the Next Move's last line or with the hours below it.
+  expect(plain.pillBottom).toBeGreaterThan(0)
 })
 
 test('wall: Hide routines ends at the wall’s right edge, with the hours', async ({ page }) => {
