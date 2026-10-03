@@ -236,7 +236,6 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // Held to talk (34e): the answer over the screen you're on rather than the chat (34f).
   const [glance, setGlance] = useState<{ holding: boolean; cancelled: boolean } | null>(null)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
-  const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   // The saved places, offered as a place is typed on the form (adding or editing).
   const placeOptions = useMemo(() => places.map((p) => ({ name: p.name, address: [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ') })).filter((p) => p.name), [places])
@@ -992,15 +991,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               <button
                 key={c.memberId}
                 type="button"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  try {
-                    await tripActions.handOff(handOff.trip, c.memberId, handOff.plan.date)
-                    setHandOff(null)
-                  } finally {
-                    setBusy(false)
-                  }
+                // The new driver shows at once and the sheet closes; it saves behind (Oct 2, instant everywhere).
+                onClick={() => {
+                  setHandOff(null)
+                  void tripActions.handOff(handOff.trip, c.memberId, handOff.plan.date)
                 }}
                 className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[14px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-left text-wall-ink"
               >

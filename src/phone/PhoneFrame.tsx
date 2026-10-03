@@ -109,7 +109,8 @@ export default function PhoneFrame() {
       week={week}
       events={allEvents}
       checklist={checklist}
-      tripActions={tripActions}
+      // A hand-off shows at once (the sheet doesn't wait); one that can't be saved says so.
+      tripActions={{ ...tripActions, handOff: (trip, driverId, date) => tripActions.handOff(trip, driverId, date).then(() => undefined, () => setNotice(`Couldn’t hand off “${trip.title}”. Try it again.`)) }}
       casaTalk={{ topic, snooze: (key, until) => talk.save({ snoozed: { [key]: until.toISOString() } }) }}
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
       onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
