@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { onResume, reconnectGate } from '../lib/catchUp'
 import { startOfWeek, endOfWeek, addDays, subDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
 import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
@@ -593,6 +594,20 @@ let _debounceTimer: ReturnType<typeof setTimeout> | null = null
 let _planDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
+// What the feed missed (Jake, Oct 3: kiosk adds not on his phone 20 minutes later): re-read when the feed comes back
+// after a drop, and when the page comes back after being away (an iPhone drops the feed in the background).
+const _reconnect = reconnectGate()
+let _resumeOff: (() => void) | null = null
+function _catchUp() {
+  _fireInvalidation()
+  _firePlanInvalidation()
+  // And make sure the feed itself is back, without waiting for the heartbeat.
+  if (_realtimeSubscribers > 0 && (!_realtimeChannel || _realtimeChannel.state === 'closed' || _realtimeChannel.state === 'errored')) {
+    try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch { /* ignore — best-effort */ }
+    _realtimeChannel = null
+    _subscribeRealtimeChannel()
+  }
+}
 
 function _evictDeletedEventFromCache(deletedId: string) {
   if (!deletedId) return
@@ -651,6 +666,10 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
     .subscribe((status, err) => {
+      if (_reconnect.status(status)) {
+        _fireInvalidation()
+        _firePlanInvalidation()
+      }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
         if (_realtimeSubscribers > 0 && !_reconnectTimer) {
@@ -709,6 +728,7 @@ function useRealtimeEventInvalidation() {
 
     if (_realtimeSubscribers === 1) {
       _subscribeRealtimeChannel()
+      _resumeOff ??= onResume(_catchUp)
     }
 
     return () => {
@@ -718,6 +738,8 @@ function useRealtimeEventInvalidation() {
       _queryClientInstances.delete(qc)
       _realtimeSubscribers--
       if (_realtimeSubscribers === 0) {
+        _resumeOff?.()
+        _resumeOff = null
         if (_heartbeatTimer) {
           clearInterval(_heartbeatTimer)
           _heartbeatTimer = null

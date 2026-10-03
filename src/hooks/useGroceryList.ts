@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { onResume, reconnectGate } from '../lib/catchUp'
 import { ADDING_PREFIX, withAddedGrocery } from '../lib/groceryOptimistic'
 
 export interface GroceryItem {
@@ -61,6 +62,7 @@ const NORMALIZATION_RETRY_MS = 15_000
 
 let _groceryRealtimeSubscribers = 0
 let _groceryRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let _groceryResumeOff: (() => void) | null = null
 const _groceryInvalidateCallbacks = new Set<() => void>()
 let _groceryDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -176,16 +178,22 @@ export function useGroceryList() {
     _groceryRealtimeSubscribers++
 
     if (_groceryRealtimeSubscribers === 1) {
+      // What the feed missed (Jake, Oct 3: the phone stale after the kiosk changed things): re-read when the feed
+      // reconnects after a drop, and when the page comes back after being away (an iPhone drops it in the background).
+      const reconnect = reconnectGate()
       _groceryRealtimeChannel = supabase
         .channel('grocery-realtime-singleton')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grocery_items' }, fireGroceryInvalidation)
-        .subscribe()
+        .subscribe((status) => { if (reconnect.status(status)) fireGroceryInvalidation() })
+      _groceryResumeOff = onResume(fireGroceryInvalidation)
     }
 
     return () => {
       _groceryInvalidateCallbacks.delete(invalidate)
       _groceryRealtimeSubscribers--
       if (_groceryRealtimeSubscribers === 0 && _groceryRealtimeChannel) {
+        _groceryResumeOff?.()
+        _groceryResumeOff = null
         supabase.removeChannel(_groceryRealtimeChannel)
         _groceryRealtimeChannel = null
         if (_groceryDebounceTimer) {
