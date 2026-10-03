@@ -207,6 +207,19 @@
 }
 
 
+/* Casa's round button on the phone breathes (Jake, Oct 2): a warm gold glow swells and fades every few seconds, and the
+   sparkle twinkles once in the middle of it. Movement and fading only. */
+@keyframes phone-casa-breath {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,162,92,0); }
+  50%      { box-shadow: 0 0 0 9px rgba(201,162,92,0.22), 0 0 26px 6px rgba(201,162,92,0.35); }
+}
+@keyframes phone-casa-twinkle {
+  0%, 38%, 62%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50%                { transform: scale(1.12) rotate(12deg); opacity: 0.85; }
+}
+.phone-casa-breath { animation: phone-casa-breath 4.5s ease-in-out infinite; }
+.phone-casa-twinkle { animation: phone-casa-twinkle 4.5s ease-in-out infinite; }
+
 @keyframes casa-art-dissolve-out {
   0% {
     opacity: 1;

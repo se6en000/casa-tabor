@@ -27,6 +27,8 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
     hold?: { start: () => void; end: (cancelled: boolean) => void }
     /** Held and listening: brass, with rings. */
     active?: boolean
+    /** Casa: breathes while waiting (a glow that swells and fades). */
+    alive?: boolean
     /** Above the shade while Casa's answer is over the screen (34f), so it can be held again. */
     raised?: boolean
   }
@@ -97,7 +99,10 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
         className={`absolute right-[12px] ${bottom} ${action.raised ? 'z-40' : 'z-20'} flex touch-none select-none items-center justify-center rounded-full border-0 p-0 text-wall-on-pigment transition-[width,height,transform,background-color] duration-300 ${action.active ? 'scale-110 bg-wall-brass shadow-[0_0_30px_rgba(201,162,92,0.7)]' : 'bg-wall-ink shadow-[0_6px_18px_rgba(38,34,29,0.30)]'} ${compact ? 'h-[56px] w-[56px]' : 'h-[64px] w-[64px]'}`}
       >
         {action.active && <span aria-hidden="true" className="absolute -inset-[14px] animate-[wall-listen-ring_2.4s_ease-out_infinite] rounded-full border-2 border-solid border-wall-brass" />}
-        {action.icon}
+        {/* Casa is alive (Jake, Oct 2: "the AI button be fancy, breath or have some alive animation"): a warm glow that
+            swells and fades, and a faint twinkle; still while held, and for reduced motion (index.css). */}
+        {action.alive && !action.active && <span aria-hidden="true" className="phone-casa-breath pointer-events-none absolute inset-0 rounded-full" />}
+        <span className={action.alive && !action.active ? 'phone-casa-twinkle flex' : 'flex'}>{action.icon}</span>
       </button>
     </>
   )

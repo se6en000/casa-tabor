@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Check, ChevronLeft, Mic, Plus } from 'lucide-react'
+import { ArrowUp, Check, ChevronLeft, Mic, Plus, ZoomIn, ZoomOut } from 'lucide-react'
 import { useFieldDictation } from '../hooks/useFieldDictation'
 import { ALL_AISLES, aisles, amountOf, planAdds, type ShopItem } from './groceries'
 import { addSaid, useLiftToMove, useTickHold } from './useGroceryGestures'
@@ -56,6 +56,15 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
     voiceTimer.current = window.setTimeout(() => setVoiceSaid(null), 3500)
   }
   const [showDone, setShowDone] = useState(false)
+  // Bigger text (Jake, Oct 2: "a magnifier button which will temporarily boost up the font 2-3X on all items so i can see
+  // without my glasses. till I go to another page or switch out of the app"): this screen only, and off again when the
+  // app goes to the background.
+  const [big, setBig] = useState(false)
+  useEffect(() => {
+    const off = () => { if (document.visibilityState === 'hidden') setBig(false) }
+    document.addEventListener('visibilitychange', off)
+    return () => document.removeEventListener('visibilitychange', off)
+  }, [])
   const { held, tap: tick } = useTickHold(data, haptic)
   const { groups, done } = useMemo(() => aisles(data.items, held), [data.items, held])
   const left = data.items.filter((i) => !i.checked).length
@@ -73,14 +82,14 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         aria-label={`${item.name}${amount ? `, ${amount}` : ''}${item.checked ? ', got it' : ''}`}
         onClick={() => tap(item)}
         {...pressHandlers(item)}
-        className={`flex min-h-[56px] w-full select-none items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent px-0 py-[8px] text-left text-wall-ink ${quiet ? 'opacity-50' : ''} ${lifted?.id === item.id ? 'rounded-[12px] bg-wall-brass/15 px-[8px] shadow-[0_6px_18px_rgba(38,34,29,0.2)]' : ''}`}
+        className={`flex ${big ? 'min-h-[84px] gap-[16px] py-[12px]' : 'min-h-[56px] gap-[14px] py-[8px]'} w-full select-none items-center border-0 border-t border-solid border-wall-stone bg-transparent px-0 text-left text-wall-ink ${quiet ? 'opacity-50' : ''} ${lifted?.id === item.id ? 'rounded-[12px] bg-wall-brass/15 px-[8px] shadow-[0_6px_18px_rgba(38,34,29,0.2)]' : ''}`}
       >
-        <span className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.75px] border-solid border-wall-ink-2'}`}>
-          {item.checked && <Check size={16} strokeWidth={3} />}
+        <span className={`flex ${big ? 'h-[44px] w-[44px]' : 'h-[28px] w-[28px]'} shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.75px] border-solid border-wall-ink-2'}`}>
+          {item.checked && <Check size={big ? 26 : 16} strokeWidth={3} />}
         </span>
-        <span className={`flex-1 text-phone-body font-medium ${item.checked ? 'text-wall-ink-2' : ''}`}>
+        <span className={`flex-1 ${big ? 'text-phone-magnified' : 'text-phone-body'} font-medium ${item.checked ? 'text-wall-ink-2' : ''}`}>
           {item.name}
-          {amount && <span className="font-bold text-wall-brass-ink"> · {amount}</span>}
+          {amount && (big ? <span className="block text-phone-move font-bold text-wall-brass-ink">{amount}</span> : <span className="font-bold text-wall-brass-ink"> · {amount}</span>)}
         </span>
       </button>
     )
@@ -100,11 +109,17 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
             <div className="text-phone-detail text-wall-ink-2">{data.loading ? 'Loading…' : left === 0 ? 'Nothing to get' : `${left} to get`}</div>
             <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Groceries</h1>
           </div>
-          {corner}
+          <div className="flex shrink-0 items-center gap-[10px]">
+            <button type="button" aria-label="Bigger text" aria-pressed={big} onClick={() => { haptic(); setBig((b) => !b) }}
+              className={`flex h-[44px] w-[44px] items-center justify-center rounded-full p-0 ${big ? 'border-0 bg-wall-brass text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+              {big ? <ZoomOut size={22} /> : <ZoomIn size={22} />}
+            </button>
+            {corner}
+          </div>
         </div>
         {groups.map((g) => (
           <div key={g.key} className="flex flex-col">
-            <h2 className="m-0 pb-[4px] pt-[16px] font-body text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">{g.label}</h2>
+            <h2 className={`m-0 pb-[4px] pt-[16px] font-body ${big ? 'text-phone-heading' : 'text-phone-label'} font-bold tracking-[0.16em] text-wall-brass-ink`}>{g.label}</h2>
             {g.items.map((i) => row(i))}
           </div>
         ))}

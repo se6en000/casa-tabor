@@ -1081,3 +1081,44 @@ test('phone: Casa — a pasted screenshot goes with the message', async ({ page 
   await expect.poll(() => page.evaluate(() => window.__casaSent ?? [])).toEqual([{ text: 'What’s in this?', images: 1 }])
   await expect(ask.getByRole('list', { name: 'Pictures to send' })).toHaveCount(0)
 })
+
+// Jake, Oct 2: "a 'Double font size' / magnifier button which will temporarily boost up the font 2-3X on all items so i
+// can see without my glasses. till I go to another page or switch out of the app."
+test('phone: Groceries — Bigger text makes the items 2.5× until another tab or the app goes away', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00')
+  await phone.getByRole('button', { name: 'Groceries' }).click()
+  const list = phone.getByRole('region', { name: 'Groceries' })
+  const size = () => list.getByRole('button', { name: 'Bananas' }).locator('span').nth(1).evaluate((el) => getComputedStyle(el).fontSize)
+  expect(await size()).toBe('16px')
+  await list.getByRole('button', { name: 'Bigger text' }).click()
+  await expect(list.getByRole('button', { name: 'Bigger text' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await size()).toBe('40px')
+  await expect(phone).toHaveScreenshot('phone-groceries-bigger.png')
+  // Another tab and back: normal again.
+  await phone.getByRole('button', { name: 'Today' }).click()
+  await phone.getByRole('button', { name: 'Groceries' }).click()
+  expect(await size()).toBe('16px')
+  // Switching out of the app: normal again.
+  await list.getByRole('button', { name: 'Bigger text' }).click()
+  expect(await size()).toBe('40px')
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect.poll(size).toBe('16px')
+})
+
+// Jake, Oct 2: "the AI button be fancy, breath or have some 'alive' animation".
+test('phone: Casa breathes at rest, and holds still while held', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
+  const casa = phone.getByRole('button', { name: 'Casa', exact: true })
+  const breath = casa.locator('.phone-casa-breath')
+  await expect(breath).toHaveCount(1)
+  expect(await breath.evaluate((el) => getComputedStyle(el).animationName)).toBe('phone-casa-breath')
+  const box = await casa.boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect(casa).toHaveAttribute('data-active', 'true')
+  await expect(breath).toHaveCount(0)
+  await page.mouse.up()
+})

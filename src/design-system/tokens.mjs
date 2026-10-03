@@ -211,6 +211,8 @@ export const DESIGN_TOKENS = {
     // The phone (board section 05): read in the hand, so smaller than the wall's
     // across-the-room sizes; labels are small capitals, never below 12px.
     'phone-title': { size: '32px', lineHeight: '1.05' },
+    // Groceries magnified (Jake, Oct 2: "so i can see without my glasses"): 2.5× the body size.
+    'phone-magnified': { size: '40px', lineHeight: '1.15' },
     'phone-move': { size: '30px', lineHeight: '1.05' },
     'phone-heading': { size: '22px', lineHeight: '1.15' },
     'phone-body': { size: '16px', lineHeight: '1.35' },
