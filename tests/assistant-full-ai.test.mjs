@@ -204,3 +204,13 @@ test('describing a flight already on the calendar does not change it; asking to 
   // Not a trip leg: an ordinary edit is never held back.
   assert.equal(describesExistingLeg({ tool: 'update_event', args: { id: 's', start: '2026-10-07T17:00:00-04:00' } }, [{ id: 's', title: 'Soccer practice', start_time: '2026-10-07T20:00:00Z', end_time: '2026-10-07T21:00:00Z', all_day: false }], 'soccer is at 5'), false)
 })
+
+// Jake's bug report, Oct 1 ("I should be able to update the name of an appointment … It said it couldn't do it") —
+// rechecked Oct 3: renames make their card now, but "change the name of the cats and dogs exhibition preview to …"
+// was answered "I can change … Is that right?" in words, with no card. The card is the question.
+test('a clear change is its card at once — never "is that right?" in words first', async () => {
+  const { buildFullAiSystem } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const system = buildFullAiSystem({ family: [], events: [], groceries: [], utcOffset: '-04:00', now: new Date('2026-10-03T12:00:00-04:00') })
+  assert.match(system, /the card is the question/i)
+  assert.match(system, /never ask "is that right\?"/i)
+})
