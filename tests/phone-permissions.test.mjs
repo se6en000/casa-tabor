@@ -51,3 +51,35 @@ test('no Permissions API (older iOS): asks anyway', async () => {
   await primePermissions(e)
   assert.deepEqual(e.calls, ['mic', 'mic-off', 'location'])
 })
+
+// Jake, Oct 4: "every single time it asks me for microphone permission". An iPhone home-screen app forgets the mic
+// answer when it's closed, so the browser says "prompt" on every launch and the launch ask became a launch nag. Each is
+// asked at launch once per phone, whatever the answer; after that only when it's used, as before Oct 3.
+function memory() {
+  const kept = new Set()
+  return { askedBefore: (n) => kept.has(n), markAsked: (n) => kept.add(n), kept }
+}
+
+test('asked at launch once per phone: the next launch asks nothing, though iPhone says "prompt" again', async () => {
+  const m = memory()
+  const first = env()
+  await primePermissions(first, m)
+  assert.deepEqual(first.calls, ['mic', 'mic-off', 'location'])
+  const next = env()
+  await primePermissions(next, m)
+  assert.deepEqual(next.calls, [])
+})
+
+test('a "Don\'t Allow" at launch is not asked again at the next launch either', async () => {
+  const m = memory()
+  await primePermissions(env({ micFails: true }), m)
+  const next = env()
+  await primePermissions(next, m)
+  assert.deepEqual(next.calls, [])
+})
+
+test('already allowed: remembered too, so a later "prompt" is not asked at launch', async () => {
+  const m = memory()
+  await primePermissions(env({ mic: 'granted', geo: 'granted' }), m)
+  assert.deepEqual([...m.kept].sort(), ['geolocation', 'microphone'])
+})
