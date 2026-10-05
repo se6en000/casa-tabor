@@ -109,7 +109,9 @@ test('a pickup that goes straight on says so, and says when it will be late', ()
 test('the header says what it is big, and who goes where and when under it', () => {
   const move = describe(friday, at(25, 7, 0))
   assert.equal(move.what, 'Drop off Emme & Owen')
-  assert.equal(move.how, 'Jake → Palm Beach Public · there by 7:35 · 10 min drive')
+  assert.equal(move.how, 'Jake → Palm Beach Public · there by 7:35')
+  // The drive on its own third line, never cut off (Jake, Oct 5).
+  assert.equal(move.drive, '10 min drive')
   const later = describe(friday, at(25, 12, 15))
   assert.equal(later.what, 'Pick up Emme & Owen')
   assert.match(later.how, /^Giselle → Palm Beach Public · /)

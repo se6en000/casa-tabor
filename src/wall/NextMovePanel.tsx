@@ -74,6 +74,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions, onDetails, 
           <span className={`truncate font-display font-semibold leading-none ${compact ? 'text-wall-quote' : 'text-wall-move'}`}>{view.what ?? view.title}</span>
         </div>
         <div className="truncate text-wall-body text-wall-ink">{view.how ?? view.detail}</div>
+        {view.drive && <div className="-mt-[4px] truncate text-wall-body text-wall-ink-2">{view.drive}</div>}
         {view.also && !actions && !onDetails && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
         {!actions && onDetails && (
           <div className="mt-[2px] flex items-center gap-[12px]">

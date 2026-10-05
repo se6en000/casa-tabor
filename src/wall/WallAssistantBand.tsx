@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bug, ChevronDown, Mic, X } from 'lucide-react'
+import { Bug, Mic, X } from 'lucide-react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import { buildBugReport, REPORT_CATEGORIES } from './bugReport'
@@ -893,9 +893,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         type="button"
         aria-label="Close the conversation — or pull down"
         onClick={(event) => { event.stopPropagation(); dismiss('tab') }}
-        className="absolute left-1/2 top-0 flex h-[44px] w-[140px] -translate-x-1/2 cursor-grab items-center justify-center rounded-b-[24px] border-[5px] border-t-0 border-solid border-wall-night-brass bg-wall-band p-0 text-wall-night-brass active:cursor-grabbing"
+        // The grabber (canvas 43a, Jake Oct 5: the tab was "too big and kind of attention getting"): a short soft brass
+        // bar like the top of an iPhone sheet; the touch area stays 140 × 44.
+        className="absolute left-1/2 top-0 flex h-[44px] w-[140px] -translate-x-1/2 cursor-grab items-start justify-center border-0 bg-transparent p-0 pt-[10px] active:cursor-grabbing"
       >
-        <ChevronDown size={34} strokeWidth={2.4} aria-hidden="true" />
+        <span aria-hidden="true" className="block h-[5px] w-[72px] rounded-full bg-wall-night-brass/50" />
       </button>
       <div className="flex w-[200px] shrink-0 flex-col items-center gap-[16px]">
         <div data-listener={listenerV2 ? haloState : undefined} className="relative flex h-[132px] w-[132px] items-center justify-center">

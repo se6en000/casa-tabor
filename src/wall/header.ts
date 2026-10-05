@@ -28,8 +28,11 @@ export interface NextMoveView {
   summary: string
   /** The header's big line: what it is ("Milo grooming") — Jake, Oct 2: "the what big, the how under it". */
   what?: string
-  /** Under it: who goes where, and when ("Jake → Pet Supermarket · starts 9:00 · 5 min drive"). */
+  /** Under it: who goes where, and when ("Jake → Pet Supermarket · starts 9:00"). */
   how?: string
+  /** The drive on its own line ("5 min drive") — Jake, Oct 5: "instead of truncating the logistics, move the driving
+   *  info to a 3rd line". */
+  drive?: string
   /** "starts 12:30 · 29 min drive" */
   timing: string
   /** "1:50", or null when the leave time is unknown. */
@@ -110,10 +113,10 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     title: `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
     detail,
     what: summary,
-    how: [
+    ...splitDrive([
       `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
       ...(trip.travel ? detail.split(' · ').filter((part) => part && part !== summary && !summary.includes(part)) : [timing, late]),
-    ].filter(Boolean).join(' · '),
+    ].filter(Boolean) as string[]),
     timing,
     summary,
     leaveTime: trip.leaveAt ? clockTime(trip.leaveAt) : null,
@@ -163,4 +166,12 @@ export function weatherLine(
     .sort((a, b) => a.arriveAt.getTime() - b.arriveAt.getTime())[0]
   if (wet) parts.push(`${rainChance(wet.weather)}% chance of rain at ${clockTime(wet.arriveAt)}, ${placeName(wet)}`)
   return parts.length > 0 ? parts.join(' · ') : null
+}
+
+/** Who goes where and when on one line; the drive ("10 min drive", "25 min drive in traffic") on its own. */
+export function splitDrive(joined: string[]): { how: string; drive?: string } {
+  const parts = joined.flatMap((p) => p.split(' · ')).filter(Boolean)
+  const drive = parts.filter((p) => /\bdrive\b/i.test(p))
+  const how = parts.filter((p) => !drive.includes(p)).join(' · ')
+  return drive.length ? { how, drive: drive.join(' · ') } : { how }
 }

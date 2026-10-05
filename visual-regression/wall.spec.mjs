@@ -127,7 +127,8 @@ test('wall: the header says what it is big, who goes where under it; no Leaving 
   const move = wall.getByRole('region', { name: 'Next move' })
   await expect(move.getByText('NEXT MOVE · LEAVE BY 7:25')).toBeVisible()
   await expect(move.getByText('Drop off Emme & Owen', { exact: true })).toBeVisible()
-  await expect(move.getByText('Jake → Palm Beach Public · there by 7:35 · 10 min drive')).toBeVisible()
+  await expect(move.getByText('Jake → Palm Beach Public · there by 7:35', { exact: true })).toBeVisible()
+  await expect(move.getByText('10 min drive', { exact: true })).toBeVisible() // its own line (Jake, Oct 5)
   await expect(move.getByRole('button', { name: 'Leaving now' })).toHaveCount(0)
   await expect(move.getByRole('button', { name: 'Hand off' })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
@@ -1877,7 +1878,7 @@ test('wall: today’s header keeps its height, with Hide routines in it or with 
 // Canvas 37a-3 (Jake, Oct 3: "a 'tab' on it so it makes sense that you can close it by dragging" — "more of a pull down vs
 // pull up"; "37a-3 for me. doesnt compete with the mic"): a tab hanging from the band's brass edge, a chevron pointing
 // down. The band follows the pull and springs back if let go early; pulled far enough, it closes; a tap on the tab too.
-test('wall: Casa’s band has a pull tab — it follows a pull, springs back when let go early, closes when pulled down or tapped', async ({ page }) => {
+test('wall: Casa’s band has a grabber (43a) — it follows a pull, springs back when let go early, closes when pulled down or tapped', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   const band = page.getByRole('region', { name: 'Assistant' })
   const tab = band.getByRole('button', { name: 'Close the conversation — or pull down' })
