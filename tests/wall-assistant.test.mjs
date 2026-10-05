@@ -163,19 +163,18 @@ test('words not said to Casa (asides) are dropped from the conversation, and a r
   assert.equal(back.messages.length, 4)
 })
 
-// Canvas 24c–d (Jake, 2026-10-01: "show what was said"; the earlier turns on the right, "like reading a book").
-test('the conversation column: the latest six, newest strongest; the rest behind "↑ N earlier"; opened, all of it', async () => {
-  const { historyView, HISTORY_SHOWN } = await import('../src/wall/assistant.ts')
-  const turns = Array.from({ length: 8 }, (_, i) => `t${i}`)
-  const closed = historyView(turns, false)
-  assert.equal(closed.earlier, 2)
-  assert.deepEqual(closed.shown.map((s) => s.turn), ['t2', 't3', 't4', 't5', 't6', 't7'])
-  assert.deepEqual(closed.shown.map((s) => s.fade), [5, 4, 3, 2, 1, 0])
-  assert.equal(HISTORY_SHOWN, 6)
-  const open = historyView(turns, true)
-  assert.equal(open.earlier, 0)
-  assert.equal(open.shown.length, 8)
-  assert.equal(historyView(['a'], false).earlier, 0)
+// Canvas 45b/45c (Jake, Oct 5: the left/right conversation "doesn't feel as natural as I would like"): only the latest on
+// the band; what came before, as exchanges, behind "N earlier".
+test('the conversation before the latest question, as exchanges', async () => {
+  const { exchanges } = await import('../src/wall/assistant.ts')
+  const t = (role, text) => ({ role, text })
+  assert.deepEqual(exchanges([t('assistant', 'Hi, what can I do?'), t('user', 'ok and Sunday?'), t('assistant', 'Nothing planned on Sunday.'), t('user', 'is anything pressing?'), t('assistant', 'Yes — Giselle at 2:00.')]), [
+    { ask: null, answer: 'Hi, what can I do?' },
+    { ask: 'ok and Sunday?', answer: 'Nothing planned on Sunday.' },
+    { ask: 'is anything pressing?', answer: 'Yes — Giselle at 2:00.' },
+  ])
+  assert.deepEqual(exchanges([t('user', 'hello')]), [{ ask: 'hello', answer: null }])
+  assert.deepEqual(exchanges([]), [])
 })
 
 // Canvas 25b (Jake, 2026-10-01): the card for "snacks for the softball game" stayed up, waiting for a yes, under the

@@ -17,7 +17,7 @@ import { useDragDown } from './useSwipeDown'
 import VoiceHalo from './VoiceHalo'
 import { inkWords, shownWords, type VoiceLineState } from './voiceLine'
 import { useListenerV2 } from './listenerSwitch'
-import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, answerShape, firstTime, historyView, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
+import { answerDay, bandAnswer, bandCompact, bandState, cardText, dismissStep, answerShape, exchanges, firstTime, nextStep, tapOutsideCloses, threadTurns, voiceFinal, whichOne, type BandState } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
@@ -56,6 +56,32 @@ const shortTitle = (title: string) => {
 const FADE = ['opacity-100', 'opacity-90', 'opacity-80', 'opacity-70', 'opacity-60', 'opacity-50']
 
 /** A long answer scrolls in place (canvas 24c), so the buttons and the typing line stay put. */
+/**
+ * The conversation so far as one page (canvas 45c): down the middle like reading a book, the newest exchange large at
+ * the bottom, each older one smaller and fainter above it, fading out at the top; it opens scrolled to now.
+ */
+function EarlierPage({ earlier, ask, answer }: { earlier: Array<{ ask: string | null; answer: string | null }>; ask: string | null; answer: string | null }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => { const el = ref.current; if (el) el.scrollTop = el.scrollHeight }, [earlier.length])
+  return (
+    <section aria-label="This conversation" ref={ref} className="flex min-w-0 flex-1 touch-pan-y flex-col gap-[18px] overflow-y-auto pr-[200px] [mask-image:linear-gradient(to_bottom,transparent_0,black_18%)]">
+      <div className="min-h-[24px] flex-1" />
+      {earlier.map((x, i) => {
+        const back = earlier.length - i
+        return (
+          <div key={i} className={`flex flex-col gap-[4px] ${FADE[Math.min(back + 1, FADE.length - 1)]}`}>
+            {x.ask && <div className="font-display text-wall-body italic text-wall-night-ink-2">“{x.ask}”</div>}
+            {x.answer && <div className="text-wall-detail text-wall-night-ink-2">{x.answer}</div>}
+          </div>
+        )
+      })}
+      {(ask || answer) && <div className="h-px shrink-0 bg-wall-night-rule" />}
+      {ask && <div className="font-display text-wall-quote font-medium italic">“{ask}”</div>}
+      {answer && <div className="text-wall-answer">{answer}</div>}
+    </section>
+  )
+}
+
 function ScrollingAnswer({ text }: { text: string }) {
   const box = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
@@ -143,7 +169,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const thread = threadTurns(messages, 60, 1200)
   const [earlierOpen, setEarlierOpen] = useState(false)
   useEffect(() => setEarlierOpen(false), [thread.length])
-  const history = historyView(thread, earlierOpen)
+  // The spotlight (canvas 45b, Jake Oct 5): only the latest on the band; what came before behind "N earlier".
+  const earlier = exchanges(thread)
   // Plan it with Casa (P3.25; boards 12b–12d): the plan on screen, its Agree card, and what it saved.
   const planAction = pending?.toolAction?.tool === 'apply_plan' ? pending.toolAction : null
   const plan = planAction ? (planAction.args as unknown as PlanArgs) : null
@@ -531,7 +558,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // A list in the answer shows as tiles under a short lead (canvas 25a).
   const shape = useMemo(() => (answer?.content ? answerShape(answer.content) : null), [answer?.content])
   // An earlier line opened in full (each is cut to two lines; canvas 25a).
-  const [openLine, setOpenLine] = useState<number | null>(null)
   // The panel on a computer (canvas 25c): its conversation keeps the newest in view.
   const panelScroll = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -947,39 +973,24 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       <button type="button" aria-label="Report a problem" onClick={openReport} className="absolute right-[40px] top-[36px] flex h-[48px] w-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2">
         <Bug size={22} />
       </button>
-      {(thread.length > 0 || card || plan) && (
-        // On the right, read last (canvas 24b; Jake, 2026-10-01: "like reading a book"): what was said before, the
-        // newest at the bottom, older lines fading; "↑ N earlier" brings back the rest.
-        <div className="order-last flex w-[520px] shrink-0 flex-col gap-[14px]">
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">THIS CONVERSATION</div>
-          {(history.earlier > 0 || earlierOpen) && (
-            <button type="button" onClick={() => setEarlierOpen((o) => !o)} className="flex h-[48px] items-center gap-[8px] self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-wall-detail font-semibold text-wall-on-pigment">
-              {earlierOpen ? '↓ Back to the latest' : `↑ ${history.earlier} earlier`}
-            </button>
-          )}
-          <div className={`flex flex-col gap-[12px] text-wall-detail leading-[1.35] ${earlierOpen ? 'max-h-[440px] touch-pan-y overflow-y-auto border-0 border-l-2 border-solid border-wall-ink-2 pl-[16px]' : ''}`}>
-            {history.shown.map(({ turn: t, fade }, i) => (
-              <div key={i} onClick={() => setOpenLine((o) => (o === i ? null : i))} className={`${openLine === i ? '' : 'line-clamp-2'} ${FADE[Math.min(fade, FADE.length - 1)]} ${t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-on-pigment/12 px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}`}>
-                {t.images && t.images.length > 0 && (
-                  <span className="mb-[8px] flex gap-[8px]">
-                    {t.images.map((src, j) => <img key={j} src={src} alt="" className="h-[40px] w-[56px] rounded-[6px] object-cover" />)}
-                  </span>
-                )}
-                {t.text}
-              </div>
-            ))}
-          </div>
-          {(card || plan) && (
-            <>
-              {!(listenerV2 && !shownQuestion) && <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>}
-              {shownQuestion && <div className="font-display text-wall-quote font-medium italic">{listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`}</div>}
-              {answerText && <div className="text-wall-body text-wall-night-ink-2">{answerText}</div>}
-            </>
-          )}
+      {/* "N earlier" (45b): the conversation so far, as a page (45c). */}
+      {earlier.length > 0 && (
+        <button type="button" onClick={() => setEarlierOpen((o) => !o)} className="absolute right-[104px] top-[36px] z-10 flex h-[48px] items-center gap-[10px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-night-ink-2">
+          {earlierOpen ? 'Back to now' : <>{earlier.length} earlier <span className="text-wall-night-brass">›</span></>}
+        </button>
+      )}
+      {(card || plan) && !earlierOpen && (
+        // With a card in the middle, what was just said sits on the right.
+        <div className="order-last flex w-[520px] shrink-0 flex-col gap-[14px] pt-[64px]">
+          {!(listenerV2 && !shownQuestion) && <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>}
+          {shownQuestion && <div className="font-display text-wall-quote font-medium italic">{listenerV2 ? quote(shownQuestion) : `“${shownQuestion}”`}</div>}
+          {answerText && <div className="text-wall-body text-wall-night-ink-2">{answerText}</div>}
         </div>
       )}
 
-      {plan ? (
+      {earlierOpen ? (
+        <EarlierPage earlier={earlier} ask={shownQuestion} answer={answerText} />
+      ) : plan ? (
         <div className="flex min-w-0 flex-1 flex-col gap-[14px] pr-[64px]">
           <WallPlanDraft plan={plan} previous={previousPlan} working={working}
             onSetUp={openAgree}

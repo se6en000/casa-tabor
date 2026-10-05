@@ -415,8 +415,8 @@ const band = (page, scene) => page.goto(`/__wall-fixture?at=2026-09-25T13:40:00&
 test('wall assistant: a draft shows the thread, what just changed, where it lands, leave by and who is free to drive', { tag: '@smoke' }, async ({ page }) => {
   await band(page, 'add')
   const section = page.getByRole('region', { name: 'Assistant' })
-  await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
-  await expect(section.getByText('It’s at Palm Beach Pediatric Dentistry')).toBeVisible()
+  await expect(section.getByRole('button', { name: /^\d+ earlier/ })).toBeVisible() // 45b: what came before, behind a tap
+  await expect(section.getByText('YOU JUST SAID')).toBeVisible()
   await expect(section.getByText('“Actually make it 4”')).toBeVisible()
   await expect(section.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
   await expect(section.getByText('Dentist · Liv')).toBeVisible()
@@ -554,7 +554,7 @@ test('wall assistant: a plan — the draft beside the conversation, one card wit
   // What changed is the tan on its line, not a list on top (Jake, 2026-09-29).
   await expect(draft.getByText(/Just changed/)).toHaveCount(0)
   await expect(draft.getByText('A project inside Halloween costumes')).toBeVisible()
-  await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
+  await expect(section.getByRole('button', { name: /^\d+ earlier/ })).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('plan-draft.png')
 
@@ -798,7 +798,8 @@ test('wall assistant: over the evening face the band is a raised layer with a br
   await section.getByRole('button', { name: 'Stop listening' }).click()
   const bg = await section.evaluate((el) => getComputedStyle(el).backgroundColor)
   expect(bg).toBe('rgb(58, 49, 40)')
-  await expect(section.getByText('Is anyone driving to softball tomorrow?')).toBeVisible()
+  // What came before is behind "N earlier" (45b), not on the band.
+  await expect(section.getByRole('button', { name: /^\d+ earlier/ })).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-over-evening.png')
 })
@@ -2178,23 +2179,27 @@ test('wall: a place in fewer taps — your places first, then the map’s neares
   expect(inserted).toHaveLength(1)
 })
 
-// Canvas 24b–d (Jake, 2026-10-01, approved: "like reading a book"): the answer by the mic on the left, what was said
-// before on the right — the latest six, newest at the bottom, older ones fading — and "↑ 2 earlier" for the rest.
-test('wall assistant: a longer conversation — the answer on the left, what was said on the right, earlier turns behind a tap', async ({ page }) => {
+// Canvas 45b/45c (Jake, Oct 5: "lets go with your recommendation"): the spotlight — only the latest question and its
+// answer on the band, big; "N earlier" opens the conversation as one page, older exchanges smaller and fainter above.
+test('wall assistant: a longer conversation — only the latest on the band; "N earlier" opens the page; Back to now', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=long')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
   const band = wall.getByRole('region', { name: 'Assistant' })
   await expect(band.getByText('“nothing on todos or reminders?”')).toBeVisible()
-  await expect(band.getByRole('button', { name: '↑ 4 earlier' })).toBeVisible()
-  await expect(band.getByText('What’s on tomorrow?')).toHaveCount(0)
-  await expect(band.getByText('is anything pressing?')).toBeVisible()
+  await expect(band.getByText('is anything pressing?')).toHaveCount(0)
+  await expect(band.getByText('THIS CONVERSATION')).toHaveCount(0)
+  const more = band.getByRole('button', { name: /^\d+ earlier/ })
+  await expect(more).toBeVisible()
   await expect(wall).toHaveScreenshot('conversation-long.png')
-  await band.getByRole('button', { name: '↑ 4 earlier' }).click()
-  await expect(band.getByText('What’s on tomorrow?')).toBeVisible()
+  await more.click()
+  const page45 = band.getByRole('region', { name: 'This conversation' })
+  await expect(page45.getByText('“What’s on tomorrow?”')).toBeVisible()
+  await expect(page45.getByText('“is anything pressing?”')).toBeVisible()
+  await expect(page45.getByText('“nothing on todos or reminders?”')).toBeVisible()
   await expect(wall).toHaveScreenshot('conversation-earlier.png')
-  await band.getByRole('button', { name: '↓ Back to the latest' }).click()
-  await expect(band.getByText('What’s on tomorrow?')).toHaveCount(0)
+  await band.getByRole('button', { name: 'Back to now' }).click()
+  await expect(band.getByRole('region', { name: 'This conversation' })).toHaveCount(0)
 })
 
 // Canvas 25a and 25c (Jake, 2026-10-01: "this is the right direction"): a list in an answer is tiles under a short lead —

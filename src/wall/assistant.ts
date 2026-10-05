@@ -232,12 +232,20 @@ export function firstTime(key: string): boolean {
 }
 
 /** The conversation column (canvas 24c–d): the latest few turns, newest last, older ones fading; the rest behind "↑ N earlier". */
-export const HISTORY_SHOWN = 6
-export function historyView<T>(turns: T[], open: boolean): { shown: Array<{ turn: T; fade: number }>; earlier: number } {
-  if (open) return { shown: turns.map((turn) => ({ turn, fade: 0 })), earlier: 0 }
-  const shown = turns.slice(-HISTORY_SHOWN)
-  // 0 = full strength (the newest) … 5 = the faintest.
-  return { shown: shown.map((turn, i) => ({ turn, fade: shown.length - 1 - i })), earlier: turns.length - shown.length }
+
+/**
+ * The conversation before the latest question, as exchanges (canvas 45: the spotlight shows only the latest; "N earlier"
+ * opens the rest as a page, each older exchange smaller and fainter). A question with its answer; a lone answer (the
+ * band's own opener) stands as an answer alone.
+ */
+export function exchanges<T extends { role: 'user' | 'assistant'; text: string; images?: string[] }>(turns: T[]): Array<{ ask: string | null; answer: string | null; images?: string[] }> {
+  const out: Array<{ ask: string | null; answer: string | null; images?: string[] }> = []
+  for (const t of turns) {
+    if (t.role === 'user') out.push({ ask: t.text, answer: null, ...(t.images?.length ? { images: t.images } : {}) })
+    else if (out.length && out[out.length - 1].answer === null) out[out.length - 1].answer = t.text
+    else out.push({ ask: null, answer: t.text })
+  }
+  return out
 }
 
 /**
