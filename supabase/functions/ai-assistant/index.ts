@@ -173,7 +173,7 @@ import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-cre
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { FULL_AI_TOOLS, READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, mayHandBack, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1388,7 +1388,7 @@ Deno.serve(async (req) => {
     const memoryCalls: Array<{ tool: string; args: Record<string, unknown>; result: unknown }> = []
     let nudgedPromise = false
     // Only the request right after the promise is sent back must call a tool.
-    let mustActNext = false
+    let mustActNext: boolean | 'look' = false
     let wordsOnlyNext = false
     const roundLog: Array<Record<string, unknown>> = []
     // D says it couldn't answer itself when the old path would have no time left (the 9:12 AM 504).
@@ -1448,10 +1448,11 @@ Deno.serve(async (req) => {
         // Promised, not done (open bug 8f58eddc: "I'll set that up for you", "I'll remember that …" with no tool
         // called): once, back to the model — call the tool now, or say plainly that nothing was saved.
         const words = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
-        if (!nudgedPromise && !memoryCalls.length && promisesAction(words) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
+        const lookOnly = !promisesAction(words) && promisesLookup(words)
+        if (!nudgedPromise && !memoryCalls.length && (promisesAction(words) || lookOnly) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
           nudgedPromise = true
-          mustActNext = true
-          contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: 'You said you would do that, but you called no tool, so nothing has happened yet. Call the tool for it now.' }] })
+          mustActNext = lookOnly ? 'look' : true
+          contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: lookOnly ? 'You said you would look that up, but you called no tool, so they have no answer yet. Look it up now, then answer.' : 'You said you would do that, but you called no tool, so nothing has happened yet. Call the tool for it now.' }] })
           parts = []
           continue
         }

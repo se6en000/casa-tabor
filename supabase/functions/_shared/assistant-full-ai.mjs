@@ -725,11 +725,14 @@ export function mayHandBack(remainingMs) {
 const FINAL_ROUND_NOTE = 'Answer now, in words, with what you have found (no more lookups this time).'
 const EMPTY_RETRY_NOTE = 'This time, answer in words (your tools are off for this reply). If they asked for a change, don’t say you added, changed or saved anything — say what you would set up and that you’ll do it when they say so.'
 export function fullAiRequest({ system, contents, tools, retryAfterEmpty = false, finalRound = false, mustAct = false }) {
+  // mustAct 'look': a lookup promised and not done ("Let me check the weather for you."; Oct 5) — a lookup this time.
   const note = retryAfterEmpty ? EMPTY_RETRY_NOTE : finalRound ? FINAL_ROUND_NOTE : null
   // A promise sent back (promisesAction): this time it must call one of the tools that act — asked in words
   // alone, it once wrote the call out as text ("forget(id='…')").
   const acting = tools.map((t) => t.name).filter((n) => !(READ_TOOLS.has(n) && !MEMORY_TOOLS.has(n)) && n !== THINK_IT_THROUGH)
-  const calling = mustAct && !note && acting.length ? { mode: 'ANY', allowed_function_names: acting } : { mode: note ? 'NONE' : 'AUTO' }
+  const looking = tools.map((t) => t.name).filter((n) => LOOK_TOOLS.has(n))
+  const allowed = mustAct === 'look' ? looking : acting
+  const calling = mustAct && !note && allowed.length ? { mode: 'ANY', allowed_function_names: allowed } : { mode: note ? 'NONE' : 'AUTO' }
   return {
     system_instruction: { parts: [{ text: note ? `${system}\n\n${note}` : system }] },
     contents,
@@ -810,6 +813,16 @@ const PROMISE = [
   /\bcard\b[^.]*\b(?:to confirm|for you to confirm|ready)\b/i,
 ]
 const ASKS_FIRST = /\?\s*$|\b(?:need|first)\b[^.]*\?/i
+
+// A lookup promised and not done (Oct 5, live: "Let me check the weather for you." and "I can look up the weather for
+// Wellington, Florida, this afternoon." — and no lookup, so no weather). Sent back once: look it up now, then answer.
+const LOOK_PROMISE = /\b(?:let me|i['’]ll|i will|i can|i['’]m going to)\s+(?:quickly\s+|just\s+)?(?:check|look(?: (?:it|that|this))? up|look into|find out|pull up|search(?: for)?)\b/i
+const LOOK_TOOLS = new Set(['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta', 'find_events', 'get_coming_up', 'search_family_notes', 'get_recipe'])
+export function promisesLookup(said) {
+  const t = String(said ?? '').trim()
+  if (!t || ASKS_FIRST.test(t) || /\b(?:can['’]t|cannot|unable)\b/i.test(t)) return false
+  return LOOK_PROMISE.test(t)
+}
 export function promisesAction(said) {
   const t = String(said ?? '').trim()
   if (!t) return false

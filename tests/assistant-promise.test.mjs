@@ -30,7 +30,7 @@ test('words that promise an action, and words that don’t', () => {
 
 test('the loop sends a promise with no tool back once', () => {
   const server = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(server, /if \(!nudgedPromise && !memoryCalls\.length && promisesAction\(/)
+  assert.match(server, /if \(!nudgedPromise && !memoryCalls\.length && \(promisesAction\(words\) \|\| lookOnly\)/)
   assert.match(server, /nothing has happened yet/)
 })
 
@@ -49,4 +49,21 @@ test('an empty first answer is retried for words once — the tools stay on for 
   assert.match(server, /retryAfterEmpty: wordsOnlyNext,/)
   assert.doesNotMatch(server, /retryAfterEmpty: retriedEmpty/)
   assert.match(server, /wordsOnlyNext = false/)
+})
+
+// Oct 5, live dry runs: "what's the weather at Olympia Park in Wellington tomorrow?" → "Let me check the weather for
+// you." and nothing more; "…in Wellington this afternoon?" → "I can look up the weather for Wellington, Florida, this
+// afternoon." A lookup promised and not done is sent back once, and that time it must look something up.
+import { promisesLookup, fullAiRequest as request, fullAiTools as toolsFor } from '../supabase/functions/_shared/assistant-full-ai.mjs'
+test('a lookup promised and not done', () => {
+  for (const said of ['Let me check the weather for you.', 'I can look up the weather for Wellington, Florida, this afternoon.', "I'll find out when the game starts.", 'Let me look that up.'])
+    assert.equal(promisesLookup(said), true, said)
+  for (const said of ['It will be 84° and sunny in Wellington.', 'Should I check the weather for the game?', "I can't look that up right now.", 'Liv has practice at 5.'])
+    assert.equal(promisesLookup(said), false, said)
+})
+test('sent back for a lookup, the model may only look things up', () => {
+  const req = request({ system: 's', contents: [], tools: toolsFor({ planning: false }), mustAct: 'look' })
+  assert.equal(req.tool_config.function_calling_config.mode, 'ANY')
+  assert.ok(req.tool_config.function_calling_config.allowed_function_names.includes('get_weather_forecast'))
+  assert.ok(!req.tool_config.function_calling_config.allowed_function_names.includes('create_event'))
 })

@@ -21,6 +21,13 @@ export interface LookupDeps {
   callIndex: number
 }
 
+/** What to search for a weather place: the name as said; a bare name (no town or state) is looked for near home. */
+export function weatherPlaceQuery(location: string, homeCity: string): string {
+  const name = location.trim()
+  if (!homeCity || /,/.test(name) || /\b(FL|Florida|[A-Z]{2})\b/.test(name)) return name
+  return `${name} near ${homeCity}`
+}
+
 export const LOOKUP_TOOL_NAMES = ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta']
 
 export function sanitizeTravelLocation(value: string): string {
@@ -125,16 +132,37 @@ export async function runLookup(name: string, args: Record<string, unknown>, dep
     }
 
     try {
-      const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
-      geoUrl.searchParams.set('name', location)
-      geoUrl.searchParams.set('count', '1')
-      geoUrl.searchParams.set('language', 'en')
-      geoUrl.searchParams.set('format', 'json')
-      const geoRes = await fetch(geoUrl.toString())
-      const geoData = await geoRes.json()
-      const place = geoData?.results?.[0]
-      if (!place || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
-        return { location, found: false, error: `Could not resolve weather location: ${location}` }
+      // Where to look (Jake, Oct 5; the week's report: "Olympia Park, Wellington, Florida" found nothing, and a bare
+      // "Wellington" was New Zealand). First the place itself, the way the app finds places (Google, near home); then a
+      // US town by name. The answer names where it looked, so a wrong place shows.
+      let place: { latitude: number; longitude: number; label: string } | null = null
+      if (mapsKey) {
+        try {
+          const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'X-Goog-Api-Key': mapsKey, 'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location' },
+            body: JSON.stringify({ textQuery: weatherPlaceQuery(location, String(context.homeCity ?? '')), maxResultCount: 1, regionCode: 'US' }),
+          }, { correlationId: cid })
+          const hit = (await res.json())?.places?.[0]
+          if (hit && Number.isFinite(hit.location?.latitude) && Number.isFinite(hit.location?.longitude)) {
+            place = { latitude: hit.location.latitude, longitude: hit.location.longitude, label: [hit.displayName?.text, hit.formattedAddress].filter(Boolean).join(', ') }
+          }
+        } catch { /* the town search below */ }
+      }
+      if (!place) {
+        const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+        geoUrl.searchParams.set('name', location.split(',')[0].trim())
+        geoUrl.searchParams.set('count', '1')
+        geoUrl.searchParams.set('language', 'en')
+        geoUrl.searchParams.set('format', 'json')
+        geoUrl.searchParams.set('countryCode', 'US')
+        const town = (await (await fetch(geoUrl.toString())).json())?.results?.[0]
+        if (town && Number.isFinite(town.latitude) && Number.isFinite(town.longitude)) {
+          place = { latitude: town.latitude, longitude: town.longitude, label: [town.name, town.admin1].filter(Boolean).join(', ') }
+        }
+      }
+      if (!place) {
+        return { location, found: false, error: `Could not find "${location}" — ask for the town it's in.` }
       }
 
       const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast')
@@ -186,7 +214,7 @@ export async function runLookup(name: string, args: Record<string, unknown>, dep
 
       const payload = {
         found: true,
-        location: `${place.name}${place.admin1 ? `, ${place.admin1}` : ''}${place.country_code ? ` (${place.country_code})` : ''}`,
+        location: place.label,
         latitude: place.latitude,
         longitude: place.longitude,
         timezone: fcData?.timezone ?? null,
