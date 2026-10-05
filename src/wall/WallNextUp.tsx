@@ -44,7 +44,7 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, small }: Omit<N
         {item.meridiem && <span className="ml-[4px] text-wall-label font-semibold">{item.meridiem}</span>}
       </span>
       {member
-        ? <span aria-hidden="true" className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
+        ? <span aria-hidden="true" className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none text-wall-on-pigment ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
         : <span aria-hidden="true" className="w-[28px] shrink-0" />}
       <span className={`min-w-0 flex-1 truncate text-left text-wall-body ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>
       {item.tag && !ticked && <span className={`shrink-0 whitespace-nowrap text-wall-detail ${TAG[state]}`}>{item.tag}</span>}
