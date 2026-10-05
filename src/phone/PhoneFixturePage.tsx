@@ -221,7 +221,7 @@ function PhoneFixturePageInner() {
               aroundEvents={shown}
               assistant={({ onClose, onOpenEvent, onOpenDay, onOpenGroceries, opening, onForm, onScan, glance }) => askTurn ? (
                 // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
-                <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
+                <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, adopt: () => {}, signOut: () => {} }}>
                   <PhoneAssistant
                     events={evs as unknown as EventWithDetails[]}
                     family={members as unknown as FamilyMember[]}

@@ -218,16 +218,26 @@ test('conversation listing includes the latest conversation summary for history 
 })
 
 test('the launch gate keeps household-admin PIN enrollment reachable before a member profile exists', () => {
-  const source = readFileSync(
-    new URL('../src/components/shared/PinGate.tsx', import.meta.url),
-    'utf8',
-  )
+  // Restyled as Tabor House's sign-in (canvas row 40): Family PINs from the picker, the household PIN, then a member's.
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
+  const gate = read('../src/components/shared/PinGate.tsx')
+  const signIn = read('../src/signin/SignIn.tsx')
+  const familyPins = read('../src/signin/FamilyPins.tsx')
+  const parts = read('../src/signin/SignInParts.tsx')
 
-  assert.match(source, /Manage family PINs/)
-  assert.match(source, /unlockAdmin/)
-  assert.match(source, /set_member_pin/)
-  assert.match(source, /function PinKeypad/)
-  assert.match(source, /aria-label="Delete PIN digit"/)
+  assert.match(gate, /<FamilyPins onDone=/)
+  assert.match(signIn, /Family PINs/)
+  assert.match(familyPins, /unlockAdmin/)
+  assert.match(familyPins, /set_member_pin/)
+  assert.match(familyPins, /list_member_pins/)
+  assert.match(parts, /export function PinKeypad/)
+  assert.match(parts, /aria-label="Delete PIN digit"/)
+})
+
+test('changing a PIN that exists updates that credential (its id is read), and the admin can list who has one', () => {
+  const gateway = readFileSync(new URL('../supabase/functions/assistant-history/index.ts', import.meta.url), 'utf8')
+  assert.match(gateway, /\.select\('id,credential_version'\)\s*\.eq\('credential_kind', 'family_member'\)/)
+  assert.match(gateway, /action === 'list_member_pins'[\s\S]{0,200}household_admin/)
 })
 
 test('family settings keeps PIN enrollment inside each existing member’s collapsible card', () => {

@@ -10,6 +10,8 @@ export type ProfileSession = {
 export type ProfileSessionContextValue = {
   profile: ProfileSession | null
   unlock: (member: FamilyMember, pin: string) => Promise<void>
+  /** Sign in with a session already checked (the sign-in screen checks the PIN, plays its way in, then adopts it). */
+  adopt: (session: ProfileSession) => void
   signOut: () => void
 }
 

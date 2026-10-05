@@ -1416,3 +1416,20 @@ html.phone-app .phone-behind-sheet {
 @keyframes phone-tick-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
 @keyframes phone-roll-in { from { opacity: 0; transform: translateY(55%); } to { opacity: 1; transform: none; } }
 @keyframes phone-breathe { 0%, 100% { box-shadow: 0 0 0 4px rgb(168 132 80 / 0.25); } 50% { box-shadow: 0 0 0 8px rgb(168 132 80 / 0.08); } }
+
+/* Signing in (canvas row 40): a wrong PIN shakes once; the way in draws a brass ring round your face. */
+@keyframes signin-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(9px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes signin-draw {
+  from { stroke-dashoffset: 352; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes signin-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}

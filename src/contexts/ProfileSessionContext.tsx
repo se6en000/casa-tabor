@@ -32,6 +32,15 @@ export function ProfileSessionProvider({ children }: { children: ReactNode }) {
     setProfile(nextProfile)
   }, [])
 
+  const adopt = useCallback((session: ProfileSession) => {
+    try {
+      localStorage.setItem(PROFILE_SESSION_STORAGE_KEY, JSON.stringify(session))
+    } catch {
+      // Signed in for this run of the app even when browser storage is unavailable.
+    }
+    setProfile(session)
+  }, [])
+
   const signOut = useCallback(() => {
     try {
       localStorage.removeItem(PROFILE_SESSION_STORAGE_KEY)
@@ -42,7 +51,7 @@ export function ProfileSessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ProfileSessionContext.Provider value={{ profile, unlock, signOut }}>
+    <ProfileSessionContext.Provider value={{ profile, unlock, adopt, signOut }}>
       {children}
     </ProfileSessionContext.Provider>
   )

@@ -502,7 +502,7 @@ Deno.serve(async (request) => {
       const credential = await pinCredential(body.pin)
       const { data: existing, error: existingError } = await sb
         .from('ai_history_pin_credentials')
-        .select('credential_version')
+        .select('id,credential_version')
         .eq('credential_kind', 'family_member')
         .eq('member_id', memberId)
         .maybeSingle()
@@ -520,6 +520,18 @@ Deno.serve(async (request) => {
         : await sb.from('ai_history_pin_credentials').insert(nextCredential)
       if (saveError) throw saveError
       return json(200, { status: 'member_pin_configured' })
+    }
+
+    // Family PINs (canvas 40d): who has a PIN, for the household admin's list. Ids only, never the PINs.
+    if (action === 'list_member_pins') {
+      const session = await assertHistorySession(request, sb)
+      if (session.role !== 'household_admin') return json(403, { error: 'Household admin access is required.' })
+      const { data, error } = await sb
+        .from('ai_history_pin_credentials')
+        .select('member_id')
+        .eq('credential_kind', 'family_member')
+      if (error) throw error
+      return json(200, { member_ids: (data ?? []).map((row: { member_id: string | null }) => row.member_id).filter(Boolean) })
     }
 
     if (action === 'list_conversations') {

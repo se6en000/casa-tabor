@@ -202,7 +202,7 @@ export default function WallFixturePage() {
   const [emailOpen, setEmailOpen] = useState(false)
   const review = emailOn && emailOpen ? <WallEmailReview data={emailData} act={fixtureEmailAct} onClose={() => setEmailOpen(false)} today="2026-09-25" computer={new URLSearchParams(window.location.search).get('keyboard') === 'device'} /> : null
   const band = useTurn && bandOpen ? (
-    <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
+    <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, adopt: () => {}, signOut: () => {} }}>
       <WallAssistantBand
         listenNonce={0}
         events={evs as unknown as EventWithDetails[]}
