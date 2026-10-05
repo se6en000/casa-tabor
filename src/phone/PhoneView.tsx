@@ -465,39 +465,58 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     // A chore or to-do whose time has passed, not ticked, is late (rust), not faded: it still needs doing.
     const late = familyToday && Boolean(tickable) && !ticked && i.kind !== 'event' && i.at.getTime() < now.getTime()
     const past = familyToday && isPast(i, now) && !late
-    return (
-      // A card each (34a/34b, Jake: "can these cards look like 33c?"): the next one lifted in brass, what's past faded.
-      <div key={i.id} className={`flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-on-pigment'} ${past ? 'opacity-45' : ''}`}>
-        <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
-          <span className={`flex w-[48px] shrink-0 flex-col pt-[1px] leading-tight ${next ? 'text-wall-brass-ink' : late ? 'text-wall-rust' : ''}`}>
-            <span className="text-phone-body font-bold">{i.time === 'All day' ? 'All' : i.time}</span>
-            <span className="text-phone-label font-semibold text-wall-ink-2">{i.time === 'All day' ? 'day' : i.at.getHours() < 12 ? 'AM' : 'PM'}</span>
+    const timeCol = (
+      <span className={`flex w-[48px] shrink-0 flex-col pt-[1px] leading-tight ${next ? 'text-wall-brass-ink' : late ? 'text-wall-rust' : ''}`}>
+        <span className="text-phone-body font-bold">{i.time === 'All day' ? 'All' : i.time}</span>
+        <span className="text-phone-label font-semibold text-wall-ink-2">{i.time === 'All day' ? 'day' : i.at.getHours() < 12 ? 'AM' : 'PM'}</span>
+      </span>
+    )
+    const words = (sub: string) => (
+      <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+        <span className={`text-phone-body font-semibold ${ticked ? 'text-wall-ink-2 line-through' : ''}`}>{i.title}</span>
+        {(sub || next || late) && <span className={`text-phone-detail ${next ? 'font-semibold text-wall-brass-ink' : late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{next ? <><span key={untilWords(i.at, now)} className="phone-roll">{untilWords(i.at, now)}</span>{sub ? ` · ${sub}` : ''}</> : late ? `Late · ${sub}` : sub}</span>}
+        {keptFromOf(keepFrom, i.id).length > 0 && (
+          <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
+            <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
           </span>
-          <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${past ? 'bg-wall-stone' : pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
-          <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-            <span className={`text-phone-body font-semibold ${ticked ? 'text-wall-ink-2 line-through' : ''}`}>{i.title}</span>
-            {(i.sub || next || late) && <span className={`text-phone-detail ${next ? 'font-semibold text-wall-brass-ink' : late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{next ? <><span key={untilWords(i.at, now)} className="phone-roll">{untilWords(i.at, now)}</span>{i.sub ? ` · ${i.sub}` : ''}</> : late ? `Late · ${i.sub}` : i.sub}</span>}
-            {keptFromOf(keepFrom, i.id).length > 0 && (
-              <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
-                <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
-              </span>
-            )}
-          </span>
-        </button>
-        {tickable && (
+        )}
+      </span>
+    )
+    const card = `flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-on-pigment'} ${past ? 'opacity-45' : ''} ${ticked ? 'opacity-55 transition-opacity duration-500' : ''}`
+    if (tickable) {
+      // A to-do or chore (canvas 46a, Jake Oct 5: "the check off box right next to the initial avatar is confusing … 46a
+      // is the most user friendly and obvious"): a brass circle where an event has its colour bar — the tick, on the left
+      // like iPhone Reminders; who it's for in words, no faces (faces are for events).
+      const who = i.people.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean).join(' & ')
+      return (
+        <div key={i.id} className={card}>
+          {timeCol}
           <button
             type="button"
             role="checkbox"
             aria-checked={ticked}
             aria-label={`Done: ${i.title}`}
             onClick={() => { haptic(); if (i.kind === 'chore' && choreDone.has(tickKey)) void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false); else ticks.toggle(tickKey) }}
-            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
+            className="-my-[8px] -ml-[8px] flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
           >
-            <span aria-hidden="true" className={`flex h-[28px] w-[28px] items-center justify-center rounded-full border-[1.75px] border-solid ${ticked ? 'phone-tick-pop border-wall-ink-2 bg-wall-ink-2 text-wall-on-pigment' : late ? 'border-wall-rust' : 'border-wall-ink-2'}`}>
-              {ticked && <Check size={16} strokeWidth={3} />}
+            <span aria-hidden="true" className={`flex h-[26px] w-[26px] items-center justify-center rounded-full border-[2px] border-solid ${ticked ? 'phone-tick-pop border-wall-brass bg-wall-brass text-wall-on-pigment' : late ? 'border-wall-rust' : 'border-wall-brass'}`}>
+              {ticked && <Check size={15} strokeWidth={3} />}
             </span>
           </button>
-        )}
+          <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="-ml-[8px] flex min-w-0 flex-1 items-stretch border-0 bg-transparent p-0 text-left text-wall-ink">
+            {words([i.sub, who].filter(Boolean).join(' · '))}
+          </button>
+        </div>
+      )
+    }
+    return (
+      // A card each (34a/34b, Jake: "can these cards look like 33c?"): the next one lifted in brass, what's past faded.
+      <div key={i.id} className={card}>
+        <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
+          {timeCol}
+          <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${past ? 'bg-wall-stone' : pigmentStyleFor(pigments.get(i.people[0] ?? '') ?? 0).solid}`} />
+          {words(i.sub)}
+        </button>
         <span className="flex shrink-0 gap-[2px] self-center">
           {i.people.map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" />)}
         </span>
