@@ -13,7 +13,7 @@ const MOMENTS = [
 ]
 
 for (const moment of MOMENTS) {
-  test(`wall: ${moment.name}`, async ({ page }) => {
+  test(`wall: ${moment.name}`, { tag: '@smoke' }, async ({ page }) => {
     await page.goto(`/__wall-fixture?at=${moment.at}`)
     await expect(page.getByTestId('wall-fixture')).toBeVisible()
     await page.evaluate(() => document.fonts.ready)
@@ -411,7 +411,7 @@ test('wall: surprise-safe — the wall shows "Kelly\'s Birthday" and nothing mor
 // The assistant's cards and thread (design section 06), from canned conversations (`?band=`).
 const band = (page, scene) => page.goto(`/__wall-fixture?at=2026-09-25T13:40:00&band=${scene}`)
 
-test('wall assistant: a draft shows the thread, what just changed, where it lands, leave by and who is free to drive', async ({ page }) => {
+test('wall assistant: a draft shows the thread, what just changed, where it lands, leave by and who is free to drive', { tag: '@smoke' }, async ({ page }) => {
   await band(page, 'add')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
@@ -1682,7 +1682,7 @@ test('wall: the Prep rail — every section starts on one of four fixed boxes, F
   }
 })
 
-test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', async ({ page }) => {
+test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', { tag: '@smoke' }, async ({ page }) => {
   const stripTop = async (url) => {
     await page.goto(url)
     await page.evaluate(() => document.fonts.ready)

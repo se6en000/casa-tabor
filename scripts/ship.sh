@@ -45,6 +45,15 @@ if command -v fuser >/dev/null 2>&1 && fuser 4175/tcp >/dev/null 2>&1; then
   printf '  \033[33m! stopped a leftover test server on port 4175\033[0m\n'
 fi
 
+# Last night's full screen suite (scripts/nightly-visual.sh), so a screen the quick set doesn't cover isn't missed.
+if [ -f "$HOME/.casa-nightly/last.txt" ]; then
+  if grep -q FAILED "$HOME/.casa-nightly/last.txt"; then
+    printf '\n\033[1;33m! Last night’s full screen check:\033[0m\n'; sed 's/^/    /' "$HOME/.casa-nightly/last.txt" | head -9
+  else
+    printf '\n  Last night’s full screen check: %s\n' "$(head -1 "$HOME/.casa-nightly/last.txt")"
+  fi
+fi
+
 step "1-2/7 Tests + gates/build, side by side (tokens/style/certify/types/vite via vercel build)"
 # Tests don't depend on the build, so they run in the background while the
 # build runs; either failing stops the ship before anything is committed.
@@ -173,13 +182,16 @@ LIVE_AT=$(( $(date +%s) - START ))
 printf '\n  \033[1;32m● live\033[0m %s in %ss\n' "$SHA" "$LIVE_AT"
 
 if [ "$WALL_RUN" = "1" ]; then
-  step "7/7 Wall + phone screenshots (after the deploy)"
-  if npm run test:visual:wall >"$WALL_LOG" 2>&1; then
+  # The quick set (14 key screens, ~1 min, tagged @smoke); the full suite (~13 min) runs every night on the Pi
+  # (scripts/nightly-visual.sh) and its result is shown at the start of the next ship (Jake, Oct 5: "make shipping
+  # much much faster").
+  step "7/7 Key screens (after the deploy)"
+  if npm run test:visual:quick >"$WALL_LOG" 2>&1; then
     ok "screenshots unchanged"
   else
     printf '  \033[1;31m✗ screenshots changed — %s is LIVE\033[0m\n' "$SHA"
     grep -E '^\s+[0-9]+\) |Error:' "$WALL_LOG" | head -20
-    echo "  Look at test-results/. Intended: npm run test:visual:wall:update, look at the PNGs, ship them."
+    echo "  Look at test-results/. Intended: npm run test:visual:quick:update, look at the PNGs, ship them."
     PREV_DEPLOY=$(cat "$PREV_DEPLOY_FILE" 2>/dev/null || true)
     echo "  Not intended: fix and ship, or roll back with: npx vercel rollback ${PREV_DEPLOY:-<previous deployment>} --scope casa-projects --yes"
     echo "  Full log: $WALL_LOG"

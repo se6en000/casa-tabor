@@ -17,7 +17,7 @@ const open = async (page, at = '2026-09-25T07:12:00', viewer = 'jake-id') => {
 // Your own day: the Me chip on Today (canvas 32b; Today opens on Everyone).
 const me = (phone) => phone.getByRole('button', { name: 'Me', exact: true }).click()
 
-test('phone: Me — the next move first (leave by), what others have covered, your day', async ({ page }) => {
+test('phone: Me — the next move first (leave by), what others have covered, your day', { tag: '@smoke' }, async ({ page }) => {
   const phone = await open(page)
   await me(phone)
   const next = phone.getByRole('region', { name: 'Your next move' })
@@ -105,7 +105,7 @@ test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evenin
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
 })
 
-test('phone: an event — details, the trip, get & pack; Edit a time and save; Delete after a yes', async ({ page }) => {
+test('phone: an event — details, the trip, get & pack; Edit a time and save; Delete after a yes', { tag: '@smoke' }, async ({ page }) => {
   const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
   await phone.getByRole('button', { name: 'Today' }).click()
   await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
@@ -285,7 +285,7 @@ const askScene = async (page, scene) => {
   return { phone, ask: phone.getByRole('region', { name: 'Ask', exact: true }) }
 }
 
-test('phone: Ask Casa — the one draft, revised in place, says what just changed, where it lands and who can drive', async ({ page }) => {
+test('phone: Ask Casa — the one draft, revised in place, says what just changed, where it lands and who can drive', { tag: '@smoke' }, async ({ page }) => {
   const { phone, ask } = await askScene(page, 'add')
   const card = ask.getByLabel('Draft')
   await expect(card).toHaveCount(1)
@@ -579,7 +579,7 @@ const openTodoPhone = async (page) => {
   return phone
 }
 
-test('phone: To do — cards: tick to finish, tap to edit, Not now; no projects (Jake’s phone only)', async ({ page }) => {
+test('phone: To do — cards: tick to finish, tap to edit, Not now; no projects (Jake’s phone only)', { tag: '@smoke' }, async ({ page }) => {
   const phone = await openTodoPhone(page)
   // Projects stay on the wall (Jake, Oct 2: "project stuff not visible").
   await expect(phone.getByText(/PROJECTS ·/)).toHaveCount(0)
@@ -690,7 +690,7 @@ test('phone: a sheet dragged down from its top closes; a short drag springs back
 // Canvas 30a (Jake, Oct 2: "an indicator of where we are time wise in the day … What's past should be obvious"):
 // today's Family list splits at NOW; what's started sits above the line (two in view, the rest folded), finished
 // ones faded; the next is lifted with how long until it; chores and to-dos tick.
-test('phone: Today — the NOW line, what’s past folded and faded, the next lifted; a chore ticks on its person', async ({ page }) => {
+test('phone: Today — the NOW line, what’s past folded and faded, the next lifted; a chore ticks on its person', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1')
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
@@ -800,7 +800,7 @@ test('phone: scrolling down tucks the title into a small frosted bar', async ({ 
   await expect(bar).toContainText('To do')
 })
 
-test('phone: Groceries — by aisle with the amount by the name; ticks wait, then leave together; add a few at once', async ({ page }) => {
+test('phone: Groceries — by aisle with the amount by the name; ticks wait, then leave together; add a few at once', { tag: '@smoke' }, async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:45:00')
   await phone.getByRole('button', { name: 'Groceries' }).click()
   const list = phone.getByRole('region', { name: 'Groceries' })
@@ -919,7 +919,7 @@ test('phone: Scan it — several photos join a tray and are read together in one
 
 // Canvas 34e/34f (Jake, Oct 2: "if you click and hold the AI button it starts to listen … or maybe it answers right there
 // as an overlay?"): held, Casa listens and shows the words; let go and the answer rises over the screen you're on.
-test('phone: hold Casa to talk — the answer over the screen; Keep talking opens the chat; slide left cancels', async ({ page }) => {
+test('phone: hold Casa to talk — the answer over the screen; Keep talking opens the chat; slide left cancels', { tag: '@smoke' }, async ({ page }) => {
   const phone = await open(page, '2026-09-25T10:45:00', 'jake-id')
   const casa = phone.getByRole('button', { name: 'Ask', exact: true })
   const box = await casa.boundingBox()
@@ -1149,7 +1149,7 @@ test('phone: Casa — "show me the grocery list" opens Groceries', async ({ page
 })
 
 // The Ask button in the T, breathing; "Hold me to ask" the first few openings (canvas 41a/41b).
-test('phone: the Ask button says T / ASK; "Hold me to ask" shows until Got it', async ({ page }) => {
+test('phone: the Ask button says T / ASK; "Hold me to ask" shows until Got it', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T07:12:00&viewer=jake-id&askTip=1')
   const phone = page.getByTestId('phone-fixture')
   await expect(phone).toBeVisible()
