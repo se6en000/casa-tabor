@@ -811,6 +811,19 @@ test.describe('with a finger', () => {
   })
 })
 
+// Jake's recording (Oct 5): a tap on a to-do opened the event sheet ("Who's going", "Get & pack"). A to-do opens as a
+// to-do: its words, its date, Done, Delete — the To do tab's sheet.
+test('phone: Today — a tap on a to-do opens the to-do sheet, not an event’s', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1')
+  const phone = page.getByTestId('phone-fixture')
+  await phone.getByRole('button', { name: /^Today/ }).first().click()
+  await phone.getByText('Pick up Photobook for Liv').click()
+  const sheet = phone.getByRole('region', { name: 'Pick up Photobook for Liv — edit' })
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByRole('textbox', { name: 'The to-do' })).toHaveValue('Pick up Photobook for Liv')
+  await expect(phone.getByText('WHO’S GOING')).toHaveCount(0)
+})
+
 test('phone: the swipe tip — Got it puts it away for good', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1&swipeTip=1')
   const phone = page.getByTestId('phone-fixture')

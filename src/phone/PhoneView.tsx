@@ -465,6 +465,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const tipAt = swipeTipOn && familyToday
     ? [...timeline.allDay, ...timeline.before.slice(-2), ...timeline.after].find((i) => ((i.kind === 'chore' && tickChore) || (i.kind === 'todo' && todos)) && !ticks.pending.has(i.kind === 'chore' ? `${i.id}:${phoneDay(now)}` : `todo:${i.id}`) && !choreDone.has(`${i.id}:${phoneDay(now)}`))?.id
     : undefined
+  // A to-do on Today opens as a to-do (the To do tab's sheet), not as an event (Jake's recording, Oct 5): the list's
+  // own item when it's there (its ids are the calendar's), else one made from the card.
+  const todoOf = (i: FamilyItem): TodoItem => [...(todos?.list.nextUp ?? []), ...Object.values(todos?.list.groups ?? {}).flat()].find((t) => t.id === i.id)
+    ?? { id: i.id, title: i.title, shape: 'quick', minutes: null, costCents: null, nextStep: null, needs: [], due: phoneDay(i.at), dueAt: i.time === 'All day' ? null : i.at.toISOString(), overdue: false, snoozedUntil: null, snoozeCount: 0, projectId: null, suggestion: null }
   const familyRow = (i: FamilyItem) => {
     const next = familyToday && i.id === timeline.nextId
     const tickKey = i.kind === 'chore' ? `${i.id}:${phoneDay(shownDay?.date ?? now)}` : `todo:${i.id}`
@@ -510,7 +514,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         <SwipeRow label={`${i.title} — swipe right when it's done`} title={i.title} ticked={ticked} onDone={done} hint={i.id === tipAt} onSwiped={tipAt ? dismissSwipeTip : undefined}
           onSnooze={i.kind === 'todo' && todos ? (days) => void todos.act({ action: 'snooze', id: i.id, days }) : undefined}>
           <div className={card}>
-            <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
+            <button type="button" disabled={!(i.kind === 'todo' && todos) && !openable(i.id)} onClick={() => (i.kind === 'todo' && todos ? setEditingTodo(todoOf(i)) : setOpenId(i.id))} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
               {timeCol}
               <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${ticked ? 'bg-wall-brass' : late ? 'bg-[repeating-linear-gradient(180deg,var(--color-wall-rust)_0_6px,transparent_6px_10px)]' : 'bg-[repeating-linear-gradient(180deg,var(--color-wall-brass)_0_6px,transparent_6px_10px)]'}`} />
               {words([i.sub, who].filter(Boolean).join(' · '))}
