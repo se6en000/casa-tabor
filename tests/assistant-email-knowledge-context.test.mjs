@@ -14,24 +14,6 @@ const briefing = readFileSync(new URL('../supabase/functions/generate-briefing/i
 
 const assistantSynthesis = readFileSync(new URL('../supabase/functions/_shared/assistant-read-tool-synthesis.mjs', import.meta.url), 'utf8')
 
-test('assistant retrieves ranked family evidence and returns its source contract', () => {
-  assert.match(assistant, /retrieveFamilyContext/)
-  assert.match(assistant, /buildAssistantContextPacket/)
-  assert.match(assistant, /trimConversationToTokenBudget/)
-  assert.match(assistant, /FAMILY EVIDENCE PACKET/)
-  assert.match(assistant, /evidence:\s*familyRetrieval\.evidence/)
-  assert.match(assistant, /sources_considered:\s*familyRetrieval\.sources_considered/)
-  assert.match(assistant, /partial_sources:\s*familyRetrieval\.partial_sources/)
-  assert.match(assistant, /assistantContextPacket\.evidence/)
-  assert.doesNotMatch(assistant, /assistantContextPacket\.items/)
-  assert.doesNotMatch(assistant, /assistantContextPacket\??\.budget/)
-  assert.doesNotMatch(assistant, /formatFamilyKnowledgeContext\(emailKnowledgeResult\.data \?\? \[\]\)/)
-  assert.match(assistant, /Do not invent undocumented family requirements or generic advice/)
-  assert.match(assistant, /could not search your family data/i)
-  assert.match(assistant, /needsUnifiedFamilyRetrieval/)
-  assert.match(assistantSynthesis, /name === 'search_events'[\s\S]*needsUnifiedFamilyRetrieval/)
-})
-
 test('family-data questions cannot be finalized by calendar-only short-circuits', () => {
   assert.doesNotMatch(assistantHook, /tryLocalScheduleAnswer/)
   assert.doesNotMatch(assistant, /server_agent_read_adopted/)

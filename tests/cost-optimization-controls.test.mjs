@@ -146,19 +146,6 @@ test('low-risk background functions use the shared model resolver but ai-assista
   assert.match(aiAssistant, /const DEFAULT_GEMINI_MODEL = PRIMARY_GEMINI_MODEL/)
 })
 
-test('routine assistant profiles keep thinking off (tested 2026-09-26: thinking was ~3x slower, no more right) and use bounded output', () => {
-  assert.match(aiAssistant, /kind: 'budget', value: drawerThinkingBudget \?\? \(intentRouting\.profile === 'full' \? 512 : 0\)/)
-  // Only a dry run (a side-by-side test) may set a budget or skip the rules; the family's turns never can.
-  assert.match(aiAssistant, /const drawerThinkingBudget = dryRun && typeof thinkingOverrideRaw === 'number'/)
-  assert.match(aiAssistant, /\? thinkingOverrideRaw\n\s+: null\n/)
-  assert.match(aiAssistant, /const turnRulesOff = dryRun && /)
-  assert.match(aiAssistant, /const fullAi = dryRun && /)
-  // The hybrid's layer 2 is switched for real turns by one constant; only a dry run can override it.
-  assert.match(aiAssistant, /const hybridLayer2 = dryRun && typeof hybridRequested === 'boolean' \? hybridRequested : HYBRID_LAYER2_LIVE/)
-  assert.match(aiAssistant, /intentRouting\.profile === 'general'\s+\? 1024\s+: 768/)
-  assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
-})
-
 test('home-weather caches the household address geocode instead of re-billing Places on every fetch', () => {
   // Confirmed root cause of a live cost incident: 5,863 Places Text Search
   // calls in a single day (2026-09-11, via maps_provider_calls) because

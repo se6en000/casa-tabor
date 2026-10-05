@@ -68,25 +68,6 @@ test('calendar synthesis completeness rejects an answer that omits an authoritat
   )
 })
 
-test('assistant uses one compact synthesis call after authoritative calendar range retrieval', () => {
-  assert.match(assistantEndpoint, /buildAuthoritativeCalendarRead\(\s*calendarReadContext,\s*allEvents/)
-  assert.match(assistantEndpoint, /calendarReadSynthesisPrompt\(latestUserText, authoritativeRead\)/)
-  assert.match(assistantEndpoint, /server_ai_assistant_authoritative_calendar_read/)
-  assert.match(assistantEndpoint, /calendarRangeConversationState\(\s*calendarReadContext,\s*authoritativeRead\.events/)
-  assert.match(assistantEndpoint, /source: 'calendar_language_contract',\s*semantic_intent: calendarFrame\.intent/)
-})
-
-test('calendar availability uses the same authoritative range path as calendar lists', () => {
-  assert.match(
-    assistantEndpoint,
-    /\['calendar\.list', 'calendar\.availability'\]\.includes\(calendarFrame\?\.intent/,
-  )
-  assert.match(
-    assistantEndpoint,
-    /\['calendar\.list', 'calendar\.availability'\]\.includes\(calendarFrame\?\.intent[\s\S]{0,300}buildAuthoritativeCalendarRead/,
-  )
-})
-
 test('the read gives the model local times, never raw UTC timestamps (a 9 AM review was said as "1:00 PM UTC")', async () => {
   const { buildAuthoritativeCalendarRead, calendarReadSynthesisPrompt } = await import('../supabase/functions/_shared/assistant-authoritative-calendar-read.mjs')
   const range = { start: '2026-09-28T04:00:00.000Z', end: '2026-09-29T04:00:00.000Z', label: 'Monday' }

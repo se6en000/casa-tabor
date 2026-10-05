@@ -43,18 +43,6 @@ test('ai-assistant imports calendarDateNeededConversationState from the shared g
   assert.match(source, /calendarDateNeededConversationState/)
 })
 
-test('both date-clarification response sites attach calendar_date_needed conversation_state so the next turn is recognized as a write-flow continuation', () => {
-  const idx1 = source.indexOf("text: experienceMode === 'talk_plan'\n                ? `I saved")
-  assert.ok(idx1 >= 0, 'first date-clarification site not found at expected location')
-  const block1 = source.slice(idx1, idx1 + 400)
-  assert.match(block1, /conversation_state:\s*calendarDateNeededConversationState\(/)
-
-  const idx2 = source.indexOf('What date should I use for "${title')
-  assert.ok(idx2 >= 0, 'second date-clarification site not found at expected location')
-  const block2 = source.slice(idx2 - 50, idx2 + 400)
-  assert.match(block2, /conversation_state:\s*calendarDateNeededConversationState\(/)
-})
-
 test('client AIMessage.conversationState type declares the calendar_date_needed variant', () => {
   const useAISession = readFileSync(new URL('../src/hooks/useAISession.ts', import.meta.url), 'utf8')
   const idx = useAISession.indexOf("activeEntityType: 'calendar_date_needed'")

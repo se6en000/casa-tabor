@@ -29,9 +29,3 @@ test('the follow-up continuation still defers to isScheduleQuery so a real sched
   const block = source.slice(idx, idx + 300)
   assert.match(block, /!isScheduleQuery/)
 })
-
-test('needsUnifiedFamilyRetrieval still gates on userRequestedWriteIntent (the fix widens the input, not the gate itself)', () => {
-  const idx = source.indexOf('const needsUnifiedFamilyRetrieval')
-  const block = source.slice(idx, idx + 300)
-  assert.match(block, /!userRequestedWriteIntent/)
-})

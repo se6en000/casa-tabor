@@ -50,7 +50,7 @@ test('a change becomes the usual update card: time, place, people and driver', (
 })
 
 test('the hard checks still hold: a real date, an event that exists, never a school-run copy', () => {
-  assert.match(fullAiCard({ name: 'update_event', args: { id: 'nope', start: '2026-10-03T13:00' } }, { events, utcOffset, now }).error, /isn't on the calendar/)
+  assert.match(fullAiCard({ name: 'update_event', args: { id: 'nope', start: '2026-10-03T13:00' } }, { events, utcOffset, now }).error, /don't see that on the calendar/)
   assert.match(fullAiCard({ name: 'update_event', args: { id: 'e2', start: '2026-10-01T08:30' } }, { events, utcOffset, now }).error, /school run/)
   assert.match(fullAiCard({ name: 'delete_event', args: { id: 'e2' } }, { events, utcOffset, now }).error, /school run/)
   assert.match(fullAiCard({ name: 'create_event', args: { title: 'X', start: '2026-02-30T10:00' } }, { events, utcOffset, now }).error, /date/)

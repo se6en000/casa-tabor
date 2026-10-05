@@ -56,15 +56,3 @@ const aiAssistantSource = readFileSync(
   new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
   'utf8',
 )
-
-// Regression coverage for a second, related bug: a separate pre-LLM
-// deterministic fast path (resolveDeterministicEventMutation) intercepted
-// structured "Title:"/"Due:" draft prompts before the LLM was ever called,
-// producing a garbage title, a wrong date pulled from an unrelated date
-// mentioned elsewhere in the text, and a hardcoded 60-minute duration.
-// The edge function must skip that fast path for structured drafts so they
-// reach the dedicated reminder date/duration handling instead.
-test('ai-assistant skips the naive deterministic event-mutation fast path for structured Title:/Due: drafts', () => {
-  assert.match(aiAssistantSource, /isStructuredDraftText/)
-  assert.match(aiAssistantSource, /!isStructuredDraftText/)
-})

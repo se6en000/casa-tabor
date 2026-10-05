@@ -20,32 +20,12 @@ test('agent grocery updates enforce proposed versions and preserve structured un
   assert.match(executeSource, /Grocery item changed since this action was proposed/)
 })
 
-test('grocery semantic dispatch precedes model prompt execution', () => {
-  const dispatch = assistantSource.indexOf("server_ai_assistant_grocery_semantic_dispatch")
-  const modelCall = assistantSource.indexOf('const rawResult = await callGeminiWithTools(history)')
-  assert.ok(dispatch > 0)
-  assert.ok(modelCall > dispatch)
-  assert.match(assistantSource, /semantic_intent: groceryFrame\.intent/)
-})
-
 test('immediate and confirmed grocery adds share duplicate-safe write logic', () => {
   assert.match(assistantSource, /import \{ groceryAddedText, saveGroceryItems \}/)
   assert.match(executeSource, /import \{ saveGroceryItems \}/)
   assert.match(writeSource, /error\?\.code === '23505'/)
   assert.match(writeSource, /already_present: true/)
   assert.match(writeSource, /last_modified_source: 'casa'/)
-})
-
-// Jake, Oct 2: "When adding stuff to the shopping list via AI. Just commit it and say 'x' added to the list. I don't
-// need to confirm it with a card." The phone's grocery adds came back from the agent write as a draft for a yes.
-test('a grocery add from the agent write is saved at once, said plainly — no card, no yes', () => {
-  const adopted = assistantSource.indexOf("appendServerTrace('server_agent_write_adopted'")
-  const direct = assistantSource.indexOf("agentWriteData.tool === 'add_grocery_items' && !dryRun && experienceMode !== 'talk_plan'")
-  assert.ok(direct > 0 && direct < adopted, 'the direct save comes before the draft is returned')
-  const block = assistantSource.slice(direct, adopted)
-  assert.match(block, /await saveGroceryItems\(sb, /)
-  assert.match(block, /groceryAddedText\(saved\)/)
-  assert.match(block, /write_verified: true/)
 })
 
 // The phone and the wall ask in the full-AI lane, where every change was a card: groceries are saved there too.

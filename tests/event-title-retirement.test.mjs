@@ -16,11 +16,14 @@ const eventBlock = readFileSync(new URL('../src/components/calendar/EventBlock.t
 const weekView = readFileSync(new URL('../src/components/calendar/WeekView.tsx', import.meta.url), 'utf8')
 const stackedView = readFileSync(new URL('../src/components/calendar/StackedView.tsx', import.meta.url), 'utf8')
 
+const fullAi = readFileSync(new URL('../supabase/functions/_shared/assistant-full-ai.mjs', import.meta.url), 'utf8')
+
 test('enrichment preserves the authored title while keeping primary assignments structured', () => {
   assert.match(enrich, /user-authored event title remains authoritative/)
   assert.match(enrich, /const eventPatch: Record<string, string> = \{\}/)
   assert.doesNotMatch(enrich, /`\$\{resolvedPrimary\} \| \$\{concisePart\}`/)
-  assert.match(assistant, /Event title only\. Never prefix it with an owner, attendee, or family member\./)
+  // The old path's rule (retired Oct 5) lives on in D's create_event: the title never carries a person.
+  assert.match(fullAi, /never prefixed with a person/)
   assert.doesNotMatch(assistant, /Owner \| Description/)
 })
 

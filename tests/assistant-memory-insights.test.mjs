@@ -72,17 +72,6 @@ test('memory and bug summaries are deterministic and truthful', () => {
   assert.match(bugText, /Calendar card mismatch/)
 })
 
-test('ai assistant wires memory and bug summaries to the canonical memory table', () => {
-  const source = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(source, /isMemoryInsightsReadRequest/)
-  assert.match(source, /from\('ai_memories'\)/)
-  assert.doesNotMatch(source, /from\('ai_memory_observations'\)/)
-  assert.match(source, /from\('ai_bug_reports'\)/)
-  assert.match(source, /server_ai_assistant_memory_bug_summary/)
-  assert.match(source, /server_ai_assistant_bug_report_created/)
-  assert.match(source, /write_verified: true/)
-})
-
 test('memory settings is the only user-facing preferences and memory destination', () => {
   const aiSettings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.meta.url), 'utf8')
   const memorySettings = readFileSync(new URL('../src/pages/MemorySettingsPage.tsx', import.meta.url), 'utf8')

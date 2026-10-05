@@ -2516,3 +2516,15 @@ test('wall assistant: "show me the grocery list" opens the Grocery page at once'
   await expect(page.getByTestId('fixture-grocery')).toBeVisible()
   expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0)
 })
+
+// The header, balanced (canvas 42a B; Jake, Oct 5: "we cant have 3 different widths across the top").
+test('wall: the header’s two ends are the same width, the Next Move wider between them', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:15:00&home=1')
+  const wall = page.getByTestId('wall-fixture')
+  await expect(wall).toBeVisible()
+  const left = await wall.locator('header > div').first().boundingBox()
+  const then = await wall.getByRole('region', { name: 'Then' }).boundingBox()
+  const move = await wall.getByRole('region', { name: 'Next move' }).boundingBox()
+  expect(Math.round(left.width)).toBe(Math.round(then.width))
+  expect(move.width).toBeGreaterThan(left.width)
+})

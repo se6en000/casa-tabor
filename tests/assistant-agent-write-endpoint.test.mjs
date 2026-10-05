@@ -106,18 +106,6 @@ test('planner clarification and ambiguity remain in the bounded lane', () => {
   assert.match(endpoint, /ambiguityClarification/)
 })
 
-test('dry-run QA and production writes share the bounded planner', () => {
-  assert.match(assistantEndpoint, /shouldUseAgentWritePlanner\(\{/)
-  assert.doesNotMatch(assistantEndpoint, /const shouldRunAgentWrite = !dryRun/)
-})
-
-test('assistant proposals and action execution share canonical calendar arguments', () => {
-  assert.match(assistantEndpoint, /normalizeLegacyCalendarActionArgs\(/)
-  assert.match(actionEndpoint, /normalizeLegacyCalendarActionArgs\(tool, rawArgs\)/)
-  assert.match(actionEndpoint, /start is required for create_event/)
-  assert.match(actionEndpoint, /end is required for create_event/)
-})
-
 test('multi-event calendar_batch_create plans are resolved per-item through the same duplicate check and policy gate as a single create, not a separate weaker path', () => {
   assert.match(endpoint, /resolveCalendarBatchCreate/)
   assert.match(endpoint, /calendar_batch_create/)

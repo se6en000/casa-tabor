@@ -74,18 +74,6 @@ test('cooking retry language is narrow and does not reinterpret unrelated reques
   assert.equal(isCookingRetryLanguage('create a calendar event again'), false)
 })
 
-test('recipe generation has one bounded text-only provider recovery lane', () => {
-  assert.match(assistantFunction, /finishReason === 'UNEXPECTED_TOOL_CALL' && requiresCompleteRecipe/)
-  assert.match(assistantFunction, /runRecipeTextRecovery\('unexpected_tool_call'\)/)
-  assert.match(assistantFunction, /runRecipeTextRecovery\('incomplete_recipe'\)/)
-  assert.match(assistantFunction, /recipeTextRecoveryUsed/)
-  assert.match(assistantFunction, /Do not call tools, save anything, emit JSON/)
-  assert.match(assistantFunction, /server_ai_assistant_recipe_recovered/)
-  assert.match(assistantFunction, /const inheritedCookingFrame = !latestCookingFrame/)
-  assert.match(assistantFunction, /Original request to retry:/)
-  assert.match(assistantFunction, /source: 'cooking_language_contract',\s*semantic_intent: cookingFrame\.intent/)
-})
-
 test('cooking parser extracts useful open-class slots', () => {
   assert.deepEqual(parseCookingLanguage('How do I make chicken tacos?')?.slots, { recipe: 'chicken tacos' })
   assert.deepEqual(parseCookingLanguage('What can I make with salmon and rice?')?.slots, { ingredients: 'salmon and rice' })
@@ -239,59 +227,6 @@ test('saved recipe grounding includes authoritative ingredients and ordered step
   assert.match(text, /recipe_id=recipe-1/)
   assert.ok(text.indexOf('4 tomatoes') < text.indexOf('1 tsp salt'))
   assert.ok(text.indexOf('Simmer the tomatoes') < text.indexOf('Blend until smooth'))
-})
-
-test('cooking authority outranks overlapping grocery parsing only in cooking context', () => {
-  const source = fs.readFileSync(
-    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
-    'utf8',
-  )
-  assert.ok(
-    source.indexOf(': authoritativeCookingContext') <
-      source.indexOf(': authoritativeGroceryContext'),
-  )
-  assert.match(source, /const recipeToolNames = cookingToolNames\(cookingFrame\)/)
-  assert.match(source, /recipe_ingredients\(name, raw_text, quantity, unit, optional, sort_order\)/)
-  assert.match(source, /: cookingSurfaceContext\s+\? \{ route: \{ profile: 'recipe'/)
-  assert.doesNotMatch(
-    source,
-    /\['grocery', 'recipe', 'full'\]\.includes\(intentRouting\.profile\)/,
-  )
-  assert.match(source, /intentRouting\.profile === 'recipe' && referencesSavedRecipe/)
-  assert.match(source, /const includeFoodProfileContext = needsFoodProfileData/)
-  assert.match(source, /const includeRecipeContext = includeRawDomainContext && needsRecipeData/)
-  assert.match(source, /cookingFrame\?\.intent === 'recipe\.find'/)
-  assert.match(source, /server_ai_assistant_recipe_find/)
-  assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)
-  assert.match(source, /hasGroundedSemanticIntent: cookingMutationIntent/)
-  assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
-  assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
-  assert.match(source, /intentRouting\.profile === 'recipe'\s+\? 1536/)
-  assert.match(source, /kind: 'budget', value: drawerThinkingBudget \?\? \(intentRouting\.profile === 'full' \? 512 : 0\)/)
-  assert.match(source, /finishReason === 'MAX_TOKENS'/)
-  assert.match(source, /incomplete_stream_missing_finish_reason/)
-  assert.match(source, /server_ai_assistant_recipe_incomplete/)
-  assert.match(source, /RECIPE_REQUEST_HARD_TIMEOUT_MS = 15000/)
-
-  const executeSource = fs.readFileSync(
-    new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url),
-    'utf8',
-  )
-  assert.match(executeSource, /const recipeInsert = \{\s+name: recipeName,\s+source_type: 'manual',/)
-  assert.match(executeSource, /appendActionTrace\('server_ai_action_succeeded', 'create_recipe'/)
-
-  const drawerSource = fs.readFileSync(
-    new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url),
-    'utf8',
-  )
-  assert.match(drawerSource, /invalidateQueries\(\{ queryKey: \['cook-page-recipes'\] \}\)/)
-  assert.match(drawerSource, /invalidateQueries\(\{ queryKey: \['recipe-library'\] \}\)/)
-
-  const cookPageSource = fs.readFileSync(
-    new URL('../src/pages/CookPage.tsx', import.meta.url),
-    'utf8',
-  )
-  assert.match(cookPageSource, /if \(query\) return haystack\.includes\(query\)/)
 })
 
 test('combined grocery list requests remain read-only cooking follow-ups', () => {

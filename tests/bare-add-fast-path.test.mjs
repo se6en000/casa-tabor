@@ -33,16 +33,3 @@ test('isBareCalendarAddRequest does NOT match a request carrying any real conten
 })
 
 const source = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-
-test('ai-assistant short-circuits a bare add request before any agent-write/read/shadow LLM call or context load', () => {
-  assert.match(source, /isBareCalendarAddRequest/)
-  const fastPathIdx = source.indexOf('isBareCalendarAddRequest(latestUserText)')
-  assert.ok(fastPathIdx >= 0)
-  const shouldRunAgentWriteIdx = source.indexOf('const shouldRunAgentWrite =')
-  const contextLoadIdx = source.indexOf('const contextLoadStartMs')
-  assert.ok(fastPathIdx < shouldRunAgentWriteIdx, 'fast path must run before the agent-write LLM call')
-  assert.ok(fastPathIdx < contextLoadIdx, 'fast path must run before family-data context load')
-  const block = source.slice(fastPathIdx - 200, fastPathIdx + 500)
-  assert.match(block, /llm_calls:\s*0/)
-  assert.match(block, /type:\s*'text'/)
-})

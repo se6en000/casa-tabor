@@ -216,7 +216,7 @@ export const FULL_AI_TOOLS = [
   {
     name: 'create_event',
     description: 'Propose a new calendar event or reminder (the person confirms the card).',
-    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] } }, required: ['title', 'start'] },
+    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself — never prefixed with a person ("Dentist", not "Liv: Dentist"); who goes in people' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] } }, required: ['title', 'start'] },
   },
   {
     name: 'update_event',
@@ -571,7 +571,7 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
   }
   if (call?.name === 'update_event' || call?.name === 'delete_event') {
     const event = events.find((e) => e.id === a.id)
-    if (!event) return { error: "That item isn't on the calendar." }
+    if (!event) return { error: call.name === 'delete_event' ? "I don't see that on the calendar, so there's nothing to remove." : "I don't see that on the calendar yet. Want me to add it?" }
     if (isRoutineCopy(event.title)) return { error: "That's a copy of a school run from the family routines; change the routine instead." }
     if (call.name === 'delete_event') return { tool: 'delete_event', args: { id: event.id, title: event.title } }
     const args = { id: event.id }
@@ -715,10 +715,6 @@ export function describeFoundEvents(events, utcOffset) {
 // its context and calls the model inside the same 9 s request budget. On 2026-09-29 9:12 AM D spent
 // 8 s and handed back with nothing left, so the old path failed at 0 ms (a 504). Below this, D says
 // so itself.
-export const HANDBACK_MIN_MS = 4000
-export function mayHandBack(remainingMs) {
-  return remainingMs >= HANDBACK_MIN_MS
-}
 
 // Gemini 2.5 Flash sometimes answers a thinking + tools call with nothing at all; the one retry
 // asks for words (tools off) instead of the same call again — the 9:12 turn came back empty twice.

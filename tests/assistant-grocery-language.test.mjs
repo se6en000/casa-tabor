@@ -127,21 +127,3 @@ test('grocery concepts tolerate common typed and STT forms', () => {
   assert.equal(parseGroceryLanguage('put milk on the shoping list')?.intent, 'grocery.add')
   assert.equal(parseGroceryLanguage('dont let me forget eggs')?.intent, 'grocery.add')
 })
-
-test('explicit grocery semantics bypass probabilistic agent planning', () => {
-  const source = fs.readFileSync(
-    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
-    'utf8',
-  )
-  assert.match(source, /const shouldRunAgentWrite =[\s\S]*?!groceryFrame &&/)
-  assert.match(source, /const shouldRunAgentRead =[\s\S]*?!groceryFrame &&/)
-  assert.match(source, /authoritativeGroceryContext[\s\S]*?isGroceryLikeLanguage\(latestUserText\)/)
-  assert.ok(
-    source.indexOf(': authoritativeGroceryContext') <
-      source.indexOf(': calendarFrame'),
-  )
-  assert.ok(
-    source.indexOf("incomingConversationState?.activeEntityType === 'grocery_clarification'") <
-      source.indexOf('if (shouldRunAgentWrite)'),
-  )
-})

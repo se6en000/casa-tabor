@@ -179,14 +179,6 @@ test('Mark decided resolves open decision questions before hiding the brief card
   assert.match(briefingAction, /status: 'decided'/)
 })
 
-test('Talk and Plan retrieves active projects only for the signed profile', () => {
-  const source = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(source, /from\('ai_projects'\)/)
-  assert.match(source, /\.eq\('owner_member_id', activeMemberId\)/)
-  assert.match(source, /source_type: 'project'/)
-  assert.match(source, /server_ai_assistant_project_retrieval_failed/)
-})
-
 test('briefing returns only actionable signed-profile projects', () => {
   const source = readFileSync(new URL('../supabase/functions/generate-briefing/index.ts', import.meta.url), 'utf8')
   assert.match(source, /from\('ai_projects'\)/)

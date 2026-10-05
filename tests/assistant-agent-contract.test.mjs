@@ -63,15 +63,6 @@ test('target capability tools cover calendar, grocery, and cooking conversations
   }
 })
 
-test('current tool inventory stays synchronized with planner declarations and action execution', () => {
-  for (const tool of CURRENT_ASSISTANT_TOOL_INVENTORY) {
-    assert.match(assistantSource, new RegExp(`name: ['"]${tool.name}['"]`), `${tool.name} declaration`)
-    if (tool.execution === 'action') {
-      assert.match(executorSource, new RegExp(`tool === ['"]${tool.name}['"]`), `${tool.name} executor`)
-    }
-  }
-})
-
 test('rollout remains staged and ends with a reversible default', () => {
   assert.deepEqual(AGENT_ROLLOUT_STAGES.slice(0, 4), [
     'contract',

@@ -91,8 +91,10 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
     // and the week strip.
     // One header height whether or not there's a list, so the screen never jumps when the list is done (polish, Oct 1).
     <div className="flex h-full w-full flex-col gap-[22px] bg-wall-ground p-[44px] font-body text-wall-ink">
-      <header className="flex h-[184px] shrink-0 items-stretch gap-[48px]">
-        <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
+      {/* Balanced (canvas 42a B, Jake Oct 5: "we cant have 3 different widths across the top"): the clock side and THEN
+          the same width, the Next Move wider between them. */}
+      <header className="flex h-[184px] shrink-0 items-stretch gap-[36px]">
+        <div className="flex w-[470px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[10px]">
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
             {onAsk && <MicButton onAsk={calling ? calling.onOpen : onAsk} calling={Boolean(calling)} small className="ml-[4px]" />}

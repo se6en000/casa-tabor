@@ -85,63 +85,6 @@ test('AI forensics reports the new client pipeline stages', () => {
   }
 })
 
-test('assistant model calls have hard budgets and only one secondary synthesis round', () => {
-  assert.match(assistantFunction, /setTimeout\(\(\) => controller\.abort\(\), timeoutMs\)/)
-  assert.match(assistantFunction, /clearTimeout\(timeoutId\)/)
-  assert.match(assistantFunction, /PRIMARY_HARD_TIMEOUT_MS = 6800/)
-  assert.match(assistantFunction, /shouldSynthesizeReadTool\(\{/)
-  assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1,\s*writeRescueUsed\)/)
-  assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
-  assert.match(assistantFunction, /runCompactFallback\('primary_timeout'\)/)
-  assert.match(assistantFunction, /server_ai_assistant_fallback_recovered/)
-  assert.match(assistantFunction, /server_ai_assistant_write_tool_rescue/)
-  assert.match(assistantFunction, /WRITE TOOL RESCUE/)
-  assert.match(assistantFunction, /llm_write_tool_rescue/)
-  assert.doesNotMatch(assistantFunction, /stage=llm_retry/)
-})
-
-test('reminder create safety clarifies missing details before write-tool rescue', () => {
-  assert.match(assistantFunction, /reminderCreateClarification\(reminderCreateRequestText\)/)
-  assert.match(assistantFunction, /args\.title = reminderSubject/)
-  assert.match(assistantFunction, /args\.event_type = 'reminder'/)
-  assert.match(assistantFunction, /const deterministicArgs = \(/)
-  assert.match(assistantFunction, /buildDisplayText\(deterministicMutation\.tool, deterministicArgs\)/)
-  assert.match(assistantFunction, /server_ai_assistant_reminder_clarification/)
-  assert.match(assistantFunction, /const userLikelyRequestedWrite = explicitReminderCreate \|\| userRequestedWriteIntent/)
-  assert.match(
-    assistantFunction,
-    /explicitReminderCreate[\s\S]{0,250}source: 'explicit_reminder_create'[\s\S]{0,250}activeEntityType === 'calendar_clarification'/,
-  )
-})
-
-test('assistant buffers model text until output safety validation completes', () => {
-  assert.match(assistantFunction, /secureAssistantResult\(rawResult/)
-  assert.match(assistantFunction, /server_ai_assistant_output_rejected/)
-  assert.match(assistantFunction, /emitToken = \(\) => \{\}/)
-  assert.doesNotMatch(assistantFunction, /emitToken = \(delta: string\)/)
-})
-
-test('assistant image context is conversation-scoped and never salvages partial streams', () => {
-  assert.match(assistant, /const activeImageRef = useRef/)
-  assert.match(assistant, /image \?\? activeImageRef\.current/)
-  assert.match(assistant, /image_context: imageContext/)
-  assert.match(assistantFunction, /IMAGE_REQUEST_HARD_TIMEOUT_MS = 26000/)
-  assert.match(assistantFunction, /IMAGE_PRIMARY_HARD_TIMEOUT_MS = 22000/)
-  assert.match(assistantFunction, /requestHardTimeoutMs = image/)
-  assert.match(assistantFunction, /const primaryHardTimeoutMs = image/)
-  assert.match(assistantFunction, /const imageEventCreateHint = Boolean\(/)
-  assert.match(assistantFunction, /const imageEventCreateFollowUp = Boolean\(/)
-  assert.match(assistantFunction, /source: 'image_event_hint'/)
-  assert.match(assistantFunction, /source: 'image_event_followup'/)
-  assert.match(assistantFunction, /const imageDirectEventCreateFlow = Boolean\(/)
-  assert.match(assistantFunction, /!imageDirectEventCreateFlow/)
-  assert.match(assistantFunction, /image_context: imageContext/)
-  assert.match(assistantFunction, /thought_tokens: usage\.thoughtTokens/)
-  assert.match(assistantFunction, /finish_reason:/)
-  assert.doesNotMatch(assistant, /salvagePartial/)
-  assert.doesNotMatch(assistant, /salvage rather than double-call/)
-})
-
 test('voice turns captured during loading are queued rather than dropped', () => {
   assert.match(drawer, /queuedVoiceTurnsRef\.current\.push/)
   assert.match(drawer, /voice_turn_queued/)
@@ -153,130 +96,11 @@ test('revised event confirmations supersede stale pending cards', () => {
   assert.match(assistant, /message\.toolAction\.args\.id === finalMsg\.toolAction\?\.args\.id/)
 })
 
-test('assistant narrows prompt context and tools by intent profile', () => {
-  assert.match(assistantFunction, /classifyAssistantIntent\(latestUserText/)
-  assert.match(assistantFunction, /selectedToolDeclarations/)
-  assert.match(assistantFunction, /primaryToolDeclarations/)
-  assert.match(assistantFunction, /source: 'explicit_reminder_create'/)
-  assert.match(assistantFunction, /const directReminderCreateFlow =/)
-  assert.match(assistantFunction, /const shouldRunAgentWrite =[\s\S]*shouldUseAgentWritePlanner\(\{/)
-  assert.match(agentWrite, /options\.explicitReminderCreate !== true/)
-  assert.match(assistantFunction, /directReminderCreateFlow[\s\S]{0,160}tool\.name === 'create_event'/)
-  assert.match(assistantFunction, /REMINDER CREATE MODE:/)
-  assert.match(assistantFunction, /directReminderCreateFlow[\s\S]{0,180}function_calling_config: \{ mode: 'ANY', allowed_function_names: \['create_event'\] \}/)
-  assert.match(assistantFunction, /resolveExplicitReminderDaypartRange\(reminderCreateRequestText/)
-  assert.match(assistantFunction, /server_ai_assistant_prompt_profile/)
-  assert.match(assistantFunction, /allowed_function_names: \['search_events'\]/)
-  assert.match(assistantFunction, /includeEventContext/)
-  assert.match(assistantFunction, /includeGroceryContext/)
-  assert.match(assistantFunction, /updated_at: e\.updated_at/)
-  assert.match(assistantFunction, /required: \['id', 'expected_updated_at'\]/)
-  for (const gate of [
-    'needsEventData',
-    'needsPlaceData',
-    'needsContactData',
-    'needsGroceryData',
-    'needsRecipeData',
-    'needsAvailabilityData',
-  ]) {
-    assert.match(assistantFunction, new RegExp(gate))
-  }
-  assert.match(assistantFunction, /loaded_domains:/)
-  assert.match(assistantFunction, /server_ai_assistant_deterministic_mutation/)
-  assert.match(assistantFunction, /server_ai_assistant_calendar_language_match/)
-  assert.match(assistantFunction, /server_ai_assistant_calendar_language_unmatched/)
-  assert.match(assistantFunction, /server_ai_assistant_family_retrieval/)
-})
-
-test('household directory lookups load confirmed contacts and their primary places', () => {
-  assert.match(assistantFunction, /isHouseholdDirectoryQuestion\(latestUserText\)/)
-  assert.match(assistantFunction, /HOUSEHOLD DIRECTORY ANSWER MODE/)
-  assert.match(assistantFunction, /const groceryFrame = householdDirectoryQuestion \|\|/)
-  assert.match(assistantFunction, /primary_place:saved_places!saved_contacts_primary_place_id_fkey/)
-  assert.match(assistantFunction, /usually at \$\{c\.primary_place\.name\}/)
-  assert.match(assistantFunction, /includePlaceContext = [\s\S]{0,180}householdDirectoryQuestion/)
-  for (const role of ['coach', 'dentist', 'dermatologist', 'doctor', 'orthodontist']) {
-    assert.match(householdDirectory, new RegExp(role))
-  }
-  assert.match(householdDirectory, /what do you know about/)
-})
-
-test('provider-list routing recognizes "who" phrasing and inherits role/member context on bare follow-ups', () => {
-  assert.match(assistantFunction, /list\|name\|other\|what\|which\|who/)
-  assert.match(assistantFunction, /providerListFollowUp/)
-  assert.match(assistantFunction, /isDirectoryFollowUpLanguage/)
-  assert.match(householdDirectory, /isDirectoryFollowUpLanguage/)
-})
-
-test('assistant grounds provider answers in confirmed family relationships', () => {
-  assert.match(assistantFunction, /family_contact_relationships/)
-  assert.match(assistantFunction, /CONFIRMED FAMILY RELATIONSHIPS/)
-  assert.match(assistantFunction, /never infer relationships from event attendees/)
-  assert.match(assistantFunction, /family_member:family_members\(name, full_name\)/)
-})
-
-test('unconfirmed provider lookups offer evidence-backed confirmation actions', () => {
-  assert.match(assistantFunction, /associate_family_contact/)
-  assert.match(assistantFunction, /Suggested from explicit family-member and provider calendar evidence/)
-  assert.match(assistantFunction, /Another possibility is/)
-  assert.match(assistantFunction, /never infer relationships from event attendees/)
-  assert.match(actionFunction, /family_member_id, contact_id, and relationship are required/)
-  assert.match(actionFunction, /family_contact_relationships/)
-  assert.match(actionFunction, /onConflict: 'family_member_id,contact_id,relationship'/)
-})
-
-test('directory suggestion tool actions expose structured names and alternatives for tappable UI cards', () => {
-  assert.match(assistantFunction, /family_member_name: member\.name/)
-  assert.match(assistantFunction, /contact_name: first\.contact\.name/)
-  assert.match(assistantFunction, /entity_name: candidate\.name/)
-  assert.match(assistantFunction, /entity_detail: detail \|\| undefined/)
-  assert.match(assistantFunction, /alternatives: alternative\s*\n?\s*\?\s*\[\{/)
-  assert.match(assistantFunction, /alternativeCandidates\.map\(\(candidate\) => \(\{/)
-  assert.match(drawer, /function DirectorySuggestionCard/)
-  assert.match(drawer, /function buildDirectoryCandidates/)
-  assert.match(drawer, /onAccept: \(candidateArgs: Record<string, unknown>\) => void/)
-})
-
-test('directory fallback can confirm entities and persist contact-place associations', () => {
-  assert.match(assistantFunction, /confirm_directory_entity/)
-  assert.match(assistantFunction, /associate_contact_place/)
-  assert.match(assistantFunction, /contact_place_relationships/)
-  assert.match(assistantFunction, /CONFIRMED PEOPLE ↔ PLACES/)
-  assert.match(actionFunction, /set_contact_place_relationship/)
-  assert.match(actionFunction, /Saved .* as .*'s \$\{relationship\.replaceAll/)
-  assert.match(householdGraph, /contactPlacesResult/)
-  assert.match(householdGraph, /edge_type: 'has_provider'/)
-  assert.match(assistantFunction, /\.from\('event_enrichments'\)[\s\S]{0,180}\.ilike\('contact_name'/)
-  assert.match(assistantFunction, /genericPlaceTerms = new Set/)
-  assert.match(householdGraph, /nodeRows\.slice\(index \* 75/)
-})
-
-test('provider-list questions use confirmed facts before calendar-backed guesses', () => {
-  assert.match(assistantFunction, /providerListRequest/)
-  assert.match(assistantFunction, /server_ai_directory_provider_fallback/)
-  assert.match(assistantFunction, /My best calendar-based guess is/)
-  assert.match(assistantFunction, /tool: 'associate_family_contact'/)
-  assert.match(assistantFunction, /\.limit\(1000\)/)
-  assert.match(assistantFunction, /householdMembersByProvider/)
-  assert.match(assistantFunction, /shared household provider/)
-  assert.match(assistantFunction, /requestedRoleWord === 'coaches'/)
-  assert.match(assistantFunction, /Math\.min\(sharedWith\.length, 3\) \* 0\.1/)
-  assert.doesNotMatch(assistantFunction, /contactsConfirmedForOtherMembers/)
-})
-
 test('household relationships remain many-to-many across shared contacts and places', () => {
   assert.match(familyContactMigration, /unique \(family_member_id, contact_id, relationship\)/)
   assert.match(contactPlaceMigration, /unique \(contact_id, place_id, relationship\)/)
   assert.doesNotMatch(familyContactMigration, /unique \(contact_id\)/)
   assert.doesNotMatch(contactPlaceMigration, /unique \(place_id\)/)
-})
-
-test('assistant preserves full family names for alias-aware identity resolution', () => {
-  assert.match(assistant, /full_name: f\.full_name/)
-  assert.match(assistantFunction, /canonicalizeFamilyReferences\(rawLatestUserText, familyMembers\)/)
-  assert.match(assistantFunction, /FAMILY IDENTITY ALIASES/)
-  assert.match(actionFunction, /resolveFamilyMemberByName\(family, name\)/)
-  assert.match(familyIdentity, /fullName\.split/)
 })
 
 test('confirmation state is atomic, self-clearing, and fully traced', () => {
@@ -324,13 +148,4 @@ test('confirmed actions preserve client trace provenance on the server', () => {
   }
   assert.match(actionFunction, /server_ai_action_started/)
   assert.match(actionFunction, /server_ai_action_failed/)
-})
-
-test('create_event action normalizes unsupported event_type values before insert', () => {
-  assert.match(actionFunction, /function normalizeCreateEventType\(value: unknown\)/)
-  assert.match(actionFunction, /event_type: normalizedEventType/)
-  assert.match(actionFunction, /\\['reminder', 'task', 'todo'\\]/)
-  assert.match(actionFunction, /if \(normalizedEventType !== 'reminder'\)/)
-  assert.match(actionFunction, /sync_status: 'synced'/)
-  assert.match(assistantFunction, /Got it — reminder set for/)
 })

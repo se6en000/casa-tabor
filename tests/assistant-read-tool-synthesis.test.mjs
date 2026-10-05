@@ -58,11 +58,3 @@ test('read-only synthesis receives plain evidence without function-call history'
   assert.match(contents[1].parts[0].text, /completed search_web/i)
   assert.doesNotMatch(JSON.stringify(contents), /functionCall|functionResponse/)
 })
-
-test('ai-assistant wires read results into one bounded tool-free synthesis call', () => {
-  assert.match(assistantSource, /shouldSynthesizeReadTool\(\{/)
-  assert.match(assistantSource, /readToolSynthesisInstruction\(name,/)
-  assert.match(assistantSource, /buildReadToolSynthesisContents\(\{/)
-  assert.match(assistantSource, /const synthesisTools = exposeSynthesisTools \? secondaryTools : \[\]/)
-  assert.match(assistantSource, /thinking:[\s\S]{0,100}\{ kind: 'level', value: 'low' \}/)
-})

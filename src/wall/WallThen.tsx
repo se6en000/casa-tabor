@@ -18,7 +18,7 @@ export default function WallThen({ items, members, pigmentOf, onOpen }: {
   return (
     <>
       <div className="my-[6px] w-px shrink-0 bg-wall-rule" />
-      <section aria-label="Then" className="flex w-[330px] shrink-0 flex-col justify-center gap-[2px]">
+      <section aria-label="Then" className="flex w-[470px] shrink-0 flex-col justify-center gap-[2px]">
         <div className="pb-[4px] text-wall-label font-bold tracking-[0.25em] text-wall-ink-2">THEN</div>
         {items.map((item) => {
           const member = item.whoId ? members.find((m) => m.id === item.whoId) ?? null : null

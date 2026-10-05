@@ -116,13 +116,13 @@ test('the assistant hands the plan over with its words; the card executor saves 
 test('with a plan on screen, a follow-up goes straight to the planning model', async () => {
   const fs = await import('node:fs')
   const ai = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(ai, /handBack = false, startPlanning = false\): Promise</)
+  assert.match(ai, /startPlanning = false\): Promise</)
   assert.match(ai, /let planning = startPlanning/)
   assert.match(ai, /let system = systemFor\(startPlanning\)/)
   const pipeline = ai.slice(ai.indexOf('const runPipeline = async'))
   const early = pipeline.slice(0, pipeline.indexOf('if (turnContext?.card)'))
   assert.match(early, /\(planningConversation \|\| stepCard\) && turnResolution\?\.act !== 'confirm_draft' && !turnContext\?\.cancelledDraft/)
-  assert.match(early, /runFullAi\(buildDisplayText, false, true\)/)
+  assert.match(early, /runFullAi\(buildDisplayText, true\)/)
 })
 
 // Live check, 2026-09-29: after a planning answer, "What do I need, and when should we build it?" was
