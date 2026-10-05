@@ -3,7 +3,7 @@ import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { onResume, reconnectGate } from '../lib/catchUp'
+import { catchUpLimit, onResume, reconnectBackoff, reconnectGate } from '../lib/catchUp'
 import { startOfWeek, endOfWeek, addDays, subDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
 import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
@@ -597,10 +597,17 @@ let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
 // What the feed missed (Jake, Oct 3: kiosk adds not on his phone 20 minutes later): re-read when the feed comes back
 // after a drop, and when the page comes back after being away (an iPhone drops the feed in the background).
 const _reconnect = reconnectGate()
+// Oct 5: a feed that flapped all night re-read on every reconnect (~80 reads a minute) until the database gave out.
+const _catchUpLimit = catchUpLimit(60_000)
+const _backoff = reconnectBackoff()
 let _resumeOff: (() => void) | null = null
-function _catchUp() {
+function _reRead() {
+  if (!_catchUpLimit.allow(Date.now())) return
   _fireInvalidation()
   _firePlanInvalidation()
+}
+function _catchUp() {
+  _reRead()
   // And make sure the feed itself is back, without waiting for the heartbeat.
   if (_realtimeSubscribers > 0 && (!_realtimeChannel || _realtimeChannel.state === 'closed' || _realtimeChannel.state === 'errored')) {
     try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch { /* ignore — best-effort */ }
@@ -666,10 +673,8 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
     .subscribe((status, err) => {
-      if (_reconnect.status(status)) {
-        _fireInvalidation()
-        _firePlanInvalidation()
-      }
+      if (status === 'SUBSCRIBED') _backoff.connected(Date.now())
+      if (_reconnect.status(status)) _reRead()
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
         if (_realtimeSubscribers > 0 && !_reconnectTimer) {
@@ -680,7 +685,7 @@ function _subscribeRealtimeChannel() {
               _realtimeChannel = null
               _subscribeRealtimeChannel()
             }
-          }, 3000)
+          }, _backoff.next(Date.now()))
         }
       }
     })

@@ -57,3 +57,35 @@ export function onResume(onResume: () => void, minAwayMs = 10_000): () => void {
     window.removeEventListener('online', onOnline)
   }
 }
+
+/**
+ * At most one catch-up per `minGapMs` (Oct 5: the kiosk's feed flapped all night and every reconnect re-read the whole
+ * calendar, ~80 reads a minute, until the database stopped answering and the phone wouldn't load).
+ */
+export function catchUpLimit(minGapMs = 60_000) {
+  let last: number | null = null
+  return {
+    allow(now: number): boolean {
+      if (last !== null && now - last < minGapMs) return false
+      last = now
+      return true
+    },
+  }
+}
+
+/** How long to wait before reconnecting the feed: 3 s, doubling after each drop up to a minute; 3 s again once a
+ *  connection has held for a minute. */
+export function reconnectBackoff(firstMs = 3_000, maxMs = 60_000, heldMs = 60_000) {
+  let wait = firstMs
+  let connectedAt: number | null = null
+  return {
+    connected(now: number) { connectedAt = now },
+    next(now: number): number {
+      if (connectedAt !== null && now - connectedAt >= heldMs) wait = firstMs
+      connectedAt = null
+      const out = wait
+      wait = Math.min(maxMs, wait * 2)
+      return out
+    },
+  }
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { onResume, reconnectGate } from '../lib/catchUp'
+import { catchUpLimit, onResume, reconnectGate } from '../lib/catchUp'
 import { ADDING_PREFIX, withAddedGrocery } from '../lib/groceryOptimistic'
 
 export interface GroceryItem {
@@ -180,12 +180,15 @@ export function useGroceryList() {
     if (_groceryRealtimeSubscribers === 1) {
       // What the feed missed (Jake, Oct 3: the phone stale after the kiosk changed things): re-read when the feed
       // reconnects after a drop, and when the page comes back after being away (an iPhone drops it in the background).
+      // At most once a minute (Oct 5: a flapping feed re-read on every reconnect until the database gave out).
       const reconnect = reconnectGate()
+      const limit = catchUpLimit(60_000)
+      const catchUp = () => { if (limit.allow(Date.now())) fireGroceryInvalidation() }
       _groceryRealtimeChannel = supabase
         .channel('grocery-realtime-singleton')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grocery_items' }, fireGroceryInvalidation)
-        .subscribe((status) => { if (reconnect.status(status)) fireGroceryInvalidation() })
-      _groceryResumeOff = onResume(fireGroceryInvalidation)
+        .subscribe((status) => { if (reconnect.status(status)) catchUp() })
+      _groceryResumeOff = onResume(catchUp)
     }
 
     return () => {
