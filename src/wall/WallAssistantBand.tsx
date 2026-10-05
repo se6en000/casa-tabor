@@ -551,7 +551,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   ) : null
   const haloNote = !listenerV2 ? null
     : haloState === 'fuse' ? 'Waiting for the rest —\ntap the mic to send'
-      : haloState === 'noise' ? 'It’s loud in here'
+      // No "It's loud in here" (Jake, Oct 5: it showed "when it's pretty quiet" — a fan or the room is enough to set it off).
         : haloState === 'deaf' ? 'Can’t hear the mic —\ntap to try again'
           : ''
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content, 1500) : ''), [answer?.content])
@@ -957,6 +957,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             ? 'Say yes, or change\nanything on it'
             : state === 'THINKING'
               ? '' // the ring and THINKING say it (Jake, 2026-09-29: "way redundant")
+              : state === 'LISTENING' && idleTip
+                ? `Try: ${idleTip}` // the quiet example, under the mic (Jake, Oct 5: "put the tips there")
               : state === 'LISTENING' && haloNote != null
                 ? haloNote // the halo says the rest (canvas row 17)
               : state === 'LISTENING' && question
@@ -1103,7 +1105,6 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <div className="mt-auto flex flex-col gap-[12px]">
         {/* While the mic waits for you (Jake, Oct 3: "any tips.. should be VERY subtle"): one quiet example, after a moment
             of quiet, gone as you speak; a different one each time. */}
-        {idleTip && <div className="max-w-[1180px] text-wall-detail text-wall-night-ink-2/60">Tip: {idleTip}</div>}
         <div className="flex gap-[14px]">
           {offer && (
             <button type="button" className={lightPill} disabled={loading} onClick={() => { setNote(null); void send(offer.say) }}>

@@ -767,10 +767,11 @@ test('wall assistant: a quiet tip after a moment of silence, gone when you speak
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=empty&idleTip=1')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section).toBeVisible()
-  await expect(section.getByText(/^Tip: /)).toHaveCount(0)
-  await expect(section.getByText(/^Tip: “/)).toBeVisible({ timeout: 4000 })
+  // Under the mic since Oct 5 (Jake: "remove that [It's loud in here] and put the tips things there").
+  await expect(section.getByText(/^Try: /)).toHaveCount(0)
+  await expect(section.getByText(/^Try: “/)).toBeVisible({ timeout: 4000 })
   await mic(page, () => window.__mic.hear('can you'))
-  await expect(section.getByText(/^Tip: /)).toHaveCount(0)
+  await expect(section.getByText(/^Try: /)).toHaveCount(0)
   const { pickTip } = await import('../supabase/functions/_shared/casa-tips.mjs')
   expect(pickTip({ question: 'birthday present for Kelly', seed: 0 }).id).toBe('gift-save') // used nine times, still offered
 })
@@ -1571,7 +1572,7 @@ test('wall: the new listener — the mic\'s halo: it swells the moment you\'re l
   expect(await page.evaluate(() => window.__mic.finished)).toBe(1)
 })
 
-test('wall: the new listener — loud with no voice detected is the room, not you', async ({ page }) => {
+test('wall: the new listener — loud with no voice detected is the room, not you; it says nothing about it', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
@@ -1580,7 +1581,8 @@ test('wall: the new listener — loud with no voice detected is the room, not yo
   await page.waitForTimeout(600)
   await mic(page, () => window.__mic.level(60))
   await expect(section.locator('[data-listener="noise"]')).toBeVisible({ timeout: 4000 })
-  await expect(section.getByText('It’s loud in here')).toBeVisible()
+  // The halo still knows; it no longer says "It's loud in here" (Jake, Oct 5: shown when it was pretty quiet).
+  await expect(section.getByText('It’s loud in here')).toHaveCount(0)
 })
 
 test('wall: the new listener is a switch in the MT menu, remembered on the wall; off, the band is as before', async ({ page }) => {
