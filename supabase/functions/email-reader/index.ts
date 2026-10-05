@@ -11,7 +11,7 @@ import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { PLANNING_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
-import { buildReaderPrompt, firstPass, readReaderDecision, readerParts } from '../_shared/email-reader.mjs'
+import { buildReaderPrompt, firstPass, pastTitles, readReaderDecision, readerParts } from '../_shared/email-reader.mjs'
 import { keptPostedBy, postedStatus, statusFor } from '../_shared/email-offers.mjs'
 import { personLine } from '../_shared/casa-memory.mjs'
 
@@ -77,13 +77,15 @@ Deno.serve(async (req) => {
   }
   if (!todo.length) return json({ read: 0, decisions: {} })
 
-  const [{ data: llmRow }, { data: familyRows }, { data: upcoming }, { data: tokens }, { data: kept }, { data: facts }] = await Promise.all([
+  const [{ data: llmRow }, { data: familyRows }, { data: upcoming }, { data: tokens }, { data: kept }, { data: facts }, { data: gone }] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
     sb.from('events').select('id, title, start_time').is('deleted_at', null).neq('status', 'cancelled').gte('start_time', new Date(Date.now() - 86400e3).toISOString()).lt('start_time', new Date(Date.now() + 45 * 86400e3).toISOString()).order('start_time').limit(250),
     sb.from('google_tokens').select('family_member_id, refresh_token, access_token, expires_at'),
     sb.from('email_keep_posted').select('id, kind, sender, topic, label'),
     sb.from('casa_memory').select('kind, about_member_id, text, words, confidence').eq('status', 'active').eq('kind', 'fact').eq('confidence', 'sure'),
+    // The groups the family is part of: what they've gone to in the last six months (pastTitles).
+    sb.from('events').select('title, start_time').is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template').gte('start_time', new Date(Date.now() - 183 * 86400e3).toISOString()).lt('start_time', new Date().toISOString()).order('start_time', { ascending: false }).limit(600),
   ])
   // Casa's memory (phase 3): each person with what's known about them, so the reader can tell whose an email is.
   const family = (familyRows ?? []).filter((m: { name: string }) => m.name !== 'Tabor Family').map((m: { id: string; name: string; role: string | null }) => ({ ...m, line: personLine(m, facts ?? []) }))
@@ -129,7 +131,7 @@ Deno.serve(async (req) => {
       const isDocx = mime.includes('wordprocessingml') || /\.docx$/i.test(a.filename ?? '')
       files.push({ filename: a.filename ?? 'attachment', mimeType: mime, size: a.size ?? 0, ...(isDocx ? { text: docxText(data) ?? undefined } : { data }) })
     }
-    const prompt = buildReaderPrompt({ email, family, upcoming: calendar, today, attachments: files, topics, matters: !!body.matters })
+    const prompt = buildReaderPrompt({ email, family, upcoming: calendar, past: pastTitles((gone ?? []) as Array<{ title: string; start_time: string }>), today, attachments: files, topics, matters: !!body.matters })
     let decision = readReaderDecision(null)
     let failure: string | null = null
     try {

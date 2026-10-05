@@ -43,7 +43,7 @@ import { explicitReminderCreateRequestForMessages, explicitReminderSearchForMess
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1238,6 +1238,32 @@ Deno.serve(async (req) => {
           // The whole calendar, past and future (Jake, 2026-09-28: "search my whole calendar").
           const searched = await searchCalendar(sb, call.args, { now, utcOffset, family })
           result = 'error' in searched ? { error: searched.error } : { from: searched.from, to: searched.to, events: describeFoundEvents(searched.found, utcOffset), ...(searched.more ? { more: 'there are more — narrow the dates or words' } : {}) }
+        } else if (call.name === 'search_email') {
+          // Everything the email reader has seen (both mailboxes), with its one-line summary when it made one.
+          const words = emailSearchWords(String(call.args?.query ?? latestUserText ?? ''))
+          const since = new Date(Date.now() - Math.min(180, Math.max(1, Number(call.args?.days ?? 30) || 30)) * 86400e3).toISOString()
+          if (!words.length) result = { found: 0, note: 'Nothing to search for.' }
+          else {
+            const ors = words.flatMap((w) => ['subject', 'from_email', 'email_body'].map((col) => `${col}.ilike.%${w.replace(/[%,()]/g, '')}%`)).join(',')
+            const [{ data: mail }, { data: gists }] = await Promise.all([
+              sb.from('gmail_processed_messages').select('gmail_message_id, subject, from_email, received_at, email_body, family_member_id').gte('received_at', since).or(ors).order('received_at', { ascending: false }).limit(60),
+              sb.from('email_offers').select('gmail_message_id, gist').gte('received_at', since).not('gist', 'is', null).limit(400),
+            ])
+            const gistOf = new Map(((gists ?? []) as Array<{ gmail_message_id: string; gist: string }>).map((g) => [g.gmail_message_id, g.gist]))
+            const rows = ((mail ?? []) as Array<Record<string, unknown>>).map((m) => ({ ...m, gist: gistOf.get(String(m.gmail_message_id)) ?? null }))
+            const seen = new Set<string>()
+            const unique = rows.filter((m) => { const k = `${m.subject}|${m.received_at}`; if (seen.has(k)) return false; seen.add(k); return true })
+            const best = rankEmails(unique, words) as Array<Record<string, unknown>>
+            const whose = (id: unknown) => family.find((m) => m.id === id)?.name ?? null
+            result = { found: best.length, emails: best.map((m) => ({
+              from: String(m.from_email ?? '').replace(/<[^>]+>/, '').replace(/"/g, '').trim(),
+              subject: m.subject,
+              received: new Date(String(m.received_at)).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+              mailbox: whose(m.family_member_id) === 'Tabor Family' ? 'the family mailbox' : whose(m.family_member_id) ? `${whose(m.family_member_id)}'s mailbox` : null,
+              summary: m.gist ?? null,
+              text: String(m.email_body ?? '').replace(/\s+/g, ' ').slice(0, 900),
+            })) }
+          }
         } else if (call.name === 'search_family_notes') {
           // The same retrieval the old path loaded on every turn — here only when D asks.
           const found = await retrieveFamilyContext({ sb, providerFetch, apiKey, query: String(call.args?.query ?? latestUserText ?? '') }).catch(() => null)

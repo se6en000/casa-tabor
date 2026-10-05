@@ -37,7 +37,7 @@ test('the prompt: the bar, the real-person rule, what is already on the calendar
   // Judged as of the day it arrived (a backtest read Spirit Day as past), and the kinds Jake's labels drew.
   assert.match(prompt, /Today is 2026-09-28, the day it arrived\./)
   assert.doesNotMatch(prompt, /2026-09-30/, 'one date: the day it arrived (a later "today" made Spirit Day look past)')
-  assert.match(prompt, /An optional event or sale sent to everyone .* is not an offer; something a child.s school day needs/)
+  assert.match(prompt, /An optional event or sale sent to everyone .* is not an offer — unless it's from a group the family is part of .*; something a child.s school day needs/)
   assert.match(prompt, /slip\.pdf/)
   assert.match(prompt, /Please sign the permission slip by Friday\./)
 })
@@ -105,4 +105,18 @@ test('the reader is told what to wear or bring goes on its event, never an event
   assert.match(p, /never (an event|its own event)/i)
   assert.match(p, /a reminder for something already on the calendar with nothing new/i)
   assert.match(p, /what to wear or bring[^.]*is new/i)
+})
+
+// Oct 5: "TOMORROW! HPSPNA Meeting Reminder" was read and passed over ("Optional neighborhood meeting invitation sent to
+// all residents"), though the family had been to the association's September meeting. The reader now sees what the
+// family has gone to in the last six months; a group they're part of is offered even when it writes to everyone.
+import { pastTitles } from '../supabase/functions/_shared/email-reader.mjs'
+test('what the family has gone to: one of each, newest first, no school runs or travel legs', () => {
+  const ev = (title, d) => ({ title, start_time: `2026-${d}T12:00:00Z` })
+  assert.deepEqual(pastTitles([ev('Neighborhood Association Meeting', '09-14'), ev('Drop off Liv @ Bak', '09-20'), ev('Softball', '09-01'), ev('softball', '09-25'), ev('Flight 1419 PBI→DFW', '09-10')]), ['softball', 'Neighborhood Association Meeting'])
+})
+test('a group the family is part of counts, even when it writes to everyone', () => {
+  const prompt = buildReaderPrompt({ email: { from: 'HPSPNA', subject: 'TOMORROW! HPSPNA Meeting Reminder', body: 'meeting', received_at: '2026-10-05' }, past: ['Neighborhood Association Meeting'], today: '2026-10-05' })
+  assert.match(prompt, /WHAT THE FAMILY HAS GONE TO \(the last six months — the groups they're part of\):\n- Neighborhood Association Meeting/)
+  assert.match(prompt, /unless it's from a group the family is part of/)
 })
