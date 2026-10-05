@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Casa Tabor is a household operations app: React 19 + TypeScript + Vite frontend, Supabase (Postgres + Edge Functions) backend, deployed to Vercel and run full-screen on a wall-mounted Raspberry Pi kiosk (Chromium), plus mobile/tablet web. It covers calendar, grocery, cooking/recipes, music, family/todo tracking, an AI assistant with voice (Alexa-style), Google Calendar sync, Gmail-based "household email intelligence" (auto-classifying/acting on household email), SMS, and push notifications.
+**Name: the app is called Tabor House** (renamed 2026-10-05 by Jake). "Casa", "Casa Tabor" and "Maison Tabor" are retired names: use "Tabor House" in all UI copy, prompts, docs, plan entries and messages. The codebase keeps its old identifiers (repo `casa-tabor`, `casa_*` tables, `casa.*` storage keys, the `casa-tabor.vercel.app` domain) — don't rename those.
+
+Tabor House (codebase: casa-tabor) is a household operations app: React 19 + TypeScript + Vite frontend, Supabase (Postgres + Edge Functions) backend, deployed to Vercel and run full-screen on a wall-mounted Raspberry Pi kiosk (Chromium), plus mobile/tablet web. It covers calendar, grocery, cooking/recipes, music, family/todo tracking, an AI assistant with voice (Alexa-style), Google Calendar sync, Gmail-based "household email intelligence" (auto-classifying/acting on household email), SMS, and push notifications.
 
 ## Commands
 

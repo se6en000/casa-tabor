@@ -121,7 +121,7 @@ function useResolvePrepItem(outcome: PrepItemOutcome) {
       p_outcome: outcome,
     })
     if (error) throw error
-    if (!data?.ok) throw new Error(`Casa could not mark this action ${outcome}.`)
+    if (!data?.ok) throw new Error(`Couldn’t mark this action ${outcome}.`)
 
     // 3. Guarantee direct dismissal of all sibling rows sharing source_ref, cluster_id, action_key, or attention_thread_key
     const nowIso = new Date().toISOString()

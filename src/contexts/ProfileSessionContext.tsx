@@ -27,7 +27,7 @@ export function ProfileSessionProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem(PROFILE_SESSION_STORAGE_KEY, JSON.stringify(nextProfile))
     } catch {
-      throw new Error('Casa could not keep this profile signed in on this device.')
+      throw new Error('Couldn’t keep this profile signed in on this device.')
     }
     setProfile(nextProfile)
   }, [])

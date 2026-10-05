@@ -122,7 +122,7 @@ export default function WallMenu({ onClose, onPreview }: { onClose: () => void; 
         className="absolute left-[44px] top-[44px] flex w-[520px] flex-col rounded-[18px] bg-wall-ground px-[32px] py-[28px] font-body text-wall-ink"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-[12px] text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">MAISON TABOR</div>
+        <div className="mb-[12px] text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">TABOR HOUSE</div>
         {DESTINATIONS.map((item) => (
           <Link
             key={item.to}

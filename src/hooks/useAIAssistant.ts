@@ -235,7 +235,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
         location_name: ctx.focusedEvent.location_name ?? null,
         address: ctx.focusedEvent.address ?? null,
         description: ctx.focusedEvent.description ?? null,
-        source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Casa Household Calendar',
+        source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Tabor House Calendar',
         driver: transport?.driverName ?? null,
         leave_by: transport?.leaveTime ?? null,
         drive_duration_min: transport?.driveMinutes ?? null,

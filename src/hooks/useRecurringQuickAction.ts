@@ -81,7 +81,7 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
     }
     if (!enabled) return Promise.resolve('legacy')
     if (!writable) {
-      return Promise.reject(new Error('This read-only Google series must be explicitly adopted before Casa can edit it.'))
+      return Promise.reject(new Error('This read-only Google series must be explicitly adopted before Tabor House can edit it.'))
     }
     if (!context) {
       return Promise.reject(new Error(
@@ -112,7 +112,7 @@ export function useRecurringQuickAction(event: EventWithDetails | null) {
     if (loadedEventId !== eventId) throw new Error('Recurring series details are still loading. Please try again in a moment.')
     if (failedEventId === eventId) throw new Error('Recurring series details could not be loaded. Retry before changing this event.')
     if (!enabled) return false
-    if (!writable) throw new Error('This read-only Google series must be explicitly adopted before Casa can edit it.')
+    if (!writable) throw new Error('This read-only Google series must be explicitly adopted before Tabor House can edit it.')
     if (!context) throw new Error('Recurring series details are unavailable.')
     setSaving(true)
     setError(null)

@@ -155,7 +155,7 @@ export default function HomeSettingsPage({ hideHeader = false }: { hideHeader?: 
             <Home size={16} className="text-casa-gold shrink-0" />
             <div>
               <label className="block text-body-sm font-semibold text-casa-navy">Home Screen Layout</label>
-              <p className="text-caption text-casa-muted mt-0.5">Choose what displays on your main Casa Tabor screen</p>
+              <p className="text-caption text-casa-muted mt-0.5">Choose what displays on your main Tabor House screen</p>
             </div>
           </div>
 

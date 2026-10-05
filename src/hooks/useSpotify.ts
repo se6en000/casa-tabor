@@ -149,7 +149,7 @@ export function useSpotify(): UseSpotifyReturn {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const Spotify = (window as any).Spotify
       const player = new Spotify.Player({
-        name: 'Casa Tabor',
+        name: 'Tabor House',
         volume: 0.8,
         getOAuthToken: async (cb: (token: string) => void) => {
           if (!isTokenFresh()) await refreshAccessToken()

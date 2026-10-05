@@ -203,7 +203,7 @@ async function finalizeEventSync(
     const syncJobId = await queueGoogleSyncRetry(sb, eventId, historyId, syncError)
     const queuedResponse = {
       ...response,
-      sync_warning: `Saved in Casa Tabor. Google sync failed for now and was queued to retry automatically: ${syncError}`,
+      sync_warning: `Saved in Tabor House. Google sync failed for now and was queued to retry automatically: ${syncError}`,
       sync_status: 'queued',
       sync_job_id: syncJobId,
     }
@@ -212,7 +212,7 @@ async function finalizeEventSync(
   } catch (queueError) {
     const failedResponse = {
       ...response,
-      sync_warning: `Saved in Casa Tabor, but Google sync failed and retry queueing also failed: ${syncError}`,
+      sync_warning: `Saved in Tabor House, but Google sync failed and retry queueing also failed: ${syncError}`,
       sync_status: 'failed',
     }
     await updateAuditResult(
@@ -1472,7 +1472,7 @@ Deno.serve(async (req) => {
         failed_events: failedEvents.slice(0, 10),
         sync_status: updatedEventIds.length > 0 ? 'queued' : 'failed',
         sync_warning: updatedEventIds.length > 0
-          ? `Updated ${updatedEventIds.length} events in Casa Tabor. Google sync has been queued in the background.`
+          ? `Updated ${updatedEventIds.length} events in Tabor House. Google sync has been queued in the background.`
           : 'No events were updated.',
         correlation_id: cid,
       }), {

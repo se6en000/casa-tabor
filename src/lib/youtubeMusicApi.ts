@@ -162,7 +162,7 @@ export async function searchYouTubeMusic(query: string): Promise<YouTubeTrack[]>
       videoId: 'KJEzFvXx3Xw',
       name: query.replace(/\b\w/g, l => l.toUpperCase()),
       artists: ['Household Cast Radio'],
-      album: 'Casa Live Station',
+      album: 'Tabor House Station',
       albumArtUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
       durationMs: 245000,
       streamUrl,

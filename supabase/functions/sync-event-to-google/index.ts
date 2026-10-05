@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
       ok: true,
       sync_status: 'queued',
       sync_job_id: existingJob.id,
-      sync_warning: `Saved in Casa Tabor. Google sync is queued and still in progress: ${reason}`,
+      sync_warning: `Saved in Tabor House. Google sync is queued and still in progress: ${reason}`,
       via: targetFn,
     })
   }
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
     ok: true,
     sync_status: 'queued',
     sync_job_id: jobId,
-    sync_warning: `Saved in Casa Tabor. Google sync is queued and still in progress: ${reason}`,
+    sync_warning: `Saved in Tabor House. Google sync is queued and still in progress: ${reason}`,
     via: targetFn,
   })
 })

@@ -1240,7 +1240,7 @@ export default function FamilySettingsPage() {
                                             </span>
                                           </div>
                                           <p className="text-caption text-casa-muted leading-tight font-normal">
-                                            Keeps external calendars 100% clean. Shows only in Casa Tabor ambient headers.
+                                            Keeps external calendars 100% clean. Shows only in Tabor House ambient headers.
                                           </p>
                                         </Button>
 

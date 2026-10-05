@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
 
   if (!llmConfig?.api_key) {
     // No LLM — echo back a simple acknowledgement
-    return twiml(`Hi ${member.name}! AI isn't configured yet. Set up an LLM in Casa Tabor Settings.`)
+    return twiml(`Hi ${member.name}! AI isn't configured yet. Set up an LLM in Tabor House Settings.`)
   }
 
   // Build the AI prompt

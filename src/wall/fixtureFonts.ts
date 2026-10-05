@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 // Visual-test only: every face and weight the Wall and the phone draw with, loaded up
 // front. Weights load lazily on first use, so document.fonts.ready could resolve before
 // a bold or an italic was even asked for, and a screenshot caught the fallback font
-// (random 500-pixel diffs on "MAISON TABOR", a title, a count).
+// (random 500-pixel diffs on "TABOR HOUSE", a title, a count).
 const FACES = [
   '400 16px "DM Sans"', '500 16px "DM Sans"', '600 16px "DM Sans"', '700 16px "DM Sans"',
   '500 16px "Cormorant Garamond"', '600 16px "Cormorant Garamond"', '700 16px "Cormorant Garamond"',

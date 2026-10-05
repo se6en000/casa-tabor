@@ -103,7 +103,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
             ) : (
               <>
                 {/* The row fits the name or the email count, not both beside TO DECIDE: the count ran into the ring (2026-09-30). */}
-                {!(onOpenEmail && emailCount > 0) && <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">MAISON TABOR</span>}
+                {!(onOpenEmail && emailCount > 0) && <span className="whitespace-nowrap text-wall-label font-semibold tracking-[0.18em] text-wall-brass-ink">TABOR HOUSE</span>}
                 {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
                 {onOpenEmail && <EmailCount count={emailCount} onOpen={onOpenEmail} />}
               </>

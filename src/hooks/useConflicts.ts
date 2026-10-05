@@ -106,7 +106,7 @@ export function useSnoozeConflict() {
       p_snoozed_until: snoozedUntil.toISOString(),
     })
     if (error) throw error
-    if (!data?.ok) throw new Error('Casa could not snooze this conflict.')
+    if (!data?.ok) throw new Error('Couldn’t snooze this conflict.')
     qc.invalidateQueries({ queryKey: ['conflicts'] })
   }
 }

@@ -6361,14 +6361,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               return { type: 'text', text: `Confirmed — I created "${title}" at ${start}.`, write_verified: true }
             }
             if (payload.sync_status === 'queued') {
-              return { type: 'text', text: `Saved in Casa Tabor. Google sync is queued and still in progress for "${title}".`, write_verified: true }
+              return { type: 'text', text: `Saved in Tabor House. Google sync is queued and still in progress for "${title}".`, write_verified: true }
             }
             return {
               type: 'text',
               write_verified: true,
               text: payload.sync_warning
                 ? payload.sync_warning
-                : `Saved in Casa Tabor, but I could not confirm Google sync yet for "${title}".`,
+                : `Saved in Tabor House, but I could not confirm Google sync yet for "${title}".`,
             }
           }
         }

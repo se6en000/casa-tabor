@@ -119,7 +119,7 @@ export function useReminderNeedsYouActions() {
       p_expected_updated_at: expectedUpdatedAt ?? null,
     })
     if (error) throw error
-    if (!data?.ok) throw new Error('Casa could not complete this reminder.')
+    if (!data?.ok) throw new Error('Couldn’t complete this reminder.')
     await invalidateReminderSurfaces()
     return data
   }, [qc, invalidateReminderSurfaces])

@@ -19,7 +19,7 @@ export function formatSyncError(error?: string | null): { title: string; detail:
   if (!error) {
     return {
       title: 'Sync Rejected by Google Calendar',
-      detail: 'The Google Calendar target rejected this sync update. Event remains safe in Casa.',
+      detail: 'The Google Calendar target rejected this sync update. Event remains safe in Tabor House.',
     }
   }
   const low = error.toLowerCase()

@@ -76,7 +76,7 @@ export async function sendDeviceTestPush(): Promise<{ ok: boolean; error?: strin
   try {
     const { error } = await supabase.functions.invoke('send-push-notification', {
       body: {
-        title: 'Casa Tabor: Test Alert',
+        title: 'Tabor House: Test Alert',
         body: 'Push notifications are working on this device!',
         tag: `test-push-${Date.now()}`,
         actions: [

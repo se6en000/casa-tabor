@@ -1,7 +1,7 @@
 {
-  "name": "Tabor",
+  "name": "Tabor House",
   "short_name": "Tabor",
-  "description": "The family day",
+  "description": "Tabor House — the family day",
   "start_url": "/phone",
   "display": "standalone",
   "background_color": "#F1ECE3",

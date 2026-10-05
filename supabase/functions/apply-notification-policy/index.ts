@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
     createdNotifications++
     await maybeSendPush(`⚠️ Conflict: ${eventTitle}`, c.description, `policy-conflict-${c.id}`, '/', c.event_a_id)
     if (cfg.conflict_alerts && (!smsEscalationOnly || c.severity >= 3)) {
-      await maybeSendSms(`Casa alert: ${c.description}`, c.severity)
+      await maybeSendSms(`Tabor House alert: ${c.description}`, c.severity)
     }
   }
 
@@ -223,7 +223,7 @@ Deno.serve(async (req) => {
       dedupe_key: dedupeKey,
     })
     createdNotifications++
-    if (cfg.prep_alerts) await maybeSendSms(`Casa prep: ${p.description}`, p.priority >= 3 ? 3 : 2)
+    if (cfg.prep_alerts) await maybeSendSms(`Tabor House prep: ${p.description}`, p.priority >= 3 ? 3 : 2)
   }
 
     return new Response(

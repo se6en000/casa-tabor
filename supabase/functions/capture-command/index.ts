@@ -147,7 +147,7 @@ async function planCaptureActionWithLlm(
   if (!geminiKey) return null
 
   const nowIso = options.now.toISOString()
-  const systemInstruction = `You are a strict single-shot execution engine for iOS Shortcuts and voice quick actions in Casa Tabor (a smart home family system).
+  const systemInstruction = `You are a strict single-shot execution engine for iOS Shortcuts and voice quick actions in Tabor House (a smart home family system).
 Current local time reference: ${nowIso} (Timezone offset: ${options.utcOffset}).
 Known Family Members: ${options.familyNames.join(', ')}.
 
@@ -166,7 +166,7 @@ MANDATORY RULES:
       functionDeclarations: [
         {
           name: 'create_event',
-          description: 'Create a calendar event or reminder task in Casa Tabor with sensible defaults.',
+          description: 'Create a calendar event or reminder task in Tabor House with sensible defaults.',
           parameters: {
             type: 'OBJECT',
             properties: {

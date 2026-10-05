@@ -98,10 +98,10 @@ self.addEventListener('push', function (event) {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'Casa Tabor', body: event.data.text() };
+    payload = { title: 'Tabor House', body: event.data.text() };
   }
 
-  const { title = 'Casa Tabor', body = '', url = '/', tag, icon, actions = [], data = {}, eventId, prepItemId } = payload;
+  const { title = 'Tabor House', body = '', url = '/', tag, icon, actions = [], data = {}, eventId, prepItemId } = payload;
 
   const options = {
     body,
