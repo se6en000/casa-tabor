@@ -39,6 +39,8 @@ export interface WallEvent {
   end_time: string
   all_day: boolean
   event_type?: string | null
+  /** A reminder with no due date is a to-do for any time (its start_time is only a placeholder). */
+  has_due_date?: boolean | null
   status?: string | null
   /** A trip's leg, as the travel email importer files it (flight_outbound / flight_return / hotel / car_rental). */
   leg_type?: string | null

@@ -298,6 +298,9 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const end = new Date(event.end_time)
     if (!(start < dayEnd && end > dayStart)) continue
     if (event.status === 'cancelled') continue
+    // A to-do with no due date isn't on any day (Jake, Oct 5: "Reply to Natasha Ahles" showed at 12:00 AM as an event
+    // with "No one yet"): its time is a placeholder. It lives on the to-do lists, with a tick.
+    if (event.event_type === 'reminder' && event.has_due_date === false) continue
     if (isRoutineMirror(event, start)) continue
     // A flight or a trip's all-day event is drawn as the trip (below), not as an outing of its own.
     if (travelEventIds.has(event.id)) continue

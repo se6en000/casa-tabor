@@ -112,7 +112,7 @@ export function meView(input: { viewerId: string; plan: DayPlan | null; members:
   dayStart.setHours(0, 0, 0, 0)
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
   const justYours = events
-    .filter((e) => (e as WallEvent & { event_type?: string | null }).event_type === 'reminder')
+    .filter((e) => (e as WallEvent & { event_type?: string | null }).event_type === 'reminder' && e.has_due_date !== false)
     .filter((e) => (e.members ?? []).some((m) => (m.family_member_id ?? m.family_member?.id) === viewerId && m.role === 'primary'))
     .map((e) => ({ id: e.id, title: e.title, at: new Date(e.start_time) }))
     .filter((r) => r.at >= dayStart && r.at < dayEnd)
