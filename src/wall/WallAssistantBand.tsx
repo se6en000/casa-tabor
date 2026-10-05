@@ -956,7 +956,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           {state === 'NEEDS A YES'
             ? 'Say yes, or change\nanything on it'
             : state === 'THINKING'
-              ? '' // the ring and THINKING say it (Jake, 2026-09-29: "way redundant")
+              ? (tip ? `Try: ${tip}` : '') // the ring and THINKING say it; a tip, if any, sits here — the one place for tips (Jake, Oct 5)
               : state === 'LISTENING' && idleTip
                 ? `Try: ${idleTip}` // the quiet example, under the mic (Jake, Oct 5: "put the tips there")
               : state === 'LISTENING' && haloNote != null
@@ -1099,8 +1099,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           // What Casa is doing on a longer think (P3.25 phase 1): in place of the tip.
           <div className="mt-auto max-w-[1180px] truncate text-wall-detail text-wall-night-ink-2/70">{status}</div>
         ) : tip ? (
-          // One quiet line, no card: the question stays the focus (Jake, 2026-09-27; board 07e).
-          <div className="mt-auto max-w-[1180px] text-wall-detail text-wall-night-ink-2/70">Tip: {tip}</div>
+          // Thinking: the tip is under the mic (Jake, Oct 5: "we only need one place for the tips").
+          null
         ) : (
         <div className="mt-auto flex flex-col gap-[12px]">
         {/* While the mic waits for you (Jake, Oct 3: "any tips.. should be VERY subtle"): one quiet example, after a moment

@@ -731,13 +731,13 @@ test('wall: Coming up with a long list — nothing runs under the week strip; "N
   await expect(page.getByText('EDS Air Conditioning Appointment')).toBeVisible()
 })
 
-// Tips while Casa thinks (board 07e): one fitting tip under THINKING. "What can I say?" is said, not tapped (Jake, Oct 3:
+// Tips while Casa thinks (board 07e): one fitting tip under the mic, the one place for tips (Oct 5). "What can I say?" is said, not tapped (Jake, Oct 3:
 // "can we remove what can I say?, If I say that then please show me the screen but I dont need a button").
 test('wall assistant: while Casa thinks, a tip that fits the question; saying "what can I say?" shows the whole list', async ({ page }) => {
   await band(page, 'thinking')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section.getByText('THINKING', { exact: true })).toBeVisible()
-  await expect(section.getByText(/^Tip: /)).toBeVisible()
+  await expect(section.getByText(/^Try: /)).toBeVisible() // under the mic, the one place for tips (Jake, Oct 5)
   await expect(section.getByText(/Gift idea for Kelly/).first()).toBeVisible()
   await expect(section.getByRole('button', { name: 'What can I say?' })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
