@@ -22,7 +22,7 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
   placeholder?: string
   /** The computer's panel (Jake, Oct 3: "restoration hardware subtle elegant"): a hairline brass field, a brass send. */
   quiet?: boolean
-}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], charsPerLine = 90, placeholder = 'Type to Casa, or paste a message or pictures', quiet = false }, ref) {
+}>(function WallTypeLine({ onSend, busy = false, initialText = '', initialImages = [], charsPerLine = 90, placeholder = 'Type, or paste a message or pictures', quiet = false }, ref) {
   const [text, setText] = useState(initialText)
   const [images, setImages] = useState<TypedImage[]>(initialImages)
   const [focused, setFocused] = useState(true)
@@ -44,7 +44,7 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
   const lines = Math.min(6, Math.max(1, text.split('\n').length, Math.ceil(text.length / charsPerLine)))
   return (
     <form
-      aria-label="Type to Casa"
+      aria-label="Type to ask"
       className="flex flex-col gap-[12px]"
       onSubmit={(e) => { e.preventDefault(); submit() }}
     >
@@ -71,7 +71,7 @@ const WallTypeLine = forwardRef<WallTypeLineHandle, {
         <textarea
           ref={field}
           autoFocus
-          aria-label="Type to Casa"
+          aria-label="Type to ask"
           value={text}
           rows={lines}
           placeholder={placeholder}

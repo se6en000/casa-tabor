@@ -37,7 +37,7 @@ export function buildReaderPrompt({ email, family = [], upcoming = [], today, at
   const cal = upcoming.map((e) => `- [${e.id}] ${e.title} · ${e.when}`).join('\n') || '- nothing'
   const files = attachments.map((a) => `- ${a.filename} (${a.mimeType})`).join('\n')
   const arrived = String(email.received_at ?? '').slice(0, 10) || today
-  return `You read one email for the Tabor family's home assistant, Casa, and decide whether it is worth bringing up. Today is ${arrived}, the day it arrived. The family: ${people}.
+  return `You read one email for the Tabor family's home assistant in Tabor House, and decide whether it is worth bringing up. Today is ${arrived}, the day it arrived. The family: ${people}.
 
 The bar: offer only what needs someone in the family to do something by a date, or changes something already on the calendar, or a real person wrote to the family (a friend, a teacher, the school office about a child) — with or without a date, unless it looks like a scam. Everything else stays in the mailbox: receipts, shipping, marketing and webinars, schools or colleges the family isn't part of, newsletters with nothing to do, a reminder for something already on the calendar with nothing new (what to wear or bring for it, a time, a place is new). An optional event or sale sent to everyone (a showcase, an open house, a fundraiser run, tickets, a yearbook ad) is not an offer; something a child's school day needs (a dress-up or spirit day, something to bring, a form to sign, a sign-up with a deadline) is — as an offer with its date, even from a teacher. A bill he has to pay himself, with a due date, is an offer (a reminder to pay); autopay notices, statements, rate or plan changes and paid receipts are not.
 

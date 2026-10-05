@@ -47,7 +47,7 @@ export function MicButton({ onAsk, className = '', small = false, calling = fals
   return (
     <button
       type="button"
-      aria-label="Talk to Casa"
+      aria-label="Ask"
       onClick={(event) => {
         event.stopPropagation()
         onAsk()

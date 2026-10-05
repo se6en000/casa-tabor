@@ -22,9 +22,52 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Architects+Daughter&family=Caveat:wght@400;500;600;700&family=Homemade+Apple&family=Marck+Script&family=Patrick+Hand&display=swap" rel="stylesheet" />
+    <!-- The loading mark (canvas 39a, Jake Oct 5): on the phone only, from the first paint until the day has loaded
+         (src/phone/splash.ts ends it). It starts as the finished mark, where the launch screen left it, then fades and
+         draws again — the ring round, the T rising, the rule out, HOUSE settling — until the day is there. -->
+    <style>
+      #th-splash{display:none}
+      html.th-splash-on #th-splash{display:flex;position:fixed;inset:0;z-index:2147483000;align-items:center;justify-content:center;background:#F1ECE3;transition:opacity .35s ease}
+      #th-splash svg{width:50vw;height:50vw;overflow:visible}
+      #th-splash .ring{stroke-dasharray:1923;transform:rotate(-90deg);transform-box:view-box;transform-origin:512px 512px;animation:th-ring 3.4s cubic-bezier(.6,0,.3,1) infinite}
+      #th-splash .t{animation:th-t 3.4s ease-out infinite}
+      #th-splash .rule{transform-box:view-box;transform-origin:512px 622px;animation:th-rule 3.4s ease-out infinite}
+      #th-splash .house{animation:th-house 3.4s ease-out infinite}
+      #th-splash.done{opacity:0}
+      #th-splash.done *{animation:none!important}
+      @keyframes th-ring{0%,10%{stroke-dashoffset:0;opacity:1}19.9%{stroke-dashoffset:0;opacity:0}20%{stroke-dashoffset:1923;opacity:1}55%,100%{stroke-dashoffset:0;opacity:1}}
+      @keyframes th-t{0%,10%{opacity:1;transform:none}20%,36%{opacity:0;transform:translateY(26px)}58%,100%{opacity:1;transform:none}}
+      @keyframes th-rule{0%,10%{opacity:1;transform:scaleX(1)}19.9%{opacity:0;transform:scaleX(1)}20%,55%{opacity:1;transform:scaleX(0)}66%,100%{opacity:1;transform:scaleX(1)}}
+      @keyframes th-house{0%,10%{opacity:1;transform:none}20%,60%{opacity:0;transform:translateY(12px)}78%,100%{opacity:1;transform:none}}
+      @media (prefers-reduced-motion: reduce){#th-splash *{animation:none!important}}
+    </style>
+    <script>
+      // Only a phone opening the app (the home-screen app starts on /phone); never the wall or the test fixtures.
+      if (location.pathname === '/phone') {
+        document.documentElement.classList.add('th-splash-on')
+        // Never in the way for long, whatever happens: gone after 8 s.
+        setTimeout(function () { window.__thSplashDone && window.__thSplashDone() }, 8000)
+      }
+    </script>
     <title>Tabor House</title>
   </head>
   <body>
+    <div id="th-splash" aria-hidden="true">
+      <svg viewBox="0 0 1024 1024">
+        <circle class="ring" cx="512" cy="512" r="306" fill="none" stroke="#A88450" stroke-width="14" />
+        <image class="t" href="/icons/mark-t.png" x="0" y="0" width="1024" height="1024" />
+        <line class="rule" x1="452" y1="622" x2="572" y2="622" stroke="#A88450" stroke-width="5" />
+        <image class="house" href="/icons/mark-house.png" x="0" y="0" width="1024" height="1024" />
+      </svg>
+    </div>
+    <script>
+      window.__thSplashDone = function () {
+        var el = document.getElementById('th-splash')
+        if (!el || el.classList.contains('done')) return
+        el.classList.add('done')
+        setTimeout(function () { el.remove(); document.documentElement.classList.remove('th-splash-on') }, 400)
+      }
+    </script>
     <div id="root"></div>
     <script src="/blank-recovery.js"></script>
     <script type="module" src="/src/main.tsx"></script>

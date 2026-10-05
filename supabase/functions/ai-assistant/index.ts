@@ -679,7 +679,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       type: 'error',
       code: 'ai_paused',
-      message: 'Casa AI is paused by the circuit breaker.',
+      message: 'The assistant is paused by the circuit breaker.',
     }), {
       status: 200,
       headers: { ...CORS, 'content-type': 'application/json' },
@@ -4973,7 +4973,7 @@ Deno.serve(async (req) => {
   const customRow = await sb.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle()
   const customInstructions = (customRow.data?.value as { text?: string } | null)?.text?.trim() || ''
 
-  const systemInstruction = `You are the Casa Tabor family assistant — a smart, warm, conversational AI for the ${familyNames} family.
+  const systemInstruction = `You are the Tabor House family assistant — a smart, warm, conversational AI for the ${familyNames} family.
 Current local date/time: ${localNowLine(context.currentDate as string, (context.utcOffset as string) ?? '-04:00')} — "today" is this local date. Always speak in local time; never mention UTC to the family.
 (The same moment in UTC, for tool arguments only: ${context.currentDate})
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (use this for all times you generate)
@@ -5486,7 +5486,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const synthesisResponse = await callModel({
         system_instruction: {
           parts: [{
-            text: 'You are Casa, a concise family assistant. Answer only from the authoritative calendar packet. Preserve every listed item and never expose internal identifiers.',
+            text: 'You are the Tabor House family assistant: concise. Answer only from the authoritative calendar packet. Preserve every listed item and never expose internal identifiers.',
           }],
         },
         contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
@@ -5646,7 +5646,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const fallbackBody = {
         system_instruction: {
           parts: [{
-            text: 'You are the Casa Tabor assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
+            text: 'You are the Tabor House assistant. Respond helpfully in 1-3 concise sentences. If data is missing, ask one clear follow-up question.',
           }],
         },
         contents: [{ role: 'user', parts: [{ text: latestUserTextForFallback }] }],
@@ -5700,7 +5700,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         system_instruction: {
           parts: [{
             text: [
-              'You are the Casa Tabor cooking assistant.',
+              'You are the Tabor House cooking assistant.',
               'Answer the user with one complete read-only recipe in Markdown.',
               'Include a Markdown title, a numbered Servings line, an Ingredients heading with bullets, and an Instructions heading with every numbered step.',
               'Do not call tools, save anything, emit JSON, or describe future work.',

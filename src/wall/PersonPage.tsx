@@ -100,10 +100,10 @@ export default function PersonPage({ surface, name, routines, known, onEdit, onA
         </section>
       )}
 
-      <section aria-label={`What Casa knows about ${name}`} className="flex flex-col">
+      <section aria-label={`What we know about ${name}`} className="flex flex-col">
         <div className={`${s.label} pb-[8px]`}>WHAT CASA KNOWS</div>
         {known === null && <div className={`${rule} ${s.row} ${s.detail}`}>Looking…</div>}
-        {known === 'error' && <div className={`${rule} ${s.row} ${s.detail}`}>Casa’s memory couldn’t be read just now.</div>}
+        {known === 'error' && <div className={`${rule} ${s.row} ${s.detail}`}>What we know couldn’t be read just now.</div>}
         {known && known !== 'error' && known.sure.length === 0 && <div className={`${rule} ${s.row} ${s.detail}`}>Nothing yet.</div>}
         {known && known !== 'error' && known.sure.map(fact)}
       </section>

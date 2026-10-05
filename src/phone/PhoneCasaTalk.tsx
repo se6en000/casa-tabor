@@ -17,7 +17,7 @@ export default function PhoneCasaTalk({ topic, onAnswer, onTalk }: { topic: Casa
     setBusy(null)
   }
   return (
-    <section aria-label="Casa has something for you" className="flex flex-col gap-[10px] rounded-[20px] bg-wall-band p-[18px] text-wall-on-pigment">
+    <section aria-label="Something for you" className="flex flex-col gap-[10px] rounded-[20px] bg-wall-band p-[18px] text-wall-on-pigment">
       <div className="text-phone-label font-bold tracking-[0.16em] text-wall-night-brass">{topic.eyebrow}</div>
       <div className="font-display text-phone-heading font-semibold">{topic.said}</div>
       {topic.ask && <div className="text-phone-body text-wall-stone">{topic.ask}</div>}

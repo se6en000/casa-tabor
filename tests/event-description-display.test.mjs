@@ -7,9 +7,9 @@ test('getEventDisplayDescription strips the Casa details block, keeping the huma
   const description = [
     'Weekly afternoon strings pickup at Palm Beach Public Elementary School.',
     '<!-- CASA-TABOR-DETAILS:START -->',
-    'Casa Tabor details',
+    'Tabor House details',
     'People: Emme',
-    'Open in Casa: https://casa-tabor.vercel.app/calendar?event=c30a186b-becb-4c44-9a67-000000000000',
+    'Open in Tabor House: https://casa-tabor.vercel.app/calendar?event=c30a186b-becb-4c44-9a67-000000000000',
     '<!-- CASA-TABOR-DETAILS:END -->',
   ].join('\n')
 

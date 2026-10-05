@@ -262,7 +262,7 @@ export default function PhoneProject({ detail: incoming, today, onEdit, onBack, 
       <div className="flex items-center justify-between">
         <button type="button" onClick={detail.parent ? () => onOpenProject(detail.parent!.id) : onBack} className="h-[44px] border-0 bg-transparent p-0 text-phone-body font-semibold text-wall-ink">‹ {detail.parent ? detail.parent.title : 'To do'}</button>
         <span className="flex gap-[8px]">
-          {onTalk && <Answer label="Talk to Casa" primary onClick={onTalk} />}
+          {onTalk && <Answer label="Talk it through" primary onClick={onTalk} />}
           <Answer label="Settings" onClick={() => setSettings(true)} />
         </span>
       </div>

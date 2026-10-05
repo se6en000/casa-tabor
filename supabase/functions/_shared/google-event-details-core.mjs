@@ -95,7 +95,7 @@ export function buildCasaDetailsLines(bundle = {}, eventUrl = '') {
     : []
 
   return compactLines([
-    'Casa Tabor details',
+    'Tabor House details',
     members.length ? `People: ${members.join(', ')}` : '',
     // Only what the family wrote or the event said: no category, generated prep or parking text (2026-10-01).
     bring.length ? `Bring: ${bring.join(', ')}` : '',
@@ -104,7 +104,7 @@ export function buildCasaDetailsLines(bundle = {}, eventUrl = '') {
     logistics.length ? `Logistics: ${logistics.join('; ')}` : '',
     checklist.length ? `Checklist: ${checklist.join('; ')}` : '',
     actions.length ? `Actions: ${actions.join('; ')}` : '',
-    eventUrl ? `Open in Casa: ${eventUrl}` : '',
+    eventUrl ? `Open in Tabor House: ${eventUrl}` : '',
   ])
 }
 

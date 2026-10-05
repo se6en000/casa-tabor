@@ -293,7 +293,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               {draft.place.address && draft.place.address !== draft.place.name ? (
                 <span className="flex items-start gap-[6px] text-phone-detail text-wall-ink-2"><MapPin size={14} aria-hidden="true" className="mt-[2px] shrink-0" />{draft.place.address}</span>
               ) : draft.place.name.trim() && !/^home$/i.test(draft.place.name.trim()) ? (
-                <span className="text-phone-detail text-wall-ink-2">No address yet — pick one below, or Casa looks it up after you save.</span>
+                <span className="text-phone-detail text-wall-ink-2">No address yet — pick one below, or it’s looked up after you save.</span>
               ) : null}
               {placeHits.length > 0 && (
                 <span className="flex flex-col gap-[6px]">

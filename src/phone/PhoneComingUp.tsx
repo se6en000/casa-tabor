@@ -35,7 +35,7 @@ export default function PhoneComingUp({ items, today, onAct, ideas = [], onEditI
   if (items.length === 0) {
     return (
       <div className="flex flex-col gap-[10px]">
-        <p className="m-0 font-display text-phone-heading italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach Casa what to watch for.</p>
+        <p className="m-0 font-display text-phone-heading italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach it what to watch for.</p>
         {ideasButton && <div>{ideasButton}</div>}
         {ideasSheet}
       </div>

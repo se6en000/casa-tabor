@@ -40,7 +40,7 @@ export default function PhoneEmailSettings({ onClose, useSettings = useEmailSett
             <div key={k.id} className={row}>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-semibold">{k.label}</span>
-                <span className="text-phone-detail text-wall-ink-2">{k.kind === 'sender' ? 'Every email, never skipped' : 'From anyone'} · {k.source === 'voice' ? 'you told Casa' : `since ${day(k.created_at)}`}</span>
+                <span className="text-phone-detail text-wall-ink-2">{k.kind === 'sender' ? 'Every email, never skipped' : 'From anyone'} · {k.source === 'voice' ? 'you said so' : `since ${day(k.created_at)}`}</span>
               </span>
               <button type="button" aria-label={`Stop keeping me posted on ${k.label}`} onClick={() => void save({ action: 'remove_rule', id: k.id }, `No longer keeping you posted on ${k.label}.`)} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink-2"><X size={16} /></button>
             </div>

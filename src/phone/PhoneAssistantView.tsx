@@ -163,7 +163,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
     // 34e: held — the words as they're heard, just above the button; let go to send, slide left to cancel.
     if (glance.holding) {
       return (
-        <section aria-label="Casa is listening" className="pointer-events-none absolute inset-0 font-body">
+        <section aria-label="Listening" className="pointer-events-none absolute inset-0 font-body">
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-wall-ink/60 to-wall-ink/15" />
           <div className="absolute bottom-[104px] left-[16px] right-[16px] flex flex-col items-end gap-[10px]">
             <div className="max-w-[92%] rounded-[22px] rounded-br-[6px] bg-wall-on-pigment px-[18px] py-[16px] shadow-[0_10px_30px_rgba(38,34,29,0.25)]">
@@ -182,7 +182,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
       <div className="absolute inset-0 font-body text-wall-ink">
         {/* The shade goes over the tab bar too (Jake, Oct 2); Casa's own button stays above it, to hold again. */}
         <div className="phone-scrim absolute inset-0 bg-wall-ink/35" onClick={onClose} />
-        <section {...glanceSwipe} aria-label="Casa’s answer" className="phone-sheet absolute bottom-[96px] left-[10px] right-[10px] flex max-h-[72%] flex-col gap-[12px] overflow-y-auto overscroll-contain rounded-[26px] bg-phone-ground px-[18px] pb-[16px] pt-[10px] shadow-[0_16px_40px_rgba(38,34,29,0.3)]">
+        <section {...glanceSwipe} aria-label="The answer" className="phone-sheet absolute bottom-[96px] left-[10px] right-[10px] flex max-h-[72%] flex-col gap-[12px] overflow-y-auto overscroll-contain rounded-[26px] bg-phone-ground px-[18px] pb-[16px] pt-[10px] shadow-[0_16px_40px_rgba(38,34,29,0.3)]">
           <div aria-hidden="true" className="mx-auto h-[5px] w-[38px] shrink-0 rounded-full bg-wall-stone" />
           {lastAsked && <div className="max-w-[85%] self-end rounded-[18px] rounded-br-[6px] bg-wall-ink px-[14px] py-[9px] text-phone-body text-wall-on-pigment">{lastAsked.text}</div>}
           {thinking ? (
@@ -213,17 +213,17 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             {openDay && !thinking && <button type="button" onClick={openDay.go} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">{openDay.label}</button>}
             <button type="button" onClick={glance.onExpand} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">Keep talking</button>
           </div>
-          <div className="text-center text-phone-detail text-wall-ink-2">Swipe down to close · hold Casa again to answer</div>
+          <div className="text-center text-phone-detail text-wall-ink-2">Swipe down to close · hold Ask again to answer</div>
         </section>
       </div>
     )
   }
 
   return (
-    <section aria-label="Ask Casa" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
+    <section aria-label="Ask" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={reporting ? backToTalk : saying ? () => setSaying(false) : onClose} className={round}><ChevronLeft size={20} /></button>
-        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : saying ? 'What can I say?' : 'Casa'}</h1>
+        <h1 className="m-0 flex-1 font-display text-phone-title font-bold text-wall-ink">{reporting ? 'What went wrong?' : saying ? 'What can I say?' : 'Ask'}</h1>
         {!reporting && !saying && onForm && (
           <button type="button" onClick={onForm} className="flex h-[44px] shrink-0 items-center border-0 bg-transparent px-[4px] text-phone-detail font-semibold text-wall-ink-2 underline underline-offset-[3px]">Use the form</button>
         )}
@@ -361,7 +361,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             <textarea
               ref={boxRef}
               rows={1}
-              aria-label="Ask Casa"
+              aria-label="Ask"
               value={shown}
               // Return on the iPhone keyboard sends at once (Jake, Oct 2: "not having to do it twice"). iOS can put the line
               // break into the box before any key event is seen, so a line break sends whichever way it arrives.

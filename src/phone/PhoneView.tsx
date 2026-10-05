@@ -44,6 +44,7 @@ import { usePendingTicks } from './ticks'
 import PhoneMonth from './PhoneMonth'
 import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
+import { finishSplash } from './splash'
 import PhoneTabBar from './PhoneTabBar'
 import PhoneDayPager from './PhoneDayPager'
 import PhonePushPage from './PhonePushPage'
@@ -696,6 +697,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const lastScroll = useRef(0)
   // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
   const loading = week.length === 0 || members.length === 0
+  // The loading mark (39a) gives way once the day is here.
+  useEffect(() => { if (!loading) finishSplash() }, [loading])
   // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
   const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || (todos && projectId))
   const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || (askOpen && !glance) || initialOpen)
@@ -819,7 +822,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             }
           : assistant
             ? {
-                label: 'Casa',
+                label: 'Ask',
                 icon: <Sparkles size={26} strokeWidth={1.9} />,
                 onClick: () => { setAskOpening(null); setGlance(null); setAskOpen(true) },
                 active: Boolean(glance?.holding),
@@ -951,7 +954,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               <span className="flex flex-1 flex-col gap-[2px]"><span className="text-phone-body font-bold">Settings</span><span className="text-phone-detail text-wall-ink-2">Family, calendars, voice</span></span>
               <ChevronRight size={18} aria-hidden="true" className="text-wall-ink-2" />
             </Link>
-            {onSignOut && initialRow(<LogOut size={20} />, 'Switch person', 'Sign out · open Casa as someone else', () => { setInitialOpen(false); onSignOut() })}
+            {onSignOut && initialRow(<LogOut size={20} />, 'Switch person', 'Sign out · open as someone else', () => { setInitialOpen(false); onSignOut() })}
             <Link to="/wall" className="mt-[12px] flex h-[48px] items-center justify-center gap-[10px] rounded-full border border-solid border-wall-ink-2 text-phone-body font-semibold text-wall-ink no-underline">
               <Monitor size={18} /> See the Wall
             </Link>

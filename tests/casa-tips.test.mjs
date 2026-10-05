@@ -12,7 +12,7 @@ test('said the way a person says it, short, grouped by what you are doing', () =
     assert.ok(t.text.length < 110, `${t.id} is short`)
     assert.match(t.text, /^“/, `${t.id} starts with the words to say`)
   }
-  assert.deepEqual(tipsByTopic().map((g) => g.topic), ['Calendar', 'Who’s driving', 'Trips', 'Groceries', 'To do & plans', 'Remember', 'Coming up', 'Email', 'Getting around', 'Talking to Casa'])
+  assert.deepEqual(tipsByTopic().map((g) => g.topic), ['Calendar', 'Who’s driving', 'Trips', 'Groceries', 'To do & plans', 'Remember', 'Coming up', 'Email', 'Getting around', 'Talking'])
   for (const g of tipsByTopic()) assert.ok(g.tips.length >= 1, g.topic)
   assert.equal(new Set(CASA_TIPS.map((t) => t.id)).size, CASA_TIPS.length)
 })

@@ -748,7 +748,7 @@ test('wall assistant: "what can I say?" opens the list without asking Casa; new 
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect(section).toBeVisible()
   await mic(page, () => window.__mic.say('what can I say'))
-  for (const topic of ['CALENDAR', 'WHO’S DRIVING', 'TRIPS', 'GROCERIES', 'TO DO & PLANS', 'REMEMBER', 'COMING UP', 'EMAIL', 'GETTING AROUND', 'TALKING TO CASA']) await expect(section.getByText(topic, { exact: true })).toBeVisible()
+  for (const topic of ['CALENDAR', 'WHO’S DRIVING', 'TRIPS', 'GROCERIES', 'TO DO & PLANS', 'REMEMBER', 'COMING UP', 'EMAIL', 'GETTING AROUND', 'TALKING']) await expect(section.getByText(topic, { exact: true })).toBeVisible()
   await expect(section.getByText(/Giselle’s watching Owen 1:30 to 3:30 today/)).toBeVisible()
   await expect(section.getByText('NEW', { exact: true }).first()).toBeVisible()
   expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0) // not a question for Casa
@@ -1147,7 +1147,7 @@ test('wall: To do — the tile opens Next up; Done and "Not now" answer an item;
   await expect(page.getByText('Look for a cable to fix the pool')).toBeVisible()
 
   // Casa noticed: each waits for a yes.
-  await page.getByRole('button', { name: /^Casa noticed/ }).click()
+  await page.getByRole('button', { name: /^Noticed/ }).click()
   await expect(page.getByText('Looks over — close it?')).toBeVisible()
   await page.getByRole('button', { name: 'Yes' }).first().click()
   await expect(page.getByText('Pick up Owen’s birthday cupcakes')).toHaveCount(0)
@@ -1350,7 +1350,7 @@ test('wall: a project page opens Casa talking about that project', async ({ page
   await page.getByRole('button', { name: /^To do:/ }).click()
   await page.getByRole('region', { name: 'Projects' }).getByRole('button', { name: 'Open Paint the house' }).click()
   const paint = page.getByRole('region', { name: 'Paint the house — project' })
-  await paint.getByRole('button', { name: 'Talk to Casa about it' }).click()
+  await paint.getByRole('button', { name: 'Talk it through' }).click()
   await expect.poll(() => page.evaluate(() => window.__asked)).toBe('Let’s work on the Paint the house project.')
 })
 
@@ -1880,7 +1880,7 @@ test('wall: today’s header keeps its height, with Hide routines in it or with 
 test('wall: Casa’s band has a pull tab — it follows a pull, springs back when let go early, closes when pulled down or tapped', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
   const band = page.getByRole('region', { name: 'Assistant' })
-  const tab = band.getByRole('button', { name: 'Close Casa — or pull down' })
+  const tab = band.getByRole('button', { name: 'Close the conversation — or pull down' })
   await expect(tab).toBeVisible()
   const t = await tab.boundingBox()
   const b = await band.boundingBox()
@@ -1907,7 +1907,7 @@ test('wall: Casa’s band has a pull tab — it follows a pull, springs back whe
   await expect(band).toHaveCount(0)
   // A tap on the tab closes it too.
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=answer')
-  await page.getByRole('region', { name: 'Assistant' }).getByRole('button', { name: 'Close Casa — or pull down' }).click()
+  await page.getByRole('region', { name: 'Assistant' }).getByRole('button', { name: 'Close the conversation — or pull down' }).click()
   await expect(page.getByRole('region', { name: 'Assistant' })).toHaveCount(0)
 })
 
@@ -1990,7 +1990,7 @@ test('wall: Casa wants to talk — the glow and the line, the band, an answer se
   await page.goto('/__wall-fixture?trip=1&talk=1&at=2026-10-07T15:05:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  const line = wall.getByRole('button', { name: 'Casa has something for you · Jake' })
+  const line = wall.getByRole('button', { name: 'Something for you, Jake' })
   await expect(line).toBeVisible()
   const pushed = await page.evaluate(() => window.__casaPushed)
   expect(pushed).toHaveLength(1)
@@ -1998,7 +1998,7 @@ test('wall: Casa wants to talk — the glow and the line, the band, an answer se
   await expect(wall).toHaveScreenshot('talk-calling.png', { animations: 'disabled' })
 
   await line.click()
-  const band = wall.getByRole('region', { name: 'Casa has something for you' })
+  const band = wall.getByRole('region', { name: 'Something for you' })
   await expect(band.getByText('JAKE, ABOUT TOMORROW MORNING')).toBeVisible()
   await expect(band.getByText(/^You’re in Dallas tomorrow, and nobody’s taking Emme and Owen to .+ at 7:35\.$/)).toBeVisible()
   await expect(band.getByText('Giselle’s free then.')).toBeVisible()
@@ -2014,11 +2014,11 @@ test('wall: Casa wants to talk — the glow and the line, the band, an answer se
 test('wall: Casa wants to talk — "Not now" puts it away until the evening; the mic opens it too', async ({ page }) => {
   await page.goto('/__wall-fixture?trip=1&talk=1&at=2026-10-07T15:05:00')
   const wall = page.getByTestId('wall-fixture')
-  await wall.getByRole('button', { name: 'Talk to Casa' }).first().click()
-  const band = wall.getByRole('region', { name: 'Casa has something for you' })
+  await wall.getByRole('button', { name: 'Ask', exact: true }).first().click()
+  const band = wall.getByRole('region', { name: 'Something for you' })
   await band.getByRole('button', { name: 'Not now' }).click()
   await expect(band).toHaveCount(0)
-  await expect(wall.getByRole('button', { name: 'Casa has something for you · Jake' })).toHaveCount(0)
+  await expect(wall.getByRole('button', { name: 'Something for you, Jake' })).toHaveCount(0)
 })
 
 // Canvas row 22 (Jake, 2026-10-01, approved; asked Sep 30: "I get a lot of text msgs on my mac that I like to copy and
@@ -2042,7 +2042,7 @@ test('wall on a computer: Casa opens ready to type; a pasted thread and a few wo
   await page.goto('/__wall-fixture?band=empty&keyboard=device&at=2026-09-30T20:42:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  const line = wall.getByRole('textbox', { name: 'Type to Casa' })
+  const line = wall.getByRole('textbox', { name: 'Type to ask' })
   await expect(line).toBeFocused()
   await expect(wall.getByText('Type, or talk')).toBeVisible()
   await page.keyboard.insertText('Kim K: Reminder for Friday’s field trip!! Kids wear their PINK class shirt and bring a packed lunch, no glass. Bus leaves 9:30 sharp, back by 2:15')
@@ -2062,13 +2062,13 @@ test('wall on a computer: pictures pasted into the line go with the words', asyn
   await page.goto('/__wall-fixture?band=empty&keyboard=device&at=2026-09-30T20:42:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  await expect(wall.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
-  await pastePictures(page, 'textarea[aria-label="Type to Casa"]', 2)
+  await expect(wall.getByRole('textbox', { name: 'Type to ask' })).toBeFocused()
+  await pastePictures(page, 'textarea[aria-label="Type to ask"]', 2)
   await expect(wall.getByRole('img', { name: /picture-\d\.png/ })).toHaveCount(2)
   await wall.getByRole('button', { name: 'Remove picture-2.png' }).click()
-  await pastePictures(page, 'textarea[aria-label="Type to Casa"]', 1)
+  await pastePictures(page, 'textarea[aria-label="Type to ask"]', 1)
   await expect(wall.getByRole('img', { name: /picture-\d\.png/ })).toHaveCount(2)
-  await wall.getByRole('textbox', { name: 'Type to Casa' }).fill('what do we need from these')
+  await wall.getByRole('textbox', { name: 'Type to ask' }).fill('what do we need from these')
   await expect(wall).toHaveScreenshot('paste-band.png')
   await wall.getByRole('button', { name: 'Send' }).click()
   const sent = await page.evaluate(() => window.__casaSent)
@@ -2081,7 +2081,7 @@ test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc l
   await page.evaluate(() => document.fonts.ready)
   await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
   await page.keyboard.press('x')
-  const quick = wall.getByRole('textbox', { name: 'Ask Casa' })
+  const quick = wall.getByRole('textbox', { name: 'Ask', exact: true })
   await expect(quick).toHaveValue('x')
   await page.keyboard.press('Escape')
   await expect(quick).toHaveCount(0)
@@ -2098,7 +2098,7 @@ test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc l
   await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
   await pastePictures(page, null, 1)
   await expect(wall.getByRole('img', { name: 'picture-1.png' })).toBeVisible()
-  await expect(wall.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
+  await expect(wall.getByRole('textbox', { name: 'Type to ask' })).toBeFocused()
 })
 
 // Canvas row 23 (Jake, 2026-10-01, approved; asked Sep 30: "make it easier to find saved places and new places alike,
@@ -2212,7 +2212,7 @@ test('wall assistant: an answer with a list is tiles — in the band, and in the
   await page.evaluate(() => document.fonts.ready)
   await expect(band.getByText('Mint-lime fruit salad', { exact: true })).toBeVisible()
   await expect(band.getByText('how about saturday')).toBeVisible()
-  await expect(band.getByRole('textbox', { name: 'Type to Casa' })).toBeFocused()
+  await expect(band.getByRole('textbox', { name: 'Type to ask' })).toBeFocused()
   await expect(wall).toHaveScreenshot('panel-tiles.png')
 })
 

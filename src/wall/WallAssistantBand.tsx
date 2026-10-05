@@ -692,13 +692,13 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               <Mic size={21} />
             </button>
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="font-display text-wall-date font-semibold leading-none">Casa</span>
+              <span className="font-display text-wall-date font-semibold leading-none">Ask</span>
               <span className="mt-[6px] truncate text-wall-label font-semibold uppercase tracking-[0.18em] text-wall-night-brass/80">
                 {state === 'LISTENING' ? 'Listening' : state === 'THINKING' ? (status ?? 'Thinking') : state === 'NEEDS A YES' ? 'Needs a yes' : 'Type, or talk'}
               </span>
             </span>
             <button type="button" aria-label="Report a problem" onClick={openReport} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-wall-night-ink-2/70"><Bug size={19} /></button>
-            <button type="button" aria-label="Close Casa" onClick={onClose} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-night-ink-2/30 bg-transparent p-0 text-wall-night-ink"><X size={19} /></button>
+            <button type="button" aria-label="Close the conversation" onClick={onClose} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-night-ink-2/30 bg-transparent p-0 text-wall-night-ink"><X size={19} /></button>
           </div>
           <div aria-hidden="true" className="mx-[32px] h-px bg-wall-night-brass/20" />
           <div ref={panelScroll} className="flex min-h-0 flex-1 touch-pan-y flex-col gap-[18px] overflow-y-auto px-[32px] py-[26px] text-wall-body leading-[1.45]">
@@ -808,7 +808,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               key={staged?.nonce ?? 0}
               ref={typeLine}
               charsPerLine={36}
-              placeholder="Type to Casa, or paste"
+              placeholder="Type, or paste"
               busy={busy}
               initialText={staged?.text ?? ''}
               initialImages={staged?.images ?? []}
@@ -840,7 +840,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   if (bandCompact({ viaWake, heard: interim, messages: messages.length, expanded })) {
     return (
       <>
-        <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
+        <button type="button" aria-label="Close the conversation" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
         <section aria-label="Assistant" className="absolute bottom-[36px] left-1/2 z-30 flex -translate-x-1/2 items-center gap-[18px] rounded-full bg-wall-band py-[12px] pl-[14px] pr-[14px] font-body text-wall-on-pigment shadow-[0_12px_36px] shadow-wall-night-ground/50">
           <span aria-hidden="true" className="flex h-[64px] w-[64px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass text-wall-night-brass"><Mic size={28} /></span>
           <span className="text-wall-body font-semibold">Listening…</span>
@@ -855,7 +855,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     <>
     {/* Before anything's said, anywhere outside the band closes it (an accidental wake). Once there's a
         conversation, a tap reaches the screen underneath — he works on the project while talking. */}
-    {tapOutsideCloses(messages.length) && <button type="button" aria-label="Close Casa" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />}
+    {tapOutsideCloses(messages.length) && <button type="button" aria-label="Close the conversation" onClick={() => dismiss('tap_outside')} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />}
     <section
       aria-label="Assistant"
       {...swipe}
@@ -891,7 +891,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           (or anywhere on the band) down to close; a tap on it closes too. */}
       <button
         type="button"
-        aria-label="Close Casa — or pull down"
+        aria-label="Close the conversation — or pull down"
         onClick={(event) => { event.stopPropagation(); dismiss('tab') }}
         className="absolute left-1/2 top-0 flex h-[44px] w-[140px] -translate-x-1/2 cursor-grab items-center justify-center rounded-b-[24px] border-[5px] border-t-0 border-solid border-wall-night-brass bg-wall-band p-0 text-wall-night-brass active:cursor-grabbing"
       >

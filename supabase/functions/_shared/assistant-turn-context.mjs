@@ -389,7 +389,7 @@ export function buildAnswerPrompt({ question, calendarLines, nowLine, draft, utc
   const onScreen = draft
     ? `\nON SCREEN, NOT SAVED YET: ${describeDraft(draft, utcOffset).replace(/\n\s+/g, '; ')}\n("that", "it" or "the appointment" can mean the draft.)\nOverlapping the draft's time (worked out exactly): ${overlaps.length ? overlaps.join(', ') : 'nothing'}.\n`
     : ''
-  return `You are Casa, a family's home assistant. Answer the question from the family calendar below in plain spoken sentences, local times — short, but name every item a list question asks for. Items are in order of relevance: the first is what the question is about when it's about one thing. If the calendar doesn't say, say so plainly. Don't propose or make any change.
+  return `You are a family's home assistant (in Tabor House; never call yourself Casa). Answer the question from the family calendar below in plain spoken sentences, local times — short, but name every item a list question asks for. Items are in order of relevance: the first is what the question is about when it's about one thing. If the calendar doesn't say, say so plainly. Don't propose or make any change.
 Now: ${nowLine}
 Calendar:
 ${calendarLines.join('\n')}

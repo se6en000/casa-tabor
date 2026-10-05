@@ -162,7 +162,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   // The folded groups on the right: Casa's suggestions first (they wait for a yes), then by kind;
   // an empty group isn't shown.
   const groups = [
-    ...(list.suggestions.length ? [{ key: 'noticed', label: 'Casa noticed', count: list.suggestions.length, summary: `${list.suggestions.length} for a yes` }] : []),
+    ...(list.suggestions.length ? [{ key: 'noticed', label: 'Noticed', count: list.suggestions.length, summary: `${list.suggestions.length} for a yes` }] : []),
     // Projects have their own shelf above (P3.23, canvas 10a), not a folded group.
     ...GROUPS.filter((g) => g.key !== 'projects').map((g) => {
       const count = list.groups[g.key].length
@@ -225,7 +225,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
             <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">TO DO · WHAT NEEDS DOING</div>
             <div className="font-display text-wall-move font-semibold">{list.nextUp.length ? `${Math.min(list.nextUp.length, nextUpRoom(list))} ready now` : 'All clear for now'}</div>
             <div className="truncate text-wall-body text-wall-ink-2">
-              {list.sorting ? 'Casa is sorting what’s new from your Reminders. ' : ''}
+              {list.sorting ? 'Sorting what’s new from your Reminders. ' : ''}
               {showShelf ? `${list.projects.length === 1 ? 'One project' : `${list.projects.length} projects`} going. One step from each is all you need to look at.` : 'The rest stays folded — open a group to see it.'}
             </div>
           </div>

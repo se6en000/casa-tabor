@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { finishSplash } from '../../phone/splash'
 import { Delete, KeyRound, Sparkles, ArrowLeft, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -21,6 +22,8 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [managingPins, setManagingPins] = useState(false)
 
+  // Signed out: the loading mark (39a) gives way to the picker at once.
+  useEffect(() => { if (!profile) finishSplash() }, [profile])
   if (profile) return <>{children}</>
 
   if (managingPins) {
@@ -44,7 +47,7 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
       await unlock(selectedMember, pinToSubmit)
     } catch (unlockError) {
       setPin('')
-      setError(unlockError instanceof Error ? unlockError.message : 'Casa could not open this profile.')
+      setError(unlockError instanceof Error ? unlockError.message : 'Couldn’t open this profile.')
     } finally {
       setUnlocking(false)
     }
@@ -90,7 +93,7 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
               </div>
 
               <h1 className="font-display text-display-xs sm:text-display-sm font-bold text-white tracking-tight">
-                Who is using Casa?
+                Who’s using Tabor House?
               </h1>
               <p className="text-body-sm text-white/70 mt-1.5 max-w-sm">
                 Select your profile to access your personalized private dashboard.
@@ -263,7 +266,7 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
                 leadingIcon={!unlocking ? <KeyRound size={18} /> : undefined}
                 className="mt-6 min-h-[52px] bg-gradient-to-r from-casa-gold via-amber-400 to-amber-500 text-casa-navy font-bold rounded-2xl text-body shadow-lg shadow-casa-gold/20 hover:brightness-110"
               >
-                Open {selectedMember.name}'s Casa
+                Open {selectedMember.name}’s Tabor House
               </Button>
             </motion.div>
           )}
@@ -291,7 +294,7 @@ function FamilyPinEnrollment({ onDone }: { onDone: () => void }) {
       setAdminPin('')
     } catch (unlockError) {
       setAdminPin('')
-      setError(unlockError instanceof Error ? unlockError.message : 'Casa could not unlock household admin access.')
+      setError(unlockError instanceof Error ? unlockError.message : 'Couldn’t unlock household admin access.')
     } finally {
       setSaving(false)
     }
@@ -312,7 +315,7 @@ function FamilyPinEnrollment({ onDone }: { onDone: () => void }) {
       onDone()
     } catch (saveError) {
       setMemberPin('')
-      setError(saveError instanceof Error ? saveError.message : 'Casa could not save this PIN.')
+      setError(saveError instanceof Error ? saveError.message : 'Couldn’t save this PIN.')
     } finally {
       setSaving(false)
     }

@@ -166,7 +166,7 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
 
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         {items.length === 0 && (
-          <div className="font-display text-wall-date italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach Casa what to watch for.</div>
+          <div className="font-display text-wall-date italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach it what to watch for.</div>
         )}
         {items.length > 0 && [0, 1].map((c) => (
           <div key={c} className="flex min-w-0 flex-1 flex-col overflow-hidden">

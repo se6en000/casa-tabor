@@ -271,7 +271,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
           <ul aria-label="Added" className="m-0 flex list-none flex-col p-0">
             {addedLines.map((line) => <li key={line} className="border-0 border-t border-solid border-wall-stone py-[12px] text-phone-body text-wall-ink">{line}</li>)}
           </ul>
-          <span className="text-phone-detail text-wall-ink-2">Events are on Google Calendar too. Ask Casa about any of them.</span>
+          <span className="text-phone-detail text-wall-ink-2">Events are on Google Calendar too. Ask about any of them.</span>
           <div className="flex gap-[10px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))]">
             <button type="button" className={`${dark} flex-1`} onClick={onClose}>Done</button>
             <button type="button" className={pill} onClick={() => { setItems([]); setAddedLines([]); setStage('intake') }}>Scan another</button>

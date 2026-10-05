@@ -34,7 +34,7 @@ export default function PhoneTodo({ list, onAct, onEdit }: PhoneTodoProps) {
   const drag = useRef<{ id: string; x: number; y: number; dx: number; on: boolean } | null>(null)
   const [dragX, setDragX] = useState<{ id: string; dx: number } | null>(null)
   const groups = [
-    ...(list.suggestions.length ? [{ key: 'noticed', label: 'Casa noticed', count: list.suggestions.length }] : []),
+    ...(list.suggestions.length ? [{ key: 'noticed', label: 'Noticed', count: list.suggestions.length }] : []),
     ...GROUPS.filter((g) => g.key !== 'projects').map((g) => ({ key: g.key, label: g.label, count: list.groups[g.key].length })).filter((g) => g.count > 0),
   ]
   const folded = groups.reduce((n, g) => n + g.count, 0)

@@ -42,7 +42,7 @@ export default function WallQuickAsk({ enabled, onSend, onPasteFiles }: {
   if (!enabled || text === null) return null
   return (
     <form
-      aria-label="Ask Casa"
+      aria-label="Ask"
       onSubmit={(e) => {
         e.preventDefault()
         if (text.trim()) onSend(text.trim())
@@ -52,10 +52,10 @@ export default function WallQuickAsk({ enabled, onSend, onPasteFiles }: {
       className="absolute bottom-[44px] left-1/2 z-30 flex w-[1100px] -translate-x-1/2 items-center gap-[14px] rounded-full border border-solid border-wall-night-brass/60 bg-wall-band py-[12px] pl-[24px] pr-[16px] font-body text-wall-on-pigment shadow-[0_12px_36px] shadow-wall-night-ground/40"
     >
       <Mic size={24} className="shrink-0 text-wall-night-brass" aria-hidden="true" />
-      <span className="shrink-0 text-wall-body text-wall-night-ink-2">Ask Casa:</span>
+      <span className="shrink-0 text-wall-body text-wall-night-ink-2">Ask:</span>
       <input
         autoFocus
-        aria-label="Ask Casa"
+        aria-label="Ask"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setText(null) } }}

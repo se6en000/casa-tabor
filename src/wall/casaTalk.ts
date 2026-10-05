@@ -157,7 +157,7 @@ export function pushNow(topic: CasaTopic, state: CasaTalkState, now: Date): bool
 
 export function pushMessage(topic: CasaTopic): { title: string; body: string; tag: string; url: string } {
   return {
-    title: topic.forName ? `Something for you, ${topic.forName}` : 'Casa has something for you',
+    title: topic.forName ? `Something for you, ${topic.forName}` : 'Something for you',
     body: topic.said,
     tag: `casa-talk:${topic.key}`,
     url: '/phone',

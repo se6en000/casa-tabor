@@ -17,7 +17,7 @@ export function CasaCalling({ topic, onOpen, className = '' }: { topic: CasaTopi
       className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full border border-solid border-wall-brass bg-wall-brass/15 pl-[14px] pr-[12px] text-wall-detail font-bold text-wall-brass-ink ${className}`}
     >
       <span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />
-      Casa has something for you{topic.forName ? ` · ${topic.forName}` : ''}
+      {topic.forName ? `Something for you, ${topic.forName}` : 'Something for you'}
       <ChevronRight size={20} aria-hidden="true" />
     </button>
   )
@@ -46,7 +46,7 @@ export default function WallCasaTalk({ topic, onAnswer, onTalk, onClose }: {
     <>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute left-0 top-0 z-10 h-[1080px] w-[1920px] cursor-default border-0 bg-transparent p-0" />
       <section
-        aria-label="Casa has something for you"
+        aria-label="Something for you"
         onClick={(event) => event.stopPropagation()}
         className="absolute bottom-0 left-0 z-30 flex h-[520px] w-[1920px] gap-[40px] rounded-t-[32px] bg-wall-band px-[56px] py-[40px] font-body text-wall-on-pigment shadow-[0_-18px_48px] shadow-wall-night-ground/60"
       >
