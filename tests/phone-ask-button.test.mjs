@@ -39,6 +39,18 @@ test('a to-do swiped right past a third is done; left past half the buttons open
   assert.equal(swipeOutcome(-60, 360, true, 148), 'none')
   // A chore has nothing to the left.
   assert.equal(swipeOutcome(-140, 360, false, 148), 'none')
+  // A quick flick counts, once it's gone far enough to be meant.
+  assert.equal(swipeOutcome(60, 360, true, 148, 0.9), 'done')
+  assert.equal(swipeOutcome(20, 360, true, 148, 0.9), 'none')
+  assert.equal(swipeOutcome(-50, 360, true, 148, -0.8), 'snooze')
+})
+
+test('a finger going sideways is the card’s, up and down the day’s; a wobble decides nothing yet', async () => {
+  const { swipeAxis } = await import('../src/phone/swipe.ts')
+  assert.equal(swipeAxis(3, 2), null)
+  assert.equal(swipeAxis(9, 4), 'x')
+  assert.equal(swipeAxis(-9, 4), 'x')
+  assert.equal(swipeAxis(4, 12), 'y')
 })
 
 test('the swipe tip shows on the first few opens, apart from the Ask tip, until a swipe or "Got it"', async () => {

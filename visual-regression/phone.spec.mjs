@@ -760,6 +760,57 @@ test('phone: Today — swipe a to-do or chore right to finish, a to-do left for 
   await expect(todo.getByRole('button', { name: 'Later' })).toBeVisible()
 })
 
+// A finger, not a mouse (Jake, Oct 5, a screen recording: "the touch swipe experience kinda sucks"): on the phone the
+// day pager took the sideways drag — the card moved a few px, sprang back, and the day slid. Real touches through
+// Chrome's input pipe (they scroll, unlike made-up TouchEvents): the card goes, the day stays.
+test.describe('with a finger', () => {
+  test.use({ hasTouch: true, isMobile: true })
+  test('phone: Today — a finger swipes a to-do right to finish and left to put off; the day doesn’t slide', async ({ page }) => {
+    await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1')
+    const phone = page.getByTestId('phone-fixture')
+    await expect(phone).toBeVisible()
+    await phone.getByRole('button', { name: /^Today/ }).first().click()
+    // As on an iPhone: Safari doesn't let the card's "up and down only" stop the day pager around it.
+    await page.addStyleTag({ content: '[data-swipe-row], [data-swipe-row] * { touch-action: auto !important }' })
+    const cdp = await page.context().newCDPSession(page)
+    const finger = async (row, from, by) => {
+      const box = await row.boundingBox()
+      const y = box.y + box.height / 2
+      const x0 = box.x + from
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
+      for (let k = 1; k <= 12; k++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (by * k) / 12, y: y + k * 0.4 }] })
+        await page.waitForTimeout(16)
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await page.waitForTimeout(400)
+    }
+    const pager = page.locator('[data-day-pager]')
+    const before = await pager.evaluate((el) => el.scrollLeft)
+    const row = phone.getByLabel(/ — swipe right when it's done$/).filter({ hasText: 'To do' }).first()
+    const title = (await row.getAttribute('aria-label')).replace(/ — swipe right when it's done$/, '')
+    await finger(row, 40, 220)
+    await expect(phone.getByRole('checkbox', { name: `Done: ${title}` })).toHaveAttribute('aria-checked', 'true')
+    expect(await pager.evaluate((el) => el.scrollLeft)).toBe(before)
+    await finger(row, 300, -160)
+    await expect(row.getByRole('button', { name: 'Tomorrow' })).toBeVisible()
+    expect(await pager.evaluate((el) => el.scrollLeft)).toBe(before)
+    // Up and down on a card still scrolls the day (made tall enough to scroll).
+    const day = page.locator('[data-day-pager] > section[aria-hidden="false"]')
+    await day.evaluate((el) => { el.firstElementChild.style.paddingBottom = '1200px' })
+    const box = await row.boundingBox()
+    const x = box.x + box.width / 2
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: box.y + 40 }] })
+    for (let k = 1; k <= 12; k++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + k * 0.3, y: box.y + 40 - k * 15 }] })
+      await page.waitForTimeout(16)
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect.poll(() => day.evaluate((el) => el.scrollTop)).toBeGreaterThan(60)
+    expect(await pager.evaluate((el) => el.scrollLeft)).toBe(before)
+  })
+})
+
 test('phone: the swipe tip — Got it puts it away for good', async ({ page }) => {
   await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1&swipeTip=1')
   const phone = page.getByTestId('phone-fixture')
