@@ -44,7 +44,7 @@ export function PinRings({ filled, state = 'typing', length = PIN_LENGTH }: { fi
 }
 
 /** The keypad, iPhone's shape in the wall's serif; a keyboard's digits and Backspace work too. */
-export function PinKeypad({ value, onPress, onDelete, disabled = false }: { value: string; onPress: (digit: string) => void; onDelete: () => void; disabled?: boolean }) {
+export function PinKeypad({ value, onPress, onDelete, disabled = false, corner = null }: { value: string; onPress: (digit: string) => void; onDelete: () => void; disabled?: boolean; corner?: React.ReactNode }) {
   useEffect(() => {
     if (disabled) return
     const onKey = (e: KeyboardEvent) => {
@@ -60,7 +60,7 @@ export function PinKeypad({ value, onPress, onDelete, disabled = false }: { valu
       {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
         <button key={d} type="button" disabled={disabled} onClick={() => onPress(d)} className={key}>{d}</button>
       ))}
-      <span aria-hidden="true" />
+      {corner ?? <span aria-hidden="true" />}
       <button type="button" disabled={disabled} onClick={() => onPress('0')} className={key}>0</button>
       <button type="button" aria-label="Delete PIN digit" disabled={disabled || value.length === 0} onClick={onDelete} className="flex h-[78px] w-[78px] items-center justify-center justify-self-center rounded-full border-0 bg-transparent p-0 text-wall-ink-2 active:scale-[0.94] disabled:opacity-30">
         <Delete size={28} strokeWidth={1.6} />
@@ -75,5 +75,15 @@ export function BackLink({ label, onClick }: { label: string; onClick: () => voi
     <button type="button" onClick={onClick} className="absolute left-[14px] top-[max(14px,calc(env(safe-area-inset-top)+6px))] flex min-h-[44px] items-center border-0 bg-transparent px-[8px] font-body text-phone-body text-wall-ink-2">
       ‹ {label}
     </button>
+  )
+}
+
+/** Face ID's mark (the corners and the face), drawn in brass. */
+export function FaceIdGlyph({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} fill="none" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+      <path className="stroke-current" d="M4 18V10a6 6 0 0 1 6-6h8M46 4h8a6 6 0 0 1 6 6v8M60 46v8a6 6 0 0 1-6 6h-8M18 60h-8a6 6 0 0 1-6-6v-8" />
+      <path className="stroke-current" d="M22 24v5M42 24v5M32 24v12h-3M24 44c4.5 4 11.5 4 16 0" />
+    </svg>
   )
 }

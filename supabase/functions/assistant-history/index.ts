@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 import { requireEnv } from '../_shared/env.ts'
+import { login as passkeyLogin, loginOptions as passkeyLoginOptions, register as registerPasskey, registrationOptions as passkeyRegistrationOptions } from '../_shared/passkey-signin.ts'
 import {
   createProfileSessionToken,
   verifyProfileSessionToken,
@@ -520,6 +521,39 @@ Deno.serve(async (request) => {
         : await sb.from('ai_history_pin_credentials').insert(nextCredential)
       if (saveError) throw saveError
       return json(200, { status: 'member_pin_configured' })
+    }
+
+    // Face ID (canvas 40c): set up by someone already signed in with their PIN; then it signs them in like the PIN.
+    if (action === 'passkey_register_options' || action === 'passkey_register') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      if (action === 'passkey_register') {
+        await registerPasskey(sb, memberId, body?.response)
+        return json(200, { status: 'passkey_registered' })
+      }
+      const { data: member, error } = await sb.from('family_members').select('id,name').eq('id', memberId).maybeSingle()
+      if (error) throw error
+      if (!member) return json(404, { error: 'Family member not found.' })
+      return json(200, { options: await passkeyRegistrationOptions(sb, member) })
+    }
+    if (action === 'passkey_login_options') {
+      const memberId = typeof body?.member_id === 'string' && body.member_id ? body.member_id : null
+      return json(200, { options: await passkeyLoginOptions(sb, memberId) })
+    }
+    if (action === 'passkey_login') {
+      const memberId = await passkeyLogin(sb, body?.response)
+      const { data: credential, error } = await sb
+        .from('ai_history_pin_credentials')
+        .select('credential_version')
+        .eq('credential_kind', 'family_member')
+        .eq('member_id', memberId)
+        .maybeSingle()
+      if (error) throw error
+      if (!credential) return json(404, { error: 'Private history has not been set up for this family member.' })
+      return json(200, {
+        member_id: memberId,
+        history_session_token: await createHistorySession({ role: 'family_member', member_id: memberId, credential_version: credential.credential_version }),
+      })
     }
 
     // Family PINs (canvas 40d): who has a PIN, for the household admin's list. Ids only, never the PINs.

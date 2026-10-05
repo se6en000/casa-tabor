@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { invokeHistoryUnlock } from '../lib/assistantConversationHistoryClient'
 import type { FamilyMember } from '../types'
 import { pigmentIndexes } from '../wall/score'
-import { BackLink, Face, HouseMark, PinKeypad, PinRings } from './SignInParts'
+import { faceIdAvailable, hasFaceId, markOfferedFaceId, setUpFaceId, signInWithFaceId, wasOfferedFaceId } from './passkey'
+import { BackLink, Face, FaceIdGlyph, HouseMark, PinKeypad, PinRings } from './SignInParts'
 import { greeting, PIN_LENGTH, rememberedMember, rememberMember, signInPeople, wrongPinText } from './signin'
 
 const store = typeof localStorage === 'undefined' ? null : localStorage
@@ -72,21 +73,50 @@ function PinStep({ member, pigment, title, resetters, onBack, onNotMe, onIn }: {
   onBack: (() => void) | null; onNotMe: (() => void) | null; onIn: (token: string) => void
 }) {
   const [pin, setPin] = useState('')
-  const [state, setState] = useState<'typing' | 'checking' | 'wrong' | 'right'>('typing')
+  const [state, setState] = useState<'typing' | 'checking' | 'wrong' | 'offer' | 'right'>('typing')
   const [message, setMessage] = useState<string | null>(null)
+  const [faceId, setFaceId] = useState<'none' | 'can' | 'has'>('none')
+  const [token, setToken] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void faceIdAvailable().then((ok) => { if (live) setFaceId(!ok ? 'none' : hasFaceId(member.id) ? 'has' : 'can') })
+    return () => { live = false }
+  }, [member.id])
+  // The way in: the rings go brass and a ring draws round the face, then the day.
+  const goIn = useCallback((t: string) => {
+    setState('right')
+    window.setTimeout(() => onIn(t), 950)
+  }, [onIn])
   const check = useCallback(async (full: string) => {
     setState('checking')
     try {
-      const { history_session_token: token } = await invokeHistoryUnlock(member.id, full)
-      setState('right')
-      // The way in: the rings go brass and a ring draws round the face, then the day.
-      window.setTimeout(() => onIn(token), 950)
+      const { history_session_token: t } = await invokeHistoryUnlock(member.id, full)
+      // Face ID, offered once after a right PIN on a phone that can do it (40c).
+      if (faceId === 'can' && !wasOfferedFaceId(member.id)) {
+        markOfferedFaceId(member.id)
+        setToken(t)
+        setState('offer')
+        return
+      }
+      goIn(t)
     } catch (e) {
       setState('wrong')
       setMessage(wrongPinText(e instanceof Error ? e.message : '', resetters))
       window.setTimeout(() => { setPin(''); setState('typing') }, 650)
     }
-  }, [member.id, onIn, resetters])
+  }, [member.id, resetters, faceId, goIn])
+  const withFaceId = useCallback(async () => {
+    setMessage(null)
+    setState('checking')
+    try {
+      const t = await signInWithFaceId(member.id)
+      if (t) goIn(t)
+      else setState('typing')
+    } catch (e) {
+      setState('typing')
+      setMessage(e instanceof Error ? e.message : 'Face ID didn’t work. Use your PIN.')
+    }
+  }, [member.id, goIn])
   const press = useCallback((d: string) => {
     if (state !== 'typing' || pin.length >= PIN_LENGTH) return
     const next = `${pin}${d}`
@@ -114,11 +144,48 @@ function PinStep({ member, pigment, title, resetters, onBack, onNotMe, onIn }: {
       <div className="mt-[10px] font-body text-phone-label font-semibold uppercase tracking-[0.22em] text-wall-brass-ink">Your PIN</div>
       <div className="mt-[22px]"><PinRings filled={pin.length} state={state === 'wrong' ? 'wrong' : 'typing'} /></div>
       <p role="alert" className={`m-0 mt-[14px] min-h-[22px] max-w-[320px] text-center font-body text-phone-detail ${message ? 'text-wall-rust' : 'text-wall-ink-2'}`}>{message ?? ''}</p>
-      <div className="mt-[14px]"><PinKeypad value={pin} onPress={press} onDelete={del} disabled={state === 'checking'} /></div>
+      <div className="mt-[14px]">
+        <PinKeypad
+          value={pin}
+          onPress={press}
+          onDelete={del}
+          disabled={state === 'checking'}
+          corner={faceId === 'has' ? (
+            <button type="button" aria-label="Use Face ID" onClick={() => void withFaceId()} className="flex h-[78px] w-[78px] items-center justify-center justify-self-center rounded-full border-0 bg-transparent p-0 text-wall-brass active:scale-[0.94]">
+              <FaceIdGlyph className="h-[34px] w-[34px]" />
+            </button>
+          ) : null}
+        />
+      </div>
+      {state === 'offer' && token && (
+        <FaceIdOffer
+          onYes={async () => {
+            try { await setUpFaceId(member.id, token) } catch { /* the PIN still works; nothing to say */ }
+            goIn(token)
+          }}
+          onNo={() => goIn(token)}
+        />
+      )}
       {onNotMe && (
         <button type="button" onClick={onNotMe} className="mt-[16px] min-h-[44px] border-0 bg-transparent font-body text-phone-body font-medium text-wall-brass-ink">Not {member.name}?</button>
       )}
     </Ground>
+  )
+}
+
+/** After the first right PIN on a phone that can: "Use Face ID next time?" — once (40c). */
+function FaceIdOffer({ onYes, onNo }: { onYes: () => Promise<void>; onNo: () => void }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="fixed inset-0 flex items-end bg-wall-ink/30 p-[10px] motion-safe:animate-[signin-rise_0.3s_ease-out_both]">
+      <div role="dialog" aria-label="Use Face ID next time?" className="mx-auto w-full max-w-[420px] rounded-[34px] bg-phone-ground px-[26px] pb-[max(22px,env(safe-area-inset-bottom))] pt-[30px] text-center">
+        <FaceIdGlyph className="mx-auto h-[64px] w-[64px] text-wall-brass" />
+        <h2 className="m-0 mt-[16px] font-display text-phone-title font-semibold text-wall-ink">Use Face ID next time?</h2>
+        <p className="m-0 mt-[8px] font-body text-phone-detail text-wall-ink-2">Your face opens your day on this phone. Your PIN still works.</p>
+        <button type="button" disabled={busy} onClick={() => { setBusy(true); void onYes() }} className="mt-[22px] min-h-[54px] w-full rounded-full border-0 bg-wall-ink font-body text-phone-body font-semibold text-phone-ground disabled:opacity-60">Use Face ID</button>
+        <button type="button" disabled={busy} onClick={onNo} className="mt-[6px] min-h-[48px] w-full border-0 bg-transparent font-body text-phone-body font-medium text-wall-ink-2">Not now</button>
+      </div>
+    </div>
   )
 }
 
