@@ -345,11 +345,13 @@ test('a timed event with nobody on it is kept for the "No one yet" row, not drop
 
 // Jake, Oct 5 (a phone screenshot: "Reply to Natasha Ahles" and "Reply to Towhid Nishat" at 12:00 AM, "No one yet"):
 // a to-do with no due date is on no day — its start time is a placeholder; it belongs on the to-do lists, with a tick.
-test('a to-do with no due date is not on the day; one with a due date still is', () => {
+test('a to-do with no due date is not on the day; one with a date and nobody on it is Jake\'s', () => {
   const anytime = { id: 'r-any', title: 'Reply to Natasha Ahles', start_time: '2026-09-25T04:00:00Z', end_time: '2026-09-25T04:15:00Z', all_day: false, event_type: 'reminder', has_due_date: false, members: [] }
   const dated = { id: 'r-dated', title: 'Call the dentist', start_time: '2026-09-25T15:00:00Z', end_time: '2026-09-25T15:15:00Z', all_day: false, event_type: 'reminder', has_due_date: true, members: [] }
   const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, anytime, dated] })
   const ids = [...plan.nobody.map((n) => n.sourceId), ...[...plan.lanes.values()].flat().map((s) => s.sourceId), ...plan.allDay.map((a) => a.sourceId)]
   assert.ok(!ids.includes('r-any'), 'the anytime to-do is on no row')
-  assert.ok(plan.nobody.some((n) => n.sourceId === 'r-dated'), 'a dated one with nobody still shows on "No one yet"')
+  // Jake, Oct 5: "if there is no assignment … make Jake the assign" — a to-do nobody is on is the first parent's.
+  assert.ok(!plan.nobody.some((n) => n.sourceId === 'r-dated'), 'not on "No one yet"')
+  assert.ok((plan.lanes.get('jake-id') ?? []).some((s) => s.sourceId === 'r-dated' && s.reminder), 'on Jake\'s lane, as a to-do')
 })

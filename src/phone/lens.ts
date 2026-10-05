@@ -218,7 +218,9 @@ export function familyItems(plan: DayPlan | null, members: WallMember[], filterI
   // Nobody on it yet (board 08a): it still shows, marked, in time order.
   for (const n of plan.nobody) {
     if (items.has(n.sourceId)) continue
-    items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, end: n.end, title: n.title, sub: 'No one yet', people: [], kind: n.sourceId.startsWith('chore:') ? 'chore' : 'event' })
+    // A to-do nobody is on is still a to-do, with its tick (Jake, Oct 5: "I still don't see tick boxes to close them").
+    const kind = n.sourceId.startsWith('chore:') ? 'chore' : n.reminder ? 'todo' : 'event'
+    items.set(n.sourceId, { id: n.sourceId, time: clockTime(n.start), at: n.start, end: n.end, title: n.title, sub: kind === 'todo' ? 'To do' : 'No one yet', people: [], kind })
   }
   // All-day items head the day; one for nobody in particular is for everyone.
   // A trip's stay says where ("Courtyard by Marriott Dallas Allen · Day 1 of 2").

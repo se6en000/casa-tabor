@@ -185,7 +185,8 @@ export interface DayPlan {
   /** Timed items with no place recorded, e.g. a pickup reminder with no address. */
   unplaced: Array<{ sourceId: string; title: string; at: Date; memberIds: string[] }>
   /** Timed items with nobody on them — the "No one yet" row (board 08a), so nothing goes missing. */
-  nobody: Array<{ sourceId: string; title: string; start: Date; end: Date }>
+  /** `reminder`: a to-do (it keeps its tick wherever it's listed). */
+  nobody: Array<{ sourceId: string; title: string; start: Date; end: Date; reminder?: boolean }>
   /** All-day items (birthdays, spirit days) shown as notes, not lane blocks; a trip away is one too, with its day count. */
   allDay: Array<{ sourceId: string; title: string; memberIds: string[]; trip?: { city: string; dayIndex: number; dayCount: number; mode?: 'fly' | 'drive' } }>
   /** Who is away on a trip this day (travel.ts). */

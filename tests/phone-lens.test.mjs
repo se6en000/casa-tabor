@@ -211,3 +211,12 @@ test('not sure of the place: "which one?"; no address at all: "add the address" 
   const moves = [me.next, ...me.moves].filter(Boolean)
   assert.deepEqual(moves.filter((m) => m.eventId === 'amped' || m.eventId === 'nowhere').map((m) => [m.eventId, m.leaveBy, m.eyebrow]), [['amped', null, 'WHICH PLACE?'], ['nowhere', null, 'ADD THE ADDRESS']])
 })
+
+// Jake, Oct 5 (Today on his phone): "Reply to Natasha Ahles" with a date and time, nobody on it, showed "No one yet" and
+// no tick. A to-do nobody is on is still a to-do: its tick, and "To do".
+test('Family: a to-do with nobody on it keeps its tick', () => {
+  const at = new Date('2026-10-05T17:00:00')
+  const plan = { date: new Date('2026-10-05T00:00:00'), lanes: new Map(), trips: [], allDay: [], nobody: [{ sourceId: 'r1', title: 'Reply to Natasha Ahles', start: at, end: at, reminder: true }, { sourceId: 'e1', title: 'Plumber', start: at, end: at }] }
+  const items = familyItems(plan, members, null)
+  assert.deepEqual(items.map((i) => [i.id, i.kind, i.sub]), [['e1', 'event', 'No one yet'], ['r1', 'todo', 'To do']])
+})

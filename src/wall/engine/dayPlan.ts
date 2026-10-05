@@ -163,6 +163,10 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   const { start: dayStart, end: dayEnd } = dayBounds(date)
 
   const lanes = new Map<string, LaneSegment[]>(members.map((m) => [m.id, []]))
+  // A to-do nobody is on is the household's first parent's (Jake, Oct 5: "if there is no assignment … make Jake the
+  // assign"; "if it's not obvious who this is for, then default it to Jake and I will delegate from there"): on his lane
+  // with its tick, not the "No one yet" row.
+  const todoOwner = [...members].filter((m) => m.role === 'parent').sort((a, b) => ((a as { sort_order?: number }).sort_order ?? 999) - ((b as { sort_order?: number }).sort_order ?? 999))[0]?.id ?? null
   const addSegment = (memberId: string, segment: LaneSegment) => {
     if (!lanes.has(memberId)) lanes.set(memberId, [])
     lanes.get(memberId)!.push(segment)
@@ -308,18 +312,22 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const refs = (event.members ?? [])
       .map((m) => ({ id: m.family_member_id ?? m.family_member?.id ?? null, role: m.role ?? null }))
       .filter((m): m is { id: string; role: string | null } => Boolean(m.id))
-    const participants = [...new Set(refs.filter((m) => m.role !== 'driver').map((m) => m.id))]
+    const named = [...new Set(refs.filter((m) => m.role !== 'driver').map((m) => m.id))]
     const primaries = refs.filter((m) => m.role === 'primary').map((m) => m.id)
+    // A to-do with nobody on it: the first parent's (above). An event with nobody keeps the "No one yet" row and its
+    // questions (who's going, who drives) — new ones are saved with Jake on them when no one is said (execute-ai-action).
+    const unassigned = event.event_type === 'reminder' && refs.length === 0 && todoOwner !== null && !event.all_day
+    const participants = unassigned ? [todoOwner!] : named
     // A reminder belongs to whoever does it ("Pick up Photobook for Liv" is Jake's job);
     // an event belongs to everyone in it ("Jaida watching Owen and Emme" is both kids').
     const owners = event.event_type === 'reminder' && primaries.length > 0 ? primaries : participants
 
     if (event.all_day) {
-      allDay.push({ sourceId: event.id, title: event.title, memberIds: participants })
+      allDay.push({ sourceId: event.id, title: event.title, memberIds: named })
       continue
     }
     // Nobody on it at all: no lane to draw it on, so it goes on the "No one yet" row (board 08a).
-    if (refs.length === 0) nobody.push({ sourceId: event.id, title: event.title, start, end })
+    if (refs.length === 0 && !unassigned) nobody.push({ sourceId: event.id, title: event.title, start, end, ...(event.event_type === 'reminder' ? { reminder: true } : {}) })
 
     const placeStatus = classifyPlace(event, homeAddress)
     if (placeStatus !== 'away') {
