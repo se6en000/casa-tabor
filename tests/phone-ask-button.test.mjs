@@ -30,3 +30,23 @@ test('the button says T / ASK and breathes, still while held and for Reduce Moti
   const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
   assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.ask-ring-breathe, \.ask-glint \{ animation: none; \}/)
 })
+
+test('a to-do swiped right past a third is done; left past half the buttons opens them; short swipes spring back', async () => {
+  const { swipeOutcome } = await import('../src/phone/swipe.ts')
+  assert.equal(swipeOutcome(130, 360, true, 148), 'done')
+  assert.equal(swipeOutcome(100, 360, true, 148), 'none')
+  assert.equal(swipeOutcome(-80, 360, true, 148), 'snooze')
+  assert.equal(swipeOutcome(-60, 360, true, 148), 'none')
+  // A chore has nothing to the left.
+  assert.equal(swipeOutcome(-140, 360, false, 148), 'none')
+})
+
+test('the swipe tip shows on the first few opens, apart from the Ask tip, until a swipe or "Got it"', async () => {
+  const { swipeTip } = await import('../src/phone/askTip.ts')
+  const s = store()
+  assert.equal(swipeTip.thisOpen(s), true)
+  askTipDone(s)
+  assert.equal(swipeTip.thisOpen(s), true)
+  swipeTip.done(s)
+  assert.equal(swipeTip.thisOpen(s), false)
+})

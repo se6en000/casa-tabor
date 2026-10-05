@@ -1,6 +1,6 @@
 import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, CalendarDays, Car, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
@@ -44,9 +44,10 @@ import { usePendingTicks } from './ticks'
 import PhoneMonth from './PhoneMonth'
 import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
+import SwipeRow from './SwipeRow'
 import { finishSplash } from './splash'
 import AskMark from './AskMark'
-import { askTipDone, askTipThisOpen } from './askTip'
+import { askTipDone, askTipThisOpen, swipeTip } from './askTip'
 import PhoneTabBar from './PhoneTabBar'
 import PhoneDayPager from './PhoneDayPager'
 import PhonePushPage from './PhonePushPage'
@@ -448,6 +449,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     setFarDay(i >= 0 || !planDay ? null : date)
     setDayIndex(i >= 0 ? i : null)
   }
+  // "Swipe to finish" (46c), over Today's first to-do or chore; off in screenshot tests unless ?swipeTip=1.
+  const [swipeTipOn, setSwipeTipOn] = useState(() => (import.meta.env.VITE_VISUAL_TEST_MODE === 'true' && !/[?&]swipeTip=1/.test(typeof location === 'undefined' ? '' : location.search) ? false : swipeTip.thisOpen(typeof localStorage === 'undefined' ? null : localStorage)))
+  const dismissSwipeTip = useCallback(() => { setSwipeTipOn(false); swipeTip.done(typeof localStorage === 'undefined' ? null : localStorage) }, [])
   // Family for any day of the strip (a page per day in the pager).
   // A day's list (canvas 30a), on Family and on Me: what's started above the NOW line (the last two in view, the rest
   // folded), finished faded, a late chore or to-do in rust, the next lifted; chores and to-dos tick.
@@ -457,6 +461,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // lifted with how long until it; chores and to-dos get ticks.
   const familyToday = Boolean(shownDay && sameDay(shownDay.date, now))
   const timeline = dayTimeline(items, now)
+  // The swipe tip sits over the first to-do or chore in view that's still to do.
+  const tipAt = swipeTipOn && familyToday
+    ? [...timeline.allDay, ...timeline.before.slice(-2), ...timeline.after].find((i) => ((i.kind === 'chore' && tickChore) || (i.kind === 'todo' && todos)) && !ticks.pending.has(i.kind === 'chore' ? `${i.id}:${phoneDay(now)}` : `todo:${i.id}`) && !choreDone.has(`${i.id}:${phoneDay(now)}`))?.id
+    : undefined
   const familyRow = (i: FamilyItem) => {
     const next = familyToday && i.id === timeline.nextId
     const tickKey = i.kind === 'chore' ? `${i.id}:${phoneDay(shownDay?.date ?? now)}` : `todo:${i.id}`
@@ -484,29 +492,32 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     )
     const card = `flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-on-pigment'} ${past ? 'opacity-45' : ''} ${ticked ? 'opacity-55 transition-opacity duration-500' : ''}`
     if (tickable) {
-      // A to-do or chore (canvas 46a, Jake Oct 5: "the check off box right next to the initial avatar is confusing … 46a
-      // is the most user friendly and obvious"): a brass circle where an event has its colour bar — the tick, on the left
-      // like iPhone Reminders; who it's for in words, no faces (faces are for events).
+      // A to-do or chore (canvas 46c; Jake, Oct 5: "can we do the swipe 46c? … right to done, swipe left to snooze a
+      // day?"): the card like the others, its bar dotted brass and who it's for in words — no box, no faces. Swipe right
+      // to finish (again to take it back), left for Tomorrow or Later (a to-do); a tap opens it.
       const who = i.people.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean).join(' & ')
+      const done = () => { haptic(); if (i.kind === 'chore' && choreDone.has(tickKey)) void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false); else ticks.toggle(tickKey) }
       return (
-        <div key={i.id} className={card}>
-          {timeCol}
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={ticked}
-            aria-label={`Done: ${i.title}`}
-            onClick={() => { haptic(); if (i.kind === 'chore' && choreDone.has(tickKey)) void tickChore?.(i.id.slice('chore:'.length), shownDay?.date ?? now, false); else ticks.toggle(tickKey) }}
-            className="-my-[8px] -ml-[8px] flex h-[44px] w-[44px] shrink-0 items-center justify-center self-center border-0 bg-transparent p-0"
-          >
-            <span aria-hidden="true" className={`flex h-[26px] w-[26px] items-center justify-center rounded-full border-[2px] border-solid ${ticked ? 'phone-tick-pop border-wall-brass bg-wall-brass text-wall-on-pigment' : late ? 'border-wall-rust' : 'border-wall-brass'}`}>
-              {ticked && <Check size={15} strokeWidth={3} />}
-            </span>
-          </button>
-          <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="-ml-[8px] flex min-w-0 flex-1 items-stretch border-0 bg-transparent p-0 text-left text-wall-ink">
-            {words([i.sub, who].filter(Boolean).join(' · '))}
-          </button>
-        </div>
+        <Fragment key={i.id}>
+        {i.id === tipAt && (
+          <div role="note" aria-label="Swipe to finish" className="relative mb-[6px] rounded-[18px] bg-wall-ink px-[16px] pb-[10px] pt-[14px] text-wall-on-pigment shadow-[0_10px_30px_rgba(38,34,29,0.3)] motion-safe:animate-[signin-rise_0.4s_ease-out_both]">
+            <div className="font-display text-phone-heading font-semibold">Swipe to finish</div>
+            <p className="m-0 mt-[4px] font-body text-phone-detail">Swipe right when it’s done{i.kind === 'todo' ? '; left to put it off till tomorrow or later' : ''}. A tap opens it.</p>
+            <button type="button" onClick={dismissSwipeTip} className="mt-[6px] min-h-[36px] border-0 bg-transparent p-0 font-body text-phone-label font-semibold uppercase tracking-[0.18em] text-wall-night-brass">Got it</button>
+            <span aria-hidden="true" className="absolute bottom-[-7px] left-[40px] h-[14px] w-[14px] rotate-45 bg-wall-ink" />
+          </div>
+        )}
+        <SwipeRow label={`${i.title} — swipe right when it's done`} title={i.title} ticked={ticked} onDone={done} hint={i.id === tipAt} onSwiped={tipAt ? dismissSwipeTip : undefined}
+          onSnooze={i.kind === 'todo' && todos ? (days) => void todos.act({ action: 'snooze', id: i.id, days }) : undefined}>
+          <div className={card}>
+            <button type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)} className="flex min-w-0 flex-1 items-stretch gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
+              {timeCol}
+              <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-[2px] ${ticked ? 'bg-wall-brass' : late ? 'bg-[repeating-linear-gradient(180deg,var(--color-wall-rust)_0_6px,transparent_6px_10px)]' : 'bg-[repeating-linear-gradient(180deg,var(--color-wall-brass)_0_6px,transparent_6px_10px)]'}`} />
+              {words([i.sub, who].filter(Boolean).join(' · '))}
+            </button>
+          </div>
+        </SwipeRow>
+        </Fragment>
       )
     }
     return (

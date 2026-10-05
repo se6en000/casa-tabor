@@ -707,9 +707,69 @@ test('phone: Today — the NOW line, what’s past folded and faded, the next li
   await expect(phone.getByRole('checkbox', { name: 'Done: Take meds' })).toHaveCount(0)
   await phone.getByRole('button', { name: 'Liv', exact: true }).click()
   const meds = phone.getByRole('checkbox', { name: 'Done: Take meds' })
-  await meds.click()
+  // Swiped right (46c).
+  const row = await phone.getByLabel("Take meds — swipe right when it's done").boundingBox()
+  await page.mouse.move(row.x + 40, row.y + row.height / 2)
+  await page.mouse.down()
+  for (let k = 1; k <= 8; k++) await page.mouse.move(row.x + 40 + 25 * k, row.y + row.height / 2)
+  await page.mouse.up()
   await expect(meds).toHaveAttribute('aria-checked', 'true')
   await expect.poll(() => page.evaluate(() => window.__choreTicks ?? []), { timeout: 8000 }).toEqual(['+chore:meds:2026-09-25'])
+})
+
+// Canvas 46c (Jake, Oct 5: "can we do the swipe 46c? … right to done, swipe left to snooze a day?"; "style this for
+// chores. Action same way"): a to-do or chore on Today swipes right to finish (again to take it back); a to-do swipes
+// left for Tomorrow or Later; a short swipe springs back; "Swipe to finish" shows over the first one until "Got it".
+test('phone: Today — swipe a to-do or chore right to finish, a to-do left for Tomorrow; the swipe tip', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1&swipeTip=1')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await phone.getByRole('button', { name: /^Today/ }).first().click()
+  const tip = phone.getByRole('note', { name: 'Swipe to finish' })
+  await expect(tip).toBeVisible()
+  const rows = phone.getByLabel(/ — swipe right when it's done$/)
+  const row = rows.first()
+  const title = (await row.getAttribute('aria-label')).replace(/ — swipe right when it's done$/, '')
+  const done = phone.getByRole('checkbox', { name: `Done: ${title}` })
+  await expect(done).toHaveAttribute('aria-checked', 'false')
+  const swipe = async (from, by) => {
+    const box = await row.boundingBox()
+    const y = box.y + box.height / 2
+    await page.mouse.move(box.x + from, y)
+    await page.mouse.down()
+    for (let k = 1; k <= 8; k++) await page.mouse.move(box.x + from + (by * k) / 8, y)
+    await page.mouse.up()
+    await page.waitForTimeout(260)
+  }
+  // Short: springs back, nothing done, and the tap that ends it doesn't open the card.
+  await swipe(40, 60)
+  await expect(done).toHaveAttribute('aria-checked', 'false')
+  await expect(phone.getByRole('region', { name: /— edit$/ })).toHaveCount(0)
+  // Past a third: done, and the tip has done its job.
+  await swipe(40, 200)
+  await expect(done).toHaveAttribute('aria-checked', 'true')
+  await expect(tip).toHaveCount(0)
+  // A to-do swiped left shows Tomorrow and Later.
+  const todo = phone.getByLabel(/ — swipe right when it's done$/).filter({ hasText: 'To do' }).first()
+  const tbox = await todo.boundingBox()
+  await page.mouse.move(tbox.x + tbox.width - 30, tbox.y + tbox.height / 2)
+  await page.mouse.down()
+  for (let k = 1; k <= 8; k++) await page.mouse.move(tbox.x + tbox.width - 30 - (140 * k) / 8, tbox.y + tbox.height / 2)
+  await page.mouse.up()
+  await expect(todo.getByRole('button', { name: 'Tomorrow' })).toBeVisible()
+  await expect(todo.getByRole('button', { name: 'Later' })).toBeVisible()
+})
+
+test('phone: the swipe tip — Got it puts it away for good', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T10:45:00&viewer=jake-id&chores=1&swipeTip=1')
+  const phone = page.getByTestId('phone-fixture')
+  await phone.getByRole('button', { name: /^Today/ }).first().click()
+  const tip = phone.getByRole('note', { name: 'Swipe to finish' })
+  await expect(tip).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-swipe-tip.png')
+  await tip.getByRole('button', { name: 'Got it' }).click()
+  await expect(tip).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('casa.swipeTip.done'))).toBe('1')
 })
 
 // Canvas 30b (Jake, Oct 2: "a way to tap to open any date. Not just the 7 day window"): Any day opens the month; a
