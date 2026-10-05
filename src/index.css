@@ -1433,3 +1433,18 @@ html.phone-app .phone-behind-sheet {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
+
+/* The Ask button breathes (canvas 41a): its ring brightens and dims with the glow, and a glint goes slowly round. */
+@keyframes ask-ring-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+@keyframes ask-glint {
+  to { transform: rotate(360deg); }
+}
+.ask-ring-breathe { animation: ask-ring-breathe 4.5s ease-in-out infinite; }
+.ask-glint { transform-box: view-box; transform-origin: 32px 32px; opacity: 0.85; animation: ask-glint 9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ask-ring-breathe, .ask-glint { animation: none; }
+  .ask-glint { opacity: 0; }
+}

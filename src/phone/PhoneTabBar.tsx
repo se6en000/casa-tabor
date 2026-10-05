@@ -13,7 +13,7 @@ const SPRING = { type: 'spring', stiffness: 520, damping: 38, mass: 0.9 } as con
 /** How long a press is before it's a hold (Casa listens) rather than a tap (the chat). */
 export const HOLD_MS = 320
 
-export default function PhoneTabBar<T extends string>({ tabs, current, onTab, action, compact }: {
+export default function PhoneTabBar<T extends string>({ tabs, current, onTab, action, compact, tip = null }: {
   tabs: TabItem<T>[]
   current: T
   onTab: (id: T) => void
@@ -31,7 +31,11 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
     alive?: boolean
     /** Above the shade while Casa's answer is over the screen (34f), so it can be held again. */
     raised?: boolean
+    /** Its face breathes by itself (the Ask mark, 41a): no twinkle on top. */
+    selfBreathes?: boolean
   }
+  /** A tip above the round button ("Hold me to ask", 41b). */
+  tip?: ReactNode
   /** Scrolling down: smaller, labels tucked away. */
   compact: boolean
 }) {
@@ -102,8 +106,9 @@ export default function PhoneTabBar<T extends string>({ tabs, current, onTab, ac
         {/* Casa is alive (Jake, Oct 2: "the AI button be fancy, breath or have some alive animation"): a warm glow that
             swells and fades, and a faint twinkle; still while held, and for reduced motion (index.css). */}
         {action.alive && !action.active && <span aria-hidden="true" className="phone-casa-breath pointer-events-none absolute inset-0 rounded-full" />}
-        <span className={action.alive && !action.active ? 'phone-casa-twinkle flex' : 'flex'}>{action.icon}</span>
+        <span className={action.selfBreathes ? 'flex h-full w-full' : action.alive && !action.active ? 'phone-casa-twinkle flex' : 'flex'}>{action.icon}</span>
       </button>
+      {tip && <div className="absolute right-[12px] bottom-[max(84px,calc(env(safe-area-inset-bottom)+82px-var(--phone-dead,0px)))] z-30">{tip}</div>}
     </>
   )
 }

@@ -2,7 +2,7 @@ import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Car, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sparkles, Sun, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Car, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -45,6 +45,8 @@ import PhoneMonth from './PhoneMonth'
 import PullToRefresh from './PullToRefresh'
 import PhoneSkeleton from './PhoneSkeleton'
 import { finishSplash } from './splash'
+import AskMark from './AskMark'
+import { askTipDone, askTipThisOpen } from './askTip'
 import PhoneTabBar from './PhoneTabBar'
 import PhoneDayPager from './PhoneDayPager'
 import PhonePushPage from './PhonePushPage'
@@ -696,6 +698,10 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [tucked, setTucked] = useState(false)
   const lastScroll = useRef(0)
   // Nothing yet: the day's shape shimmering, not "Nothing on the calendar".
+  // "Hold me to ask" (41b): the first few openings of the app, until the Ask button has been held once.
+  // Off in the screenshot tests unless asked for (?askTip=1): a fresh test phone would show it on every screen.
+  const [askTip, setAskTip] = useState(() => (import.meta.env.VITE_VISUAL_TEST_MODE === 'true' && !/[?&]askTip=1/.test(typeof location === 'undefined' ? '' : location.search) ? false : askTipThisOpen(typeof localStorage === 'undefined' ? null : localStorage)))
+  const dismissAskTip = useCallback(() => { setAskTip(false); askTipDone(typeof localStorage === 'undefined' ? null : localStorage) }, [])
   const loading = week.length === 0 || members.length === 0
   // The loading mark (39a) gives way once the day is here.
   useEffect(() => { if (!loading) finishSplash() }, [loading])
@@ -809,6 +815,14 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         current={tab}
         onTab={pickTab}
         compact={barCompact}
+        tip={askTip && assistant && tab !== 'groceries' && !askOpen ? (
+          <div role="note" aria-label="Hold me to ask" className="relative w-[250px] rounded-[18px] bg-wall-ink px-[16px] pb-[12px] pt-[14px] text-wall-on-pigment shadow-[0_10px_30px_rgba(38,34,29,0.3)] motion-safe:animate-[signin-rise_0.4s_ease-out_both]">
+            <div className="font-display text-phone-heading font-semibold">Hold me to ask</div>
+            <p className="m-0 mt-[4px] font-body text-phone-detail">Say it while you hold; let go and the answer appears right here. A tap opens the conversation.</p>
+            <button type="button" onClick={dismissAskTip} className="mt-[6px] min-h-[36px] border-0 bg-transparent p-0 font-body text-phone-label font-semibold uppercase tracking-[0.18em] text-wall-night-brass">Got it</button>
+            <span aria-hidden="true" className="absolute bottom-[-7px] right-[24px] h-[14px] w-[14px] rotate-45 bg-wall-ink" />
+          </div>
+        ) : null}
         action={tab === 'groceries' && groceries
           ? {
               label: 'Add to groceries',
@@ -823,13 +837,14 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           : assistant
             ? {
                 label: 'Ask',
-                icon: <Sparkles size={26} strokeWidth={1.9} />,
+                icon: <AskMark held={Boolean(glance?.holding)} />,
+                selfBreathes: true,
                 onClick: () => { setAskOpening(null); setGlance(null); setAskOpen(true) },
                 active: Boolean(glance?.holding),
                 alive: true,
                 raised: Boolean(glance) && askOpen,
                 hold: {
-                  start: () => { haptic(); setAskOpening(null); setGlance({ holding: true, cancelled: false }); setAskOpen(true) },
+                  start: () => { haptic(); dismissAskTip(); setAskOpening(null); setGlance({ holding: true, cancelled: false }); setAskOpen(true) },
                   end: (cancelled) => { if (cancelled) closeAsk(); else setGlance({ holding: false, cancelled: false }) },
                 },
               }

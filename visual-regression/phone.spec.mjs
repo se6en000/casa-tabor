@@ -1147,3 +1147,19 @@ test('phone: Casa — "show me the grocery list" opens Groceries', async ({ page
   await expect(phone.getByRole('region', { name: 'Groceries' })).toBeVisible()
   expect(await page.evaluate(() => (window.__casaSent ?? []).length)).toBe(0)
 })
+
+// The Ask button in the T, breathing; "Hold me to ask" the first few openings (canvas 41a/41b).
+test('phone: the Ask button says T / ASK; "Hold me to ask" shows until Got it', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T07:12:00&viewer=jake-id&askTip=1')
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const ask = phone.getByRole('button', { name: 'Ask', exact: true })
+  await expect(ask.locator('text', { hasText: 'ASK' })).toBeAttached()
+  const tip = phone.getByRole('note', { name: 'Hold me to ask' })
+  await expect(tip).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-ask-tip.png', { animations: 'disabled' })
+  await tip.getByRole('button', { name: 'Got it' }).click()
+  await expect(tip).toBeHidden()
+  expect(await page.evaluate(() => localStorage.getItem('casa.askTip.done'))).toBe('1')
+})
