@@ -4,7 +4,7 @@ import { createSupabaseRouteEtaCache } from '../_shared/route-eta-cache.mjs'
 import { PLANNING_GEMINI_MODEL, PRIMARY_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
 import { formatLocal, humanWhen, localNowLine } from '../_shared/assistant-local-time.mjs'
-import { applyDraftChanges, buildAnswerPrompt, draftOverlaps, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange, buildAsidePrompt, readAsideCheck } from '../_shared/assistant-turn-context.mjs'
+import { applyDraftChanges, buildAnswerPrompt, draftOverlaps, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange, buildAsidePrompt, readAsideCheck, aboutMail } from '../_shared/assistant-turn-context.mjs'
 import {
   resolveTalkPlanIntentGate,
   shouldUseTalkPlanDeterministicLane,
@@ -43,7 +43,7 @@ import { explicitReminderCreateRequestForMessages, explicitReminderSearchForMess
 import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
-import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -269,7 +269,7 @@ async function readTurn(
     const pendingChange = asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change'
     const offsetMin = (() => { const m = /^([+-])(\d{2}):(\d{2})$/.exec(utcOffset); return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0 })()
     const localToday = new Date(Date.parse(String(context?.currentDate ?? new Date().toISOString())) + offsetMin * 60000).toISOString().slice(0, 10)
-    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange, today: localToday })
+    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange, today: localToday, heard: String(messages.at(-1)?.content ?? '') })
     // An aside gets a second look that asks only who the words were said to (overnight queue 4: with a
     // card waiting, a new subject said to Casa was dropped). Unsure, or no answer: it's for Casa.
     if (resolution.act === 'aside') {
@@ -1137,6 +1137,12 @@ Deno.serve(async (req) => {
         const body = await res.json() as Record<string, unknown>
         const candidate = (body?.candidates as Array<{ content?: { parts?: Array<Record<string, unknown>> }; finishReason?: string }> | undefined)?.[0]
         parts = candidate?.content?.parts ?? []
+        // A call written out as words ("finish_todo(id='…')"): taken as the call it meant.
+        if (!parts.some((p) => p.functionCall)) {
+          const said = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
+          const meant = writtenCall(said, fullAiTools({ planning }).map((t: { name: string }) => t.name))
+          if (meant) parts = [{ functionCall: meant }]
+        }
         if (dryRun) roundLog.push({ round, model, forced, parts: parts.map((p) => (p.functionCall ? `call:${(p.functionCall as { name: string }).name}` : p.thought ? 'thought' : 'text')), error: (body as { error?: { message?: string } }).error?.message ?? null })
         finishReason = candidate?.finishReason ?? null
       } catch {
@@ -1255,7 +1261,7 @@ Deno.serve(async (req) => {
             const unique = rows.filter((m) => { const k = `${m.subject}|${m.received_at}`; if (seen.has(k)) return false; seen.add(k); return true })
             const best = rankEmails(unique, words) as Array<Record<string, unknown>>
             const whose = (id: unknown) => family.find((m) => m.id === id)?.name ?? null
-            result = { found: best.length, emails: best.map((m) => ({
+            result = { found: best.length, next: 'Anything here to go to or do by a date that is not on the calendar: call create_event for it now, in this same answer — the card is the question, never ask in words.', emails: best.map((m) => ({
               from: String(m.from_email ?? '').replace(/<[^>]+>/, '').replace(/"/g, '').trim(),
               subject: m.subject,
               received: new Date(String(m.received_at)).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
@@ -1792,7 +1798,9 @@ Deno.serve(async (req) => {
     let out = await runPipeline()
     // A question stays a question: it's never answered with a card to change something.
     const proposesChange = (out.payload.type === 'tool_action' && WRITE_TOOLS.has(String(out.payload.tool))) || out.payload.type === 'tool_action_batch'
-    if (turnResolution?.isQuestion && proposesChange) {
+    // …except one found in the mail (Oct 5: "did anything come in from …?" found the meeting and its card was swapped
+    // for a calendar answer): there the card is the point.
+    if (turnResolution?.isQuestion && proposesChange && !aboutMail(latestUserText)) {
       appendServerTrace('server_ai_assistant_question_kept', String(out.payload.tool ?? out.payload.type), { tool: out.payload.tool ?? null })
       const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid, drawerThinkingBudget ?? 0)
         .catch(() => ({ text: 'I couldn’t find that just now.', mentioned: [] as TurnReferent[] }))

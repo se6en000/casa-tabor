@@ -149,7 +149,7 @@ Then the act — what they want (besides dropping the draft). Decide in this ord
 - "remove": asks to take one calendar item off — delete it, cancel it, call it off, it's rained out or not happening any more ("cancel the softball game tonight, it rained", "the dentist canceled on us", "take Friday's party off") — give "event_id", and "called_off": true when it's off because of something that happened (the weather, someone canceled), false when it was a mistake or isn't wanted. More than one item could fit: "clarify".
 - "clarify": asks to change something, but more than one calendar item fits what they said (for example several on the day they named, and nothing in the message tells them apart) — give "candidates" (their ids) and "question" (asking which, naming them). Never pick one when it's unclear; "my" or "the" doesn't make it clear.
 - "question": (asking what's on the Coming up list, or about gift ideas, is "other") asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web). A question about any or every time something happens or happened, the last or first time, or anything before today — is false: those need the whole calendar, not the weeks listed.
-- "other": anything not about the family's calendar — groceries, recipes, contacts, gift ideas, the Coming up list and its rules (adding or removing any of those), what Casa knows or remembers about someone or something (asking "what do you know about Liv", telling a fact to keep — her school, grade, team, work — rather than something for the calendar, correcting one, "remember this", "forget that"), general knowledge, small talk.
+- "other": anything not about the family's calendar — the email (anything that came in, a sender writing, searching the mail), groceries, recipes, contacts, gift ideas, the Coming up list and its rules (adding or removing any of those), what Casa knows or remembers about someone or something (asking "what do you know about Liv", telling a fact to keep — her school, grade, team, work — rather than something for the calendar, correcting one, "remember this", "forget that"), general knowledge, small talk.
 Asking whether someone could take, drive, join or move a calendar item is suggesting a change: "change".
 
 "standalone": the latest message the way the person would say it if they had said everything at once — short, plain and complete, making sense with no conversation before it. A question stays a question; a request starts with what to do, then the thing itself in a few words, then who, when and where. Resolve every reference — pronouns, positions in a list Casa gave, "that one"-style pointers, and shortened follow-ups that repeat the previous question or request with a different day, person or item — to the actual titles, names, days and times. Change only what's needed to make it stand on its own; if it already does, return it word for word. Keep the person's meaning exactly: don't answer it, and don't add anything they didn't say or clearly mean.
@@ -173,10 +173,21 @@ const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
 /** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
-export function readTurnResolution(raw, { draft = null, knownIds = [], pendingChange = false, today = null } = {}) {
+/**
+ * A turn about the mail (bug report Oct 5: "Did anything come in from the Neighborhood Association?" and "Can you search
+ * my email for …" were answered from the calendar — "I cannot search your email"). It goes to the full assistant, which
+ * can search the mail; never answered from the calendar here.
+ */
+export function aboutMail(text) {
+  return /\b(?:e-?mails?|inbox|mailbox|mail|newsletters?)\b|\b(?:came|come|comes|coming) in\b|\bhea(?:r|rd) from\b|\b(?:did|has|have|was)\b[^?.]{0,60}\b(?:send|sent|write|wrote|emailed)\b/i.test(String(text ?? ''))
+}
+
+export function readTurnResolution(raw, { draft = null, knownIds = [], pendingChange = false, today = null, heard = null } = {}) {
   const r = raw && typeof raw === 'object' ? raw : {}
   let act = ACTS.includes(r.act) ? r.act : 'other'
   const standalone = typeof r.standalone === 'string' && r.standalone.trim() ? r.standalone.trim().slice(0, 600) : null
+  const mail = aboutMail(heard) || aboutMail(standalone)
+  if (mail && act === 'question') act = 'other'
   const eventId = typeof r.event_id === 'string' && (knownIds ?? []).includes(r.event_id) ? r.event_id : null
   const changes = r.changes && typeof r.changes === 'object' && Object.keys(r.changes).length > 0 ? r.changes : (r.draft_changes && typeof r.draft_changes === 'object' && Object.keys(r.draft_changes).length > 0 ? r.draft_changes : null)
   const newItem = r.new_item && typeof r.new_item === 'object' ? r.new_item : null
@@ -208,7 +219,7 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   const af = r.address_for && typeof r.address_for === 'object' ? r.address_for : null
   const addressFor = act !== 'aside' && af && typeof af.who === 'string' && af.who.trim() && typeof af.address === 'string' && af.address.trim() ? { who: af.who.trim().slice(0, 120), address: af.address.trim().slice(0, 300) } : null
   // A whole-calendar question (any / every / the last time / the past): the server searches, then answers.
-  const sr = ['question', 'other'].includes(act) && r.search && typeof r.search === 'object' ? r.search : null
+  const sr = !mail && ['question', 'other'].includes(act) && r.search && typeof r.search === 'object' ? r.search : null
   const day10 = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null)
   // One date alone is an open end, never a single day ("from today" found only today's pill; "up to today"
   // found nothing — live, 2026-09-30): the other side reaches two years out.

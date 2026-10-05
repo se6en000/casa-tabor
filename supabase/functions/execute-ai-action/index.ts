@@ -1631,6 +1631,8 @@ Deno.serve(async (req) => {
         p_expected_updated_at: args.expected_updated_at ?? null,
       })
       if (error) throw new Error(error.message)
+      // As the phone's tick does (todos 'done'): a project step this to-do stands for is done too.
+      await sb.from('todo_steps').update({ done_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('reminder_event_id', args.id).is('done_at', null)
       return new Response(JSON.stringify({ success: true, completed: true, event_id: args.id, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })

@@ -67,3 +67,11 @@ test('sent back for a lookup, the model may only look things up', () => {
   assert.ok(req.tool_config.function_calling_config.allowed_function_names.includes('get_weather_forecast'))
   assert.ok(!req.tool_config.function_calling_config.allowed_function_names.includes('create_event'))
 })
+
+// Live, Oct 5 ("Mark Gray Jim sneakers as done."): "I'll mark "Grey Gym Sneakers" as done on your to-do list." and "I can
+// mark … I would call the finish_todo tool with the ID …" — words, no call. Both are sent back to call it.
+test('marking something done, or describing a tool call, is a promise', () => {
+  for (const said of ['I’ll mark "Grey Gym Sneakers" as done on your to-do list.', 'I can mark "Grey Gym Sneakers" as done for you. I would call the `finish_todo` tool with the ID `a36823aa`.'])
+    assert.equal(promisesAction(said), true, said)
+  assert.equal(promisesAction('Can I mark it done?'), false)
+})
