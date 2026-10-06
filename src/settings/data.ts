@@ -5,6 +5,7 @@ import type { WallChore } from '../wall/engine/chores'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { ScreensaverSettings } from '../hooks/useScreensaverSettings'
 import type { FamilyRoutine } from '../lib/familyRoutines'
+import type { Arrangement } from './model'
 import type { DayOffRow } from '../wall/RoutineEditor'
 
 // Settings V2's data, one source the pages read (canvas 47). The live source (liveSource.ts) is the app's own hooks and
@@ -64,6 +65,8 @@ export interface DisplayConfigLite {
 
 export type SaveResult = { ok: boolean; message?: string }
 
+export type MemberPatch = Partial<Pick<FamilyMember, 'name' | 'full_name' | 'nicknames' | 'role' | 'can_drive' | 'show_on_home_sidebar'>>
+
 /** What the wall's sensor measured and what the screen was set to (the Pi's bridge; Settings › The wall). */
 export interface LightReading { at: string; cct: number | null; lux: number | null; brightness: number | null; rgb: number[] | null; display_on: boolean | null }
 
@@ -76,8 +79,12 @@ export interface SettingsSource {
   useMembers: () => FamilyMember[] | null
   useViewer: () => { id: string | null; name: string | null; token: string | null; signOut: (() => void) | null }
   useFaceId: () => { here: boolean; available: boolean; setUp: (() => Promise<boolean>) | null }
-  setCanDrive: (memberId: string, canDrive: boolean) => Promise<SaveResult>
-  addMember: (name: string, role: 'parent' | 'child' | 'caregiver', canDrive: boolean) => Promise<SaveResult>
+  /** Changing people (Settings › Family): fields, a new person, colours and order; the family list refreshes after. */
+  useMemberEdits: () => {
+    update: (memberId: string, patch: MemberPatch) => Promise<SaveResult>
+    add: (name: string, role: FamilyMember['role'], canDrive: boolean) => Promise<SaveResult>
+    arrange: (changes: Arrangement[]) => Promise<SaveResult>
+  }
   /** Where every drive starts (settings home_config). */
   useHome: () => string | null
   usePlaces: () => SavedPlace[] | null
@@ -132,4 +139,7 @@ export function useSource(): SettingsSource {
 }
 
 /** The people settings shows: the family, not the "Tabor Family" calendar member. */
-export const people = (members: FamilyMember[] | null) => (members ?? []).filter((m) => m.name !== 'Tabor Family' && m.show_on_home_sidebar !== false)
+const byOrder = (a: FamilyMember, b: FamilyMember) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || a.name.localeCompare(b.name)
+export const people = (members: FamilyMember[] | null) => (members ?? []).filter((m) => m.name !== 'Tabor Family' && m.show_on_home_sidebar !== false).sort(byOrder)
+/** Everyone a profile can be opened for, on the wall or not (pets, someone switched off), without the mailbox. */
+export const everyone = (members: FamilyMember[] | null) => (members ?? []).filter((m) => m.name !== 'Tabor Family').sort(byOrder)

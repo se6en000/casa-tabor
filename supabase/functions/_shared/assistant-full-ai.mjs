@@ -169,7 +169,7 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
     ...(speaker ? [speaker] : []),
     `DAYS (the next two weeks):\n${Array.from({ length: 14 }, (_, i) => { const d = local(new Date(now.getTime() + i * 86400e3).toISOString(), utcOffset); return `${i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.weekday} = ${d.weekday} ${d.month} ${d.day} (${d.date})` }).join('\n')}`,
     memoryContext(memory, { due: dueThoughtId }),
-    `FAMILY:\n${family.map((m) => `- ${m.name} (${[m.full_name && m.full_name !== m.name ? m.full_name : null, m.role, m.can_drive ? 'drives' : null].filter(Boolean).join(', ')})`).join('\n')}`,
+    `FAMILY:\n${family.map((m) => `- ${m.name} (${[m.full_name && m.full_name !== m.name ? m.full_name : null, Array.isArray(m.nicknames) && m.nicknames.length ? `also called ${m.nicknames.join(', ')}` : null, m.role, m.can_drive ? 'drives' : null].filter(Boolean).join(', ')})`).join('\n')}`,
     `CALENDAR (today through three weeks out; [id] first — for any other date, the past, or to check whether something is on the calendar at all, call find_events):\n${events.map((e) => `- ${describeEvent(e, utcOffset)}`).join('\n') || '- nothing'}`,
     `GROCERY LIST ([id] first):\n${groceries.map((g) => `- ${g.id ? `[${g.id}] ` : ''}${g.name}${g.quantity ? ` (${g.quantity})` : ''}${g.checked ? ' · checked off' : ''}`).join('\n') || '- empty'}`,
   ]

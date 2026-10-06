@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsRoot from './SettingsRoot'
@@ -24,7 +24,7 @@ const member = (id: string, name: string, role: FamilyMember['role'], sort: numb
 const MEMBERS: FamilyMember[] = [
   member('jake', 'Jake', 'parent', 1, { full_name: 'Jake Tabor' }), member('kelly', 'Kelly', 'parent', 2), member('liv', 'Liv', 'child', 3), member('emme', 'Emme', 'child', 4),
   member('family', 'Tabor Family', 'child', 5, { show_on_home_sidebar: false }), member('owen', 'Owen', 'child', 5), member('giselle', 'Giselle', 'caregiver', 7),
-  member('milo', 'Milo', 'child', 9, { show_on_home_sidebar: false }),
+  member('milo', 'Milo', 'pet', 9, { show_on_home_sidebar: false }),
 ]
 const place = (id: string, name: string, category: SavedPlace['category'], address: string, city = 'West Palm Beach'): SavedPlace => ({
   id, name, aliases: [], address, city, state: 'FL', zip: null, lat: null, lng: null, category, notes: null, phone: null, google_place_id: null, confirmed: true,
@@ -99,6 +99,15 @@ const CHECKS: NightlyCheck[] = [
   ...Array.from({ length: 12 }, (_, i): NightlyCheck => ({ run_date: new Date(Date.UTC(2026, 8, 24 + i)).toISOString().slice(0, 10), kind: 'screens', ok: i !== 7, summary: '', details: [], created_at: at('2026-10-01T03:40:00Z') })),
 ]
 
+/** The fixture's family, shared by every page (an edit shows everywhere, as the live list does). */
+let family = MEMBERS
+const listeners = new Set<() => void>()
+const familyStore = {
+  get: () => family,
+  sub: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn) },
+  set: (next: FamilyMember[]) => { family = next; listeners.forEach((fn) => fn()) },
+}
+
 function fixtureSource(params: URLSearchParams): SettingsSource {
   const viewerId = params.get('viewer') ?? 'jake'
   const onWall = params.get('wall') === '1'
@@ -106,11 +115,14 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
   return {
     now: () => NOW,
     onWall,
-    useMembers: () => MEMBERS,
+    useMembers: () => useSyncExternalStore(familyStore.sub, familyStore.get),
     useViewer: () => ({ id: viewerId, name: MEMBERS.find((m) => m.id === viewerId)?.name ?? null, token: 't', signOut: () => {} }),
     useFaceId: () => ({ here: viewerId === 'jake', available: true, setUp: async () => true }),
-    setCanDrive: ok,
-    addMember: ok,
+    useMemberEdits: () => ({
+      update: async (id, patch) => { familyStore.set(family.map((m) => (m.id === id ? { ...m, ...patch } : m))); return { ok: true } },
+      add: async (name, role, canDrive) => { familyStore.set([...family, member(`new-${family.length}`, name, role, 20 + family.length, { can_drive: canDrive, show_on_home_sidebar: role !== 'pet' })]); return { ok: true } },
+      arrange: async (changes) => { familyStore.set(family.map((m) => ({ ...m, ...(changes.find((c) => c.id === m.id) ?? {}) }))); return { ok: true } },
+    }),
     useHome: () => '412 Palm Way, West Palm Beach, FL',
     usePlaces: () => PLACES,
     useContacts: () => CONTACTS,

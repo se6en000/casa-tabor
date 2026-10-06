@@ -102,3 +102,47 @@ test('the wall’s light: where a colour temperature sits, in words, and drawn',
   assert.equal(tintColor([50, 45, 41]), 'rgb(255, 230, 209)')
   assert.equal(tintColor(null), null)
 })
+
+// Family profiles (Jake, Oct 6: "change the name, nicknames, add a pet, change the profile avatar color").
+test('a picked colour is that person’s; the rest keep following the family’s order, skipping it', async () => {
+  const { pigmentIndexes } = await import('../src/wall/score.ts')
+  const fam = [{ id: 'jake', name: 'Jake', sort_order: 1 }, { id: 'kelly', name: 'Kelly', sort_order: 2 }, { id: 'liv', name: 'Liv', sort_order: 3 }]
+  // Nobody picked: exactly as always.
+  assert.deepEqual([...pigmentIndexes(fam).entries()], [['jake', 0], ['kelly', 1], ['liv', 2]])
+  // Liv picks Jake's colour (0): Jake and Kelly move along to the next free ones, Liv has hers.
+  const picked = pigmentIndexes([...fam.slice(0, 2), { ...fam[2], pigment: 0 }])
+  assert.equal(picked.get('liv'), 0)
+  assert.equal(picked.get('jake'), 1)
+  assert.equal(picked.get('kelly'), 2)
+})
+
+test('the assistant knows a person by their nicknames too', async () => {
+  const { memberNamed } = await import('../supabase/functions/_shared/family-names.mjs')
+  const fam = [{ id: 'liv', name: 'Liv', full_name: 'Olivia Tabor', nicknames: ['Livvy', 'Bug'] }, { id: 'jake', name: 'Jake', nicknames: [] }]
+  assert.equal(memberNamed('livvy', fam)?.id, 'liv')
+  assert.equal(memberNamed('Bug', fam)?.id, 'liv')
+  assert.equal(memberNamed('Olivia', fam)?.id, 'liv')
+  assert.equal(memberNamed('Buggy', fam), null)
+})
+
+test('picking someone’s colour swaps the two; moving someone keeps everyone’s colour', async () => {
+  const { pickColor, moveInOrder } = await import('../src/settings/model.ts')
+  const { pigmentIndexes } = await import('../src/wall/score.ts')
+  const fam = [{ id: 'jake', name: 'Jake', sort_order: 1 }, { id: 'kelly', name: 'Kelly', sort_order: 2 }, { id: 'liv', name: 'Liv', sort_order: 3 }, { id: 'emme', name: 'Emme', sort_order: 4 }]
+  const shown = pigmentIndexes(fam)
+  const swap = pickColor('liv', 0, shown)
+  assert.deepEqual(swap, [{ id: 'liv', pigment: 0 }, { id: 'jake', pigment: 2 }])
+  const after = pigmentIndexes(fam.map((m) => ({ ...m, ...(swap.find((c) => c.id === m.id) ?? {}) })))
+  assert.deepEqual([...after.entries()], [['jake', 2], ['kelly', 1], ['liv', 0], ['emme', 3]])
+  assert.deepEqual(pickColor('liv', 2, shown), [])
+  // Liv moves up past Kelly: places swap, colours stay with the people, Emme's doesn't move.
+  const move = moveInOrder('liv', -1, fam, shown)
+  const moved = pigmentIndexes(fam.map((m) => ({ ...m, ...(move.find((c) => c.id === m.id) ?? {}) })))
+  assert.equal(moved.get('liv'), 2)
+  assert.equal(moved.get('kelly'), 1)
+  assert.equal(moved.get('emme'), 3)
+  assert.deepEqual(move.map((c) => [c.id, c.sort_order]), [['liv', 2], ['kelly', 3]])
+  assert.deepEqual(moveInOrder('jake', -1, fam, shown), [])
+  // Two at the same place (Owen and the family mailbox were both 5) still come out in the new order.
+  assert.deepEqual(moveInOrder('b', -1, [{ id: 'a', sort_order: 5 }, { id: 'b', sort_order: 5 }], new Map()).map((c) => c.sort_order), [4, 5])
+})

@@ -9,8 +9,10 @@ import type { FamilyRoutine } from '../lib/familyRoutines'
 import FamilyPins from '../signin/FamilyPins'
 import type { WallChore } from '../wall/engine/chores'
 import type { WallMember } from '../wall/engine/types'
-import { people, useSource, type MemoryItem } from './data'
-import { ago } from './model'
+import type { FamilyMember } from '../types'
+import { pigmentStyleFor } from '../wall/lanes'
+import { everyone, people, useSource, type MemberPatch, type MemoryItem } from './data'
+import { ago, moveInOrder, pickColor } from './model'
 import { Action, Group, Label, PageHead, PersonDisc, Quiet, Row, Seg, Stepper, Toggle } from './ui'
 import { LightDay, LightNow } from './WallLight'
 import { usePigment, useSize, useType } from './sizing'
@@ -19,7 +21,6 @@ import { useSaveNote } from './saveNote'
 // Settings V2 › General (canvas 47b–c): the household's six pages. Each answers one question, saves as it changes,
 // and asks before anything that can't be taken back.
 
-const ROLE: Record<string, string> = { parent: 'Parent', child: 'Kid', caregiver: 'Caregiver' }
 /** Where a memory came from, in words (casa_memory.source). */
 const SOURCE: Record<string, string> = { learned: 'picked up on its own', told: 'you told it', old_app: 'from the old app' }
 
@@ -47,28 +48,105 @@ function Sheet({ children, onClose, label }: { children: ReactNode; onClose: () 
 }
 
 // ── Family ──────────────────────────────────────────────────────────────────────────────────────────────
-export function FamilyPage({ head }: { head: ReactNode }) {
+// Profiles (Jake, Oct 6: "change the name, nicknames, add a pet, change the profile avatar color, and additional
+// preferences that could be useful to customize the wall and how it presents the family").
+const ROLES: Array<{ value: FamilyMember['role']; label: string }> = [
+  { value: 'parent', label: 'Parent' }, { value: 'child', label: 'Kid' }, { value: 'caregiver', label: 'Caregiver' }, { value: 'pet', label: 'Pet' },
+]
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`
+
+/** A name field that saves when you leave it (or press return), if it changed. */
+function NameField({ label, value, onSave, placeholder }: { label: string; value: string; onSave: (v: string) => void; placeholder?: string }) {
+  const t = useType()
+  const [draft, setDraft] = useState(value)
+  const commit = () => { if (draft.trim() !== value.trim()) onSave(draft.trim()) }
+  return (
+    <label className="flex flex-col gap-[4px] px-[14px] py-[10px]">
+      <span className={`text-wall-ink-2 ${t.detail}`}>{label}</span>
+      <input aria-label={label} value={draft} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        className={`h-[44px] rounded-[10px] border border-solid border-wall-stone bg-phone-ground px-[12px] font-body text-wall-ink ${t.body}`} />
+    </label>
+  )
+}
+
+function PersonProfile({ person, members, shown, onBack }: { person: FamilyMember; members: FamilyMember[]; shown: Map<string, number>; onBack: () => void }) {
   const src = useSource()
-  const members = src.useMembers()
+  const t = useType()
+  const wall = useSize() === 'wall'
   const viewer = src.useViewer()
   const faceId = src.useFaceId()
-  const pigment = usePigment(members)
-  const [open, setOpen] = useState<string | null>(null)
+  const edits = src.useMemberEdits()
   const [pins, setPins] = useState(false)
-  const [adding, setAdding] = useState<{ name: string; role: 'parent' | 'child' | 'caregiver'; drives: boolean } | null>(null)
+  const [nick, setNick] = useState('')
   const [note, show] = useSaveNote()
-  const t = useType()
-  const person = people(members).find((m) => m.id === open) ?? null
+  const nicknames = person.nicknames ?? []
+  const onWall = people(members)
+  const place = onWall.findIndex((m) => m.id === person.id)
+  const mine = (shown.get(person.id) ?? 0) % 6
+  const holder = (c: number) => everyone(members).find((m) => m.id !== person.id && m.show_on_home_sidebar !== false && (shown.get(m.id) ?? 0) % 6 === c)
+  const save = async (patch: MemberPatch, words?: string) => show(await edits.update(person.id, patch), words)
 
-  if (person) {
-    return (
-      <div>
-        <PageHead title={person.full_name ?? person.name} about={ROLE[person.role] ?? person.role} back="Family" onBack={() => setOpen(null)} />
-        <Group label="Driving">
+  return (
+    <div>
+      <PageHead title={person.name} about={[ROLES.find((r) => r.value === person.role)?.label, person.full_name && person.full_name !== person.name ? person.full_name : null].filter(Boolean).join(' · ')} back="Family" onBack={onBack} />
+      <div className="mt-[14px] flex items-center gap-[14px]">
+        <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-display font-bold text-wall-on-pigment ${wall ? 'h-[88px] w-[88px] text-wall-move' : 'h-[64px] w-[64px] text-phone-title'} ${pigmentStyleFor(mine).solid}`}>{person.name.charAt(0)}</span>
+        <p className={`m-0 text-wall-ink-2 ${t.detail}`}>{person.show_on_home_sidebar === false ? 'Not on the wall.' : `${ordinal(place + 1)} on the wall, in this color.`}</p>
+      </div>
+      {note}
+      <Group label="Names">
+        <NameField label="Name on the wall" value={person.name} onSave={(v) => { if (v) void save({ name: v }, `Now ${v}.`) }} />
+        <NameField label="Full name" value={person.full_name ?? ''} placeholder="Olivia Tabor" onSave={(v) => void save({ full_name: v || null })} />
+        <div className="px-[14px] py-[10px]">
+          <span className={`text-wall-ink-2 ${t.detail}`}>Nicknames · the assistant knows them by these too</span>
+          <div className="mt-[6px] flex flex-wrap items-center gap-[8px]">
+            {nicknames.map((n) => (
+              <span key={n} className={`flex h-[36px] items-center gap-[6px] rounded-full border border-solid border-wall-stone bg-phone-ground pl-[12px] pr-[4px] text-wall-ink ${t.detail}`}>
+                {n}<Action label={`Remove the nickname ${n}`} tone="quiet" onClick={() => void save({ nicknames: nicknames.filter((x) => x !== n) }, `${n} removed.`)}><X size={16} /></Action>
+              </span>
+            ))}
+            <input aria-label="Add a nickname" placeholder="Add a nickname" value={nick} onChange={(e) => setNick(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && nick.trim() && !nicknames.includes(nick.trim())) { void save({ nicknames: [...nicknames, nick.trim()] }, `${person.name} is also ${nick.trim()}.`); setNick('') } }}
+              className={`h-[36px] w-[160px] rounded-full border border-dashed border-wall-stone bg-transparent px-[12px] font-body text-wall-ink ${t.detail}`} />
+          </div>
+        </div>
+      </Group>
+      <Group label="Who they are">
+        <div className="px-[14px] py-[12px]">
+          <Seg label="Who they are" value={person.role} onChange={(role) => void save({ role, ...(role === 'pet' ? { can_drive: false } : {}) }, `${person.name} is a ${ROLES.find((r) => r.value === role)?.label.toLowerCase()}.`)} options={ROLES} />
+        </div>
+        {person.role !== 'pet' && (
           <Row name="Drives" state={person.can_drive ? 'Can be the driver for an event' : 'Never offered as a driver'}
-            right={<Toggle label={`${person.name} drives`} on={person.can_drive} onChange={async (on) => show(await src.setCanDrive(person.id, on), on ? `${person.name} can drive.` : `${person.name} won’t be offered as a driver.`)} />} />
-        </Group>
-        {note}
+            right={<Toggle label={`${person.name} drives`} on={person.can_drive} onChange={(on) => void save({ can_drive: on }, on ? `${person.name} can drive.` : `${person.name} won’t be offered as a driver.`)} />} />
+        )}
+      </Group>
+      <Group label="On the wall">
+        <Row name="On the wall" state={person.show_on_home_sidebar === false ? `Off · no row on the wall${person.role === 'pet' ? '' : ', and not offered at sign-in'}` : 'Their own row on the wall, and offered at sign-in'}
+          right={<Toggle label={`${person.name} on the wall`} on={person.show_on_home_sidebar !== false} onChange={(on) => void save({ show_on_home_sidebar: on }, on ? `${person.name} is on the wall.` : `${person.name} is off the wall.`)} />} />
+        <div className="px-[14px] py-[12px]">
+          <span className={`text-wall-ink-2 ${t.detail}`}>Color{holder(mine) ? '' : ''} · picking someone’s swaps the two of you</span>
+          <div className="mt-[8px] flex flex-wrap gap-[10px]" role="radiogroup" aria-label={`${person.name}’s color`}>
+            {[0, 1, 2, 3, 4, 5].map((c) => {
+              const who = holder(c)
+              return (
+                <button key={c} type="button" role="radio" aria-checked={c === mine} aria-label={`Color ${c + 1}${who ? `, ${who.name}’s now` : ''}`}
+                  onClick={async () => { const r = await edits.arrange(pickColor(person.id, c, shown)); show(r, who ? `Swapped colors with ${who.name}.` : 'Color changed.') }}
+                  className={`flex items-center justify-center rounded-full border-0 p-0 font-display font-bold text-wall-on-pigment ${wall ? 'h-[64px] w-[64px] text-wall-heading' : 'h-[44px] w-[44px] text-phone-body'} ${pigmentStyleFor(c).solid} ${c === mine ? 'ring-[3px] ring-wall-ink ring-offset-2 ring-offset-wall-on-pigment' : ''}`}>
+                  {who ? who.name.charAt(0) : ''}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {place >= 0 && (
+          <Row name="Place in the order" state={`${ordinal(place + 1)} of ${onWall.length} · the wall’s rows, the phone’s chips and sign-in follow it`}
+            right={<div className="flex gap-[14px]">
+              <Action label={`Move ${person.name} up`} disabled={place === 0} onClick={async () => show(await edits.arrange(moveInOrder(person.id, -1, onWall, shown)), 'Moved up.')}>Up</Action>
+              <Action label={`Move ${person.name} down`} disabled={place === onWall.length - 1} onClick={async () => show(await edits.arrange(moveInOrder(person.id, 1, onWall, shown)), 'Moved down.')}>Down</Action>
+            </div>} />
+        )}
+      </Group>
+      {person.role !== 'pet' && (
         <Group label="Signing in">
           <Row name="PIN" state="Set or change it in Family PINs" onClick={() => setPins(true)} />
           {viewer.id === person.id && !src.onWall && (
@@ -76,21 +154,44 @@ export function FamilyPage({ head }: { head: ReactNode }) {
               right={faceId.here ? undefined : <Toggle label="Face ID on this phone" on={false} disabled={!faceId.available || !faceId.setUp} onChange={async () => { const done = await faceId.setUp?.(); show({ ok: Boolean(done), message: 'Face ID wasn’t set up.' }, 'Face ID is on.') }} />} />
           )}
         </Group>
-        {pins && <Sheet label="Family PINs" onClose={() => setPins(false)}><FamilyPins onDone={() => setPins(false)} /></Sheet>}
-      </div>
-    )
-  }
+      )}
+      {pins && <Sheet label="Family PINs" onClose={() => setPins(false)}><FamilyPins onDone={() => setPins(false)} /></Sheet>}
+    </div>
+  )
+}
+
+export function FamilyPage({ head }: { head: ReactNode }) {
+  const src = useSource()
+  const members = src.useMembers()
+  const viewer = src.useViewer()
+  const faceId = src.useFaceId()
+  const edits = src.useMemberEdits()
+  const pigment = usePigment(members)
+  const shown = useMemo(() => pigmentIndexes((members ?? []) as unknown as WallMember[]), [members])
+  const [open, setOpen] = useState<string | null>(null)
+  const [pins, setPins] = useState(false)
+  const [adding, setAdding] = useState<{ name: string; role: FamilyMember['role']; drives: boolean } | null>(null)
+  const [note, show] = useSaveNote()
+  const t = useType()
+  const person = everyone(members).find((m) => m.id === open) ?? null
+  if (person && members) return <PersonProfile person={person} members={members} shown={shown} onBack={() => setOpen(null)} />
+  const off = everyone(members).filter((m) => m.show_on_home_sidebar === false)
+  const line = (m: FamilyMember) => [ROLES.find((r) => r.value === m.role)?.label ?? m.role, m.can_drive && m.role !== 'pet' ? 'drives' : null, m.nicknames?.length ? `“${m.nicknames[0]}”` : null, viewer.id === m.id && faceId.here && !src.onWall ? 'Face ID' : null].filter(Boolean).join(' · ')
 
   return (
     <div>
       {head}
-      <Group label="People">
+      <Group label="On the wall">
         {members == null ? <Quiet>Loading…</Quiet> : people(members).map((m) => (
-          <Row key={m.id} label={`Open ${m.name}`} onClick={() => setOpen(m.id)} lead={<PersonDisc name={m.name} className={pigment(m.id)} />}
-            name={m.name} state={[ROLE[m.role] ?? m.role, m.can_drive ? 'drives' : null, viewer.id === m.id && faceId.here ? 'Face ID' : null].filter(Boolean).join(' · ')} />
+          <Row key={m.id} label={`Open ${m.name}`} onClick={() => setOpen(m.id)} lead={<PersonDisc name={m.name} className={pigment(m.id)} />} name={m.name} state={line(m)} />
         ))}
       </Group>
-      <div className="mt-[8px] px-[4px]"><Action onClick={() => setAdding({ name: '', role: 'child', drives: false })}><Plus size={18} aria-hidden="true" /> Add someone</Action></div>
+      {off.length > 0 && (
+        <Group label="Not on the wall">
+          {off.map((m) => <Row key={m.id} label={`Open ${m.name}`} onClick={() => setOpen(m.id)} lead={<PersonDisc name={m.name} className="bg-wall-ink-2" />} name={m.name} state={line(m)} />)}
+        </Group>
+      )}
+      <div className="mt-[8px] px-[4px]"><Action onClick={() => setAdding({ name: '', role: 'child', drives: false })}><Plus size={18} aria-hidden="true" /> Add someone, or a pet</Action></div>
       <Group label="Signing in">
         <Row name="Family PINs" state="Set, change or reset anyone’s PIN" onClick={() => setPins(true)} />
         {viewer.id && !src.onWall && (
@@ -102,17 +203,17 @@ export function FamilyPage({ head }: { head: ReactNode }) {
       {pins && <Sheet label="Family PINs" onClose={() => setPins(false)}><FamilyPins onDone={() => setPins(false)} /></Sheet>}
       {adding && (
         <Sheet label="Add someone" onClose={() => setAdding(null)}>
-          <h2 className={`m-0 font-display font-semibold text-wall-ink ${t.heading}`}>Add someone</h2>
-          <p className={`m-0 mt-[4px] text-wall-ink-2 ${t.detail}`}>They get the next color and a row on the wall.</p>
+          <h2 className={`m-0 font-display font-semibold text-wall-ink ${t.heading}`}>{adding.role === 'pet' ? 'Add a pet' : 'Add someone'}</h2>
+          <p className={`m-0 mt-[4px] text-wall-ink-2 ${t.detail}`}>{adding.role === 'pet' ? 'Pets start off the wall; turn them on in their profile.' : 'They get the next color and a row on the wall.'}</p>
           <input aria-label="Their name" placeholder="Their name" value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })}
             className={`mt-[12px] h-[48px] w-full rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-body text-wall-ink ${t.body}`} />
           <div className="mt-[12px]">
-            <Seg label="Who they are" value={adding.role} onChange={(role) => setAdding({ ...adding, role, drives: role !== 'child' })} options={[{ value: 'parent', label: 'Parent' }, { value: 'child', label: 'Kid' }, { value: 'caregiver', label: 'Caregiver' }]} />
+            <Seg label="Who they are" value={adding.role} onChange={(role) => setAdding({ ...adding, role, drives: role === 'parent' || role === 'caregiver' })} options={ROLES} />
           </div>
-          <div className="mt-[8px]"><Row name="Drives" right={<Toggle label="They drive" on={adding.drives} onChange={(on) => setAdding({ ...adding, drives: on })} />} /></div>
+          {adding.role !== 'pet' && <div className="mt-[8px]"><Row name="Drives" right={<Toggle label="They drive" on={adding.drives} onChange={(on) => setAdding({ ...adding, drives: on })} />} /></div>}
           <div className="mt-[8px] flex justify-end gap-[18px]">
             <Action tone="quiet" onClick={() => setAdding(null)}>Cancel</Action>
-            <Action disabled={!adding.name.trim()} onClick={async () => { const r = await src.addMember(adding.name, adding.role, adding.drives); show(r, `${adding.name.trim()} is in the family.`); if (r.ok) setAdding(null) }}>Add</Action>
+            <Action disabled={!adding.name.trim()} onClick={async () => { const r = await edits.add(adding.name, adding.role, adding.drives); show(r, `${adding.name.trim()} is in the family.`); if (r.ok) setAdding(null) }}>Add</Action>
           </div>
         </Sheet>
       )}

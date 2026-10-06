@@ -125,7 +125,7 @@ test('settings: family — a person’s page, and who drives', async ({ page }) 
   await s.getByRole('switch', { name: 'Giselle drives' }).click()
   await expect(s.getByRole('status')).toHaveText('Giselle won’t be offered as a driver.')
   await s.getByRole('button', { name: 'Family', exact: true }).click()
-  await expect(s.getByRole('region', { name: 'People' })).toBeVisible()
+  await expect(s.getByRole('region', { name: 'On the wall', exact: true })).toBeVisible()
 })
 
 test('settings: an old settings link lands on its new page', async ({ page }) => {
@@ -176,7 +176,7 @@ test('settings: chores and routines — the school runs, opened in the wall’s 
 
 test('settings: family — add someone', async ({ page }) => {
   const s = await open(page, { page: 'family' })
-  await s.getByRole('button', { name: 'Add someone' }).click()
+  await s.getByRole('button', { name: 'Add someone, or a pet' }).click()
   const sheet = page.getByRole('region', { name: 'Add someone' })
   await sheet.getByRole('textbox', { name: 'Their name' }).fill('Grandma')
   await sheet.getByRole('tab', { name: 'Caregiver' }).click()
@@ -263,4 +263,49 @@ test('settings on the wall: this wall’s health, its listener, and maintenance 
   await expect(s.getByRole('button', { name: 'Run: Reload this screen' })).toBeVisible()
   await s.getByRole('button', { name: 'Run: Re-measure the screen’s brightness range' }).click()
   await expect(s.getByText('The screen flickers for a few seconds. Tap again to go ahead')).toBeVisible()
+})
+
+// Jake, Oct 6: "family profile editing, where I can change the name, nicknames, add a pet, change the profile avatar
+// color, and additional preferences that could be useful to customize the wall and how it presents the family".
+test('settings: a family profile — name, nickname, color (a swap), place in the order, on the wall', async ({ page }) => {
+  const s = await open(page, { page: 'family' })
+  await s.getByRole('button', { name: 'Open Liv' }).click()
+  await expect(page).toHaveScreenshot('settings-profile.png', { fullPage: true })
+  const name = s.getByRole('textbox', { name: 'Name on the wall' })
+  await name.fill('Livvy')
+  await name.press('Enter')
+  await expect(s.getByRole('heading', { name: 'Livvy', level: 1 })).toBeVisible()
+  const nick = s.getByRole('textbox', { name: 'Add a nickname' })
+  await nick.fill('Bug')
+  await nick.press('Enter')
+  await expect(s.getByRole('button', { name: 'Remove the nickname Bug' })).toBeVisible()
+  // Jake's color: the two swap.
+  await s.getByRole('radio', { name: /Color 1, Jake’s now/ }).click()
+  await expect(s.getByRole('status')).toHaveText('Swapped colors with Jake.')
+  await expect(s.getByRole('radio', { name: 'Color 1' })).toHaveAttribute('aria-checked', 'true')
+  await expect(s.getByRole('radio', { name: /Color 3, Jake’s now/ })).toBeVisible()
+  // Up one: 2nd of 6.
+  await s.getByRole('button', { name: 'Move Livvy up' }).click()
+  await expect(s.getByText(/^2nd of 6/)).toBeVisible()
+  // Off the wall: she moves to "Not on the wall".
+  await s.getByRole('switch', { name: 'Livvy on the wall' }).click()
+  await s.getByRole('button', { name: 'Family', exact: true }).click()
+  await expect(s.getByRole('region', { name: 'Not on the wall' })).toContainText('Livvy')
+})
+
+test('settings: pets — Milo is one; adding a pet starts it off the wall', async ({ page }) => {
+  const s = await open(page, { page: 'family' })
+  await expect(s.getByRole('region', { name: 'Not on the wall' })).toContainText('Pet')
+  await s.getByRole('button', { name: 'Open Milo' }).click()
+  await expect(s.getByRole('tab', { name: 'Pet' })).toHaveAttribute('aria-selected', 'true')
+  await expect(s.getByRole('switch', { name: 'Milo drives' })).toHaveCount(0)
+  await expect(s.getByRole('region', { name: 'Signing in' })).toHaveCount(0)
+  await s.getByRole('button', { name: 'Family', exact: true }).click()
+  await s.getByRole('button', { name: 'Add someone, or a pet' }).click()
+  const sheet = page.getByRole('region', { name: 'Add someone' })
+  await sheet.getByRole('tab', { name: 'Pet' }).click()
+  await expect(sheet).toContainText('Pets start off the wall')
+  await sheet.getByRole('textbox', { name: 'Their name' }).fill('Biscuit')
+  await sheet.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(s.getByRole('region', { name: 'Not on the wall' })).toContainText('Biscuit')
 })

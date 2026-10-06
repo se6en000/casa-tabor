@@ -143,3 +143,38 @@ export function tintColor(rgb: number[] | null | undefined): string | null {
   const top = Math.max(...rgb, 1)
   return `rgb(${rgb.map((v) => Math.round((v / top) * 255)).join(', ')})`
 }
+
+// ── Family profiles: colour and order (Jake, Oct 6: "change the profile avatar color … customize the wall") ──────
+export interface Arrangement { id: string; pigment?: number | null; sort_order?: number }
+type Placed = { id: string; sort_order?: number | null }
+
+/**
+ * Picking a colour: it's theirs, and whoever had it takes theirs, so nobody else's colour moves. `shown` is each
+ * person's colour now (0–5).
+ */
+export function pickColor(personId: string, color: number, shown: Map<string, number>): Arrangement[] {
+  const mine = (shown.get(personId) ?? 0) % 6
+  if (mine === color) return []
+  const other = [...shown.entries()].find(([id, c]) => id !== personId && c % 6 === color)?.[0]
+  return [{ id: personId, pigment: color }, ...(other ? [{ id: other, pigment: mine }] : [])]
+}
+
+/**
+ * Moving someone up or down the wall's order (`ordered` = the people on the wall, in order): they swap places with
+ * the neighbour, and both keep their colours (colours otherwise follow the order).
+ */
+export function moveInOrder(personId: string, dir: -1 | 1, ordered: Placed[], shown: Map<string, number>): Arrangement[] {
+  const i = ordered.findIndex((m) => m.id === personId)
+  const j = i + dir
+  if (i < 0 || j < 0 || j >= ordered.length) return []
+  const a = ordered[i]
+  const b = ordered[j]
+  const sa = a.sort_order ?? i + 1
+  const sb = b.sort_order ?? j + 1
+  // Equal places (two people at 5) still need to come out in the new order.
+  const [na, nb] = sa === sb ? [sb + dir, sa] : [sb, sa]
+  return [
+    { id: a.id, sort_order: na, pigment: (shown.get(a.id) ?? 0) % 6 },
+    { id: b.id, sort_order: nb, pigment: (shown.get(b.id) ?? 0) % 6 },
+  ]
+}

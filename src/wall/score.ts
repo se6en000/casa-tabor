@@ -93,10 +93,22 @@ function span(start: Date, end: Date): { x: number; width: number } | null {
   return { x, width: Math.max(width, MIN_BLOCK_WIDTH) }
 }
 
-/** Colors follow the person (family order), not the row, so lanes appearing never recolor anyone. */
+/**
+ * Colors follow the person (family order), not the row, so lanes appearing never recolor anyone. A colour someone
+ * picked in Settings › Family is theirs; the rest keep following the order, skipping the picked ones (with none
+ * picked, everyone's colour is exactly what it always was).
+ */
 export function pigmentIndexes(members: WallMember[]): Map<string, number> {
   const ordered = [...members].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || a.name.localeCompare(b.name))
-  return new Map(ordered.map((m, i) => [m.id, i]))
+  const picked = new Set(ordered.map((m) => m.pigment).filter((p): p is number => p != null))
+  const out = new Map<string, number>()
+  let next = 0
+  for (const m of ordered) {
+    if (m.pigment != null) { out.set(m.id, m.pigment); continue }
+    if (picked.size < 6) while (picked.has(next % 6)) next++
+    out.set(m.id, next++)
+  }
+  return out
 }
 
 /**

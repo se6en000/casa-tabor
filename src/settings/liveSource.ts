@@ -64,15 +64,23 @@ export const liveSource: SettingsSource = {
     }, [profile])
     return { here, available, setUp: profile ? setUp : null }
   },
-  addMember: async (name, role, canDrive) => {
-    // Last in the family's order, so nobody's color changes (colors follow that order).
-    const { data: last } = await supabase.from('family_members').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
-    const { error } = await supabase.from('family_members').insert({ name: name.trim(), role, can_drive: canDrive, sort_order: (Number(last?.sort_order) || 0) + 1, show_on_home_sidebar: true })
-    return error ? fail(error) : ok
-  },
-  setCanDrive: async (memberId, canDrive) => {
-    const { error } = await supabase.from('family_members').update({ can_drive: canDrive }).eq('id', memberId)
-    return error ? fail(error) : ok
+  useMemberEdits: () => {
+    const queryClient = useQueryClient()
+    const done = (error: unknown) => {
+      // The family list is held for the whole session (useFamilyMembers); a change has to refresh it.
+      void queryClient.invalidateQueries({ queryKey: ['family-members'] })
+      void queryClient.invalidateQueries({ queryKey: ['calendar-connections'] })
+      return error ? fail(error) : ok
+    }
+    return {
+      update: async (memberId, patch) => done((await supabase.from('family_members').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', memberId)).error),
+      add: async (name, role, canDrive) => {
+        // Last in the family's order, so nobody's colour changes. A pet starts off the wall and out of sign-in.
+        const { data: last } = await supabase.from('family_members').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+        return done((await supabase.from('family_members').insert({ name: name.trim(), role, can_drive: role === 'pet' ? false : canDrive, sort_order: (Number(last?.sort_order) || 0) + 1, show_on_home_sidebar: role !== 'pet' })).error)
+      },
+      arrange: async (changes) => done(changes.length ? (await supabase.rpc('arrange_family_members', { p_changes: changes })).error : null),
+    }
   },
   useHome: () => {
     const { data } = useSetting<{ address?: string; city?: string; state?: string; zip?: string }>('home_config')

@@ -3,10 +3,11 @@
 
 const clean = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 
-/** Every name a family member goes by: short name, full name, and the first name of it. */
+/** Every name a family member goes by: short name, full name, the first name of it, and their nicknames. */
 export function namesOf(member) {
   const full = clean(member?.full_name)
-  return [...new Set([clean(member?.name), full, full.split(' ')[0]].filter(Boolean))]
+  const nicknames = Array.isArray(member?.nicknames) ? member.nicknames.map(clean) : []
+  return [...new Set([clean(member?.name), full, full.split(' ')[0], ...nicknames].filter(Boolean))]
 }
 
 /** The family member a name means, or null ("Tabor" alone is nobody in particular). */

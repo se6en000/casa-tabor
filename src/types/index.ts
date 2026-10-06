@@ -1,6 +1,6 @@
 // ── Family ──────────────────────────────────────────────────
 
-export type FamilyRole = 'parent' | 'child' | 'caregiver'
+export type FamilyRole = 'parent' | 'child' | 'caregiver' | 'pet'
 
 export interface FamilyMember {
   id: string
@@ -20,6 +20,10 @@ export interface FamilyMember {
   sort_order: number
   created_at: string
   updated_at: string
+  /** Other names they go by ("Livvy"); the assistant knows them by these too. */
+  nicknames?: string[]
+  /** The wall colour they picked (0–5), else the one that follows the family's order. */
+  pigment?: number | null
 }
 
 export interface MemberAvailabilityRule {

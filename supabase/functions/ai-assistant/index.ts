@@ -1018,7 +1018,7 @@ Deno.serve(async (req) => {
     const { from, until } = fullAiWindow(now, utcOffset)
     // Everything D answers from, in its context rather than behind search tools.
     const [familyRows, idRows, groceryRows, homeRow, placeRows, contactRows, recipeRows, memoryRows] = await Promise.all([
-      sb.from('family_members').select('id, name, full_name, role, can_drive, is_admin').order('sort_order'),
+      sb.from('family_members').select('id, name, full_name, nicknames, role, can_drive, is_admin').order('sort_order'),
       sb.from('events').select('id').is('deleted_at', null).eq('status', 'confirmed').neq('record_kind', 'series_template')
         .gte('start_time', from).lt('start_time', until).order('start_time').limit(200),
       sb.from('grocery_items').select('id, name, quantity, checked').is('deleted_at', null).order('checked').order('name').limit(200),

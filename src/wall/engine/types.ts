@@ -16,6 +16,8 @@ export interface WallMember {
   can_drive: boolean
   show_on_home_sidebar?: boolean | null
   sort_order?: number | null
+  /** The wall colour they picked (0–5); else theirs follows the family's order. */
+  pigment?: number | null
   /** How they travel (canvas 19): time at the airport, off the plane, and the usual way there. */
   travel_prefs?: { airport_minutes?: number | null; deplane_minutes?: number | null; way?: 'uber' | 'someone' | 'drive_park' | null } | null
 }
