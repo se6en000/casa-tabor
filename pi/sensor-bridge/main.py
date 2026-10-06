@@ -147,6 +147,7 @@ def _is_push_enabled() -> bool:
     global _push_enabled, _push_checked_at
     global _brightness_min, _brightness_max, _user_brightness_min, _user_brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
+    global _room_dim_strength, _color_soften
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         return _push_enabled
@@ -177,6 +178,8 @@ def _is_push_enabled() -> bool:
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
             _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
+            _room_dim_strength   = max(0.0, min(0.9, float(cfg.get("room_dim_strength", 0.30))))
+            _color_soften        = max(0.0, min(1.0, float(cfg.get("color_soften", 0.0))))
         log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
                  _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
     except Exception as exc:
@@ -282,6 +285,13 @@ _panel_brightness_min = BRIGHTNESS_MIN_DEFAULT
 _panel_brightness_max = BRIGHTNESS_MAX_DEFAULT
 _art_mode_active = False
 _art_dim_offset = 0.0
+# Below the room, always (Jake, Oct 6: "it always felt like it was a painting on the wall vs a monitor"): how far under
+# the room's light the wall sits, 0–0.9 (display_config.room_dim_strength; 0.30 when unset). The old app only dimmed
+# while its art screensaver showed; the new wall has none, so this is on whenever the wall follows the room.
+_room_dim_strength = 0.0
+# The colour shift: 0 = true to the room's light, 1 = none (display_config.color_soften; Jake: "put the color shift to
+# true so I can see the difference"). It was a fixed 0.4 toward neutral.
+_color_soften = 0.0
 
 PANEL_CALIBRATION_PATH = "/home/jake/sensor-bridge/panel-calibration.json"
 
@@ -484,6 +494,17 @@ def _display_wake(target_brightness: int):
     log.info("Wake burst complete → %d", target_brightness)
 
 
+def dim_scale(t: float, strength: float) -> float:
+    """How much of the room's lightness the wall keeps: 1.0 = none taken off. `t` is the room's light, 0 (dark) to 1."""
+    strength = max(0.0, min(0.95, strength))
+    if strength <= 0.0:
+        return 1.0
+    scale = 1.0 - strength * (0.30 + 0.65 * t)
+    if t < 0.25:
+        scale *= 0.20 + 0.80 * (t / 0.25)
+    return max(0.0, scale)
+
+
 def lux_to_brightness(lux: float) -> int:
     """
     Map ambient lux → DDC hardware brightness level (0–90) using:
@@ -514,20 +535,13 @@ def lux_to_brightness(lux: float) -> int:
     day_active_perceived = 1.00
     active_perceived = night_active_perceived + (day_active_perceived - night_active_perceived) * (t ** PERCEIVED_EXP)
     
-    # 3. Art Mode ("dim below ambient"): uniform perceptual scaling
-    if _art_mode_active and _art_dim_offset > 0.0:
-        # User-selected offset directly scales perceived lightness by (1.0 - dim_offset)
-        dim_fraction = max(0.0, min(0.95, _art_dim_offset))
-        art_perceived = active_perceived * (1.0 - dim_fraction)
-        
-        # When in very dark ambient light (t < 0.25, i.e. < 0.8 lux), decay to 0 to reach true panel floor (DDC 0)
-        if t < 0.25:
-            dark_factor = t / 0.25
-            art_perceived = art_perceived * (0.20 + 0.80 * dark_factor)
-        perceived_target = art_perceived
-    else:
-        perceived_target = active_perceived
-    
+    # 3. Below the room (always on, or the old art screensaver's own strength while it shows): the cut grows with the
+    #    room's light — 30% of the strength in the dark, 95% in full daylight (the Aug 28 curve Jake remembered: "a
+    #    stronger brightness change during day light than in the dark") — and in a near pitch-black room (< 0.8 lux,
+    #    t < 0.25) it fades on toward the panel floor (Sep 1).
+    strength = _art_dim_offset if _art_mode_active else _room_dim_strength
+    perceived_target = active_perceived * dim_scale(t, strength)
+
     perceived_target = max(0.0, min(1.0, perceived_target))
     
     # 4. Gamma expansion: convert perceived lightness to physical DDC PWM duty cycle
@@ -671,6 +685,11 @@ def _touch_wake_loop():
                     devices.append(d)
 
 
+def ramp_seconds(delta: int) -> float:
+    """How long a brightness change takes: about 0.35 s for a few steps, up to 1.4 s for a big one."""
+    return max(0.35, min(1.4, 0.25 + 0.05 * abs(delta)))
+
+
 def _brightness_loop():
     """
     Dedicated thread for brightness DDC control + auto-sleep.
@@ -688,23 +707,31 @@ def _brightness_loop():
     _dark_since = None  # time.time() when lux first dropped below sleep threshold
 
     def _fire_burst(start: int, end: int):
+        """An eased ramp, as long as the change is big (a lamp on: about a second; a few steps: under half a second),
+        so a big change glides instead of snapping. Each DDC level is written once."""
         global _current_brightness
         if start == end:
             return
         lo, hi = _effective_brightness_bounds()
-        for i in range(1, BURST_STEPS + 1):
-            t = i / BURST_STEPS
-            val = round(start + (end - start) * t)
-            val = max(lo, min(hi, val))
-            try:
-                _ddc_write(val)
-                with _ddc_lock:
-                    _current_brightness = val
-            except Exception as exc:
-                log.warning("DDC burst step failed: %s", exc)
-                break
-            time.sleep(BURST_STEP_MS / 1000.0)
-        log.info("DDC burst complete %d → %d", start, end)
+        delta = abs(end - start)
+        duration = ramp_seconds(delta)
+        steps = max(BURST_STEPS, min(60, delta * 3))
+        last = start
+        for i in range(1, steps + 1):
+            x = i / steps
+            eased = x * x * (3 - 2 * x)  # smoothstep: eases in and out
+            val = max(lo, min(hi, round(start + (end - start) * eased)))
+            if val != last:
+                try:
+                    _ddc_write(val)
+                    with _ddc_lock:
+                        _current_brightness = val
+                    last = val
+                except Exception as exc:
+                    log.warning("DDC ramp step failed: %s", exc)
+                    break
+            time.sleep(duration / steps)
+        log.info("DDC ramp %d → %d over %.2fs", start, end, duration)
 
     while True:
         time.sleep(IDLE_STEP_MS / 1000.0)
@@ -864,13 +891,14 @@ def cct_to_rgb_gains(cct: float) -> tuple[int, int, int]:
     g = max(0.0, min(255.0, g))
     b = max(0.0, min(255.0, b))
 
-    # Normalize so max channel = 50 (DDC neutral midpoint), scale others proportionally.
-    # Blending 40% toward neutral (50,50,50) softens the effect for a tasteful display shift.
+    # Normalize so max channel = 50 (DDC neutral midpoint), scale others proportionally, then blend toward neutral
+    # (50,50,50) by _color_soften: 0 = true to the room's light (now), 0.4 = the old softened shift.
     peak = max(r, g, b)
     scale = 50.0 / peak
-    r_gain = round(r * scale * 0.6 + 50 * 0.4)
-    g_gain = round(g * scale * 0.6 + 50 * 0.4)
-    b_gain = round(b * scale * 0.6 + 50 * 0.4)
+    keep = 1.0 - _color_soften
+    r_gain = round(r * scale * keep + 50 * _color_soften)
+    g_gain = round(g * scale * keep + 50 * _color_soften)
+    b_gain = round(b * scale * keep + 50 * _color_soften)
 
     return (
         max(0, min(100, r_gain)),

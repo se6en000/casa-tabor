@@ -113,6 +113,47 @@ test('Evening lamp light: 50% dim maintains natural soft wall art feel', () => {
   const eveningArt50 = evaluatePyBrightness(50.0, true, 0.50)
 
   assert.ok(eveningActive >= 50 && eveningActive <= 62, `Evening active expected ~57 DDC, got ${eveningActive}`)
-  assert.ok(eveningArt30 >= 22 && eveningArt30 <= 30, `Evening Art 30% expected ~26 DDC, got ${eveningArt30}`)
-  assert.ok(eveningArt50 >= 10 && eveningArt50 <= 16, `Evening Art 50% expected ~12 DDC, got ${eveningArt50}`)
+  // The Aug 28 curve (Jake, Oct 6): in lamp light the cut is gentler than in daylight (76% of the strength at 50 lux).
+  assert.ok(eveningArt30 >= 29 && eveningArt30 <= 35, `Evening Art 30% expected ~32 DDC, got ${eveningArt30}`)
+  assert.ok(eveningArt50 >= 17 && eveningArt50 <= 23, `Evening Art 50% expected ~20 DDC, got ${eveningArt50}`)
+})
+
+// Below the room, always (Jake, Oct 6: "it always felt like it was a painting on the wall vs a monitor … a stronger
+// brightness change during day light than in the dark"), and the colour shift true to the room.
+test('below the room is on without the art screensaver; the cut is stronger in daylight than in lamp light or the dark', () => {
+  const script = `
+import sys, json
+sys.path.insert(0, ${JSON.stringify(sensorBridgeDir)})
+import main
+out = {}
+out['scale'] = [round(main.dim_scale(t, 0.30), 4) for t in (0.0, 0.25, 0.5, 1.0)]
+out['none'] = main.dim_scale(0.6, 0.0)
+main._art_mode_active = False
+main._room_dim_strength = 0.0
+out['plain'] = [main.lux_to_brightness(l) for l in (5.0, 50.0, 800.0)]
+main._room_dim_strength = 0.30
+out['room'] = [main.lux_to_brightness(l) for l in (5.0, 50.0, 800.0)]
+out['ramp'] = [main.ramp_seconds(d) for d in (1, 3, 9, 40)]
+main._color_soften = 0.0
+out['true'] = list(main.cct_to_rgb_gains(2700))
+main._color_soften = 0.4
+out['soft'] = list(main.cct_to_rgb_gains(2700))
+out['neutral'] = list(main.cct_to_rgb_gains(6600))
+print(json.dumps(out))
+`
+  const r = JSON.parse(execFileSync('python3', ['-c', script], { encoding: 'utf8' }).trim())
+  // 30% strength: 9% off in the dark … 28.5% off in daylight; the near-dark fade on top at t = 0.
+  assert.deepEqual(r.scale, [0.182, 0.8612, 0.8125, 0.715])
+  assert.equal(r.none, 1)
+  for (let i = 0; i < 3; i++) assert.ok(r.room[i] < r.plain[i], `below the room at ${[5, 50, 800][i]} lx: ${r.room[i]} < ${r.plain[i]}`)
+  // Stronger in daylight: the share taken off grows with the light.
+  const cut = r.room.map((v, i) => 1 - v / r.plain[i])
+  assert.ok(cut[2] > cut[1], `daylight cut ${cut[2]} > lamp-light cut ${cut[1]}`)
+  // Ramps: a few steps under half a second, a lamp switching on about a second, never more than 1.4 s.
+  assert.deepEqual(r.ramp, [0.35, 0.4, 0.7, 1.4])
+  // True colour: a 2700 K lamp gives the full amber (blue well under green under red); softened pulls toward 50.
+  assert.equal(r.true[0], 50)
+  assert.ok(r.true[2] < r.soft[2] && r.true[1] < r.soft[1], `true ${r.true} warmer than softened ${r.soft}`)
+  assert.ok(r.true[2] < 25, `true blue gain at 2700 K is strong: ${r.true[2]}`)
+  assert.deepEqual(r.neutral.map((v) => Math.abs(v - 50) <= 3), [true, true, true])
 })

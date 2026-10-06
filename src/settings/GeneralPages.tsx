@@ -419,10 +419,16 @@ export function WallPage({ head }: { head: ReactNode }) {
           <>
             <Row name="Dimmest" right={<Stepper label="Dimmest brightness" value={min} min={0} max={Math.max(0, max - 5)} step={5} unit="%" onChange={(v) => void set({ brightness_min: v })} />} />
             <Row name="Brightest" right={<Stepper label="Brightest brightness" value={max} min={Math.min(100, min + 5)} max={100} step={5} unit="%" onChange={(v) => void set({ brightness_max: v })} />} />
+            <Row name="Below the room" state="Like a painting, not a screen: more by day than at night"
+              right={<Stepper label="How far below the room" value={Math.round((c.room_dim_strength ?? 0.3) * 100)} min={0} max={90} step={5} unit="%" onChange={(v) => void set({ room_dim_strength: v / 100 })} />} />
           </>
         ) : (
           <Row name="Hold at" right={<Stepper label="Hold the brightness at" value={max} min={5} max={100} step={5} unit="%" onChange={(v) => void set({ brightness_min: v, brightness_max: v })} />} />
         )}
+      </Group>
+      <Group label="Colour">
+        <Row name="True to the room’s light" state={(c.color_soften ?? 0) > 0 ? 'Off: a gentle shift toward the lamp’s warmth' : 'The screen takes on the lamp’s warmth, or the daylight’s cool, fully'}
+          right={<Toggle label="True to the room’s light" on={(c.color_soften ?? 0) === 0} onChange={(on) => void set({ color_soften: on ? 0 : 0.4 }, on ? 'True to the room.' : 'Softened.')} />} />
       </Group>
       <Group label="Sleep">
         <Row name="Sleep when the room is dark" state="Wakes as soon as a light comes on" right={<Toggle label="Sleep when the room is dark" on={c.auto_sleep_enabled !== false} onChange={(on) => void set({ auto_sleep_enabled: on })} />} />
