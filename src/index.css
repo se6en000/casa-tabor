@@ -1256,6 +1256,7 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
   --color-wall-brass-ink: var(--color-wall-night-brass-ink);
   --color-wall-rust: var(--color-wall-night-rust);
   --color-wall-on-pigment: var(--color-wall-night-on-pigment);
+  --color-wall-paper: var(--color-wall-night-paper);
   --color-wall-pigment-1: var(--color-wall-night-pigment-1);
   --color-wall-pigment-2: var(--color-wall-night-pigment-2);
   --color-wall-pigment-3: var(--color-wall-night-pigment-3);

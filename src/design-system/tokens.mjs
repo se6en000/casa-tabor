@@ -180,6 +180,8 @@ export const DESIGN_TOKENS = {
     'wall-night-brass-ink': '#C9A46A',
     'wall-night-rust': '#D07A56',
     'wall-night-on-pigment': '#221E1A',
+    // Paper at night: a step up from the night ground, as the tan paper is a step up from the linen.
+    'wall-night-paper': '#2E2924',
     'wall-night-band': '#3A3128',
     'wall-night-pigment-1': '#BDB3A5',
     'wall-night-pigment-2': '#93A7B5',
