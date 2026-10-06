@@ -1,3 +1,4 @@
+import { BACK_SPOT } from './backSpot'
 import { useState, type ReactNode } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
 import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion, type PastStep } from './todos'
@@ -229,9 +230,10 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
               {showShelf ? `${list.projects.length === 1 ? 'One project' : `${list.projects.length} projects`} going. One step from each is all you need to look at.` : 'The rest stays folded — open a group to see it.'}
             </div>
           </div>
-          <Pill label="Back to today" onClick={onBack} />
         </div>
       </header>
+      {/* Where a far day has it: under the +, mic and MT buttons, right edges in line (Jake, Oct 6: it rode up into the mic). */}
+      <div className={BACK_SPOT}><Pill label="Back to today" onClick={onBack} /></div>
 
       {showShelf && <WallProjectShelf projects={list.projects} today={today} onOpen={setProjectId} upcoming={seasons} onStart={(key) => void onStart?.(key).then((id) => { if (id) setProjectId(id) })} />}
 

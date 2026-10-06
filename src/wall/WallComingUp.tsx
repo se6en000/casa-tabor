@@ -1,3 +1,4 @@
+import { BACK_SPOT } from './backSpot'
 import { useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import WallKeyboard from './WallKeyboard'
@@ -155,14 +156,15 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
               {startNow > 0 ? `${startNow === 1 ? 'One' : startNow === 2 ? 'Two' : startNow} to start now. ` : ''}Games, school runs and chores are left off — they’re on the days.
             </div>
           </div>
-          <div className="flex shrink-0 gap-[12px]">
-            {more > 0 && <Answer label={`${more} more`} onClick={() => setPageIndex(page + 1)} />}
-            {more === 0 && page > 0 && <Answer label="First page" onClick={() => setPageIndex(0)} />}
-            <Answer label={`Gift ideas · ${ideas.length}`} onClick={() => setIdeasOpen(true)} />
-            <Answer label="Back to today" onClick={onBack} />
-          </div>
         </div>
       </header>
+      {/* Where a far day has its Back to today: under the +, mic and MT buttons (Jake, Oct 6: it rode up into them). */}
+      <div className={`${BACK_SPOT} flex gap-[12px]`}>
+        {more > 0 && <Answer label={`${more} more`} onClick={() => setPageIndex(page + 1)} />}
+        {more === 0 && page > 0 && <Answer label="First page" onClick={() => setPageIndex(0)} />}
+        <Answer label={`Gift ideas · ${ideas.length}`} onClick={() => setIdeasOpen(true)} />
+        <Answer label="Back to today" onClick={onBack} />
+      </div>
 
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         {items.length === 0 && (
