@@ -71,7 +71,7 @@ export function FamilyPage({ head }: { head: ReactNode }) {
         {note}
         <Group label="Signing in">
           <Row name="PIN" state="Set or change it in Family PINs" onClick={() => setPins(true)} />
-          {viewer.id === person.id && (
+          {viewer.id === person.id && !src.onWall && (
             <Row name="Face ID on this phone" state={faceId.here ? 'On' : faceId.available ? 'Off · sign in with a look instead of a PIN' : 'Not available on this device'}
               right={faceId.here ? undefined : <Toggle label="Face ID on this phone" on={false} disabled={!faceId.available || !faceId.setUp} onChange={async () => { const done = await faceId.setUp?.(); show({ ok: Boolean(done), message: 'Face ID wasn’t set up.' }, 'Face ID is on.') }} />} />
           )}
@@ -93,7 +93,7 @@ export function FamilyPage({ head }: { head: ReactNode }) {
       <div className="mt-[8px] px-[4px]"><Action onClick={() => setAdding({ name: '', role: 'child', drives: false })}><Plus size={18} aria-hidden="true" /> Add someone</Action></div>
       <Group label="Signing in">
         <Row name="Family PINs" state="Set, change or reset anyone’s PIN" onClick={() => setPins(true)} />
-        {viewer.id && (
+        {viewer.id && !src.onWall && (
           <Row name="Face ID on this phone" state={faceId.here ? `On for ${viewer.name}` : faceId.available ? 'Off' : 'Not available on this device'}
             right={faceId.here ? undefined : <Toggle label="Face ID on this phone" on={false} disabled={!faceId.available || !faceId.setUp} onChange={async () => { const done = await faceId.setUp?.(); show({ ok: Boolean(done), message: 'Face ID wasn’t set up.' }, 'Face ID is on.') }} />} />
         )}
@@ -308,6 +308,8 @@ export function WallPage({ head }: { head: ReactNode }) {
   const c = config ?? {}
   const min = c.brightness_min ?? 0
   const max = c.brightness_max ?? 100
+  // Held at one brightness when the range is closed and the old range is kept to go back to.
+  const following = !(c.follow_room_backup && min === max)
   const set = async (patch: Parameters<typeof save>[0], words?: string) => show(await save(patch), words)
 
   return (
@@ -316,9 +318,18 @@ export function WallPage({ head }: { head: ReactNode }) {
       <LightNow now={light.now} live={src.onWall} at={now} />
       <LightDay samples={light.today} at={now} />
       <Group label="Brightness">
-        <Row name="Follows the room’s light" state="The wall sensor dims it in a dark room and brightens it in a bright one, between these two." />
-        <Row name="Dimmest" right={<Stepper label="Dimmest brightness" value={min} min={0} max={Math.max(0, max - 5)} step={5} unit="%" onChange={(v) => void set({ brightness_min: v })} />} />
-        <Row name="Brightest" right={<Stepper label="Brightest brightness" value={max} min={Math.min(100, min + 5)} max={100} step={5} unit="%" onChange={(v) => void set({ brightness_max: v })} />} />
+        <Row name="Follow the room’s light" state={following ? 'The wall sensor dims it in a dark room and brightens it in a bright one, between these two.' : `Held at ${max}%, whatever the room`}
+          right={<Toggle label="Follow the room’s light" on={following} onChange={(on) => void (on
+            ? set({ brightness_min: c.follow_room_backup?.min ?? 0, brightness_max: c.follow_room_backup?.max ?? 50, follow_room_backup: null }, 'Following the room again.')
+            : set({ follow_room_backup: { min, max }, brightness_min: max, brightness_max: max }, `Held at ${max}%.`))} />} />
+        {following ? (
+          <>
+            <Row name="Dimmest" right={<Stepper label="Dimmest brightness" value={min} min={0} max={Math.max(0, max - 5)} step={5} unit="%" onChange={(v) => void set({ brightness_min: v })} />} />
+            <Row name="Brightest" right={<Stepper label="Brightest brightness" value={max} min={Math.min(100, min + 5)} max={100} step={5} unit="%" onChange={(v) => void set({ brightness_max: v })} />} />
+          </>
+        ) : (
+          <Row name="Hold at" right={<Stepper label="Hold the brightness at" value={max} min={5} max={100} step={5} unit="%" onChange={(v) => void set({ brightness_min: v, brightness_max: v })} />} />
+        )}
       </Group>
       <Group label="Sleep">
         <Row name="Sleep when the room is dark" state="Wakes as soon as a light comes on" right={<Toggle label="Sleep when the room is dark" on={c.auto_sleep_enabled !== false} onChange={(on) => void set({ auto_sleep_enabled: on })} />} />
@@ -327,6 +338,15 @@ export function WallPage({ head }: { head: ReactNode }) {
         )}
         <Row name="Night glow" state="A faint candle glow on the light strip at night" right={<Toggle label="Night glow" on={c.led_night_glow !== false} onChange={(on) => void set({ led_night_glow: on })} />} />
       </Group>
+      {src.onWall && (
+        <Group label="The light sensor, on this wall">
+          <Row name="Sleep when darker than" state={`The room is ${light.now?.lux != null ? `${Math.round(light.now.lux * 10) / 10} lux` : '—'} now`}
+            right={<Stepper label="Sleep when darker than" value={c.sleep_lux_threshold ?? 1.1} min={0.2} max={20} step={0.2} format={(v) => `${Math.round(v * 10) / 10} lux`} onChange={(v) => void set({ sleep_lux_threshold: Math.round(v * 10) / 10, wake_lux_threshold: Math.max(c.wake_lux_threshold ?? 1.2, Math.round((v + 0.1) * 10) / 10) })} />} />
+          <Row name="Wake when brighter than" state="A little above the sleep level, so it doesn’t flicker"
+            right={<Stepper label="Wake when brighter than" value={c.wake_lux_threshold ?? 1.2} min={Math.round(((c.sleep_lux_threshold ?? 1.1) + 0.1) * 10) / 10} max={25} step={0.2} format={(v) => `${Math.round(v * 10) / 10} lux`} onChange={(v) => void set({ wake_lux_threshold: Math.round(v * 10) / 10 })} />} />
+          <Row name="The light strip" state="Plays its yes flash once" right={<Action onClick={async () => show(await src.wallDo('test_light'), 'There it goes.')}>Try it</Action>} />
+        </Group>
+      )}
       {src.onWall && (
         <Group label="This screen">
           <Row name="Turn off when nobody’s touched it" state="Only this screen" right={<Toggle label="Turn the screen off when idle" on={screen.settings.displaySleepEnabled} onChange={(on) => screen.update({ displaySleepEnabled: on })} />} />

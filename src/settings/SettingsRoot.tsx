@@ -48,7 +48,11 @@ function Settings() {
   const wide = useWide(src.onWall)
   const members = src.useMembers()
   const viewer = src.useViewer()
-  const isOwner = Boolean(viewer.id && viewer.id === ownerId(members ?? []))
+  const owner = ownerId(members ?? [])
+  // On the kitchen wall the kiosk stays signed in, so Advanced asks for Jake's PIN each visit (canvas 47f).
+  const [wallUnlocked, setWallUnlocked] = useState(false)
+  const isOwner = src.onWall ? wallUnlocked : Boolean(viewer.id && viewer.id === owner)
+  const unlock = owner ? { ownerId: owner, onUnlock: () => setWallUnlocked(true) } : null
   const page = pageFromPath(pathname)
   // An old link (/settings/google, Google's way back) is shown at its new address.
   useEffect(() => {
@@ -71,19 +75,21 @@ function Settings() {
   const leaveWords = src.onWall ? 'Back to the wall' : 'Back'
 
   const shown = page ?? (wide ? 'family' : null)
-  const body = shown ? <PageView id={shown} isOwner={isOwner} onBack={wide ? undefined : home} onOld={() => navigate('/settings/old/display')} /> : null
+  // On a wide screen an Advanced page shows the PIN pad itself; the list beside it just says it's locked.
+  const pageGated = Boolean(shown && pageById(shown)?.advanced && !isOwner)
+  const body = shown ? <PageView id={shown} isOwner={isOwner} unlock={unlock} onBack={wide ? undefined : home} onOld={() => navigate('/settings/old/display')} /> : null
 
   if (!wide) {
     return (
       <main className="min-h-[100dvh] bg-phone-ground px-[18px] pb-[48px] pt-[max(20px,calc(env(safe-area-inset-top)+10px))] font-body text-wall-ink">
-        {body ?? <Home tab={tab} setTab={setTab} isOwner={isOwner} onOpen={open} current={null} onLeave={leave} leaveWords={leaveWords} />}
+        {body ?? <Home tab={tab} setTab={setTab} isOwner={isOwner} unlock={unlock} onOpen={open} current={null} onLeave={leave} leaveWords={leaveWords} />}
       </main>
     )
   }
   return (
     <main className="fixed inset-0 flex bg-phone-ground font-body text-wall-ink">
       <nav aria-label="Settings" className={`shrink-0 overflow-y-auto border-0 border-r border-solid border-wall-stone bg-phone-card px-[24px] pb-[40px] pt-[28px] ${src.onWall ? 'w-[500px]' : 'w-[400px]'}`}>
-        <Home tab={tab} setTab={setTab} isOwner={isOwner} onOpen={open} current={shown} onLeave={leave} leaveWords={leaveWords} />
+        <Home tab={tab} setTab={setTab} isOwner={isOwner} unlock={pageGated ? null : unlock} locked={pageGated} onOpen={open} current={shown} onLeave={leave} leaveWords={leaveWords} />
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto px-[48px] pb-[60px] pt-[36px]">
         <div className={src.onWall ? 'max-w-[1100px]' : 'max-w-[720px]'}>{body}</div>
@@ -93,10 +99,14 @@ function Settings() {
 }
 
 /** The home (47a A, the glance): each page with what it's set to now, in words. */
-function Home({ tab, setTab, isOwner, onOpen, current, onLeave, leaveWords }: {
+type Unlock = { ownerId: string; onUnlock: () => void } | null
+
+function Home({ tab, setTab, isOwner, unlock, locked = false, onOpen, current, onLeave, leaveWords }: {
+  locked?: boolean
   tab: 'general' | 'advanced'
   setTab: (t: 'general' | 'advanced') => void
   isOwner: boolean
+  unlock: Unlock
   onOpen: (id: SettingsPageId) => void
   current: SettingsPageId | null
   onLeave: () => void
@@ -134,7 +144,8 @@ function Home({ tab, setTab, isOwner, onOpen, current, onLeave, leaveWords }: {
           </div>
           {tab === 'general'
             ? <Group label="The household"><GeneralRows onOpen={onOpen} current={current} /></Group>
-            : isOwner ? <Group label="Just Jake"><AdvancedRows onOpen={onOpen} current={current} /></Group> : <Gate />}
+            : isOwner ? <Group label="Just Jake"><AdvancedRows onOpen={onOpen} current={current} /></Group>
+              : locked ? <Group label="Just Jake"><Row name="Locked" state="Jake’s PIN, beside" /></Group> : <Gate unlock={unlock} />}
         </>
       )}
       <p className={`m-0 mt-[16px] text-center text-wall-ink-2 ${t.detail}`}>
@@ -206,11 +217,12 @@ function AdvancedRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => voi
   )
 }
 
-/** Anyone but Jake sees what Advanced is and how to get in, not the numbers (47e). */
-function Gate() {
+/** Anyone but Jake sees what Advanced is and how to get in, not the numbers (47e); on the wall, his PIN opens it. */
+function Gate({ unlock }: { unlock: Unlock }) {
   const src = useSource()
   const t = useType()
   const viewer = src.useViewer()
+  if (src.onWall && unlock) return <WallPin unlock={unlock} />
   return (
     <section aria-label="Advanced is Jake’s" className="mt-[18px] rounded-[22px] bg-wall-ink px-[22px] py-[24px] text-center text-wall-on-pigment">
       <ScanFace size={40} aria-hidden="true" className="mx-auto text-wall-night-brass" />
@@ -221,10 +233,49 @@ function Gate() {
   )
 }
 
-function PageView({ id, isOwner, onBack, onOld }: { id: SettingsPageId; isOwner: boolean; onBack?: () => void; onOld: () => void }) {
+const PIN_LENGTH = 6
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫']
+
+/** Jake's PIN on the wall's own keypad (47f): opens Advanced for this visit only. */
+function WallPin({ unlock }: { unlock: NonNullable<Unlock> }) {
+  const src = useSource()
+  const t = useType()
+  const [pin, setPin] = useState('')
+  const [wrong, setWrong] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const press = async (k: string) => {
+    if (checking || !k) return
+    setWrong(false)
+    const next = k === '⌫' ? pin.slice(0, -1) : (pin + k).slice(0, PIN_LENGTH)
+    setPin(next)
+    if (next.length === PIN_LENGTH) {
+      setChecking(true)
+      const good = await src.checkOwnerPin(unlock.ownerId, next)
+      setChecking(false)
+      if (good) unlock.onUnlock()
+      else { setWrong(true); setPin('') }
+    }
+  }
+  return (
+    <section aria-label="Advanced is Jake’s" className="mt-[18px] rounded-[22px] bg-wall-ink px-[22px] py-[24px] text-center text-wall-on-pigment">
+      <h2 className={`m-0 font-display font-semibold ${t.heading}`}>Advanced is Jake’s</h2>
+      <p className={`m-0 mt-[6px] text-wall-night-ink-2 ${t.detail}`}>{wrong ? 'That PIN isn’t right.' : checking ? 'Checking…' : 'Jake’s PIN opens it for now.'}</p>
+      <div className="mt-[14px] flex justify-center gap-[12px]" aria-label={`${pin.length} of ${PIN_LENGTH} numbers`} role="img">
+        {Array.from({ length: PIN_LENGTH }, (_, i) => <span key={i} className={`h-[16px] w-[16px] rounded-full border-2 border-solid border-wall-night-brass ${i < pin.length ? 'bg-wall-night-brass' : ''}`} />)}
+      </div>
+      <div className="mx-auto mt-[18px] grid max-w-[300px] grid-cols-3 gap-[12px]">
+        {KEYS.map((k, i) => k ? (
+          <button key={i} type="button" aria-label={k === '⌫' ? 'Delete' : k} onClick={() => void press(k)} className={`h-[72px] rounded-full border border-solid border-wall-night-rule bg-transparent font-semibold text-wall-on-pigment ${t.heading}`}>{k}</button>
+        ) : <span key={i} />)}
+      </div>
+    </section>
+  )
+}
+
+function PageView({ id, isOwner, unlock, onBack, onOld }: { id: SettingsPageId; isOwner: boolean; unlock: Unlock; onBack?: () => void; onOld: () => void }) {
   const p = pageById(id)!
   const head = <PageHead title={p.name} about={p.about} back={p.advanced ? 'Advanced' : 'Settings'} onBack={onBack} />
-  if (p.advanced && !isOwner) return <div>{head}<Gate /></div>
+  if (p.advanced && !isOwner) return <div>{head}<Gate unlock={unlock} /></div>
   const pages: Record<SettingsPageId, ReactNode> = {
     family: <FamilyPage head={head} />,
     places: <PlacesPage head={head} />,

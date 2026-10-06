@@ -209,3 +209,58 @@ test('settings: voice — the last things it heard', async ({ page }) => {
   const s = await open(page, { page: 'voice' })
   await expect(s.getByRole('region', { name: 'The last things it heard' })).toContainText('What do we have going on today?')
 })
+
+// Jake, Oct 6: "compare what is on the wall with the proposed design … the wall/pi settings will have more settings
+// options than the mobile version". The wall's own sensor, light strip, listener and screen; Advanced by Jake's PIN.
+const WALL = { width: 1920, height: 1080 }
+test('settings on the wall: Advanced asks for Jake’s PIN each visit, whoever the kiosk is signed in as', async ({ page }) => {
+  const s = await open(page, { wall: '1' }, WALL)
+  await s.getByRole('tab', { name: 'Advanced' }).click()
+  const gate = s.getByRole('region', { name: 'Advanced is Jake’s' })
+  for (const k of '111111') await gate.getByRole('button', { name: k, exact: true }).click()
+  await expect(gate).toContainText('That PIN isn’t right.')
+  for (const k of '123456') await gate.getByRole('button', { name: k, exact: true }).click()
+  await expect(s.getByRole('button', { name: 'Open Usage and cost' })).toBeVisible()
+  await expect(page).toHaveScreenshot('settings-wall-advanced-open.png')
+})
+
+test('settings on the wall: the light sensor’s sleep and wake levels and the light strip, wall only', async ({ page }) => {
+  let s = await open(page, { wall: '1', page: 'wall' }, WALL)
+  const sensor = s.getByRole('region', { name: 'The light sensor, on this wall' })
+  await sensor.getByRole('button', { name: 'More: Sleep when darker than' }).click()
+  await expect(sensor.getByRole('group', { name: 'Sleep when darker than' })).toContainText('1.3 lux')
+  await expect(sensor.getByRole('group', { name: 'Wake when brighter than' })).toContainText('1.4 lux')
+  await sensor.getByRole('button', { name: 'Try it' }).click()
+  await expect(s.getByRole('status')).toHaveText('There it goes.')
+  s = await open(page, { page: 'wall' })
+  await expect(s.getByRole('region', { name: 'The light sensor, on this wall' })).toHaveCount(0)
+})
+
+test('settings: holding the screen at one brightness, and back to following the room', async ({ page }) => {
+  const s = await open(page, { page: 'wall' })
+  await s.getByRole('switch', { name: 'Follow the room’s light' }).click()
+  await expect(s.getByRole('group', { name: 'Hold the brightness at' })).toContainText('50 %')
+  await expect(s.getByRole('group', { name: 'Dimmest brightness' })).toHaveCount(0)
+  await s.getByRole('switch', { name: 'Follow the room’s light' }).click()
+  await expect(s.getByRole('group', { name: 'Dimmest brightness' })).toContainText('0 %')
+})
+
+test('settings on the wall: this wall’s health, its listener, and maintenance that runs here', async ({ page }) => {
+  const unlock = async (s) => {
+    for (const k of '123456') await s.getByRole('region', { name: 'Advanced is Jake’s' }).getByRole('button', { name: k, exact: true }).click()
+  }
+  let s = await open(page, { wall: '1', page: 'limits' }, WALL)
+  await unlock(s)
+  const wall = s.getByRole('region', { name: 'This wall' })
+  await expect(wall).toContainText('Working')
+  await expect(wall).toContainText('0–100 on the monitor’s own scale')
+  s = await open(page, { wall: '1', page: 'voice' }, WALL)
+  await unlock(s)
+  await expect(s.getByText('Running, waiting for the wake word')).toBeVisible()
+  await expect(s.getByRole('group', { name: 'How easily it wakes' })).toContainText('12')
+  s = await open(page, { wall: '1', page: 'maintenance' }, WALL)
+  await unlock(s)
+  await expect(s.getByRole('button', { name: 'Run: Reload this screen' })).toBeVisible()
+  await s.getByRole('button', { name: 'Run: Re-measure the screen’s brightness range' }).click()
+  await expect(s.getByText('The screen flickers for a few seconds. Tap again to go ahead')).toBeVisible()
+})

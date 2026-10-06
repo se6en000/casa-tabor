@@ -21,6 +21,6 @@ else
 fi
 # For the morning email (nightly_checks; the routine emails Jake only when something failed).
 if head -1 "$OUT/last.txt" | grep -q ' passed'; then ok=true; else ok=false; fi
-PATH="/usr/local/bin:/usr/bin:/bin:$PATH" node scripts/nightly-record.mjs screens "$ok" "$(head -1 "$OUT/last.txt")" "$OUT/last.txt" >/dev/null 2>&1 || true
+PATH="/usr/local/bin:/usr/bin:/bin:$PATH" node scripts/nightly-record.mjs screens "$ok" "$(head -1 "$OUT/last.txt")" "$OUT/last.txt" >>"$OUT/record.log" 2>&1 || true
 # Keep two weeks of logs.
 find "$OUT" -name 'visual-*.log' -mtime +14 -delete 2>/dev/null

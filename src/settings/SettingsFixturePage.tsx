@@ -130,7 +130,7 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
       return { data, change: async (body: Record<string, unknown>) => { if (body.action === 'text_on_wall') setData((d) => ({ ...d, text_on_wall: body.on === true })); return { ok: true } } }
     },
     useDisplay: () => {
-      const [config, setConfig] = useState({ brightness_min: 0, brightness_max: 50, auto_sleep_enabled: true, sleep_delay_s: 120, led_night_glow: true })
+      const [config, setConfig] = useState<import('./data').DisplayConfigLite>({ brightness_min: 0, brightness_max: 50, auto_sleep_enabled: true, sleep_delay_s: 120, led_night_glow: true, sleep_lux_threshold: 1.1, wake_lux_threshold: 1.2 })
       return { config, save: async (patch) => { setConfig((c) => ({ ...c, ...patch })); return { ok: true } } }
     },
     useScreen: () => {
@@ -179,6 +179,9 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     useChecks: () => CHECKS,
     useBugs: () => ({ open: 4, newest: at('2026-10-01T18:15:00Z') }),
     run: ok,
+    checkOwnerPin: async (_id, pin) => pin === '123456',
+    useWallHardware: () => (onWall ? { sensorOk: true, listener: 'ready', wakeScore: 0.12, panel: { min: 0, max: 100 } } : { sensorOk: null, listener: null, wakeScore: null, panel: null }),
+    wallDo: ok,
   }
 }
 

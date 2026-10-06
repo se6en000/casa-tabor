@@ -103,6 +103,7 @@ export function LimitsPage({ head }: { head: ReactNode }) {
   const b = summary.breaker
   const paused = Boolean(b.paused)
   const lastSync = (connections ?? []).map((m) => m.connection?.last_sync_at).filter(Boolean).sort().at(-1) ?? null
+  const hw = src.useWallHardware()
   const jobs = summary.last_check?.background_calls
   return (
     <div>
@@ -135,6 +136,13 @@ export function LimitsPage({ head }: { head: ReactNode }) {
         <Row name="Background jobs" state={jobs ? `${jobs.total} in the last hour${jobs.errors || jobs.timeouts ? ` · ${jobs.errors} errors, ${jobs.timeouts} timeouts` : ', all fine'}` : 'No check yet'} tone={jobs && (jobs.errors || jobs.timeouts) ? 'rust' : 'good'} />
         <Row name="App errors" state={`${summary.client_errors.last_24h} today · ${summary.client_errors.last_7d} this week`} tone={summary.client_errors.last_24h ? 'rust' : 'quiet'} />
       </Group>
+      {src.onWall && (
+        <Group label="This wall">
+          <Row name="The light sensor" state={hw.sensorOk == null ? 'Checking…' : hw.sensorOk ? 'Working' : 'Not answering · the screen keeps its last brightness'} tone={hw.sensorOk === false ? 'rust' : hw.sensorOk ? 'good' : 'quiet'} />
+          <Row name="The wake-word listener" state={hw.listener === 'off' ? 'Not running' : hw.listener ? 'Running' : 'Checking…'} tone={hw.listener === 'off' ? 'rust' : hw.listener ? 'good' : 'quiet'} />
+          <Row name="The screen’s brightness range" state={hw.panel ? `${hw.panel.min}–${hw.panel.max} on the monitor’s own scale` : 'Checking…'} />
+        </Group>
+      )}
     </div>
   )
 }
@@ -185,25 +193,28 @@ export function VoicePage({ head }: { head: ReactNode }) {
   const src = useSource()
   const screen = src.useScreen()
   const turns = src.useVoiceTurns()
+  const hw = src.useWallHardware()
   const now = src.now()
   const [mic, setMic] = useState<string | null>(null)
   const [note, show] = useSaveNote()
   useEffect(() => {
     void navigator.permissions?.query({ name: 'microphone' as PermissionName }).then((p) => setMic(p.state), () => setMic(null))
   }, [])
-  const sensitivity = Math.round((0.7 - screen.settings.wakeWordSensitivity) * 20) // 0.1 strict…0.6 loose → 12…2
+  // The listener's own number when it answers (it's what's really in use); 0.1 wakes easily … 0.6 is strict → 12…2.
+  const sensitivity = Math.round((0.7 - (hw.wakeScore ?? screen.settings.wakeWordSensitivity)) * 20)
   return (
     <div>
       {head}
       {src.onWall && (
         <Group label="The wake word, on this wall">
+          <Row name="The listener" state={hw.listener === 'ready' ? 'Running, waiting for the wake word' : hw.listener === 'busy' ? 'Listening to someone now' : hw.listener === 'off' ? 'Not running · Refresh the wall in Maintenance' : 'Checking…'} tone={hw.listener === 'off' ? 'rust' : hw.listener ? 'good' : 'quiet'} />
           <Row name="Listen for the wake word" right={<Toggle label="Listen for the wake word" on={screen.settings.wakeWordEnabled} onChange={(on) => screen.update({ wakeWordEnabled: on })} />} />
           <Row name="How easily it wakes" state="Higher hears you from further away; lower wakes by mistake less"
             right={<Stepper label="How easily it wakes" value={sensitivity} min={2} max={12} step={1} onChange={(v) => {
               const score = Math.round((0.7 - v / 20) * 100) / 100
               screen.update({ wakeWordSensitivity: score })
               // The Pi's listener takes it at once (as the old settings did).
-              void fetch('http://127.0.0.1:8766/wake-sensitivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score }) }).catch(() => {})
+              void src.wallDo({ wakeScore: score })
             }} />} />
         </Group>
       )}
@@ -234,7 +245,15 @@ export function MaintenancePage({ head, onOld }: { head: ReactNode; onOld: () =>
   return (
     <div>
       {head}
-      <Group label="The wall">{job('refresh_wall', 'Refresh the wall', 'Reloads the kitchen screen within a minute', 'The wall will reload in a minute.')}</Group>
+      <Group label="The wall">
+        {src.onWall
+          ? <Row name="Reload this screen" state="Now, from here" right={<Action label="Run: Reload this screen" onClick={() => void src.wallDo('reload_here')}>Reload</Action>} />
+          : job('refresh_wall', 'Refresh the wall', 'Reloads the kitchen screen within a minute', 'The wall will reload in a minute.')}
+        {src.onWall && (
+          <Row name="Re-measure the screen’s brightness range" state={sure === 'calibrate' ? 'The screen flickers for a few seconds. Tap again to go ahead' : 'If the dimmest or brightest looks wrong'}
+            right={<Action label="Run: Re-measure the screen’s brightness range" onClick={async () => { if (sure !== 'calibrate') { setSure('calibrate'); return } setSure(null); show(await src.wallDo('calibrate_panel'), 'Measured.') }}>{sure === 'calibrate' ? 'Run now' : 'Run'}</Action>} />
+        )}
+      </Group>
       <Group label="Data">{job('sync_calendars', 'Check calendars now', 'Normally every few minutes', 'Checking the calendars now.')}</Group>
       {note}
       <Group label="The old settings">

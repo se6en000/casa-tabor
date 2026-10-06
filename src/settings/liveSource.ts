@@ -19,6 +19,7 @@ import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutinesFromAvailabilityRules } from '../lib/familyRoutines'
 import { addDayOff, removeDayOff, removeRoutine, saveRoutine } from '../wall/saveRoutine'
 import { useGoogleCalendarList, useSelectGoogleCalendar } from '../hooks/useCalendarConnections'
+import { invokeHistoryUnlock } from '../lib/assistantConversationHistoryClient'
 import type { DisplayConfigLite, HealthSummary, LightReading, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
 
 const ok: SaveResult = { ok: true }
@@ -32,6 +33,13 @@ async function memory(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('casa-memory', { body })
   if (error) throw error
   return data as { items?: MemoryItem[]; ok?: boolean; error?: string }
+}
+
+/** The wall's bridges (sensor 8765, voice 8766): on the kiosk only; anywhere else they don't answer. */
+async function bridge<T>(port: number, path: string, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
+  const res = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(method === 'POST' ? 30_000 : 2500) })
+  if (!res.ok) throw new Error(`The wall answered ${res.status}`)
+  return res.json() as Promise<T>
 }
 
 /** The real thing: the app's own hooks and the server. */
@@ -286,6 +294,47 @@ export const liveSource: SettingsSource = {
     },
     staleTime: 5 * 60_000,
   }).data ?? null,
+  checkOwnerPin: async (ownerId, pin) => {
+    try { await invokeHistoryUnlock(ownerId, pin); return true } catch { return false }
+  },
+  useWallHardware: () => {
+    const onWall = readWallHomeFlag() === '1'
+    const { data } = useQuery({
+      queryKey: ['settings-wall-hardware'],
+      enabled: onWall,
+      refetchInterval: 15_000,
+      queryFn: async () => {
+        const [health, tone, status, wake, panel] = await Promise.allSettled([
+          bridge<{ ok: boolean }>(8765, '/health'), bridge<{ error: string | null }>(8765, '/room-tone'),
+          bridge<{ ready: boolean; recording: boolean; error: string | null }>(8766, '/status'), bridge<{ score: number }>(8766, '/wake-sensitivity'),
+          bridge<{ min?: number; max?: number; panel_min?: number; panel_max?: number }>(8765, '/display/panel-calibration'),
+        ])
+        const val = <T,>(r: PromiseSettledResult<T>) => (r.status === 'fulfilled' ? r.value : null)
+        const st = val(status)
+        const p = val(panel)
+        return {
+          sensorOk: val(health)?.ok === true && !val(tone)?.error,
+          listener: st == null ? 'off' as const : st.recording ? 'busy' as const : st.error ? 'off' as const : 'ready' as const,
+          wakeScore: val(wake)?.score ?? null,
+          panel: p && (p.min ?? p.panel_min) != null ? { min: Number(p.min ?? p.panel_min), max: Number(p.max ?? p.panel_max) } : null,
+        }
+      },
+    })
+    return data ?? { sensorOk: null, listener: null, wakeScore: null, panel: null }
+  },
+  wallDo: async (job) => {
+    try {
+      if (job === 'reload_here') { window.location.reload(); return ok }
+      if (job === 'test_light') await bridge(8765, '/led/confirm', 'POST', {})
+      else if (job === 'calibrate_panel') {
+        const r = await bridge<{ ok: boolean; error?: string }>(8765, '/display/calibrate-panel', 'POST', {})
+        if (!r.ok) throw new Error(r.error ?? 'The screen didn’t answer.')
+      } else await bridge(8766, '/wake-sensitivity', 'POST', { score: job.wakeScore })
+      return ok
+    } catch (error) {
+      return fail(error)
+    }
+  },
   run: async (job) => {
     try {
       if (job === 'sync_calendars') {

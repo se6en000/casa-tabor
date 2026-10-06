@@ -52,6 +52,11 @@ export interface NightlyCheck {
 export interface DisplayConfigLite {
   brightness_min?: number
   brightness_max?: number
+  /** The Pi sleeps the screen when the room is darker than this, and wakes it when brighter than wake. */
+  sleep_lux_threshold?: number
+  wake_lux_threshold?: number
+  /** While "Follow the room's light" is off: the range it had, to go back to. */
+  follow_room_backup?: { min: number; max: number } | null
   auto_sleep_enabled?: boolean
   sleep_delay_s?: number
   led_night_glow?: boolean
@@ -111,6 +116,11 @@ export interface SettingsSource {
   useChecks: () => NightlyCheck[] | null
   useBugs: () => { open: number; newest: string | null } | null
   run: (job: 'sync_calendars' | 'refresh_wall') => Promise<SaveResult>
+  /** Jake's PIN, checked (Advanced on the wall asks each visit, whoever the kiosk is signed in as). */
+  checkOwnerPin: (ownerId: string, pin: string) => Promise<boolean>
+  /** The wall's own hardware (the Pi's bridges, only reachable on the wall itself). */
+  useWallHardware: () => { sensorOk: boolean | null; listener: 'ready' | 'busy' | 'off' | null; wakeScore: number | null; panel: { min: number; max: number } | null }
+  wallDo: (job: 'test_light' | 'calibrate_panel' | 'reload_here' | { wakeScore: number }) => Promise<SaveResult>
 }
 
 export const SettingsSourceContext = createContext<SettingsSource | null>(null)
