@@ -1314,10 +1314,14 @@ Deno.serve(async (req) => {
       let groceryNote = ''
       const groceryCards = cards.filter((c) => c.tool === 'add_grocery_items')
       if (groceryCards.length) {
-        const result = await saveGroceryItems(sb, groceryCards.flatMap((c) => (Array.isArray(c.args.items) ? c.args.items : [])))
+        const items = groceryCards.flatMap((c) => (Array.isArray(c.args.items) ? c.args.items : []))
+        // A dry run saves nothing (Oct 5: the nightly check's "add milk and a dozen eggs" put them on the real list).
+        const result = dryRun
+          ? { items: items.map((i) => ({ name: String((i as { name?: string })?.name ?? i), already_present: false })) }
+          : await saveGroceryItems(sb, items)
         groceryNote = groceryAddedText(result.items ?? [])
         cards = cards.filter((c) => c.tool !== 'add_grocery_items')
-        if (!cards.length) return { status: 200, payload: { type: 'text', text: groceryNote, write_verified: true, semantic_intent: 'full_ai.grocery_added', correlation_id: cid } }
+        if (!cards.length) return { status: 200, payload: { type: 'text', text: groceryNote, write_verified: !dryRun, ...(dryRun ? { dry_run: true, would_add: items } : {}), semantic_intent: 'full_ai.grocery_added', correlation_id: cid } }
       }
       // A trip already on the calendar is never added again (Jake, 2026-10-01: Casa proposed his Dallas trip a second
       // time, though the work email had put it there): its days are read in full, past the three weeks Casa holds.

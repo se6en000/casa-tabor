@@ -32,11 +32,19 @@ test('immediate and confirmed grocery adds share duplicate-safe write logic', ()
 test('in the full-AI lane a grocery add is saved and said, the rest stay cards', () => {
   const start = assistantSource.indexOf("const groceryCards = cards.filter((c) => c.tool === 'add_grocery_items')")
   assert.ok(start > 0)
-  const block = assistantSource.slice(start, start + 900)
+  const block = assistantSource.slice(start, start + 1300)
   assert.match(block, /await saveGroceryItems\(sb, /)
   assert.match(block, /groceryAddedText\(result\.items/)
   assert.match(block, /cards = cards\.filter\(\(c\) => c\.tool !== 'add_grocery_items'\)/)
-  assert.match(block, /write_verified: true, semantic_intent: 'full_ai\.grocery_added'/)
+  assert.match(block, /write_verified: !dryRun/)
+})
+
+// Oct 5: the nightly check's dry run "add milk and a dozen eggs to the grocery list" put them on the real list.
+test('a dry run never saves groceries: it says what it would add', () => {
+  const start = assistantSource.indexOf("const groceryCards = cards.filter((c) => c.tool === 'add_grocery_items')")
+  const block = assistantSource.slice(start, start + 1300)
+  assert.match(block, /const result = dryRun\s*\?\s*\{ items: items\.map/)
+  assert.match(block, /: await saveGroceryItems\(sb, items\)/)
 })
 
 import { groceryAddedText } from '../supabase/functions/_shared/assistant-grocery-write.mjs'

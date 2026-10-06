@@ -19,5 +19,8 @@ else
   failed=$(grep -E '^\s+[0-9]+\) ' "$LOG" | sed -E 's/^\s+[0-9]+\) //' | sort -u | head -8)
   { echo "$(date '+%a %b %-d %-I:%M %p') FAILED — $(grep -oE '[0-9]+ failed' "$LOG" | tail -1) (log: $LOG)"; echo "$failed"; } > "$OUT/last.txt"
 fi
+# For the morning email (nightly_checks; the routine emails Jake only when something failed).
+if head -1 "$OUT/last.txt" | grep -q ' passed'; then ok=true; else ok=false; fi
+PATH="/usr/local/bin:/usr/bin:/bin:$PATH" node scripts/nightly-record.mjs screens "$ok" "$(head -1 "$OUT/last.txt")" "$OUT/last.txt" >/dev/null 2>&1 || true
 # Keep two weeks of logs.
 find "$OUT" -name 'visual-*.log' -mtime +14 -delete 2>/dev/null
