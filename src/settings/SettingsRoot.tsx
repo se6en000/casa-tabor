@@ -179,7 +179,9 @@ function GeneralRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => void
   const { chores } = src.useChores()
   const n = (count: number | undefined, one: string, many: string) => (count == null ? '' : `${count} ${count === 1 ? one : many}`)
   const linked = (connections ?? []).filter((m) => m.connection)
-  const broken = linked.some((m) => m.connection?.reauthorization_required || m.connection?.last_sync_error)
+  const signIn = linked.some((m) => m.connection?.reauthorization_required || m.connection?.health_status === 'reauthorization_required')
+  const failing = linked.some((m) => m.connection?.last_sync_error)
+  const broken = signIn || failing
   const calendars = linked.reduce((sum, m) => sum + (m.connection?.read_calendar_metadata?.length || 1), 0)
   const unsure = items?.filter((i) => i.confidence !== 'sure').length ?? 0
   const trash = chores?.find((c) => /trash/i.test(c.title))
@@ -188,7 +190,7 @@ function GeneralRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => void
       <PageRow p={P('family')} onOpen={onOpen} current={current} state={[n(people(members).length || undefined, 'person', 'people'), viewer.name && faceId.here ? `Face ID on for ${viewer.name}` : null].filter(Boolean).join(' · ')} />
       <PageRow p={P('places')} onOpen={onOpen} current={current} state={[places ? `Home and ${n(places.filter((p) => p.confirmed !== false && !(p as { dismissed_at?: string | null }).dismissed_at).length, 'place', 'places')}` : null, contacts ? n(contacts.length, 'person', 'people') : null].filter(Boolean).join(' · ')} />
       <PageRow p={P('calendars')} onOpen={onOpen} current={current} tone={broken ? 'rust' : 'quiet'}
-        state={broken ? 'A calendar needs signing in again' : [connections ? n(calendars, 'calendar', 'calendars') : null, email ? (email.keep.length ? `kept posted on ${email.keep.length}` : 'the email reader is on') : null].filter(Boolean).join(' · ')} />
+        state={signIn ? 'A calendar needs signing in again' : failing ? 'A calendar isn’t syncing' : [connections ? n(calendars, 'calendar', 'calendars') : null, email ? (email.keep.length ? `kept posted on ${email.keep.length}` : 'the email reader is on') : null].filter(Boolean).join(' · ')} />
       <PageRow p={P('wall')} onOpen={onOpen} current={current} state={config ? `Up to ${config.brightness_max ?? 100}% bright · ${config.auto_sleep_enabled !== false ? 'sleeps in the dark' : 'stays on in the dark'}` : ''} />
       <PageRow p={P('knows')} onOpen={onOpen} current={current} tone={unsure ? 'brass' : 'quiet'} state={items ? `${n(items.length, 'thing', 'things')}${unsure ? ` · ${unsure} not sure yet` : ''}` : ''} />
       <PageRow p={P('chores')} onOpen={onOpen} current={current} state={chores ? [n(chores.length, 'chore', 'chores'), trash ? `${trash.title.toLowerCase()} ${choreDays(trash.days_of_week)}` : null].filter(Boolean).join(' · ') : ''} />

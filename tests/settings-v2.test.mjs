@@ -146,3 +146,13 @@ test('picking someone’s colour swaps the two; moving someone keeps everyone’
   // Two at the same place (Owen and the family mailbox were both 5) still come out in the new order.
   assert.deepEqual(moveInOrder('b', -1, [{ id: 'a', sort_order: 5 }, { id: 'b', sort_order: 5 }], new Map()).map((c) => c.sort_order), [4, 5])
 })
+
+// Jake, Oct 6: "taborfamilyemail is saying last checked on Sept 30th" — its calendar sync failed every run on an event
+// already saved from Jake's calendar (the same Google event on both: events_google_event_id_key).
+test('calendar sync: an event already saved from another family calendar is left as is, never inserted twice', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../supabase/functions/sync-calendars/index.ts', import.meta.url), 'utf8')
+  const legacy = src.slice(src.indexOf("if (legacy && (!legacy.source_member_id"), src.indexOf("let eventId: string"))
+  assert.match(legacy, /\} else if \(legacy\) \{[\s\S]*return\s*\}/)
+  assert.match(src, /error\?\.code === '23505' && \/google_event_id\/\.test\(error\.message\)\) return/)
+})

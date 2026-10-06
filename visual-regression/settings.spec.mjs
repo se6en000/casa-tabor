@@ -105,7 +105,9 @@ test('settings: limits — pause and resume the AI, and the caps', async ({ page
 test('settings: calendars and email — the wall switch for email, and a broken calendar says so', async ({ page }) => {
   const s = await open(page, { page: 'calendars' })
   await expect(s.getByText('Needs signing in again')).toBeVisible()
-  await expect(s.getByRole('button', { name: 'Reconnect' })).toBeVisible()
+  await expect(s.getByRole('button', { name: 'Reconnect' })).toHaveCount(1)
+  // A sync that fails isn't a lost sign-in (the family calendar, Sept 30 – Oct 6): it says so, and no Reconnect.
+  await expect(s.getByText(/family@example\.com · syncing fails since/)).toBeVisible()
   await s.getByRole('switch', { name: 'Email text on the wall' }).click()
   await expect(s.getByText('Off · the wall shows only who it’s from')).toBeVisible()
 })

@@ -170,7 +170,9 @@ export function weatherLine(
 
 /** Who goes where and when on one line; the drive ("10 min drive", "25 min drive in traffic") on its own. */
 export function splitDrive(joined: string[]): { how: string; drive?: string } {
-  const parts = joined.flatMap((p) => p.split(' · ')).filter(Boolean)
+  const raw = joined.flatMap((p) => p.split(' · ')).filter(Boolean)
+  // A road trip says "Drive · 3 hr 15": one thing, "3 hr 15 drive" (Oct 6: it came apart into "· 3 hr 15" and "Drive").
+  const parts = raw.flatMap((p, i) => (/^drive$/i.test(p) && /^\d+\s*(hr|min)/.test(raw[i + 1] ?? '') ? [`${raw[i + 1]} drive`] : /^\d+\s*(hr|min)/.test(p) && /^drive$/i.test(raw[i - 1] ?? '') ? [] : [p]))
   const drive = parts.filter((p) => /\bdrive\b/i.test(p))
   const how = parts.filter((p) => !drive.includes(p)).join(' · ')
   return drive.length ? { how, drive: drive.join(' · ') } : { how }

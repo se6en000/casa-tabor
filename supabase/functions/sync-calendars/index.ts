@@ -387,6 +387,11 @@ async function upsertEvent(
       .maybeSingle()
     if (legacy && (!legacy.source_member_id || legacy.source_member_id === sourceMemberId)) {
       existing = legacy
+    } else if (legacy) {
+      // The same Google event on two family calendars (an invite on Jake's and the family's): it's already here from
+      // the other one, which keeps it up to date. Inserting a copy broke the family calendar's sync from Sept 30 to
+      // Oct 6 (events_google_event_id_key), every run, so nothing new came in from it.
+      return
     }
   }
   let eventId: string
@@ -484,6 +489,8 @@ async function upsertEvent(
       updated_at: new Date().toISOString()
     }
     const { data: ins, error } = await sb.from('events').insert({ ...row, is_enriched: false }).select('id').single()
+    // Saved from another family calendar a moment ago (the same event on two calendars): that copy stands.
+    if (error?.code === '23505' && /google_event_id/.test(error.message)) return
     if (error) throw new Error(error.message)
     eventId = ins.id
     await sb.from('event_enrichments').insert({ event_id: eventId, confidence: 'low', what_to_bring: [] })

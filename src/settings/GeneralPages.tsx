@@ -320,15 +320,18 @@ export function CalendarsPage({ head }: { head: ReactNode }) {
       <Group label="Google">
         {connections == null ? <Quiet>Loading…</Quiet> : linked.map((m) => {
           const c = m.connection
-          const broken = Boolean(c?.reauthorization_required || c?.health_status === 'reauthorization_required' || c?.last_sync_error)
+          // Signing in again is only for a lost sign-in; a sync that fails is something else (Oct 6: the family
+          // calendar's sync failed on a duplicate for six days and this said "needs signing in again").
+          const signIn = Boolean(c?.reauthorization_required || c?.health_status === 'reauthorization_required')
+          const failing = Boolean(c && !signIn && c.last_sync_error)
           return (
             <Row key={m.id} lead={<PersonDisc name={m.name} className={pigment(m.id)} />} name={m.name}
-              state={!c ? 'Not connected' : broken ? 'Needs signing in again' : `${c.google_email} · checked ${ago(c.last_sync_at, now)}`}
-              tone={!c ? 'quiet' : broken ? 'rust' : 'good'}
-              right={!c || broken ? <Action onClick={() => void src.connectGoogle(m.id)}>{c ? 'Reconnect' : 'Connect'}</Action> : undefined} />
+              state={!c ? 'Not connected' : signIn ? 'Needs signing in again' : failing ? `${c.google_email} · syncing fails since ${ago(c.last_sync_at, now)} · ${c.last_sync_error}` : `${c.google_email} · checked ${ago(c.last_sync_at, now)}`}
+              tone={!c ? 'quiet' : signIn || failing ? 'rust' : 'good'}
+              right={!c || signIn ? <Action onClick={() => void src.connectGoogle(m.id)}>{c ? 'Reconnect' : 'Connect'}</Action> : undefined} />
           )
         })}
-        {linked.filter((m) => m.connection && !m.connection.reauthorization_required).map((m) => (
+        {linked.filter((m) => m.connection && !m.connection.reauthorization_required && m.connection.health_status !== 'reauthorization_required').map((m) => (
           <Row key={`choose-${m.id}`} label={`Choose ${m.name}’s calendars`} onClick={() => setChoosing({ id: m.id, name: m.name })} name={`${m.name}’s calendars`} state="Choose which ones show on the family calendar" />
         ))}
         <Row name="Check calendars now" state="They’re checked every few minutes on their own" right={<Action onClick={async () => show(await src.run('sync_calendars'), 'Checking now.')}>Check</Action>} />

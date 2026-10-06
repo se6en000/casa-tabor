@@ -116,3 +116,12 @@ test('the header says what it is big, and who goes where and when under it', () 
   assert.equal(later.what, 'Pick up Emme & Owen')
   assert.match(later.how, /^Giselle → Palm Beach Public · /)
 })
+
+// Oct 6 (the full screen run): a road trip's "Drive · 3 hr 15" came apart — "Jake → Orlando · 3 hr 15" over a lone
+// "Drive". The drive's line keeps it whole.
+test('a road trip’s drive stays one thing on its own line', async () => {
+  const { splitDrive } = await import('../src/wall/header.ts')
+  assert.deepEqual(splitDrive(['Jake → Orlando', 'Drive · 3 hr 15']), { how: 'Jake → Orlando', drive: '3 hr 15 drive' })
+  assert.deepEqual(splitDrive(['Giselle → Palm Beach Public', 'pickup at 2:00 · 10 min drive']), { how: 'Giselle → Palm Beach Public · pickup at 2:00', drive: '10 min drive' })
+  assert.deepEqual(splitDrive(['Jake → Dentist', 'starts 9:00']), { how: 'Jake → Dentist · starts 9:00' })
+})

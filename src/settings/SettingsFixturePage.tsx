@@ -130,7 +130,7 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     keepPlace: ok,
     dismissPlace: ok,
     deletePlace: ok,
-    useConnections: () => [conn(MEMBERS[0], 'jake@example.com'), conn(MEMBERS[1], 'kelly@example.com', { reauthorization_required: true }), conn(MEMBERS[2], null), conn(MEMBERS[3], null)],
+    useConnections: () => [conn(MEMBERS[0], 'jake@example.com'), conn(MEMBERS[1], 'kelly@example.com', { reauthorization_required: true }), conn(MEMBERS[4], 'family@example.com', { last_sync_error: 'duplicate key value violates unique constraint', last_sync_at: at('2026-09-30T09:22:00-04:00') }), conn(MEMBERS[2], null), conn(MEMBERS[3], null)],
     connectGoogle: async () => {},
     useCalendarChoices: (memberId) => ({
       calendars: memberId ? [{ id: 'w', summary: 'Tabor House', color: null, primary: false }, { id: 'p', summary: 'jake@example.com', color: null, primary: true }, { id: 's', summary: 'Huskies Softball', color: null, primary: false }, { id: 'h', summary: 'US Holidays', color: null, primary: false }] : null,
