@@ -4,8 +4,8 @@
   "description": "Tabor House — the family day",
   "start_url": "/phone",
   "display": "standalone",
-  "background_color": "#F1ECE3",
-  "theme_color": "#F1ECE3",
+  "background_color": "#E1D7C7",
+  "theme_color": "#E1D7C7",
   "orientation": "portrait-primary",
   "icons": [
     {

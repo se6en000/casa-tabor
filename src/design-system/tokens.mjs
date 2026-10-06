@@ -185,8 +185,10 @@ export const DESIGN_TOKENS = {
     'wall-night-pigment-5': '#D4A65F',
     'wall-night-pigment-6': '#9DAA83',
     // The phone (src/phone, board section 05): the wall's palette on a lighter ground.
-    'phone-ground': '#F1ECE3',
-    'phone-card': '#E6DED1',
+    // Linen everywhere (Jake, Oct 6: "ok ship that color for the whole app"): the phone, Settings and Recipes take the
+    // wall's ground; cards a step deeper, as before.
+    'phone-ground': '#E1D7C7',
+    'phone-card': '#D7CCBB',
   },
   // Fixed sizes on the Wall's 1920x1080 stage (the stage scales as a whole, so
   // these don't follow density or the user font scale). Three viewing
