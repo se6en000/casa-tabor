@@ -7,7 +7,7 @@ import type { Posture } from './posture'
 const DESTINATIONS = [
   { to: '/calendar', label: 'Calendar' },
   { to: '/wall/grocery', label: 'Grocery list' },
-  { to: '/cook', label: 'Meals & kitchen' },
+  { to: '/recipes', label: 'Recipes' },
   { to: '/briefing', label: 'Briefing' },
   { to: '/settings', label: 'Settings' },
   { to: '/?classic=1', label: 'Previous home screen' },

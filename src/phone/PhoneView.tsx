@@ -2,7 +2,7 @@ import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Car, Check, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sun, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Car, Check, ChefHat, ChevronDown, ChevronRight, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -998,6 +998,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             )}
             {initialRow(<Users size={20} />, 'People and places', 'Find someone · call, text, directions', () => { setInitialOpen(false); setPeopleOpen(true) })}
             {initialRow(<Mail size={20} />, 'Email', 'Keep me posted · what’s quiet · the wall', () => { setInitialOpen(false); setEmailSettingsOpen(true) })}
+            <Link to="/recipes" className="flex min-h-[64px] w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone py-[8px] text-wall-ink no-underline">
+              <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-phone-card"><ChefHat size={20} /></span>
+              <span className="flex flex-1 flex-col gap-[2px]"><span className="text-phone-body font-bold">Recipes</span><span className="text-phone-detail text-wall-ink-2">Find one, cook it, add one</span></span>
+              <ChevronRight size={18} aria-hidden="true" className="text-wall-ink-2" />
+            </Link>
             <Link to="/settings" className="flex min-h-[64px] w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone py-[8px] text-wall-ink no-underline">
               <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-phone-card"><Settings size={20} /></span>
               <span className="flex flex-1 flex-col gap-[2px]"><span className="text-phone-body font-bold">Settings</span><span className="text-phone-detail text-wall-ink-2">Family, calendars, voice</span></span>

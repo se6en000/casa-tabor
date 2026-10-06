@@ -332,6 +332,7 @@ function AppShell() {
 const WallRoot = lazyWithReload(() => import('./wall/WallRoot'), 'WallRoot')
 const PhoneFrame = lazyWithReload(() => import('./phone/PhoneFrame'), 'PhoneFrame')
 const SettingsRoot = lazyWithReload(() => import('./settings/SettingsRoot'), 'SettingsRoot')
+const RecipesRoot = lazyWithReload(() => import('./recipes/RecipesRoot'), 'RecipesRoot')
 
 // /wall is the Family Wall and renders without the old app shell.
 function RootSwitch() {
@@ -347,6 +348,14 @@ function RootSwitch() {
     return (
       <Suspense fallback={<div className="fixed inset-0 bg-phone-ground" />}>
         <SettingsRoot />
+      </Suspense>
+    )
+  }
+  // Recipes V2 (canvas row 49): the photo wall, a recipe, cooking, adding and editing — phone first; the old page stays at /cook.
+  if (pathname === '/recipes' || pathname.startsWith('/recipes/')) {
+    return (
+      <Suspense fallback={<div className="fixed inset-0 bg-phone-ground" />}>
+        <RecipesRoot />
       </Suspense>
     )
   }

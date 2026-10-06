@@ -606,30 +606,11 @@ export default function MobileCookingView({
       setSelectedRecipeId(newId)
       setScanSheetOpen(false)
       onRecipeCreated?.()
-    } catch {
-      const newId = `upload-${Date.now()}`
-      const newRecipe: CatalogRecipe = {
-        id: newId,
-        name: 'Grandma’s Rustic Skillet Pasta',
-        cook_time: '25 min',
-        servings: '4',
-        ingredients: [
-          { raw_text: '12 oz penne or rigatoni', name: 'Penne pasta', quantity: '12', unit: 'oz' },
-          { raw_text: '1 jar (24 oz) marinara sauce', name: 'Marinara sauce', quantity: '1', unit: 'jar' },
-          { raw_text: '1 cup shredded mozzarella', name: 'Mozzarella', quantity: '1', unit: 'cup' },
-          { raw_text: '1/2 cup grated parmesan', name: 'Parmesan', quantity: '0.5', unit: 'cup' },
-          { raw_text: 'Fresh basil leaves', name: 'Fresh basil', quantity: '1', unit: 'bunch' },
-        ],
-        steps: [
-          { step_number: 1, instruction: 'Boil pasta in salted water for 9 minutes until al dente. Drain well.', timerDurationSeconds: 9 * 60, timerLabel: 'Boil Pasta Timer' } as CatalogRecipeStep,
-          { step_number: 2, instruction: 'Toss pasta with warm marinara sauce in cast iron skillet. Top with cheeses.' },
-          { step_number: 3, instruction: 'Broil on high for 4 minutes until cheese is golden brown and melted.', timerDurationSeconds: 4 * 60, timerLabel: 'Broil Timer' } as CatalogRecipeStep,
-          { step_number: 4, instruction: 'Top with fresh basil and serve straight from the skillet.' },
-        ],
-      }
-      setExtraRecipes((prev) => [newRecipe, ...prev])
-      setSelectedRecipeId(newId)
-      setScanSheetOpen(false)
+    } catch (error) {
+      // It couldn’t read the recipe: say so, and leave the sheet open to try again. (It used to add a made-up
+      // "Grandma’s Rustic Skillet Pasta" instead; Recipes V2 at /recipes replaces this view.)
+      console.error('[MobileCookingView] recipe import failed', error)
+      setProcessingStatus('That recipe couldn’t be read. Try clearer photos.')
     } finally {
       setIsProcessing(false)
     }
