@@ -67,7 +67,7 @@ test('recipes: Groceries starts with the pantry things unticked', async ({ page 
 
 test('recipes: cooking on the phone — a step’s own timer, ticks, next and back, done counts it', async ({ page }) => {
   const s = await open(page, '/recipes/scampi/cook', { cooking: 'phone' })
-  await expect(s.getByText('STEP 5 OF 11')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Step 5 of 11' })).toBeVisible()
   await expect(s.getByLabel('Timers')).toContainText('9:42')
   await expect(page).toHaveScreenshot('recipes-phone-cook.png')
   await s.getByRole('button', { name: 'Start a 9–11 min timer' }).click()
@@ -76,12 +76,12 @@ test('recipes: cooking on the phone — a step’s own timer, ticks, next and ba
   await s.getByRole('region', { name: 'For this step' }).getByRole('button', { name: '6 oz Spaghetti' }).click()
   await expect(s.getByText('All ingredients · 6 of 8 ready')).toBeVisible()
   await s.getByRole('button', { name: 'Next step' }).click()
-  await expect(s.getByText('STEP 6 OF 11')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Step 6 of 11' })).toBeVisible()
   await s.getByRole('button', { name: 'Back', exact: true }).click()
-  await expect(s.getByText('STEP 5 OF 11')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Step 5 of 11' })).toBeVisible()
   await s.getByRole('button', { name: 'All steps' }).click()
   await page.getByRole('dialog', { name: 'All steps' }).getByRole('button', { name: /^11 Divide pasta/ }).click()
-  await expect(s.getByText('STEP 11 OF 11')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Step 11 of 11' })).toBeVisible()
   await s.getByRole('button', { name: 'Done cooking' }).click()
   await expect(page.getByText('Made it. That’s 4 times.')).toBeVisible()
   await expect(page.getByRole('article', { name: 'Garlic Butter Shrimp Scampi' })).toContainText('made 4 times · last today')
@@ -92,8 +92,8 @@ test('recipes: on the wall — the photo wall says what the phone is cooking; Op
   await expect(s.getByText('Cooking on Jake’s phone:')).toBeVisible()
   await expect(page).toHaveScreenshot('recipes-wall.png')
   await s.getByRole('button', { name: 'Open here' }).click()
-  await expect(s.getByText('STEP 5 OF 11')).toBeVisible()
-  await expect(s.getByRole('region', { name: 'Ingredients' }).getByText('This step')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Step 5 of 11' })).toBeVisible()
+  await expect(s.getByRole('region', { name: 'For this step' })).toContainText('6 oz Spaghetti')
   await expect(page).toHaveScreenshot('recipes-wall-cook.png')
 })
 
@@ -152,4 +152,24 @@ test('recipes: editing — rename, change the photo from its search, delete afte
   await page.getByRole('button', { name: 'Tap again to delete it' }).click()
   await expect(page.getByText('Deleted.')).toBeVisible()
   await expect(s.getByRole('list', { name: 'Recipes' }).getByRole('listitem')).toHaveCount(9)
+})
+
+// Jake, Oct 6: "make sure it keeps the ingredient highlights for the steps function, thats a cool feature that i want
+// to keep no matter what".
+test('recipes: cooking keeps each step’s own ingredients highlighted — in its card, and marked in the whole list', async ({ page }) => {
+  const s = await open(page, '/recipes/scampi/cook', { size: { width: 1440, height: 900 } })
+  const card = s.getByRole('region', { name: 'For this step' })
+  await expect(card).toContainText('Nothing to measure for this one.')
+  await s.getByRole('button', { name: 'All steps' }).click()
+  await page.getByRole('dialog', { name: 'All steps' }).getByRole('button', { name: /^10 To pan with shrimp/ }).click()
+  const uses = card.getByRole('list').first()
+  for (const item of ['10 oz Shrimp', '2 cloves Garlic', '1/2 Broccoli', '6 oz Spaghetti', '1 Seafood Stock Concentrate', '1 Lemon']) await expect(uses).toContainText(item)
+  await expect(uses).not.toContainText('Chili Flakes')
+  await expect(page).toHaveScreenshot('recipes-tablet-cook.png')
+  // On the phone, the whole list marks them too.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await s.getByRole('button', { name: /All ingredients/ }).click()
+  const all = page.getByRole('dialog', { name: 'All ingredients' })
+  await expect(all.getByRole('button', { name: /Shrimp.*This step/ })).toBeVisible()
+  await expect(all.getByRole('button', { name: /Chili Flakes/ })).not.toContainText('This step')
 })

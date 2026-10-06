@@ -126,6 +126,8 @@
   --text-wall-headline--line-height: 1;
   --text-wall-deck: 36px;
   --text-wall-deck--line-height: 1.2;
+  --text-wall-numeral: 180px;
+  --text-wall-numeral--line-height: 0.8;
   --text-wall-answer: 28px;
   --text-wall-answer--line-height: 1.4;
   --text-wall-countdown: 88px;
@@ -150,6 +152,8 @@
   --text-phone-title--line-height: 1.05;
   --text-phone-magnified: 40px;
   --text-phone-magnified--line-height: 1.15;
+  --text-phone-numeral: 110px;
+  --text-phone-numeral--line-height: 0.8;
   --text-phone-move: 30px;
   --text-phone-move--line-height: 1.05;
   --text-phone-heading: 22px;

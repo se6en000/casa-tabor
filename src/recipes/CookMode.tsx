@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ListOrdered, Pause, Play, Timer, X } from 'lucide-react'
+import { Check, ChevronRight, ListOrdered, Pause, Play, Timer, X } from 'lucide-react'
 import { useRecipesSource, type CookPlace, type CookTimer, type Recipe } from './data'
 import { useLayout, useT } from './layout'
-import { linesFor, servingChoices, stepTimers, stepUses } from './model'
-import { Label, Pill, Round, Sheet } from './ui'
+import { linesFor, servingChoices, splitAmount, stepTimers, stepUses } from './model'
+import { Label, Pill, Sheet } from './ui'
 import { formatRecipeTitle } from '../pages/CookPage.helpers'
 
 // Cooking (canvas 49c/49f; Jake: "a cooking experience on both the wall and more importantly my phone/tablet"): one
@@ -74,6 +74,7 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
   const [nowMs, setNowMs] = useState(() => src.now().getTime())
   const [sheet, setSheet] = useState<'steps' | 'ingredients' | null>(null)
   const [finishing, setFinishing] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const rung = useRef(new Set<string>())
   const savedAt = useRef(0)
   useAwake()
@@ -115,6 +116,7 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
   const servingLabel = servingChoices(recipe.servings)[servings]?.label
   const name = formatRecipeTitle(recipe.name)
   const last = step >= total - 1
+  const wall = layout === 'wall'
 
   const go = (to: number) => setStep(Math.max(0, Math.min(total - 1, to)))
   const tick = (i: number) => setTicked((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]))
@@ -168,79 +170,117 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
     </div>
   )
 
-  const usesList = (which: number[], title: string, mark: number[] = []) => (
-    <section aria-label={title}>
-      <Label right={layout !== 'phone' ? `${ticked.length} of ${lines.length} ready` : undefined}>{title}</Label>
-      <ul className="m-0 list-none p-0">
-        {which.map((i) => (
-          <li key={i}>
-            <button type="button" aria-pressed={ticked.includes(i)} onClick={() => tick(i)} className={`flex w-full items-center gap-[14px] border-0 border-b border-solid border-wall-stone px-[10px] py-0 text-left font-body ${mark.includes(i) ? 'rounded-[12px] bg-phone-card' : 'bg-transparent'} ${layout === 'wall' ? 'min-h-[60px]' : 'min-h-[50px]'} ${t.body} ${ticked.includes(i) ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>
-              <span className={`flex shrink-0 items-center justify-center rounded-full ${layout === 'wall' ? 'h-[34px] w-[34px]' : 'h-[28px] w-[28px]'} ${ticked.includes(i) ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{ticked.includes(i) && <Check size={18} strokeWidth={2.6} />}</span>
-              <span className="min-w-0 flex-1">{lines[i]}</span>
-              {mark.includes(i) && <span className={`shrink-0 font-bold uppercase tracking-[0.16em] text-wall-brass-ink ${t.label}`}>This step</span>}
+  // The step's own ingredients, always highlighted (Jake, Oct 6: "make sure it keeps the ingredient highlights for the
+  // steps function, thats a cool feature that i want to keep no matter what"): the "For this step" card, and a mark in
+  // the whole list.
+  const row = (i: number, size: 'big' | 'small', marked = false) => {
+    const [amount, rest] = splitAmount(lines[i])
+    const on = ticked.includes(i)
+    const big = size === 'big'
+    return (
+      <li key={i}>
+        <button type="button" aria-pressed={on} onClick={() => tick(i)}
+          className={`flex w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left font-body ${big ? (wall ? 'min-h-[64px]' : 'min-h-[54px]') : 'min-h-[46px]'} ${big ? t.body : t.detail} ${on ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>
+          <span className={`flex shrink-0 items-center justify-center rounded-full ${big ? (wall ? 'h-[34px] w-[34px]' : 'h-[28px] w-[28px]') : 'h-[24px] w-[24px]'} ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{on && <Check size={big ? 18 : 15} strokeWidth={2.6} />}</span>
+          <span className={`shrink-0 font-bold ${on ? 'text-wall-ink-2' : 'text-wall-brass-ink'} ${wall ? 'w-[120px]' : layout === 'tablet' ? 'w-[92px]' : 'w-[84px]'}`}>{amount}</span>{' '}
+          <span className="min-w-0 flex-1">{rest}</span>
+          {marked && <span className={`shrink-0 font-bold uppercase tracking-[0.16em] text-wall-brass-ink no-underline ${t.label}`}>This step</span>}
+        </button>
+      </li>
+    )
+  }
+  const others = lines.map((_, i) => i).filter((i) => !uses.includes(i))
+  const [allOthers, setAllOthers] = [showAll, setShowAll]
+  const thisStep = (
+    <section aria-label="For this step" className={`rounded-[24px] bg-wall-on-pigment ${wall ? 'px-[30px] pb-[20px] pt-[26px]' : layout === 'tablet' ? 'px-[26px] pb-[16px] pt-[22px]' : 'px-[16px] pb-[8px] pt-[14px]'}`}>
+      <h2 className={`m-0 font-body font-bold uppercase tracking-[0.22em] text-wall-brass-ink ${t.label}`}>For this step</h2>
+      {uses.length
+        ? <ul className="m-0 mt-[8px] list-none p-0">{uses.map((i) => row(i, 'big'))}</ul>
+        : <p className={`m-0 py-[12px] text-wall-ink-2 ${t.detail}`}>Nothing to measure for this one.</p>}
+      {layout !== 'phone' && others.length > 0 && (
+        <>
+          <div className={`mt-[20px] flex items-baseline justify-between font-bold uppercase tracking-[0.22em] text-wall-ink-2 ${t.label}`}>
+            <span>Everything else</span><span className="font-medium normal-case tracking-normal">{others.filter((i) => ticked.includes(i)).length} of {others.length} ready</span>
+          </div>
+          <ul className="m-0 mt-[6px] list-none p-0">{(allOthers ? others : others.slice(0, 4)).map((i) => row(i, 'small'))}</ul>
+          {others.length > 4 && (
+            <button type="button" onClick={() => setAllOthers(!allOthers)} className={`flex min-h-[44px] items-center border-0 bg-transparent p-0 font-body font-semibold text-wall-brass-ink ${t.detail}`}>
+              {allOthers ? 'Fewer' : `And ${others.length - 4} more`}
             </button>
-          </li>
-        ))}
-      </ul>
+          )}
+        </>
+      )}
     </section>
   )
 
-  const progress = (
-    <div className="flex gap-[3px]" aria-hidden="true">
-      {Array.from({ length: total }, (_, i) => <span key={i} className={`h-[5px] flex-1 rounded-full ${i <= step ? 'bg-wall-ink' : 'bg-wall-stone'}`} />)}
+  const numeral = (
+    <div className="flex items-baseline gap-[12px]">
+      <span className={`font-display font-semibold text-wall-brass lining-nums ${layout === 'phone' ? 'text-phone-numeral' : 'text-wall-numeral'}`}>{step + 1}</span>
+      <span className={`font-bold tracking-[0.24em] text-wall-ink-2 ${t.label}`}>OF {total}</span>
     </div>
   )
-  const nav = (
-    <div className="flex items-center gap-[10px]">
-      <Pill onClick={() => go(step - 1)} disabled={step === 0}>Back</Pill>
-      {last
-        ? <Pill tone="ink" wide disabled={finishing} onClick={() => void finish()}>{finishing ? 'Saving…' : 'Done cooking'}</Pill>
-        : <Pill tone="ink" wide onClick={() => go(step + 1)}>Next step</Pill>}
-    </div>
-  )
-
+  // A long step steps down a size, so it stays above Back and Next.
+  const long = text.length > 150
+  const stepSize = layout === 'phone' ? (text.length > 220 ? 'text-phone-heading' : 'text-phone-move') : wall ? (long ? 'text-wall-move' : 'text-wall-title') : (long ? 'text-phone-magnified' : 'text-wall-move')
   const stepBlock = (
-    <div {...swipeProps} className="flex touch-pan-y select-none flex-col gap-[18px]">
-      <p className={`m-0 font-display font-semibold leading-[1.15] text-wall-ink ${t.step}`}>{text}</p>
+    <section aria-label={`Step ${step + 1} of ${total}`} {...swipeProps} className="flex touch-pan-y select-none flex-col gap-[22px]">
+      {numeral}
+      <p className={`m-0 font-display font-semibold leading-[1.12] text-wall-ink ${stepSize}`}>{text}</p>
       {offers.length > 0 && (
         <div className="flex flex-wrap gap-[10px]">
           {offers.map((o) => <Pill key={o.label} tone="brass" onClick={() => startTimer(o.label, o.seconds)}><Timer size={t.icon - 2} />Start a {o.label} timer</Pill>)}
         </div>
       )}
+    </section>
+  )
+  const nextText = recipe.steps[step + 1]
+  const nextButton = last ? (
+    <button type="button" disabled={finishing} onClick={() => void finish()}
+      className={`flex flex-1 items-center justify-center rounded-full border-0 bg-wall-ink font-body font-bold text-wall-on-pigment disabled:opacity-50 ${wall ? 'h-[92px] text-wall-heading' : layout === 'tablet' ? 'h-[84px] text-phone-heading' : 'h-[72px] text-phone-body'}`}>
+      {finishing ? 'Saving…' : 'Done cooking'}
+    </button>
+  ) : (
+    <button type="button" aria-label="Next step" onClick={() => go(step + 1)}
+      className={`flex min-w-0 flex-1 items-center justify-between gap-[16px] rounded-full border-0 bg-wall-ink text-left font-body text-wall-on-pigment ${wall ? 'h-[92px] px-[40px]' : layout === 'tablet' ? 'h-[84px] px-[34px]' : 'h-[72px] px-[22px]'}`}>
+      <span className="flex min-w-0 flex-col gap-[3px]">
+        <span className={`font-bold tracking-[0.22em] text-wall-night-brass ${t.label}`}>NEXT · STEP {step + 2}</span>
+        <span className={`truncate ${layout === 'phone' ? 'text-phone-detail' : t.body}`}>{nextText}</span>
+      </span>
+      <ChevronRight size={wall ? 34 : 28} aria-hidden="true" className="shrink-0" />
+    </button>
+  )
+  const backButton = (
+    <button type="button" onClick={() => go(step - 1)} disabled={step === 0}
+      className={`shrink-0 rounded-full border border-solid border-wall-stone bg-transparent font-body font-semibold text-wall-ink disabled:opacity-35 ${wall ? 'h-[80px] w-[170px] text-wall-body' : layout === 'tablet' ? 'h-[72px] w-[150px] text-phone-heading' : 'h-[72px] w-[72px] text-phone-detail'}`}>
+      Back
+    </button>
+  )
+  const dots = (
+    <div aria-hidden="true" className="flex items-center gap-[6px]">
+      {Array.from({ length: total }, (_, i) => <span key={i} className={`h-[10px] rounded-full ${i === step ? 'w-[28px] bg-wall-ink' : `w-[10px] ${i < step ? 'bg-wall-ink-2' : 'bg-wall-stone'}`}`} />)}
     </div>
   )
-
-  return (
-    <section aria-label={`Cooking ${name}`} className={`flex flex-col text-wall-ink ${layout === 'phone' ? 'min-h-[calc(100dvh-max(20px,calc(env(safe-area-inset-top)+10px))-48px)] gap-[16px]' : 'gap-[22px]'}`}>
-      <header className="flex items-center gap-[12px]">
-        <Round label="Close — your place is kept" onClick={onClose}><X size={20} /></Round>
-        <div className="min-w-0 flex-1">
-          <div className={`font-bold tracking-[0.2em] text-wall-brass-ink ${t.label}`}>STEP {step + 1} OF {total}</div>
-          <div className={`truncate text-wall-ink-2 ${t.detail}`}>{name}{servingLabel && /\d/.test(servingLabel) ? ` · serves ${servingLabel}` : ''}</div>
-        </div>
-        <Pill onClick={() => setSheet('steps')} label="All steps"><ListOrdered size={t.icon - 2} />{layout === 'phone' ? '' : 'All steps'}</Pill>
-      </header>
-      {progress}
-      {layout === 'phone' ? (
-        <>
-          {timerBar}
-          {stepBlock}
-          {uses.length > 0 && usesList(uses, 'For this step')}
-          <button type="button" onClick={() => setSheet('ingredients')} className={`flex min-h-[44px] items-center border-0 bg-transparent p-0 font-body font-semibold text-wall-brass-ink ${t.detail}`}>All ingredients · {ticked.length} of {lines.length} ready</button>
-          <div className="flex-1" />
-          <p className={`m-0 text-center text-wall-ink-2 ${t.label}`}>Swipe the step for the next one</p>
-          {nav}
-        </>
-      ) : (
-        <div className="flex gap-[56px]">
-          <div className="flex min-w-0 flex-1 flex-col gap-[22px]">{stepBlock}{timerBar}<div className="pt-[10px]">{nav}</div></div>
-          <div className={`flex shrink-0 flex-col gap-[18px] ${layout === 'wall' ? 'w-[560px]' : 'w-[38%]'}`}>
-            {layout === 'wall' && recipe.image_url && <img src={recipe.image_url} alt="" className="block h-[260px] w-full rounded-[22px] object-cover" />}
-            {usesList(lines.map((_, i) => i), 'Ingredients', uses)}
-          </div>
-        </div>
+  const allSteps = (
+    <button type="button" aria-label="All steps" onClick={() => setSheet('steps')}
+      className={`flex shrink-0 items-center justify-center gap-[8px] rounded-full border border-solid border-wall-stone bg-transparent font-body font-semibold text-wall-ink ${layout === 'phone' ? 'h-[44px] w-[44px] p-0' : `${t.pill} px-[20px] ${t.body}`}`}>
+      <ListOrdered size={t.icon - 2} />{layout !== 'phone' && 'All steps'}
+    </button>
+  )
+  const close = (
+    <button type="button" aria-label="Close — your place is kept" onClick={onClose}
+      className={`flex shrink-0 items-center justify-center gap-[6px] rounded-full border border-solid border-wall-stone bg-transparent font-body font-semibold text-wall-ink ${layout === 'phone' ? 'h-[44px] w-[44px] p-0' : `${t.pill} pl-[14px] pr-[20px] ${t.body}`}`}>
+      <X size={t.icon - 2} />{layout !== 'phone' && 'Close'}
+    </button>
+  )
+  const sheets = (
+    <>
+      {sheet === 'ingredients' && (
+        <Sheet label="All ingredients" onClose={() => setSheet(null)}>
+          <Label right={`${ticked.length} of ${lines.length} ready`}>All ingredients</Label>
+          <ul className="m-0 list-none p-0">{lines.map((_, i) => row(i, 'small', uses.includes(i)))}</ul>
+          <div className="mt-[14px] flex justify-end"><Pill onClick={() => setSheet(null)}>Done</Pill></div>
+        </Sheet>
       )}
-      {sheet === 'ingredients' && <Sheet label="All ingredients" onClose={() => setSheet(null)}>{usesList(lines.map((_, i) => i), 'All ingredients')}<div className="mt-[14px] flex justify-end"><Pill onClick={() => setSheet(null)}>Done</Pill></div></Sheet>}
       {sheet === 'steps' && (
         <Sheet label="All steps" onClose={() => setSheet(null)}>
           <Label>All steps</Label>
@@ -260,6 +300,51 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
           </div>
         </Sheet>
       )}
+    </>
+  )
+
+  if (layout === 'phone') {
+    // 51b: the number, the step, its ingredients in a card; Back and Next (with the next step) at your thumb.
+    return (
+      <section aria-label={`Cooking ${name}`} className="flex flex-col gap-[18px] pb-[110px] text-wall-ink">
+        <header className="flex items-center gap-[10px]">
+          {close}
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-display text-phone-heading font-bold leading-none">{name}</div>
+            {servingLabel && /\d/.test(servingLabel) && <div className="mt-[3px] text-phone-label text-wall-ink-2">Serves {servingLabel}</div>}
+          </div>
+          {allSteps}
+        </header>
+        {stepBlock}
+        {timerBar}
+        {thisStep}
+        <button type="button" onClick={() => setSheet('ingredients')} className="flex min-h-[44px] items-center border-0 bg-transparent p-0 font-body text-phone-detail font-semibold text-wall-brass-ink">All ingredients · {ticked.length} of {lines.length} ready</button>
+        <div className="fixed bottom-[max(18px,calc(env(safe-area-inset-bottom)+8px))] left-[12px] right-[12px] z-30 flex gap-[8px]">{backButton}{nextButton}</div>
+        {sheets}
+      </section>
+    )
+  }
+
+  // 51a: the number big in brass, the step beside its ingredients; Back, the dots and Next along the bottom.
+  return (
+    <section aria-label={`Cooking ${name}`} className="flex min-h-[100dvh] flex-col text-wall-ink">
+      <header className={`flex items-center gap-[16px] border-0 border-b border-solid border-wall-stone ${wall ? 'px-[64px] py-[20px]' : 'px-[48px] py-[16px]'}`}>
+        {close}
+        {recipe.image_url && <img src={recipe.image_url} alt="" className={`shrink-0 rounded-full object-cover ${wall ? 'h-[56px] w-[56px]' : 'h-[44px] w-[44px]'}`} />}
+        <div className="min-w-0 flex-1">
+          <div className={`truncate font-display font-bold leading-none ${wall ? 'text-wall-date' : 'text-phone-heading'}`}>{name}</div>
+          <div className={`mt-[3px] text-wall-ink-2 ${t.label}`}>{servingLabel && /\d/.test(servingLabel) ? `Serves ${servingLabel} · ` : ''}your place is kept on every screen</div>
+        </div>
+        {allSteps}
+      </header>
+      <div className={`flex flex-1 gap-[56px] ${wall ? 'px-[64px] pb-[150px] pt-[40px]' : 'px-[64px] pb-[150px] pt-[36px]'}`}>
+        <div className="flex min-w-0 flex-1 flex-col gap-[24px]">{stepBlock}{timerBar}</div>
+        <div className={`shrink-0 ${wall ? 'w-[580px]' : 'w-[40%] max-w-[480px]'}`}>{thisStep}</div>
+      </div>
+      <div className={`fixed bottom-0 left-0 right-0 z-30 flex items-center gap-[20px] border-0 border-t border-solid border-wall-stone bg-phone-ground ${wall ? 'h-[140px] px-[64px]' : 'h-[124px] px-[48px]'}`}>
+        {backButton}{dots}<div className="flex min-w-0 flex-1 justify-end">{nextButton}</div>
+      </div>
+      {sheets}
     </section>
   )
 }

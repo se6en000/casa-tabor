@@ -200,6 +200,8 @@ export const DESIGN_TOKENS = {
     // The morning paper (canvas 48a): the headline and the line under it.
     'wall-headline': { size: '84px', lineHeight: '1' },
     'wall-deck': { size: '36px', lineHeight: '1.2' },
+    // Cooking (canvas 51): the step's number, big in brass.
+    'wall-numeral': { size: '180px', lineHeight: '0.8' },
     'wall-answer': { size: '28px', lineHeight: '1.4' },
     'wall-countdown': { size: '88px', lineHeight: '0.85' },
     // Hours and minutes ("1:35") inside the same ring: smaller, so four digits and a colon fit.
@@ -216,6 +218,7 @@ export const DESIGN_TOKENS = {
     'phone-title': { size: '32px', lineHeight: '1.05' },
     // Groceries magnified (Jake, Oct 2: "so i can see without my glasses"): 2.5× the body size.
     'phone-magnified': { size: '40px', lineHeight: '1.15' },
+    'phone-numeral': { size: '110px', lineHeight: '0.8' },
     'phone-move': { size: '30px', lineHeight: '1.05' },
     'phone-heading': { size: '22px', lineHeight: '1.15' },
     'phone-body': { size: '16px', lineHeight: '1.35' },
