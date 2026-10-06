@@ -135,7 +135,7 @@ export default function WallProjectSettings({ detail, now, onEdit, onBack, onDel
             )}
           </Card>
           <div className="mt-auto flex justify-end">
-            <button type="button" onClick={() => setConfirmDelete(true)} className="h-[52px] rounded-full border border-solid border-wall-rust bg-transparent px-[22px] text-wall-detail font-semibold text-wall-rust">Delete the project…</button>
+            <button type="button" onClick={() => setConfirmDelete(true)} className="h-[52px] rounded-full border border-solid border-wall-rust bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-rust">Delete the project…</button>
           </div>
         </div>
       </div>

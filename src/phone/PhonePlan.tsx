@@ -71,7 +71,7 @@ export function PhonePlanAgree({ plan, working, onAgree, onBack }: { plan: PlanA
               return (
                 <button key={r.id} type="button" aria-pressed={on} onClick={() => setSkip((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id]))}
                   className="flex min-h-[44px] w-full items-center gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-phone-body text-wall-ink">
-                  <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{on && <Check size={14} strokeWidth={3} />}</span>
+                  <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2 bg-wall-paper'}`}>{on && <Check size={14} strokeWidth={3} />}</span>
                   <span className={`min-w-0 flex-1 ${on ? '' : 'text-wall-ink-2 line-through'}`}>{r.label}</span>
                   {r.meta && <span className="shrink-0 text-phone-detail text-wall-ink-2">{r.meta}</span>}
                 </button>
@@ -102,20 +102,20 @@ export function PhonePlanSaved({ plan, result, working, onOpen, onUndo, onDone }
       <section {...swipe} aria-label={`${plan.title} — saved`} onClick={(e) => e.stopPropagation()} className="phone-sheet flex max-h-[92%] w-full flex-col gap-[10px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] text-wall-ink">
         <div className="flex items-start justify-between">
           <span className={`${label} text-wall-brass-ink`}>{result.undone ? 'UNDONE' : `SAVED · ${saved.things} ${saved.things === 1 ? 'THING' : 'THINGS'}`}</span>
-          <button type="button" aria-label="Close" onClick={onDone} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>
+          <button type="button" aria-label="Close" onClick={onDone} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><X size={18} /></button>
         </div>
         <span className="font-display text-phone-heading font-bold leading-tight">{result.undone ? `${plan.title} is undone` : `${plan.title} is set up`}</span>
         {!result.undone && rows.map((r) => (
           <div key={r.label} className="flex min-h-[44px] items-center gap-[10px] border-0 border-t border-solid border-wall-stone text-phone-body">
             <span aria-hidden="true" className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-wall-brass-ink text-wall-on-pigment"><Check size={13} strokeWidth={3} /></span>
             <span className="min-w-0 flex-1">{r.label}</span>
-            {r.open && onOpen && r.open.kind !== 'shopping' && <button type="button" onClick={() => onOpen(r.open!)} className="h-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[12px] text-phone-detail font-semibold text-wall-ink">{r.open.label}</button>}
+            {r.open && onOpen && r.open.kind !== 'shopping' && <button type="button" onClick={() => onOpen(r.open!)} className="h-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[12px] text-phone-detail font-semibold text-wall-ink">{r.open.label}</button>}
           </div>
         ))}
         {!result.undone && left.length > 0 && <span className="text-phone-detail text-wall-ink-2">Left out: {left.join(', ')}.</span>}
         <div className="flex items-center gap-[8px]">
           <button type="button" onClick={onDone} className={dark}>Done</button>
-          {undoable && <button type="button" disabled={working} onClick={onUndo} className="h-[44px] rounded-full border border-solid border-wall-rust bg-transparent px-[16px] text-phone-body font-semibold text-wall-rust">{working ? 'Undoing…' : 'Undo this plan'}</button>}
+          {undoable && <button type="button" disabled={working} onClick={onUndo} className="h-[44px] rounded-full border border-solid border-wall-rust bg-wall-paper px-[16px] text-phone-body font-semibold text-wall-rust">{working ? 'Undoing…' : 'Undo this plan'}</button>}
         </div>
         {undoable && <span className="text-phone-detail text-wall-ink-2">Undo works until {lastDay} 11:59 PM.</span>}
       </section>

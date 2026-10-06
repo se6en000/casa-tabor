@@ -199,7 +199,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
               <div className="font-display text-phone-heading font-semibold">{pending}</div>
               <div className="flex gap-[8px]">
                 <button type="button" onClick={onConfirm} disabled={working} className="flex h-[48px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink text-phone-body font-semibold text-wall-on-pigment">Yes, do it</button>
-                <button type="button" onClick={onCancel} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-phone-body font-semibold text-wall-ink">No</button>
+                <button type="button" onClick={onCancel} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[20px] text-phone-body font-semibold text-wall-ink">No</button>
               </div>
             </div>
           )}
@@ -210,8 +210,8 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
           )}
           <div className="flex gap-[8px]">
             {onOpenEvent && !pending && !thinking && <button type="button" onClick={onOpenEvent} className="flex h-[46px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink text-phone-body font-bold text-wall-on-pigment">Open it</button>}
-            {openDay && !thinking && <button type="button" onClick={openDay.go} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">{openDay.label}</button>}
-            <button type="button" onClick={glance.onExpand} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-body font-semibold text-wall-ink">Keep talking</button>
+            {openDay && !thinking && <button type="button" onClick={openDay.go} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[14px] text-phone-body font-semibold text-wall-ink">{openDay.label}</button>}
+            <button type="button" onClick={glance.onExpand} className="flex h-[46px] flex-1 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[14px] text-phone-body font-semibold text-wall-ink">Keep talking</button>
           </div>
           <div className="text-center text-phone-detail text-wall-ink-2">Swipe down to close · hold Ask again to answer</div>
         </section>
@@ -254,7 +254,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             {REPORT_CATEGORIES.map((c) => {
               const on = categories.includes(c)
               return (
-                <button key={c} type="button" aria-pressed={on} onClick={() => setCategories((list) => (on ? list.filter((x) => x !== c) : [...list, c]))} className={`flex h-[44px] items-center rounded-full px-[14px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+                <button key={c} type="button" aria-pressed={on} onClick={() => setCategories((list) => (on ? list.filter((x) => x !== c) : [...list, c]))} className={`flex h-[44px] items-center rounded-full px-[14px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
                   {c}
                 </button>
               )
@@ -356,7 +356,7 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             onSubmit={(e) => { e.preventDefault(); submit(text) }}
           >
             {onScan && (
-              <button type="button" aria-label="Scan it" onClick={onScan} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><Camera size={20} /></button>
+              <button type="button" aria-label="Scan it" onClick={onScan} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Camera size={20} /></button>
             )}
             <textarea
               ref={boxRef}

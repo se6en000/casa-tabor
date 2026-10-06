@@ -39,7 +39,7 @@ export default function PhonePeople({ contacts, places, onClose, family }: { con
     <section aria-label="People" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 flex-col gap-[12px] border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <div className="flex items-center gap-[12px]">
-          <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+          <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
           <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">People</h1>
         </div>
         <label className="flex h-[48px] items-center gap-[10px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px]">

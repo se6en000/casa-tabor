@@ -99,7 +99,7 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
                 event.stopPropagation()
                 onBack()
               }}
-              className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink"
+              className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-ink"
             >
               Back to today
             </button>

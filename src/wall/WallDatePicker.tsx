@@ -30,9 +30,9 @@ export default function WallDatePicker({ value, now, onPick, clearLabel }: WallD
   return (
     <div className="flex flex-col gap-[10px]" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between">
-        <button type="button" aria-label="Month before" onClick={() => step(-1)} className="h-[48px] w-[64px] rounded-full border border-solid border-wall-rule bg-transparent text-wall-heading text-wall-ink">‹</button>
+        <button type="button" aria-label="Month before" onClick={() => step(-1)} className="h-[48px] w-[64px] rounded-full border border-solid border-wall-rule bg-wall-paper text-wall-heading text-wall-ink">‹</button>
         <span className="font-display text-wall-date font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
-        <button type="button" aria-label="Month after" onClick={() => step(1)} className="h-[48px] w-[64px] rounded-full border border-solid border-wall-rule bg-transparent text-wall-heading text-wall-ink">›</button>
+        <button type="button" aria-label="Month after" onClick={() => step(1)} className="h-[48px] w-[64px] rounded-full border border-solid border-wall-rule bg-wall-paper text-wall-heading text-wall-ink">›</button>
       </div>
       <div className="grid grid-cols-7 gap-[6px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-center text-wall-label font-bold text-wall-ink-2">{d}</span>)}
@@ -47,14 +47,14 @@ export default function WallDatePicker({ value, now, onPick, clearLabel }: WallD
               aria-pressed={on}
               aria-label={fromYmd(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               onClick={() => onPick(date)}
-              className={`${cell} ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : date === today ? 'border-2 border-solid border-wall-brass bg-transparent text-wall-ink' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+              className={`${cell} ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : date === today ? 'border-2 border-solid border-wall-brass bg-wall-paper text-wall-ink' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink'}`}
             >
               {i + 1}
             </button>
           )
         })}
       </div>
-      <button type="button" onClick={() => onPick(null)} className={`self-start h-[48px] rounded-full px-[20px] text-wall-detail font-semibold ${value ? 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink' : 'border-0 bg-wall-ink text-wall-on-pigment'}`}>
+      <button type="button" onClick={() => onPick(null)} className={`self-start h-[48px] rounded-full px-[20px] text-wall-detail font-semibold ${value ? 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink' : 'border-0 bg-wall-ink text-wall-on-pigment'}`}>
         {clearLabel}
       </button>
     </div>

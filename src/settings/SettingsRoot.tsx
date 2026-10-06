@@ -267,7 +267,7 @@ function WallPin({ unlock }: { unlock: NonNullable<Unlock> }) {
       </div>
       <div className="mx-auto mt-[18px] grid max-w-[300px] grid-cols-3 gap-[12px]">
         {KEYS.map((k, i) => k ? (
-          <button key={i} type="button" aria-label={k === '⌫' ? 'Delete' : k} onClick={() => void press(k)} className={`h-[72px] rounded-full border border-solid border-wall-night-rule bg-transparent font-semibold text-wall-on-pigment ${t.heading}`}>{k}</button>
+          <button key={i} type="button" aria-label={k === '⌫' ? 'Delete' : k} onClick={() => void press(k)} className={`h-[72px] rounded-full border border-solid border-wall-night-rule bg-wall-paper font-semibold text-wall-on-pigment ${t.heading}`}>{k}</button>
         ) : <span key={i} />)}
       </div>
     </section>

@@ -90,7 +90,7 @@ export function WallPlanAgree({ plan, skip, working, onToggle, onAgree, onBack }
                 return (
                   <button key={r.id} type="button" aria-pressed={on} onClick={() => onToggle(r.id)}
                     className="flex min-h-[56px] items-center gap-[16px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-wall-body text-wall-ink">
-                    <span aria-hidden="true" className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[6px] ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{on && <Check size={20} strokeWidth={3} />}</span>
+                    <span aria-hidden="true" className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[6px] ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2 bg-wall-paper'}`}>{on && <Check size={20} strokeWidth={3} />}</span>
                     <span className={`min-w-0 flex-1 ${on ? '' : 'text-wall-ink-2 line-through'}`}>{r.label}</span>
                     {r.meta && <span className="shrink-0 text-wall-detail text-wall-ink-2">{r.meta}</span>}
                   </button>
@@ -133,7 +133,7 @@ export function WallPlanSaved({ plan, result, working, onOpen, onUndo, onDone }:
         className="absolute left-[360px] top-[70px] flex h-[940px] w-[1200px] flex-col rounded-[28px] bg-wall-on-pigment px-[56px] py-[40px] font-body text-wall-ink">
         <div className="flex items-start justify-between">
           <div className={`${eyebrow} text-wall-brass-ink`}>{result.undone ? 'UNDONE · NOTHING FROM THIS PLAN IS LEFT' : `SAVED · ${saved.things} ${saved.things === 1 ? 'THING' : 'THINGS'}`}</div>
-          <button type="button" aria-label="Close" onClick={onDone} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={22} /></button>
+          <button type="button" aria-label="Close" onClick={onDone} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><X size={22} /></button>
         </div>
         <div className="font-display text-wall-quote font-semibold leading-tight">{result.undone ? `${plan.title} is undone` : `${plan.title} is set up`}</div>
         {!result.undone && <div className="mt-[6px] text-wall-body text-wall-ink-2">Each one opens where it lives, so you can change it there.</div>}
@@ -143,7 +143,7 @@ export function WallPlanSaved({ plan, result, working, onOpen, onUndo, onDone }:
               <div key={r.label} className="flex min-h-[64px] items-center gap-[16px] border-0 border-t border-solid border-wall-stone text-wall-body">
                 <span aria-hidden="true" className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-wall-brass-ink text-wall-on-pigment"><Check size={18} strokeWidth={3} /></span>
                 <span className="min-w-0 flex-1">{r.label}</span>
-                {r.open && onOpen && r.open.kind !== 'shopping' && <button type="button" className="h-[48px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[20px] text-wall-detail font-semibold text-wall-ink" onClick={() => onOpen(r.open!)}>{r.open.label}</button>}
+                {r.open && onOpen && r.open.kind !== 'shopping' && <button type="button" className="h-[48px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[20px] text-wall-detail font-semibold text-wall-ink" onClick={() => onOpen(r.open!)}>{r.open.label}</button>}
               </div>
             ))}
           </div>
@@ -151,7 +151,7 @@ export function WallPlanSaved({ plan, result, working, onOpen, onUndo, onDone }:
         {!result.undone && left.length > 0 && <div className="mt-[14px] text-wall-detail text-wall-ink-2">Left out: {left.join(', ')}.</div>}
         <div className="mt-auto flex items-center gap-[14px]">
           <button type="button" className={darkPill} onClick={onDone}>Done</button>
-          {undoable && <button type="button" disabled={working} className="h-[60px] shrink-0 rounded-full border border-solid border-wall-rust bg-transparent px-[28px] text-wall-body font-semibold text-wall-rust" onClick={onUndo}>{working ? 'Undoing…' : 'Undo this plan'}</button>}
+          {undoable && <button type="button" disabled={working} className="h-[60px] shrink-0 rounded-full border border-solid border-wall-rust bg-wall-paper px-[28px] text-wall-body font-semibold text-wall-rust" onClick={onUndo}>{working ? 'Undoing…' : 'Undo this plan'}</button>}
           {undoable && <span className="ml-auto text-wall-detail text-wall-ink-2">Undo works until {lastDay} 11:59 PM.</span>}
         </div>
       </section>

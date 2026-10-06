@@ -65,7 +65,7 @@ export default function WallGroceries({ data, syncStale = false }: { data: Phone
         {...pressHandlers(item)}
         className={`flex min-h-[66px] w-full select-none items-center gap-[18px] border-0 border-t border-solid bg-transparent py-[8px] text-left font-body text-wall-ink ${quiet ? 'opacity-50' : ''} ${isLifted ? 'rounded-[14px] border-transparent bg-wall-on-pigment px-[14px] shadow-[0_10px_26px_rgba(38,34,29,0.22)]' : isNew ? 'rounded-[14px] border-transparent bg-wall-brass/15 px-[14px]' : 'border-wall-rule px-0'}`}
       >
-        <span className={`flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>
+        <span className={`flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2 bg-wall-paper'}`}>
           {item.checked && <Check size={20} strokeWidth={3} />}
         </span>
         <span className={`whitespace-nowrap text-wall-answer font-medium ${item.checked ? 'text-wall-ink-2 line-through decoration-2' : ''}`}>
@@ -117,7 +117,7 @@ export default function WallGroceries({ data, syncStale = false }: { data: Phone
                 {showDone && (
                   <>
                     {done.map((i) => row(i, true))}
-                    <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[12px] flex h-[56px] items-center rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-body font-semibold text-wall-ink">
+                    <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[12px] flex h-[56px] items-center rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-body font-semibold text-wall-ink">
                       Clear them
                     </button>
                   </>
@@ -143,7 +143,7 @@ export default function WallGroceries({ data, syncStale = false }: { data: Phone
                   )
                 })}
               </div>
-              <button type="button" onClick={cancel} className="flex h-[60px] items-center self-start rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-body font-semibold text-wall-ink">Cancel</button>
+              <button type="button" onClick={cancel} className="flex h-[60px] items-center self-start rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-wall-paper px-[28px] text-wall-body font-semibold text-wall-ink">Cancel</button>
             </div>
           ) : (
             <div aria-label="Add to the list" className="flex h-full flex-col gap-[22px] rounded-[28px] bg-wall-on-pigment/60 p-[34px]">
@@ -178,7 +178,7 @@ export default function WallGroceries({ data, syncStale = false }: { data: Phone
                   <span className="mt-[8px] text-wall-detail font-bold tracking-[0.16em] text-wall-ink-2">YOUR USUALS</span>
                   <div className="grid grid-cols-2 gap-[12px]">
                     {chips.map((n) => (
-                      <button key={n} type="button" onClick={() => add(n, false)} className="flex h-[62px] items-center whitespace-nowrap rounded-full border-[1.5px] border-solid border-wall-stone bg-transparent px-[18px] text-left text-wall-body font-semibold text-wall-ink">
+                      <button key={n} type="button" onClick={() => add(n, false)} className="flex h-[62px] items-center whitespace-nowrap rounded-full border-[1.5px] border-solid border-wall-stone bg-wall-paper px-[18px] text-left text-wall-body font-semibold text-wall-ink">
                         + {n}
                       </button>
                     ))}

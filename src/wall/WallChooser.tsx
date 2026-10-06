@@ -15,14 +15,14 @@ export default function WallChooser({ title, options, onPick, onCancel }: WallCh
         <span className="pb-[6px] font-display text-wall-date font-semibold">{title}</span>
         <div className="flex min-h-0 flex-col gap-[8px] overflow-y-auto">
           {options.map((o) => (
-            <button key={o.key} type="button" onClick={() => onPick(o.key)} className="flex min-h-[60px] shrink-0 flex-col justify-center rounded-[16px] border border-solid border-wall-rule bg-transparent px-[20px] py-[8px] text-left text-wall-ink">
+            <button key={o.key} type="button" onClick={() => onPick(o.key)} className="flex min-h-[60px] shrink-0 flex-col justify-center rounded-[16px] border border-solid border-wall-rule bg-wall-paper px-[20px] py-[8px] text-left text-wall-ink">
               <span className="text-wall-body font-semibold">{o.label}</span>
               {o.detail && <span className="text-wall-label text-wall-ink-2">{o.detail}</span>}
             </button>
           ))}
           {options.length === 0 && <span className="text-wall-detail text-wall-ink-2">Nothing to pick yet.</span>}
         </div>
-        <button type="button" onClick={onCancel} className="mt-[6px] h-[52px] self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
+        <button type="button" onClick={onCancel} className="mt-[6px] h-[52px] self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
       </section>
     </div>
   )

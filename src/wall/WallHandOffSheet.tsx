@@ -37,7 +37,7 @@ export default function WallHandOffSheet({ trip, plan, members, pigmentOf, onPic
               {placeName(trip)} · {nameOf(trip.driverId) ? `now ${nameOf(trip.driverId)}` : 'nobody driving yet'}
             </div>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-wall-rule bg-wall-paper p-0 text-wall-ink">
             <X size={22} />
           </button>
         </div>
@@ -63,7 +63,7 @@ export default function WallHandOffSheet({ trip, plan, members, pigmentOf, onPic
                     setSaving(null)
                   }
                 }}
-                className={`flex h-[88px] items-center gap-[14px] rounded-[16px] px-[18px] text-left ${current ? 'border border-dashed border-wall-rule bg-transparent text-wall-ink-2' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+                className={`flex h-[88px] items-center gap-[14px] rounded-[16px] px-[18px] text-left ${current ? 'border border-dashed border-wall-rule bg-transparent text-wall-ink-2' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink'}`}
               >
                 <span aria-hidden="true" className={`flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold text-wall-on-pigment ${pigment != null ? pigmentStyleFor(pigment).solid : 'bg-wall-ink-2'}`}>
                   {choice.name.charAt(0)}

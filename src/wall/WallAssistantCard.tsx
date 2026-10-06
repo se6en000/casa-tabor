@@ -143,10 +143,10 @@ export default function WallAssistantCard({ card, members, pigmentOf, working, o
         <button type="button" disabled={working} onClick={onYes} className="h-[60px] rounded-full border-0 bg-wall-ink px-[32px] text-wall-detail font-bold text-wall-on-pigment">
           {working ? 'Saving…' : card.kind === 'add' ? 'Yes, add it' : card.before ? 'Yes, move it' : 'Yes, change it'}
         </button>
-        <button type="button" disabled={working} onClick={onChange} className="h-[60px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[28px] text-wall-detail font-semibold text-wall-ink">
+        <button type="button" disabled={working} onClick={onChange} className="h-[60px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[28px] text-wall-detail font-semibold text-wall-ink">
           Change something
         </button>
-        <button type="button" disabled={working} onClick={onNo} className="h-[60px] rounded-full border border-solid border-wall-rule bg-transparent px-[28px] text-wall-detail font-semibold text-wall-ink">
+        <button type="button" disabled={working} onClick={onNo} className="h-[60px] rounded-full border border-solid border-wall-rule bg-wall-paper px-[28px] text-wall-detail font-semibold text-wall-ink">
           {card.kind === 'add' ? 'Cancel' : 'No'}
         </button>
       </div>

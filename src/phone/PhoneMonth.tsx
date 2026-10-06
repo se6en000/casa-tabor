@@ -37,9 +37,9 @@ export default function PhoneMonth({ now, members, pigments, useMonth, onOpen, o
       <section {...swipe} aria-label="Any day" onClick={(e) => e.stopPropagation()} className="phone-sheet flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] pt-[10px]">
         <div aria-hidden="true" className="mx-auto h-[5px] w-[38px] rounded-full bg-wall-stone" />
         <div className="flex items-center justify-between">
-          <button type="button" aria-label="The month before" onClick={() => step(-1)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink-2"><ChevronLeft size={20} /></button>
+          <button type="button" aria-label="The month before" onClick={() => step(-1)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink-2"><ChevronLeft size={20} /></button>
           <h2 className="m-0 font-display text-phone-title font-bold text-wall-ink">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h2>
-          <button type="button" aria-label="The month after" onClick={() => step(1)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink-2"><ChevronRight size={20} /></button>
+          <button type="button" aria-label="The month after" onClick={() => step(1)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink-2"><ChevronRight size={20} /></button>
         </div>
         <div
           onTouchStart={(e) => { across.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
@@ -94,7 +94,7 @@ export default function PhoneMonth({ now, members, pigments, useMonth, onOpen, o
           </button>
         )}
         <div className="flex justify-between">
-          <button type="button" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setPicked(today) }} className="h-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-phone-body font-semibold text-wall-ink">Today</button>
+          <button type="button" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setPicked(today) }} className="h-[44px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[18px] text-phone-body font-semibold text-wall-ink">Today</button>
           <button type="button" disabled={!pickedHere} onClick={() => onOpen(picked)} className="h-[44px] rounded-full border-0 bg-wall-ink px-[18px] text-phone-body font-semibold text-wall-on-pigment disabled:opacity-40">Open {label(picked)}</button>
         </div>
       </section>

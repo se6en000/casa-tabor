@@ -23,7 +23,7 @@ function Choice({ label, on, onPick }: { label: string; on: boolean; onPick: () 
       type="button"
       aria-pressed={on}
       onClick={(e) => { e.stopPropagation(); onPick() }}
-      className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+      className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>
@@ -79,7 +79,7 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
           type="button"
           aria-pressed={current === m.id}
           onClick={(e) => { e.stopPropagation(); onChange({ [key]: m.id }) }}
-          className={`flex h-[52px] items-center gap-[10px] rounded-full pl-[6px] pr-[18px] text-wall-detail font-semibold ${current === m.id ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+          className={`flex h-[52px] items-center gap-[10px] rounded-full pl-[6px] pr-[18px] text-wall-detail font-semibold ${current === m.id ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
         >
           <span aria-hidden="true" className={`flex h-[40px] w-[40px] items-center justify-center rounded-full font-display text-wall-detail font-bold text-wall-on-pigment ${pigmentStyleFor(pigmentOf(m.id)).solid}`}>{m.name.charAt(0)}</span>
           {m.name}
@@ -102,7 +102,7 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
             <span className="font-display text-wall-move font-semibold">{who} in {trip.city}</span>
             {trip.hotel && <span className="text-wall-detail text-wall-ink-2">Staying at {trip.hotel}</span>}
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-rule bg-transparent p-0 text-wall-ink">
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-rule bg-wall-paper p-0 text-wall-ink">
             <X size={22} />
           </button>
         </div>
@@ -175,7 +175,7 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
                       aria-pressed={run.driverId === m.id}
                       aria-label={`${m.name} takes ${run.title} ${run.time}`}
                       onClick={(e) => { e.stopPropagation(); onCover?.(run, m.id) }}
-                      className={`flex h-[48px] items-center gap-[8px] rounded-full pl-[4px] pr-[14px] text-wall-detail font-semibold ${run.driverId === m.id ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+                      className={`flex h-[48px] items-center gap-[8px] rounded-full pl-[4px] pr-[14px] text-wall-detail font-semibold ${run.driverId === m.id ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
                     >
                       <span aria-hidden="true" className={`flex h-[38px] w-[38px] items-center justify-center rounded-full font-display text-wall-detail font-bold text-wall-on-pigment ${pigmentStyleFor(pigmentOf(m.id)).solid}`}>{m.name.charAt(0)}</span>
                       {m.name}

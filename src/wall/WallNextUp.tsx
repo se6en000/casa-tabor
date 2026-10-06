@@ -23,7 +23,7 @@ export interface NextUpRowsProps {
 }
 
 const TIME = { late: 'text-wall-rust', soon: 'text-wall-ink', later: 'text-wall-ink' } as const
-const BOX = { late: 'border-wall-rust', soon: 'border-wall-ink-2', later: 'border-wall-ink-2' } as const
+const BOX = { late: 'border-wall-rust bg-wall-paper', soon: 'border-wall-ink-2 bg-wall-paper', later: 'border-wall-ink-2 bg-wall-paper' } as const
 const TAG = { late: 'text-wall-rust', soon: 'text-wall-brass-ink', later: 'text-wall-ink-2' } as const
 
 function Row({ item, members, pigmentOf, ticked, onTick, onOpen, small }: Omit<NextUpRowsProps, 'items' | 'ticked'> & { item: NextUpItem; ticked: boolean; small: boolean }) {

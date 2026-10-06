@@ -18,7 +18,7 @@ export function PackingItem({ item, onToggle }: { item: WallChecklistItem; onTog
     >
       <span
         aria-hidden="true"
-        className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[4px] border-2 ${item.checked ? 'border-wall-brass bg-wall-brass text-wall-ground' : 'border-wall-ink-2'}`}
+        className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[4px] border-2 ${item.checked ? 'border-wall-brass bg-wall-brass text-wall-ground' : 'border-wall-ink-2 bg-wall-paper'}`}
       >
         {item.checked && <Check size={16} strokeWidth={3} />}
       </span>
@@ -44,7 +44,7 @@ export default function WallPackingSheet({ groups, packed, total, onToggle, onCl
       >
         <div className="flex items-center justify-between">
           <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">GET &amp; PACK · {packed} OF {total} DONE</div>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-wall-paper p-0 text-wall-ink">
             <X size={22} />
           </button>
         </div>

@@ -502,7 +502,7 @@ export function KnowsPage({ head }: { head: ReactNode }) {
         <div className="-mx-[4px] flex gap-[8px] overflow-x-auto px-[4px] pb-[2px]" role="group" aria-label="Whose">
           {chips.map((c) => (
             <button key={c.id} type="button" aria-pressed={who === c.id} onClick={() => setWho(c.id)}
-              className={`h-[40px] shrink-0 rounded-full px-[14px] font-semibold ${t.detail} ${who === c.id ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment text-wall-ink' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>{c.name}</button>
+              className={`h-[40px] shrink-0 rounded-full px-[14px] font-semibold ${t.detail} ${who === c.id ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment text-wall-ink' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>{c.name}</button>
           ))}
         </div>
       </div>

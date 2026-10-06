@@ -20,7 +20,7 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
     <button
       type="button"
       onClick={onClick}
-      className={`h-[44px] rounded-full px-[14px] text-phone-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}
+      className={`h-[44px] rounded-full px-[14px] text-phone-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>

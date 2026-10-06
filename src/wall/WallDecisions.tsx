@@ -52,7 +52,7 @@ export function DecisionRow({ decision, now, onAnswer, compact = false, showDay 
               }
               setBusy(null)
             }}
-            className={`${compact ? 'h-[48px] px-[20px]' : 'h-[56px] px-[24px]'} rounded-full text-wall-detail font-semibold ${i === 0 ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+            className={`${compact ? 'h-[48px] px-[20px]' : 'h-[56px] px-[24px]'} rounded-full text-wall-detail font-semibold ${i === 0 ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
           >
             {busy === answer.label ? 'Saving…' : answer.label}
           </button>
@@ -80,7 +80,7 @@ export default function WallDecisionsSheet({ decisions, now, onAnswer, onClose }
       >
         <div className="flex items-center justify-between">
           <div className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">NEEDS A DECISION · {decisions.length}</div>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-wall-paper p-0 text-wall-ink">
             <X size={22} />
           </button>
         </div>
@@ -103,7 +103,7 @@ export function DecisionCount({ count, onOpen, className = '' }: { count: number
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen() }}
-      className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full border border-solid border-wall-brass bg-transparent px-[16px] text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink ${className}`}
+      className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full border border-solid border-wall-brass bg-wall-paper px-[16px] text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink ${className}`}
     >
       <span aria-hidden="true" className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-wall-brass-ink text-wall-on-pigment">{count}</span>
       TO DECIDE

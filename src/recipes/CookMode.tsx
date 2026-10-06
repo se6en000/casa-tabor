@@ -181,7 +181,7 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
       <li key={i}>
         <button type="button" aria-pressed={on} onClick={() => tick(i)}
           className={`flex w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left font-body ${big ? (wall ? 'min-h-[64px]' : 'min-h-[54px]') : 'min-h-[46px]'} ${big ? t.body : t.detail} ${on ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>
-          <span className={`flex shrink-0 items-center justify-center rounded-full ${big ? (wall ? 'h-[34px] w-[34px]' : 'h-[28px] w-[28px]') : 'h-[24px] w-[24px]'} ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{on && <Check size={big ? 18 : 15} strokeWidth={2.6} />}</span>
+          <span className={`flex shrink-0 items-center justify-center rounded-full ${big ? (wall ? 'h-[34px] w-[34px]' : 'h-[28px] w-[28px]') : 'h-[24px] w-[24px]'} ${on ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2 bg-wall-paper'}`}>{on && <Check size={big ? 18 : 15} strokeWidth={2.6} />}</span>
           <span className={`shrink-0 font-bold ${on ? 'text-wall-ink-2' : 'text-wall-brass-ink'} ${wall ? 'w-[120px]' : layout === 'tablet' ? 'w-[92px]' : 'w-[84px]'}`}>{amount}</span>{' '}
           <span className="min-w-0 flex-1">{rest}</span>
           {marked && <span className={`shrink-0 font-bold uppercase tracking-[0.16em] text-wall-brass-ink no-underline ${t.label}`}>This step</span>}
@@ -251,7 +251,7 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
   )
   const backButton = (
     <button type="button" onClick={() => go(step - 1)} disabled={step === 0}
-      className={`shrink-0 rounded-full border border-solid border-wall-stone bg-transparent font-body font-semibold text-wall-ink disabled:opacity-35 ${wall ? 'h-[80px] w-[170px] text-wall-body' : layout === 'tablet' ? 'h-[72px] w-[150px] text-phone-heading' : 'h-[72px] w-[72px] text-phone-detail'}`}>
+      className={`shrink-0 rounded-full border border-solid border-wall-stone bg-wall-paper font-body font-semibold text-wall-ink disabled:opacity-35 ${wall ? 'h-[80px] w-[170px] text-wall-body' : layout === 'tablet' ? 'h-[72px] w-[150px] text-phone-heading' : 'h-[72px] w-[72px] text-phone-detail'}`}>
       Back
     </button>
   )

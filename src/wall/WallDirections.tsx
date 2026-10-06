@@ -53,7 +53,7 @@ export default function WallDirections({ route, computer }: { route: Route; comp
         <span className="text-wall-detail text-wall-ink-2">{calling ? route.phone : route.address}</span>
         <span className="text-wall-detail text-wall-ink-2">{calling ? 'Point your phone’s camera here to call.' : 'Point your phone’s camera here — Google Maps opens with the route.'}</span>
         {tel && (
-          <button type="button" onClick={() => setCalling((c) => !c)} className="h-[52px] self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">
+          <button type="button" onClick={() => setCalling((c) => !c)} className="h-[52px] self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">
             {calling ? 'Directions instead' : `Call ${route.name}`}
           </button>
         )}

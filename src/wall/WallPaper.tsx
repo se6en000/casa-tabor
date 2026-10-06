@@ -82,7 +82,7 @@ export default function WallPaper({ now, facts, words, next, onPutAway, onAsk }:
         </div>
         <div className="flex gap-[16px]">
           {onAsk && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onAsk() }} className="h-[56px] rounded-full border border-solid border-wall-rule bg-transparent px-[30px] text-wall-body font-semibold text-wall-ink">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onAsk() }} className="h-[56px] rounded-full border border-solid border-wall-rule bg-wall-paper px-[30px] text-wall-body font-semibold text-wall-ink">
               Ask about it
             </button>
           )}

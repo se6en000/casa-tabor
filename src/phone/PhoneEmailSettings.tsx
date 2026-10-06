@@ -29,7 +29,7 @@ export default function PhoneEmailSettings({ onClose, useSettings = useEmailSett
   return (
     <section aria-label="Email settings" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         <span className="flex flex-col"><span className="text-phone-detail text-wall-ink-2">Settings</span><h1 className="m-0 font-display text-phone-title font-bold leading-none text-wall-ink">Email</h1></span>
       </div>
       <div className="flex flex-1 flex-col gap-[18px] overflow-y-auto overscroll-contain px-[18px] py-[14px] pb-[max(24px,calc(env(safe-area-inset-bottom)+12px))] text-phone-body">
@@ -42,7 +42,7 @@ export default function PhoneEmailSettings({ onClose, useSettings = useEmailSett
                 <span className="font-semibold">{k.label}</span>
                 <span className="text-phone-detail text-wall-ink-2">{k.kind === 'sender' ? 'Every email, never skipped' : 'From anyone'} · {k.source === 'voice' ? 'you said so' : `since ${day(k.created_at)}`}</span>
               </span>
-              <button type="button" aria-label={`Stop keeping me posted on ${k.label}`} onClick={() => void save({ action: 'remove_rule', id: k.id }, `No longer keeping you posted on ${k.label}.`)} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink-2"><X size={16} /></button>
+              <button type="button" aria-label={`Stop keeping me posted on ${k.label}`} onClick={() => void save({ action: 'remove_rule', id: k.id }, `No longer keeping you posted on ${k.label}.`)} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink-2"><X size={16} /></button>
             </div>
           ))}
           {data && data.keep.length === 0 && <div className={`${row} text-phone-detail text-wall-ink-2`}>No one yet. “That one mattered” on a skipped email offers it too.</div>}

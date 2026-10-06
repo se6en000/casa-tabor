@@ -185,7 +185,7 @@ function Label({ children }: { children: ReactNode }) {
 function CheckLine({ item, onToggle }: { item: { id: string; label: string; checked?: boolean }; onToggle?: () => void }) {
   return (
     <button type="button" onClick={onToggle} disabled={!onToggle} aria-pressed={Boolean(item.checked)} className="flex min-h-[44px] w-full items-center gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-phone-body text-wall-ink">
-      <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+      <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>
         {item.checked && <Check size={14} strokeWidth={3} />}
       </span>
       <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
@@ -608,7 +608,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             aria-pressed={filter === p.id}
             aria-label={p.name}
             onClick={() => setFilter(p.id)}
-            className={`flex h-[40px] shrink-0 items-center gap-[6px] rounded-full pl-[4px] pr-[12px] text-phone-detail font-semibold text-wall-ink ${filter === p.id ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent'} ${p.id ? '' : 'pl-[12px]'}`}
+            className={`flex h-[40px] shrink-0 items-center gap-[6px] rounded-full pl-[4px] pr-[12px] text-phone-detail font-semibold text-wall-ink ${filter === p.id ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper'} ${p.id ? '' : 'pl-[12px]'}`}
           >
             {p.id && <Disc id={p.id} members={members} pigments={pigments} size="h-[30px] w-[30px] text-phone-detail" />}
             {p.name}
@@ -657,7 +657,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <div className="flex items-center justify-between gap-[12px]">
         <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Calendar</h1>
         <div className="flex items-center gap-[8px]">
-          <button type="button" onClick={() => setMonthOpen(true)} className="flex h-[44px] items-center gap-[4px] rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">
+          <button type="button" onClick={() => setMonthOpen(true)} className="flex h-[44px] items-center gap-[4px] rounded-full border border-solid border-wall-stone bg-wall-paper px-[14px] text-phone-detail font-semibold text-wall-ink">
             Any day <ChevronDown size={15} aria-hidden="true" />
           </button>
           {initial}
@@ -1056,7 +1056,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                 <div className="text-phone-detail text-wall-ink-2">{handOff.trip.title}</div>
                 <div className="font-display text-phone-heading font-bold">Who takes it?</div>
               </div>
-              <button type="button" aria-label="Close" onClick={() => setHandOff(null)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>
+              <button type="button" aria-label="Close" onClick={() => setHandOff(null)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><X size={18} /></button>
             </div>
             {choices.filter((c) => c.memberId !== handOff.trip.driverId).map((c) => (
               <button

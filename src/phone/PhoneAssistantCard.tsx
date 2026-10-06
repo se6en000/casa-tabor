@@ -73,7 +73,7 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
               <div className="text-wall-ink-2">Not sure which one — tap it:</div>
               {choices.map((c) => (
                 <button key={`${c.name}|${c.address}`} type="button" disabled={working} aria-label={`${c.name}, ${c.address}`} onClick={() => onPickPlace(c)}
-                  className="flex min-h-[52px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-transparent px-[12px] py-[8px] text-left text-wall-ink">
+                  className="flex min-h-[52px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-paper px-[12px] py-[8px] text-left text-wall-ink">
                   <span className="text-phone-detail font-semibold">{c.name}</span>
                   <span className="text-phone-detail text-wall-ink-2">{c.address}</span>
                 </button>
@@ -103,7 +103,7 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
         <button type="button" disabled={working} onClick={onYes} className="flex h-[48px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink px-[16px] text-phone-body font-bold text-wall-on-pigment">
           {working ? 'Saving…' : card.kind === 'add' ? 'Yes, add it' : card.before ? 'Yes, move it' : 'Yes, change it'}
         </button>
-        <button type="button" disabled={working} onClick={onNo} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent px-[16px] text-phone-body font-semibold text-wall-ink">
+        <button type="button" disabled={working} onClick={onNo} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[16px] text-phone-body font-semibold text-wall-ink">
           {card.kind === 'add' ? 'Cancel' : 'No'}
         </button>
       </div>
@@ -136,7 +136,7 @@ export function PhoneWhich({ which, members, pigmentOf, onPick, onNeither }: {
         </button>
       ))}
       {which.kept && <span className="self-start rounded-full bg-wall-brass/15 px-[12px] py-[6px] text-phone-detail font-semibold text-wall-brass-ink">Your change is kept: {which.kept}</span>}
-      <button type="button" onClick={onNeither} className="flex h-[44px] items-center self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[16px] text-phone-body font-semibold text-wall-ink">
+      <button type="button" onClick={onNeither} className="flex h-[44px] items-center self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[16px] text-phone-body font-semibold text-wall-ink">
         Neither — never mind
       </button>
     </div>

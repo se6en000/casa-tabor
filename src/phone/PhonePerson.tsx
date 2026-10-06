@@ -42,7 +42,7 @@ export default function PhonePerson({ member, members, routines, dayOffs, now, c
     <section aria-label={`${member.name}’s page`} className="absolute inset-0 z-30 flex flex-col bg-phone-ground font-body text-wall-ink">
       {!editing && (
         <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-          <button type="button" aria-label="Back" onClick={onBack} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+          <button type="button" aria-label="Back" onClick={onBack} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
           <span className="flex flex-col">
             <span className="text-phone-label text-wall-ink-2">People › Family</span>
             <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">{member.name}</h1>

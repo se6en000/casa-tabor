@@ -715,7 +715,7 @@ export default function WallView(props: WallViewProps) {
       {!onLaunchFace && !(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
       {!onLaunchFace && !(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
       {!onLaunchFace && calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
-      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
+      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className={`absolute right-[184px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
       {!selected && overlay && (
         // Over the night face the band is raised and the calendar steps back a little, so the
         // conversation reads as a layer of its own (Jake, 2026-09-27).

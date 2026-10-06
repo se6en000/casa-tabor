@@ -20,7 +20,7 @@ const SWIPE_W = 148
 export function Answer({ label, primary = false, onClick }: { label: string; primary?: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }}
-      className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-phone-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+      className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-phone-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
       {label}
     </button>
   )
@@ -76,7 +76,7 @@ export default function PhoneTodo({ list, onAct, onEdit }: PhoneTodoProps) {
         >
           <button type="button" role="checkbox" aria-checked={false} aria-label={`Done: ${item.title}`} onClick={() => { haptic(); void onAct({ action: 'done', id: item.id }) }}
             className="-m-[7px] flex h-[44px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0">
-            <span aria-hidden="true" className={`h-[28px] w-[28px] rounded-full border-[1.75px] border-solid ${late ? 'border-wall-rust' : 'border-wall-ink-2'}`} />
+            <span aria-hidden="true" className={`h-[28px] w-[28px] rounded-full border-[1.75px] border-solid ${late ? 'border-wall-rust' : 'border-wall-ink-2'} bg-wall-paper`} />
           </button>
           <button type="button" aria-label={`Edit ${item.title}`} disabled={Boolean(item.projectId)}
             onClick={() => { if (swiped) return setSwiped(null); onEdit(item) }}

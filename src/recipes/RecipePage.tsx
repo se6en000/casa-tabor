@@ -240,7 +240,7 @@ function GroceriesSheet({ name, lines, onClose, onDone }: { name: string; lines:
           <li key={i}>
             <button type="button" aria-pressed={picked.has(i)} onClick={() => setPicked((s) => { const next = new Set(s); if (next.has(i)) next.delete(i); else next.add(i); return next })}
               className={`flex min-h-[50px] w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left font-body ${t.body} ${picked.has(i) ? 'text-wall-ink' : 'text-wall-ink-2 line-through'}`}>
-              <span className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full ${picked.has(i) ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2'}`}>{picked.has(i) && <Check size={18} strokeWidth={2.6} />}</span>
+              <span className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full ${picked.has(i) ? 'bg-wall-ink text-wall-on-pigment' : 'border-2 border-solid border-wall-ink-2 bg-wall-paper'}`}>{picked.has(i) && <Check size={18} strokeWidth={2.6} />}</span>
               {line}
             </button>
           </li>

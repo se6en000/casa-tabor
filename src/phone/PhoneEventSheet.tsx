@@ -118,7 +118,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
     <section aria-label={`${event.title} on the phone`} className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       {/* A pinned top bar, clear of the notch: Back and Edit never scroll away or sit under the status bar. */}
       <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         {mode === 'details' && !view.repeating && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
         {isNew && (
           <div className="flex rounded-full border border-solid border-wall-stone p-[3px]">
@@ -199,7 +199,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               <div className={label}>{prep.length ? `GET & PACK · ${prep.filter((i) => i.checked).length} OF ${prep.length}` : 'GET & PACK'}</div>
               {prep.map((item) => (
                 <button key={item.id} type="button" aria-pressed={item.checked} disabled={!onToggleItem} onClick={() => onToggleItem?.(item)} className="flex min-h-[44px] w-full items-center gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-phone-body text-wall-ink">
-                  <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>{item.checked && <Check size={14} strokeWidth={3} />}</span>
+                  <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>{item.checked && <Check size={14} strokeWidth={3} />}</span>
                   <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
                 </button>
               ))}
@@ -241,7 +241,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                       aria-label={`Keep from ${m.name}`}
                       disabled={busy}
                       onClick={() => void run(() => onKeepFrom(on ? keptFrom.filter((id) => id !== m.id) : [...keptFrom, m.id]), 'That didn’t save. Nothing changed.', true)}
-                      className={`flex h-[44px] items-center gap-[6px] rounded-full px-[12px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}
+                      className={`flex h-[44px] items-center gap-[6px] rounded-full px-[12px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}
                     >
                       {on && <Lock size={14} aria-hidden="true" />}{m.name}
                     </button>
@@ -318,7 +318,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
             <span className={label}>DAY</span>
             <div className="flex gap-[6px] overflow-x-auto">
               {dayChips(now, draft.day).map((chip) => (
-                <button key={chip.date.getTime()} type="button" aria-pressed={chip.selected} onClick={() => setDraft((d) => setDay(d, chip.date))} className={`flex h-[60px] min-w-[52px] flex-col items-center justify-center rounded-[12px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+                <button key={chip.date.getTime()} type="button" aria-pressed={chip.selected} onClick={() => setDraft((d) => setDay(d, chip.date))} className={`flex h-[60px] min-w-[52px] flex-col items-center justify-center rounded-[12px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
                   <span className="text-phone-label font-bold">{chip.weekday}</span>
                   <span className="font-display text-phone-heading font-bold">{chip.date.getDate()}</span>
                 </button>
@@ -328,9 +328,9 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           {!draft.allDay && (['start', 'end'] as const).map((which) => (
             <div key={which} className="flex items-center gap-[10px]">
               <span className="w-[56px] text-phone-body text-wall-ink-2">{which === 'start' ? 'Starts' : 'Ends'}</span>
-              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} earlier`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, -STEP_MIN) : stepEnd(d, -STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><Minus size={18} /></button>
+              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} earlier`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, -STEP_MIN) : stepEnd(d, -STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Minus size={18} /></button>
               <span className="flex h-[48px] flex-1 items-center justify-center rounded-[12px] border-2 border-solid border-wall-brass font-display text-phone-heading font-semibold">{fmt(which === 'start' ? draft.startMin : draft.endMin)}</span>
-              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} later`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, STEP_MIN) : stepEnd(d, STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><Plus size={18} /></button>
+              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} later`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, STEP_MIN) : stepEnd(d, STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Plus size={18} /></button>
             </div>
           ))}
           <div className="flex flex-col gap-[8px]">
@@ -339,7 +339,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               {members.filter((m) => m.show_on_home_sidebar !== false).map((m) => {
                 const on = draft.going.includes(m.id)
                 return (
-                  <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id]))} className={`flex h-[60px] flex-col items-center justify-center gap-[2px] rounded-[12px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-transparent'}`}>
+                  <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id]))} className={`flex h-[60px] flex-col items-center justify-center gap-[2px] rounded-[12px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
                     {disc(m.id, 'h-[26px] w-[26px] text-phone-detail')}{m.name}
                   </button>
                 )
@@ -358,7 +358,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                   const on = draft.driverId === m.id
                   return (
                     <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => ({ ...d, driverId: on ? null : m.id }))}
-                      className={`flex h-[44px] items-center gap-[6px] rounded-full pl-[5px] pr-[14px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-transparent'}`}>
+                      className={`flex h-[44px] items-center gap-[6px] rounded-full pl-[5px] pr-[14px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
                       {disc(m.id, 'h-[30px] w-[30px] text-phone-detail')}{m.name}
                     </button>
                   )

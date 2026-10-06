@@ -34,7 +34,7 @@ const Label = ({ children, note }: { children: string; note?: string }) => (
 export function Pill({ label, on = false, onClick, aria }: { label: string; on?: boolean; onClick: () => void; aria?: string }) {
   return (
     <button type="button" aria-pressed={on} aria-label={aria} onClick={(e) => { e.stopPropagation(); onClick() }}
-      className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-wall-label font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}>
+      className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-wall-label font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink'}`}>
       {label}
     </button>
   )
@@ -88,7 +88,7 @@ export default function WallStepPanel({ detail, step, number, total, onSet, onAs
           <span className="truncate text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">STEP {number} OF {total} · {detail.project.title.toUpperCase()}</span>
           <button type="button" aria-label="Edit the step’s title" onClick={() => onAsk('title')} className="min-w-0 truncate rounded-[12px] border border-dashed border-wall-rule bg-transparent px-[10px] py-[2px] text-left font-display text-wall-date font-semibold text-wall-ink">{step.title}</button>
         </div>
-        <button type="button" aria-label="Close the details" onClick={onClose} className="h-[44px] w-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent text-wall-heading text-wall-ink">×</button>
+        <button type="button" aria-label="Close the details" onClick={onClose} className="h-[44px] w-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper text-wall-heading text-wall-ink">×</button>
       </div>
 
       {picking ? (
@@ -119,13 +119,13 @@ export default function WallStepPanel({ detail, step, number, total, onSet, onAs
               <span className={`text-wall-detail ${repeat ? 'text-wall-ink' : 'text-wall-ink-2'}`}>Same job, many times</span>
               {repeat && (
                 <span className="flex items-center gap-[8px]">
-                  <button type="button" aria-label="Less time each" onClick={() => onSet({ repeat_minutes: Math.max(5, step.repeat_minutes! - 5), repeat_count: step.repeat_count })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent text-wall-heading text-wall-ink">−</button>
+                  <button type="button" aria-label="Less time each" onClick={() => onSet({ repeat_minutes: Math.max(5, step.repeat_minutes! - 5), repeat_count: step.repeat_count })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper text-wall-heading text-wall-ink">−</button>
                   <span className="flex w-[70px] flex-col items-center leading-none"><span className="font-display text-wall-heading font-bold">{each(step.repeat_minutes!)}</span><span className="text-wall-label text-wall-ink-2">each</span></span>
-                  <button type="button" aria-label="More time each" onClick={() => onSet({ repeat_minutes: step.repeat_minutes! + 5, repeat_count: step.repeat_count })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent text-wall-heading text-wall-ink">+</button>
+                  <button type="button" aria-label="More time each" onClick={() => onSet({ repeat_minutes: step.repeat_minutes! + 5, repeat_count: step.repeat_count })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper text-wall-heading text-wall-ink">+</button>
                   <span className="text-wall-heading text-wall-ink-2">×</span>
-                  <button type="button" aria-label="Fewer" onClick={() => onSet({ repeat_minutes: step.repeat_minutes, repeat_count: Math.max(1, step.repeat_count! - 1) })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent text-wall-heading text-wall-ink">−</button>
+                  <button type="button" aria-label="Fewer" onClick={() => onSet({ repeat_minutes: step.repeat_minutes, repeat_count: Math.max(1, step.repeat_count! - 1) })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper text-wall-heading text-wall-ink">−</button>
                   <button type="button" aria-label="Change what's counted" onClick={() => onAsk('unit')} className="flex w-[80px] flex-col items-center border-0 bg-transparent p-0 leading-none text-wall-ink"><span className="font-display text-wall-heading font-bold">{step.repeat_count}</span><span className="truncate text-wall-label text-wall-ink-2">{step.repeat_unit ?? 'times'}</span></button>
-                  <button type="button" aria-label="More" onClick={() => onSet({ repeat_minutes: step.repeat_minutes, repeat_count: step.repeat_count! + 1 })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent text-wall-heading text-wall-ink">+</button>
+                  <button type="button" aria-label="More" onClick={() => onSet({ repeat_minutes: step.repeat_minutes, repeat_count: step.repeat_count! + 1 })} className="h-[44px] w-[44px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper text-wall-heading text-wall-ink">+</button>
                 </span>
               )}
             </div>

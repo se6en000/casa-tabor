@@ -354,7 +354,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                   {rest.length > 0 && <div className="mt-[4px] text-wall-date font-medium text-wall-ink-2">{rest.join(':').trim()}</div>}
                 </div>
               </div>
-              <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
+              <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border border-wall-rule bg-wall-paper p-0 text-wall-ink">
                 <X size={22} />
               </button>
             </div>
@@ -417,7 +417,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                     onClick={() => void toggleChecklistItem(queryClient, item.id, !item.checked)}
                     className="flex h-[56px] items-center gap-[16px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left"
                   >
-                    <span className={`flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border-2 ${item.checked ? 'border-wall-brass-ink bg-wall-brass-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+                    <span className={`flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border-2 ${item.checked ? 'border-wall-brass-ink bg-wall-brass-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>
                       {item.checked && <Check size={18} strokeWidth={3} />}
                     </span>
                     <span className={`text-wall-body ${item.checked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.label}</span>
@@ -506,7 +506,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                     type="button"
                     aria-pressed={tab === t}
                     onClick={() => { setKeyboard(null); setTab(t) }}
-                    className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${tab === t ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+                    className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${tab === t ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink'}`}
                   >
                     {t === 'when' ? 'When & where' : 'Who'}
                     {(t === 'who' ? ['going', 'driver'] : ['title', 'day', 'start', 'end', 'allDay', 'anytime', 'place']).some((f) => wasOf(f)) && ' •'}
@@ -555,13 +555,13 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                           key={chip.date.getTime()}
                           type="button"
                           onClick={() => { touch(); setDraft((d) => setDay(d, chip.date)); setOtherDates(false) }}
-                          className={`flex h-[76px] flex-1 flex-col items-center justify-center gap-[2px] rounded-[14px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+                          className={`flex h-[76px] flex-1 flex-col items-center justify-center gap-[2px] rounded-[14px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink'}`}
                         >
                           <span className={`text-wall-label font-bold ${chip.selected ? 'text-wall-brass' : 'text-wall-ink-2'}`}>{chip.weekday}</span>
                           <span className="font-display text-wall-heading font-bold">{chip.date.getDate()}</span>
                         </button>
                       ))}
-                      <button type="button" onClick={() => setOtherDates((o) => !o)} className="flex h-[76px] flex-1 items-center justify-center rounded-[14px] border border-solid border-wall-rule bg-transparent text-wall-label font-semibold text-wall-ink">
+                      <button type="button" onClick={() => setOtherDates((o) => !o)} className="flex h-[76px] flex-1 items-center justify-center rounded-[14px] border border-solid border-wall-rule bg-wall-paper text-wall-label font-semibold text-wall-ink">
                         Other
                       </button>
                     </div>
@@ -571,7 +571,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                           const date = midnight(now)
                           date.setDate(date.getDate() + 6 + i)
                           return (
-                            <button key={i} type="button" onClick={() => { setDraft((d) => setDay(d, date)); setOtherDates(false) }} className="h-[48px] rounded-[10px] border border-solid border-wall-rule bg-transparent text-wall-label font-semibold text-wall-ink">
+                            <button key={i} type="button" onClick={() => { setDraft((d) => setDay(d, date)); setOtherDates(false) }} className="h-[48px] rounded-[10px] border border-solid border-wall-rule bg-wall-paper text-wall-label font-semibold text-wall-ink">
                               {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </button>
                           )
@@ -600,7 +600,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                       {hourPicker && (
                         <div className="grid grid-cols-9 gap-[6px]">
                           {HOUR_CHIPS.map((h) => (
-                            <button key={h} type="button" onClick={() => { setDraft((d) => stepStart(d, h * 60 + (d.startMin % 60) - d.startMin)); setHourPicker(false) }} className="h-[48px] rounded-[10px] border border-solid border-wall-rule bg-transparent text-wall-label font-semibold text-wall-ink">
+                            <button key={h} type="button" onClick={() => { setDraft((d) => stepStart(d, h * 60 + (d.startMin % 60) - d.startMin)); setHourPicker(false) }} className="h-[48px] rounded-[10px] border border-solid border-wall-rule bg-wall-paper text-wall-label font-semibold text-wall-ink">
                               {h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'a' : 'p'}
                             </button>
                           ))}
@@ -678,7 +678,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                           type="button"
                           aria-pressed={on}
                           onClick={() => { touch(); setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id])) }}
-                          className={`flex h-[72px] items-center gap-[14px] rounded-[16px] px-[16px] text-left ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink-2'} ${on !== wasOn ? 'outline-2 outline-solid outline-offset-2 outline-wall-brass-ink' : ''}`}
+                          className={`flex h-[72px] items-center gap-[14px] rounded-[16px] px-[16px] text-left ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-wall-paper text-wall-ink-2'} ${on !== wasOn ? 'outline-2 outline-solid outline-offset-2 outline-wall-brass-ink' : ''}`}
                         >
                           <span
                             aria-hidden="true"
@@ -714,7 +714,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                             type="button"
                             aria-pressed={chosen}
                             onClick={() => { touch(); setDraft((d) => setDriver(d, choice.memberId)) }}
-                            className={`flex h-[80px] items-center gap-[14px] rounded-[16px] px-[18px] text-left ${chosen ? 'border-0 bg-wall-ink text-wall-on-pigment' : choice.memberId ? 'border border-solid border-wall-rule bg-transparent text-wall-ink' : 'border border-dashed border-wall-rule bg-transparent text-wall-ink-2'}`}
+                            className={`flex h-[80px] items-center gap-[14px] rounded-[16px] px-[18px] text-left ${chosen ? 'border-0 bg-wall-ink text-wall-on-pigment' : choice.memberId ? 'border border-solid border-wall-rule bg-wall-paper text-wall-ink' : 'border border-dashed border-wall-rule bg-transparent text-wall-ink-2'}`}
                           >
                             <span
                               aria-hidden="true"
@@ -765,7 +765,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
         {mode === 'place' && (
           <>
             <div className="flex items-center gap-[16px]">
-              <button type="button" aria-label="Back to editing" onClick={() => { setKeyboard(null); setMode('edit') }} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-transparent p-0 text-wall-ink">
+              <button type="button" aria-label="Back to editing" onClick={() => { setKeyboard(null); setMode('edit') }} className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-wall-rule bg-wall-paper p-0 text-wall-ink">
                 <ChevronLeft size={24} />
               </button>
               <div className={`${eyebrow} text-wall-brass-ink`}>PLACE FOR {head.trim().toUpperCase()}</div>

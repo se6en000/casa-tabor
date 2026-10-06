@@ -84,7 +84,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         {...pressHandlers(item)}
         className={`flex ${big ? 'min-h-[84px] gap-[16px] py-[12px]' : 'min-h-[56px] gap-[14px] py-[8px]'} w-full select-none items-center border-0 border-t border-solid border-wall-stone bg-transparent px-0 text-left text-wall-ink ${quiet ? 'opacity-50' : ''} ${lifted?.id === item.id ? 'rounded-[12px] bg-wall-brass/15 px-[8px] shadow-[0_6px_18px_rgba(38,34,29,0.2)]' : ''}`}
       >
-        <span className={`flex ${big ? 'h-[44px] w-[44px]' : 'h-[28px] w-[28px]'} shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.75px] border-solid border-wall-ink-2'}`}>
+        <span className={`flex ${big ? 'h-[44px] w-[44px]' : 'h-[28px] w-[28px]'} shrink-0 items-center justify-center rounded-full ${item.checked ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.75px] border-solid border-wall-ink-2 bg-wall-paper'}`}>
           {item.checked && <Check size={big ? 26 : 16} strokeWidth={3} />}
         </span>
         <span className={`flex-1 ${big ? 'text-phone-magnified' : 'text-phone-body'} font-medium ${item.checked ? 'text-wall-ink-2' : ''}`}>
@@ -100,7 +100,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
     <section aria-label="Groceries" className={`absolute inset-0 flex flex-col bg-phone-ground font-body text-wall-ink ${onBack ? 'z-20' : ''}`}>
       {onBack && (
         <div className="flex shrink-0 items-center gap-[12px] px-[20px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-          <button type="button" aria-label="Back" onClick={onBack} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+          <button type="button" aria-label="Back" onClick={onBack} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         </div>
       )}
       <div data-phone-scroll className="flex-1 overflow-y-auto overscroll-y-contain px-[20px] pb-[140px] pt-[14px]">
@@ -111,7 +111,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
           </div>
           <div className="flex shrink-0 items-center gap-[10px]">
             <button type="button" aria-label="Bigger text" aria-pressed={big} onClick={() => { haptic(); setBig((b) => !b) }}
-              className={`flex h-[44px] w-[44px] items-center justify-center rounded-full p-0 ${big ? 'border-0 bg-wall-brass text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+              className={`flex h-[44px] w-[44px] items-center justify-center rounded-full p-0 ${big ? 'border-0 bg-wall-brass text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
               {big ? <ZoomOut size={22} /> : <ZoomIn size={22} />}
             </button>
             {corner}
@@ -135,7 +135,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
             {showDone && (
               <>
                 {done.map((i) => row(i, true))}
-                <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[10px] flex h-[44px] items-center justify-center self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-phone-detail font-semibold text-wall-ink">
+                <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[10px] flex h-[44px] items-center justify-center self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[18px] text-phone-detail font-semibold text-wall-ink">
                   Clear them
                 </button>
               </>
@@ -182,7 +182,7 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         <section aria-label={`Move ${lifted.name}`} className="phone-sheet absolute inset-x-0 bottom-0 z-40 flex flex-col gap-[10px] rounded-t-[22px] bg-phone-ground px-[16px] pb-[max(18px,calc(env(safe-area-inset-bottom)+8px))] pt-[12px] shadow-[0_-12px_40px_rgba(38,34,29,0.2)]">
           <div className="flex items-center justify-between gap-[10px]">
             <span className="font-display text-phone-heading font-semibold text-wall-ink">Move {lifted.name} to…</span>
-            <button type="button" onClick={cancelLift} className="flex h-[44px] items-center rounded-full border border-solid border-wall-stone bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink">Cancel</button>
+            <button type="button" onClick={cancelLift} className="flex h-[44px] items-center rounded-full border border-solid border-wall-stone bg-wall-paper px-[14px] text-phone-detail font-semibold text-wall-ink">Cancel</button>
           </div>
           <div className="grid grid-cols-2 gap-[8px]">
             {ALL_AISLES.map((a) => {
@@ -229,7 +229,7 @@ function GroceryAdd({ data, onClose }: { data: PhoneGroceriesData; onClose: () =
         {chips.length > 0 && (
           <div className="-mx-[14px] flex gap-[8px] overflow-x-auto px-[14px]">
             {chips.map((n) => (
-              <button key={n} type="button" onClick={() => void submit(n)} className="flex h-[36px] shrink-0 items-center rounded-full border border-solid border-wall-stone bg-transparent px-[13px] text-phone-detail font-semibold text-wall-ink">+ {n}</button>
+              <button key={n} type="button" onClick={() => void submit(n)} className="flex h-[36px] shrink-0 items-center rounded-full border border-solid border-wall-stone bg-wall-paper px-[13px] text-phone-detail font-semibold text-wall-ink">+ {n}</button>
             ))}
           </div>
         )}

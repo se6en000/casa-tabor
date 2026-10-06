@@ -36,7 +36,7 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
         event.stopPropagation()
         onClick()
       }}
-      className={`h-[52px] shrink-0 whitespace-nowrap rounded-full px-[20px] text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+      className={`h-[52px] shrink-0 whitespace-nowrap rounded-full px-[20px] text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>
@@ -114,7 +114,7 @@ function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: ()
                   className="min-h-[56px] min-w-0 flex-1 border-0 bg-transparent p-0 text-left text-wall-body text-wall-ink">{g.idea}</button>
                 {onEdit && g.id && (removing === g.id
                   ? <Answer label="Yes, remove it" onClick={() => { setRemoving(null); void onEdit(g.id!, null) }} />
-                  : <button type="button" aria-label={`Remove “${g.idea}”`} onClick={() => setRemoving(g.id!)} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-rule bg-transparent p-0 text-wall-ink-2"><X size={20} /></button>)}
+                  : <button type="button" aria-label={`Remove “${g.idea}”`} onClick={() => setRemoving(g.id!)} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-rule bg-wall-paper p-0 text-wall-ink-2"><X size={20} /></button>)}
               </div>
             )))}
           </div>

@@ -19,7 +19,7 @@ export default function PhoneAddSheet({ onType, onSay, onScan, onClose }: { onTy
       <section {...swipe} aria-label="Add something" className="phone-sheet absolute bottom-0 left-0 flex w-full flex-col gap-[12px] rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="font-display text-phone-title font-bold text-wall-ink">Add something</div>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><X size={18} /></button>
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><X size={18} /></button>
         </div>
         {option(<Type size={22} />, 'Type it', 'An event or a reminder', onType)}
         {onSay && option(<Mic size={22} />, 'Say it', '“Add Jaida watching the kids Saturday 12 to 3”', onSay)}

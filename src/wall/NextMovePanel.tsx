@@ -78,7 +78,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions, onDetails, 
         {view.also && !actions && !onDetails && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
         {!actions && onDetails && (
           <div className="mt-[2px] flex items-center gap-[12px]">
-            <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); onDetails() }}>
+            <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); onDetails() }}>
               Details
             </button>
           </div>
@@ -88,12 +88,12 @@ export default function NextMovePanel({ view, pigmentIndex, actions, onDetails, 
         {actions && (
           <div className="mt-[2px] flex min-h-[48px] items-center gap-[12px]">
             {view.status === 'en_route' && view.departed && (
-              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onUndoLeaving() }}>
+              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onUndoLeaving() }}>
                 Not yet (undo)
               </button>
             )}
             {view.status === 'upcoming' && !view.driverId && (
-              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onHandOff() }}>
+              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onHandOff() }}>
                 Choose a driver
               </button>
             )}

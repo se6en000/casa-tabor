@@ -13,7 +13,7 @@ function Button({ label, primary = false, onClick }: { label: string; primary?: 
         event.stopPropagation()
         onClick()
       }}
-      className={`h-[64px] shrink-0 whitespace-nowrap rounded-full px-[26px] text-wall-body font-semibold ${primary ? 'border-0 bg-wall-brass text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+      className={`h-[64px] shrink-0 whitespace-nowrap rounded-full px-[26px] text-wall-body font-semibold ${primary ? 'border-0 bg-wall-brass text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>

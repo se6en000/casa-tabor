@@ -22,7 +22,7 @@ export function MenuButton({ onOpen, className = '' }: { onOpen: () => void; cla
         event.stopPropagation()
         onOpen()
       }}
-      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-wall-brass bg-transparent p-0 text-wall-ink ${className}`}
+      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-wall-brass bg-wall-paper p-0 text-wall-ink ${className}`}
     >
       <HouseMark />
     </button>
@@ -83,7 +83,7 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
         onAdd()
       }}
       // Brass like the MT button, so it reads on the daytime ground and the evening's dark one.
-      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-brass bg-transparent p-0 text-wall-brass-ink ${className}`}
+      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-brass bg-wall-paper p-0 text-wall-brass-ink ${className}`}
     >
       <Plus size={20} strokeWidth={2} />
     </button>
@@ -136,7 +136,7 @@ export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClo
                   key={p.face}
                   type="button"
                   onClick={() => onPreview(p.face)}
-                  className="h-[52px] rounded-full border border-wall-rule bg-transparent text-wall-detail font-semibold text-wall-ink"
+                  className="h-[52px] rounded-full border border-wall-rule bg-wall-paper text-wall-detail font-semibold text-wall-ink"
                 >
                   {p.label}
                 </button>
@@ -147,7 +147,7 @@ export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClo
         <button
           type="button"
           onClick={onClose}
-          className="mt-[16px] h-[52px] rounded-full border border-wall-rule bg-transparent text-wall-body font-semibold text-wall-ink"
+          className="mt-[16px] h-[52px] rounded-full border border-wall-rule bg-wall-paper text-wall-body font-semibold text-wall-ink"
         >
           Back to the Wall
         </button>

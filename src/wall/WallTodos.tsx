@@ -47,7 +47,7 @@ function Pill({ label, primary = false, onClick, small = false }: { label: strin
         event.stopPropagation()
         onClick()
       }}
-      className={`${small ? 'h-[44px] px-[16px]' : 'h-[52px] px-[20px]'} shrink-0 whitespace-nowrap rounded-full text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-transparent text-wall-ink'}`}
+      className={`${small ? 'h-[44px] px-[16px]' : 'h-[52px] px-[20px]'} shrink-0 whitespace-nowrap rounded-full text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>

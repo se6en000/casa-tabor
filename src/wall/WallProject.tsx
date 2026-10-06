@@ -181,7 +181,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
   const row = (s: ProjectStep, dark: boolean) => {
     const chip = (label: string, aria: string, onClick: () => void) => (
       <button type="button" aria-label={aria} onClick={(e) => { e.stopPropagation(); onClick() }}
-        className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-wall-label font-semibold ${dark ? 'border border-solid border-wall-night-ink-2 bg-transparent text-wall-night-ink' : 'border border-solid border-wall-stone bg-transparent text-wall-ink-2'}`}>{label}</button>
+        className={`h-[44px] shrink-0 whitespace-nowrap rounded-full px-[14px] text-wall-label font-semibold ${dark ? 'border border-solid border-wall-night-ink-2 bg-transparent text-wall-night-ink' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink-2'}`}>{label}</button>
     )
     const dragging = drag?.id === s.id
     if (s.child) {
@@ -200,8 +200,8 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
                 <span className={`truncate text-wall-label ${dark ? 'text-wall-night-ink-2' : 'text-wall-ink-2'}`}>{s.child.done} of {s.child.total}{s.child.next ? ` · next: ${s.child.next}` : ''}</span>
               </span>
             </div>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-transparent px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Open</button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); edit('take_out', { step_id: s.id }) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-transparent px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Take it out</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-wall-paper px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Open</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); edit('take_out', { step_id: s.id }) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-wall-paper px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Take it out</button>
           </div>
         </div>
       )
@@ -212,7 +212,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
         style={dragging ? { transform: `translateY(${drag!.dy}px)` } : undefined}>
         <Grip title={s.title} onDown={startDrag(s.id)} />
         <button type="button" aria-label={`Mark ${s.title} done`} onClick={(e) => { e.stopPropagation(); edit('done_step', { step_id: s.id }) }} className="flex h-[44px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0">
-          <span className={`h-[28px] w-[28px] rounded-full border-2 border-solid ${dark ? 'border-wall-night-brass' : 'border-wall-ink-2'}`} />
+          <span className={`h-[28px] w-[28px] rounded-full border-2 border-solid ${dark ? 'border-wall-night-brass' : 'border-wall-ink-2 bg-wall-paper'}`} />
         </button>
         <button type="button" aria-label={`Open ${s.title}`} onClick={(e) => { e.stopPropagation(); setQuick(null); setPicked((p) => (p === s.id ? null : s.id)) }} className={`min-w-0 flex-1 truncate border-0 bg-transparent p-0 text-left text-wall-body ${dark ? 'font-bold text-wall-night-ink' : 'font-semibold text-wall-ink'}`}>{s.title}</button>
         <span className="flex gap-[6px]">
@@ -258,9 +258,9 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
         <div className="flex shrink-0 gap-[12px]">
           {/* Change it by talking (P3.25 phase 4; Jake: "where is the button to invoke AI on the project screen?"). */}
           {onTalk && <button type="button" onClick={(e) => { e.stopPropagation(); onTalk(`Let’s work on the ${project.title} project.`) }} className="flex h-[52px] items-center gap-[10px] rounded-full border-0 bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment"><Mic size={20} aria-hidden="true" />Talk it through</button>}
-          <button type="button" onClick={(e) => { e.stopPropagation(); setSettings(true) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Project settings</button>
-          {detail.parent && <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(detail.parent!.id) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Back to {detail.parent.title}</button>}
-          <button type="button" onClick={(e) => { e.stopPropagation(); onBack() }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Back to the list</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setSettings(true) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Project settings</button>
+          {detail.parent && <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(detail.parent!.id) }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Back to {detail.parent.title}</button>}
+          <button type="button" onClick={(e) => { e.stopPropagation(); onBack() }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Back to the list</button>
         </div>
       </div>
 
@@ -269,7 +269,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
         <div className="flex shrink-0 items-center gap-[16px] rounded-[16px] border-2 border-solid border-wall-rust px-[20px] py-[12px]">
           <span className="text-wall-label font-bold tracking-[0.2em] text-wall-rust">CLOSED</span>
           <span className="min-w-0 flex-1 truncate text-wall-body">{project.closed_reason ? `${project.closed_reason.replace(/[.!]$/, '')}.` : 'This project is closed.'} Nothing here is on your list or calendar.</span>
-          <button type="button" onClick={(e) => { e.stopPropagation(); edit('reopen', {}) }} className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Reopen</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); edit('reopen', {}) }} className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Reopen</button>
         </div>
       )}
       <div aria-hidden="true" className="flex h-[12px] shrink-0 gap-[4px]">
@@ -412,7 +412,7 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
           {!deviceKeyboardHere() && <div className="absolute bottom-[430px] left-0 z-30 flex h-[84px] w-[1920px] items-center gap-[24px] bg-wall-on-pigment px-[44px]" onClick={(e) => e.stopPropagation()}>
             <span className="shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{TYPING_LABEL[typing.what]}</span>
             <span className="min-w-0 truncate font-display text-wall-date font-semibold">{typing.value}<span className="text-wall-brass">|</span></span>
-            <button type="button" onClick={() => setTyping(null)} className="ml-auto h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[22px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
+            <button type="button" onClick={() => setTyping(null)} className="ml-auto h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Cancel</button>
           </div>}
           <WallKeyboard key={`${typing.what}:${typing.stepId ?? ''}`} showsValue value={typing.value} onChange={(value) => setTyping((t) => t && { ...t, value })} onDone={finishTyping} onCancel={() => setTyping(null)} />
         </>

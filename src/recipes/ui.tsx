@@ -34,7 +34,7 @@ export function Round({ children, onClick, label, over, pressed }: { children: R
   const wall = useLayout() === 'wall'
   return (
     <button type="button" aria-label={label} aria-pressed={pressed} onClick={(e) => { e.stopPropagation(); onClick() }}
-      className={`flex shrink-0 items-center justify-center rounded-full p-0 text-wall-ink ${wall ? 'h-[60px] w-[60px]' : 'h-[44px] w-[44px]'} ${over ? 'border-0 bg-wall-on-pigment/90' : 'border border-solid border-wall-stone bg-transparent'}`}>
+      className={`flex shrink-0 items-center justify-center rounded-full p-0 text-wall-ink ${wall ? 'h-[60px] w-[60px]' : 'h-[44px] w-[44px]'} ${over ? 'border-0 bg-wall-on-pigment/90' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
       {children}
     </button>
   )
@@ -48,7 +48,7 @@ export function Chip({ children, on, onClick }: { children: ReactNode; on: boole
   const t = useT()
   return (
     <button type="button" aria-pressed={on} onClick={onClick}
-      className={`flex shrink-0 items-center gap-[6px] whitespace-nowrap rounded-full px-[16px] font-body font-semibold ${t.chip} ${t.detail} ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}>
+      className={`flex shrink-0 items-center gap-[6px] whitespace-nowrap rounded-full px-[16px] font-body font-semibold ${t.chip} ${t.detail} ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
       {children}
     </button>
   )

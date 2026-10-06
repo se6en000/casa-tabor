@@ -142,7 +142,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
   return (
     <section aria-label="Scan it" className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       <div className="flex shrink-0 items-center gap-[12px] border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[12px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
+        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">Scan it</h1>
       </div>
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={picked} />
@@ -192,7 +192,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
                   onClick={() => patch(item.id, (i) => ({ selected: !i.selected }))}
                   className="flex h-[44px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0"
                 >
-                  <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-2 border-solid ${item.selected ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>
+                  <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-2 border-solid ${item.selected ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>
                     {item.selected && <Check size={16} strokeWidth={3} />}
                   </span>
                 </button>
@@ -251,7 +251,7 @@ export default function PhoneScanSheet({ members, pigments, scan, createEvent, a
                       <span className="pt-[4px] text-phone-label font-bold tracking-[0.16em] text-wall-ink-2">PACK THE NIGHT BEFORE</span>
                       {(groups.packs[item.id] ?? []).map((p) => (
                         <button key={p.id} type="button" aria-pressed={p.selected} aria-label={`${p.selected ? 'Skip' : 'Pack'} ${p.title}`} onClick={() => patch(p.id, (i) => ({ selected: !i.selected }))} className="flex min-h-[44px] items-center gap-[10px] border-0 bg-transparent p-0 text-left text-phone-body text-wall-ink">
-                          <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 border-solid ${p.selected ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2'}`}>{p.selected && <Check size={14} strokeWidth={3} />}</span>
+                          <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 border-solid ${p.selected ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>{p.selected && <Check size={14} strokeWidth={3} />}</span>
                           <span className={p.selected ? '' : 'opacity-50'}>{p.title}</span>
                         </button>
                       ))}
