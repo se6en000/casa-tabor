@@ -1548,7 +1548,7 @@ test('wall: tapping a name opens their page beside the day — routines, what Ca
 // Canvas row 17 (Jake, 2026-09-30: "ok do this switch thing so I can test it"): the new listener behind a switch.
 // Take two (Jake: "too busy for our design … something smaller, like the mic"): a halo behind the mic.
 test('wall: the new listener — the mic\'s halo: it swells the moment you\'re louder than the room, settles a moment after, a held sentence fills an arc and a tap on the mic sends it', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
   // No rings, no LISTENING word, nothing under the words: the mic says it.
@@ -1573,7 +1573,7 @@ test('wall: the new listener — the mic\'s halo: it swells the moment you\'re l
 })
 
 test('wall: the new listener — loud with no voice detected is the room, not you; it says nothing about it', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen&listener=2')
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   const section = page.getByRole('region', { name: 'Assistant' })
   await expect.poll(() => starts(page)).toBeGreaterThan(0)
   // On the bridge's decibel scale: the room ~34, then something loud (60) with no voice detected.
@@ -1585,23 +1585,32 @@ test('wall: the new listener — loud with no voice detected is the room, not yo
   await expect(section.getByText('It’s loud in here')).toHaveCount(0)
 })
 
-test('wall: the new listener is a switch in the MT menu, remembered on the wall; off, the band is as before', async ({ page }) => {
+test('wall: the new listener is the only one — no switch in the menu, no Music (Jake, Oct 6: "its good and decided")', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'Open menu' }).click()
-  const toggle = wall.getByRole('switch', { name: 'Try the new listener' })
-  await expect(toggle).toHaveAttribute('aria-checked', 'false')
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-checked', 'true')
-  expect(await page.evaluate(() => localStorage.getItem('casa-wall-listener-v2'))).toBe('1')
-  // Flux is the speech to text now (Jake, Oct 1): its "Try Flux" switch is gone.
-  await expect(wall.getByRole('switch', { name: 'Try Flux' })).toHaveCount(0)
+  await expect(wall.getByRole('link', { name: 'Calendar' })).toBeVisible()
+  await expect(wall.getByRole('switch', { name: 'Try the new listener' })).toHaveCount(0)
+  await expect(wall.getByText('Try the new listener')).toHaveCount(0)
+  await expect(wall.getByRole('link', { name: 'Music' })).toHaveCount(0)
+  // It opens under the mark that opened it (Jake, Oct 6: "can settings menu show up near the MT button?"): top left
+  // on the launch face, top right on the others.
+  const under = async () => {
+    const menu = await wall.getByRole('navigation').boundingBox()
+    const button = await wall.getByRole('button', { name: 'Open menu' }).boundingBox()
+    return { left: Math.abs(menu.x - button.x), right: Math.abs(menu.x + menu.width - (button.x + button.width)), below: menu.y - (button.y + button.height) }
+  }
+  let gap = await under()
+  expect(gap.left).toBeLessThan(2)
+  expect(gap.below).toBeGreaterThan(0)
+  expect(gap.below).toBeLessThan(20)
+  await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  gap = await under()
+  expect(gap.right).toBeLessThan(2)
+  expect(gap.below).toBeLessThan(20)
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   await expect(page.getByRole('region', { name: 'Assistant' }).locator('[data-listener]')).toBeVisible()
-  await page.evaluate(() => localStorage.removeItem('casa-wall-listener-v2'))
-  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
-  await expect(page.getByRole('region', { name: 'Assistant' }).getByText('LISTENING', { exact: true }).first()).toBeVisible()
-  await expect(page.locator('[data-listener]')).toHaveCount(0)
 })
 
 // Jake, 2026-10-01: "today should show the get and pack section … able to see what was checked off" — the evening's

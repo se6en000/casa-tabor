@@ -311,3 +311,56 @@ test('settings: pets — Milo is one; adding a pet starts it off the wall', asyn
   await sheet.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(s.getByRole('region', { name: 'Not on the wall' })).toContainText('Biscuit')
 })
+
+// Jake, Oct 6: "allow me to dig into this information more, click and show me the details, allow me to edit the bugs
+// captured, prioritize, delete if not relevant any more".
+test('settings: checks — each line opens; the assistant’s results, one in full', async ({ page }) => {
+  const s = await open(page, { page: 'checks' })
+  await s.getByRole('button', { name: /^The assistant/ }).click()
+  const all = page.getByRole('region', { name: 'The assistant' })
+  await expect(all).toContainText('A calendar question')
+  await all.getByRole('button', { name: /^Marking a to-do done/ }).click()
+  const one = page.getByRole('region', { name: 'Marking a to-do done' })
+  await expect(one).toContainText('expected a complete_reminder card')
+  await expect(one).toContainText('update event · title: Order groceries for travel (done)')
+  await expect(one).toContainText('2.1 s')
+  await expect(page).toHaveScreenshot('settings-check-result.png')
+  await one.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('region', { name: 'The assistant' })).toBeVisible()
+})
+
+test('settings: the bug box — urgent first; set priority, edit, mark fixed, delete', async ({ page }) => {
+  const s = await open(page, { page: 'checks' }, { width: 1280, height: 800 })
+  const box = s.getByRole('region', { name: 'Bug box · 3 open' })
+  const rows = box.getByRole('button')
+  await expect(rows.first()).toContainText('Email reader') // High first
+  await rows.filter({ hasText: 'Review event enrichment' }).click()
+  const sheet = page.getByRole('region', { name: /^Bug: Review event enrichment/ })
+  await sheet.getByRole('tab', { name: 'Urgent' }).click()
+  await expect(sheet.getByRole('status')).toHaveText('Priority: Urgent')
+  await sheet.getByRole('textbox', { name: 'Details' }).fill('Look at the last month of enrichments.')
+  await sheet.getByRole('tab', { name: 'Working on it' }).click()
+  await expect(page).toHaveScreenshot('settings-bug-sheet.png')
+  await sheet.getByRole('button', { name: 'Done' }).click()
+  await expect(rows.first()).toContainText('Review event enrichment') // now Urgent, so first
+  await expect(rows.first()).toContainText('Urgent · Working on it')
+  await rows.first().click()
+  await expect(page.getByRole('textbox', { name: 'Details' })).toHaveValue('Look at the last month of enrichments.')
+  await page.getByRole('button', { name: 'It’s fixed' }).click()
+  await expect(s.getByRole('region', { name: 'Bug box · 2 open' })).toBeVisible()
+  await s.getByRole('button', { name: 'Show the 2 closed' }).click()
+  await s.getByRole('region', { name: 'Closed' }).getByRole('button', { name: /Address update/ }).click()
+  const closed = page.getByRole('region', { name: /^Bug: Address update/ })
+  await closed.getByRole('button', { name: 'Delete' }).click()
+  await closed.getByRole('button', { name: 'Tap again to delete for good' }).click()
+  await expect(closed).toHaveCount(0)
+  await expect(s.getByRole('region', { name: 'Closed' }).getByRole('button')).toHaveCount(1)
+  await expect(s.getByRole('region', { name: 'Closed' })).not.toContainText('Address update')
+})
+
+test('settings: checks — a night in the last two weeks shows that night', async ({ page }) => {
+  const s = await open(page, { page: 'checks' })
+  const nights = s.getByRole('list', { name: 'Nights' }).getByRole('listitem')
+  await nights.nth(7).click()
+  await expect(s.getByRole('region', { name: /^The night of · / })).toBeVisible()
+})

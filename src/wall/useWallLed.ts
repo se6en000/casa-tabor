@@ -25,6 +25,9 @@ export function useWallLed(bandOpen: boolean, now: Date) {
     queryKey: settingsQueryKey('display_config'),
     queryFn: async () => (await getSetting<DisplayConfig>('display_config')).data,
     staleTime: 60_000,
+    // The kiosk never reloads or refocuses, so without this a change in Settings (night glow, sleep, brightness —
+    // they share this query) reached the wall only at its next reload (Jake, Oct 6: "does the night glow actually work?").
+    refetchInterval: 60_000,
   })
   const night = isLedNight(now)
   const mode = wallLedMode({ bandOpen, bandState: band.state, micOpen: band.micOpen, closing: band.closing, night, glowEnabled: config?.led_night_glow !== false })

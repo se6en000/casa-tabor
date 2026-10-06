@@ -1,15 +1,13 @@
 import { Mic, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
-import { setListenerV2, useListenerV2 } from './listenerSwitch'
 
-// The MT monogram opens the rest of the app. On the kiosk, each page's Home
+// The Tabor House mark (was the MT monogram) opens the rest of the app. On the kiosk, each page's Home
 // button — and a few idle minutes — bring it back to the Wall (kioskHome.ts).
 const DESTINATIONS = [
   { to: '/calendar', label: 'Calendar' },
   { to: '/wall/grocery', label: 'Grocery list' },
   { to: '/cook', label: 'Meals & kitchen' },
-  { to: '/music', label: 'Music' },
   { to: '/briefing', label: 'Briefing' },
   { to: '/settings', label: 'Settings' },
   { to: '/?classic=1', label: 'Previous home screen' },
@@ -24,10 +22,25 @@ export function MenuButton({ onOpen, className = '' }: { onOpen: () => void; cla
         event.stopPropagation()
         onOpen()
       }}
-      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-wall-brass bg-transparent p-0 font-display text-wall-detail font-bold text-wall-brass-ink ${className}`}
+      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-wall-brass bg-transparent p-0 text-wall-ink ${className}`}
     >
-      MT
+      <HouseMark />
     </button>
+  )
+}
+
+/**
+ * The Tabor House mark (the app icon, canvas 38l): the serif T, a brass rule, HOUSE; the button's brass edge is its
+ * ring (Jake, Oct 6: "replace the MT button icon with the Tabor House icon"). Drawn, not the PNG, so it takes the
+ * evening face's colours.
+ */
+function HouseMark() {
+  return (
+    <svg viewBox="0 0 44 44" width="42" height="42" aria-hidden="true" className="font-display">
+      <text x="22" y="27" textAnchor="middle" fontSize="25" fontWeight="500" fill="currentColor">T</text>
+      <line x1="17.5" y1="30.5" x2="26.5" y2="30.5" strokeWidth="0.9" className="stroke-wall-brass" />
+      <text x="22.5" y="36.6" textAnchor="middle" fontSize="4.4" letterSpacing="0.9" fontWeight="600" className="fill-wall-brass-ink font-body">HOUSE</text>
+    </svg>
   )
 }
 
@@ -77,37 +90,18 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
   )
 }
 
-/** Try the new listener (canvas row 17) on this wall; off by default until it's approved as the one. */
-function ListenerSwitch() {
-  const on = useListenerV2()
-  return (
-    <div className="mt-[14px] flex items-center gap-[16px] border-t border-wall-rule pt-[14px]">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-wall-detail font-semibold">Try the new listener</span>
-        <span className="text-wall-label text-wall-ink-2">One voice line under your words; the fuse</span>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-label="Try the new listener"
-        onClick={() => setListenerV2(!on)}
-        className={`h-[52px] shrink-0 rounded-full px-[22px] text-wall-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
-      >
-        {on ? 'On' : 'Off'}
-      </button>
-    </div>
-  )
-}
-
 const PREVIEWS: Array<{ posture: Posture; label: string }> = [
   { posture: 'launch', label: 'Full day' },
   { posture: 'calm', label: 'Calm' },
   { posture: 'evening', label: 'Evening' },
 ]
 
-/** The MT menu: the rest of the app, and (since a tap on the wall no longer flips faces) a way to preview each face. */
-export default function WallMenu({ onClose, onPreview }: { onClose: () => void; onPreview?: (posture: Posture) => void }) {
+/**
+ * The menu: the rest of the app, and (since a tap on the wall no longer flips faces) a way to preview each face. It
+ * opens under the mark that opened it — top right on the day faces, top left on the launch face (Jake, Oct 6: "can
+ * settings menu show up near the MT button?").
+ */
+export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (posture: Posture) => void; side?: 'left' | 'right' }) {
   return (
     <div
       role="dialog"
@@ -119,7 +113,7 @@ export default function WallMenu({ onClose, onPreview }: { onClose: () => void; 
       }}
     >
       <nav
-        className="absolute left-[44px] top-[44px] flex w-[520px] flex-col rounded-[18px] bg-wall-ground px-[32px] py-[28px] font-body text-wall-ink"
+        className={`absolute ${side === 'left' ? 'left-[44px]' : 'right-[44px]'} top-[100px] flex w-[520px] flex-col rounded-[18px] bg-wall-ground px-[32px] py-[28px] font-body text-wall-ink`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-[12px] text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">TABOR HOUSE</div>
@@ -149,7 +143,6 @@ export default function WallMenu({ onClose, onPreview }: { onClose: () => void; 
             </div>
           </div>
         )}
-        <ListenerSwitch />
         <button
           type="button"
           onClick={onClose}

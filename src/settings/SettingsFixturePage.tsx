@@ -3,7 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsRoot from './SettingsRoot'
 import { liveSource } from './liveSource'
-import type { LightReading, MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
+import type { BugReport, LightReading, MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
+import { sortBugs } from './model'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { MemberWithConnection } from '../hooks/useCalendarConnections'
@@ -95,9 +96,23 @@ const USAGE: UsageSummary = {
 }
 const CHECKS: NightlyCheck[] = [
   { run_date: '2026-10-06', kind: 'screens', ok: true, summary: 'Thu Oct 6 3:43 AM passed — 412 passed', details: [], created_at: at('2026-10-06T03:43:00-04:00') },
-  { run_date: '2026-10-06', kind: 'assistant', ok: false, summary: '1 of 18 assistant checks failed: Marking a to-do done', details: [{ situation: 'Marking a to-do done', said: 'I finished order groceries for travel', ok: false, problem: 'expected a complete_reminder card, got a update_event card' }], created_at: at('2026-10-06T03:04:00-04:00') },
+  { run_date: '2026-10-06', kind: 'assistant', ok: false, summary: '1 of 18 assistant checks failed: Marking a to-do done', details: [{ situation: 'Marking a to-do done', said: 'I finished order groceries for travel', ok: false, problem: 'expected a complete_reminder card, got a update_event card', got: { text: 'Update: title → "Order groceries for travel (done)"', tool: 'update_event', ms: 2140, args: { title: 'Order groceries for travel (done)' } } }, { situation: 'A calendar question', said: 'What do we have going on tomorrow?', ok: true, problem: null, got: { text: 'Tomorrow: Liv’s reading test, softball at 6.', tool: null, ms: 3700 } }], created_at: at('2026-10-06T03:04:00-04:00') },
   ...Array.from({ length: 12 }, (_, i): NightlyCheck => ({ run_date: new Date(Date.UTC(2026, 8, 24 + i)).toISOString().slice(0, 10), kind: 'screens', ok: i !== 7, summary: '', details: [], created_at: at('2026-10-01T03:40:00Z') })),
 ]
+
+/** The bug box, a store like the family's (an edit shows in the list behind the sheet). */
+let bugBox: BugReport[] = sortBugs([
+  { id: 'b1', title: 'Review event enrichment: is it still helping, or making noise?', details: 'Jake: “we should review what it does and if it’s helping or creating noise.”', severity: 'medium', status: 'open', source: 'user', created_at: at('2026-10-01T19:24:00Z'), member_name: 'Jake', page: null, transcript: null },
+  { id: 'b2', title: 'Email reader: a reminder for an event already on the calendar is filed as nothing actionable', details: 'Pink Shirt & Packed Lunch Tomorrow!', severity: 'high', status: 'open', source: 'user', created_at: at('2026-10-01T18:49:00Z'), member_name: 'Jake', page: null, transcript: null },
+  { id: 'b3', title: 'The listening light should move with your voice', details: null, severity: 'low', status: 'in_progress', source: 'user', created_at: at('2026-09-30T23:01:00Z'), member_name: null, page: 'wall', transcript: [{ role: 'user', text: 'Can the light move when it hears words?' }, { role: 'assistant', text: 'I’ve filed that.' }] },
+  { id: 'b4', title: 'Address update was incomplete', details: null, severity: 'medium', status: 'resolved', source: 'user', created_at: at('2026-10-04T15:00:00Z'), member_name: 'Kelly', page: 'phone', transcript: null },
+])
+const bugListeners = new Set<() => void>()
+const bugStore = {
+  get: () => bugBox,
+  sub: (fn: () => void) => { bugListeners.add(fn); return () => bugListeners.delete(fn) },
+  set: (next: BugReport[]) => { bugBox = sortBugs(next); bugListeners.forEach((fn) => fn()) },
+}
 
 /** The fixture's family, shared by every page (an edit shows everywhere, as the live list does). */
 let family = MEMBERS
@@ -190,6 +205,11 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     },
     useChecks: () => CHECKS,
     useBugs: () => ({ open: 4, newest: at('2026-10-01T18:15:00Z') }),
+    useBugBox: () => ({
+      bugs: useSyncExternalStore(bugStore.sub, bugStore.get),
+      edit: async (id, patch) => { bugStore.set(bugBox.map((b) => (b.id === id ? { ...b, ...patch } : b))); return { ok: true } },
+      remove: async (id) => { bugStore.set(bugBox.filter((b) => b.id !== id)); return { ok: true } },
+    }),
     run: ok,
     checkOwnerPin: async (_id, pin) => pin === '123456',
     useWallHardware: () => (onWall ? { sensorOk: true, listener: 'ready', wakeScore: 0.12, panel: { min: 0, max: 100 } } : { sensorOk: null, listener: null, wakeScore: null, panel: null }),

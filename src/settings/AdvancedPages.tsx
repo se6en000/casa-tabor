@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useSource } from './data'
-import { ago, money, nightStatus } from './model'
-import { Action, Group, Label, Quiet, Row, Stepper, Toggle } from './ui'
+import { useSource, type BugPatch, type NightlyCheck, type BugReport, type SaveResult } from './data'
+import { ago, BUG_PRIORITIES, BUG_STATUSES, bugIsOpen, checkLine, money, nightStatus, screenFailures, type BugStatus } from './model'
+import { Action, Group, Label, Quiet, Row, Seg, Sheet, Stepper, Toggle } from './ui'
 import { useSize, useType } from './sizing'
 import { useSaveNote } from './saveNote'
 
@@ -148,41 +148,197 @@ export function LimitsPage({ head }: { head: ReactNode }) {
 }
 
 // ── Checks ──────────────────────────────────────────────────────────────────────────────────────────────
+// Every line opens (Jake, Oct 6: "allow me to dig into this information more, click and show me the details, allow me
+// to edit the bugs captured, prioritize, delete if not relevant any more").
+type AssistantResult = Exclude<NightlyCheck['details'][number], string>
+const isResult = (d: unknown): d is AssistantResult => typeof d === 'object' && d !== null
+const nightName = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+const priorityName = (v: string) => BUG_PRIORITIES.find((p) => p.value === v)?.label ?? 'Normal'
+
 export function ChecksPage({ head }: { head: ReactNode }) {
   const src = useSource()
   const t = useType()
   const now = src.now()
   const checks = src.useChecks()
-  const bugs = src.useBugs()
-  const lastDate = checks?.[0]?.run_date ?? null
-  const last = (checks ?? []).filter((c) => c.run_date === lastDate)
-  const failures = last.flatMap((c) => (c.details ?? []).filter((d): d is { situation?: string; said?: string; ok?: boolean; problem?: string | null } => typeof d === 'object' && d !== null && d.ok === false))
+  const box = src.useBugBox()
+  const [night, setNight] = useState<string | null>(null)
+  const [open, setOpen] = useState<{ kind: 'screens' } | { kind: 'assistant' } | { kind: 'result'; r: AssistantResult } | { kind: 'bug'; id: string } | null>(null)
+  const [showClosed, setShowClosed] = useState(false)
+  const nights = checks ? nightStatus(checks) : []
+  const shownDate = night ?? checks?.[0]?.run_date ?? null
+  const shown = (checks ?? []).filter((c) => c.run_date === shownDate)
+  const screens = shown.find((c) => c.kind === 'screens') ?? null
+  const assistant = shown.find((c) => c.kind === 'assistant') ?? null
+  const results = (assistant?.details ?? []).filter(isResult) as AssistantResult[]
+  const failures = results.filter((r) => r.ok === false)
+  const bugs = box.bugs ?? []
+  const openBugs = bugs.filter((b) => bugIsOpen(b.status))
+  const closedBugs = bugs.filter((b) => !bugIsOpen(b.status))
+  const bug = open?.kind === 'bug' ? bugs.find((b) => b.id === open.id) ?? null : null
   return (
     <div>
       {head}
-      <Group label={lastDate ? `Last run · ${new Date(`${lastDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` : 'Last run'}>
-        {checks == null ? <Quiet>Loading…</Quiet> : last.length === 0 ? <Quiet>No run yet. The first one is tonight at 3 AM.</Quiet> : last.map((c) => (
-          <Row key={c.kind + c.created_at} name={c.kind === 'assistant' ? 'The assistant' : 'Screens'} state={c.summary} tone={c.ok ? 'good' : 'rust'} />
+      <Group label={shownDate ? `${night && night !== checks?.[0]?.run_date ? 'The night of' : 'Last run'} · ${nightName(shownDate)}` : 'Last run'}>
+        {checks == null ? <Quiet>Loading…</Quiet> : shown.length === 0 ? <Quiet>No run yet. The first one is tonight at 3 AM.</Quiet> : shown.map((c) => (
+          <Row key={c.kind + c.created_at} name={c.kind === 'assistant' ? 'The assistant' : 'Screens'} state={checkLine(c)} tone={c.ok ? 'good' : 'rust'}
+            onClick={() => setOpen({ kind: c.kind })} />
         ))}
       </Group>
       {failures.length > 0 && (
         <Group label="What failed">
-          {failures.map((f, i) => <Row key={i} name={f.situation ?? 'A check'} state={`“${f.said ?? ''}” — ${f.problem ?? ''}`} tone="rust" />)}
+          {failures.map((f, i) => <Row key={i} name={f.situation ?? 'A check'} state={`“${f.said ?? ''}”`} tone="rust" onClick={() => setOpen({ kind: 'result', r: f })} />)}
         </Group>
       )}
-      {checks && checks.length > 0 && (
+      {nights.length > 0 && (
         <>
           <Label>The last two weeks</Label>
-          <div className="flex flex-wrap gap-[6px] px-[4px]" role="list" aria-label="Nights">
-            {nightStatus(checks).map((n) => <span key={n.date} role="listitem" aria-label={`${n.date}: ${n.ok ? 'all passed' : 'something failed'}`} className={`h-[18px] w-[18px] rounded-[5px] ${n.ok ? 'bg-wall-pigment-6' : 'bg-wall-rust'}`} />)}
+          <div className="flex flex-wrap gap-[2px] px-[4px]" role="list" aria-label="Nights">
+            {nights.map((n) => (
+              <button key={n.date} type="button" role="listitem" aria-label={`${nightName(n.date)}: ${n.ok ? 'all passed' : 'something failed'}`} aria-pressed={n.date === shownDate}
+                onClick={() => setNight(n.date)} className="flex h-[44px] w-[30px] items-center justify-center border-0 bg-transparent p-0">
+                <span className={`h-[20px] w-[20px] rounded-[5px] ${n.ok ? 'bg-wall-pigment-6' : 'bg-wall-rust'} ${n.date === shownDate ? 'ring-2 ring-wall-ink ring-offset-2 ring-offset-phone-ground' : ''}`} />
+              </button>
+            ))}
           </div>
         </>
       )}
-      <Group label="Bug box">
-        <Row name={bugs ? `${bugs.open} open` : 'Open reports'} state={bugs?.newest ? `Newest ${ago(bugs.newest, now)}` : 'Hold the bug icon on the phone to report one'} />
+      <Group label={`Bug box · ${box.bugs ? `${openBugs.length} open` : '…'}`}>
+        {box.bugs == null ? <Quiet>Loading…</Quiet> : openBugs.length === 0 ? <Quiet>Nothing open. Hold the bug icon on the phone to report one.</Quiet> : openBugs.map((b) => (
+          <Row key={b.id} name={b.title} state={bugLine(b, now)} tone={b.severity === 'critical' || b.severity === 'high' ? 'rust' : 'quiet'} onClick={() => setOpen({ kind: 'bug', id: b.id })} />
+        ))}
       </Group>
+      {closedBugs.length > 0 && (
+        <div className="mt-[8px] px-[4px]">
+          <Action tone="quiet" onClick={() => setShowClosed(!showClosed)}>{showClosed ? 'Hide the closed ones' : `Show the ${closedBugs.length} closed`}</Action>
+        </div>
+      )}
+      {showClosed && closedBugs.length > 0 && (
+        <Group label="Closed">
+          {closedBugs.map((b) => <Row key={b.id} name={b.title} state={bugLine(b, now)} onClick={() => setOpen({ kind: 'bug', id: b.id })} />)}
+        </Group>
+      )}
       <p className={`m-0 mt-[10px] px-[4px] text-wall-ink-2 ${t.detail}`}>A failed night sends you an email at 7:30 AM; a good one sends nothing.</p>
+
+      {open?.kind === 'screens' && screens && (
+        <Sheet label="Screens" onClose={() => setOpen(null)}>
+          <SheetHead title="Screens" sub={`${nightName(screens.run_date)} · ${screens.summary.replace(/\s*\(log:.*\)\s*$/, '')}`} />
+          {screens.ok ? <Quiet>Every screen looked the way it should.</Quiet> : (
+            <Group>
+              {screenFailures(screens.details).map((f, i) => <Row key={i} name={f.name} state={`${f.area} · ${f.where}`} tone="rust" />)}
+            </Group>
+          )}
+          <p className={`m-0 mt-[10px] px-[4px] text-wall-ink-2 ${t.detail}`}>A screen fails when it no longer matches its saved picture: a real break, or an intended change whose picture wasn’t updated.</p>
+          <SheetClose onClose={() => setOpen(null)} />
+        </Sheet>
+      )}
+      {open?.kind === 'assistant' && assistant && (
+        <Sheet label="The assistant" onClose={() => setOpen(null)}>
+          <SheetHead title="The assistant" sub={`${nightName(assistant.run_date)} · ${checkLine(assistant)}`} />
+          <Group>
+            {results.map((r, i) => <Row key={i} name={r.situation ?? 'A check'} state={`${r.ok ? '' : 'Failed · '}“${r.said ?? ''}”`} tone={r.ok ? 'quiet' : 'rust'}
+              lead={<span aria-hidden="true" className={`h-[10px] w-[10px] shrink-0 rounded-full ${r.ok ? 'bg-wall-pigment-6' : 'bg-wall-rust'}`} />}
+              onClick={() => setOpen({ kind: 'result', r })} />)}
+          </Group>
+          <SheetClose onClose={() => setOpen(null)} />
+        </Sheet>
+      )}
+      {open?.kind === 'result' && (
+        <Sheet label={open.r.situation ?? 'A check'} onClose={() => setOpen(assistant ? { kind: 'assistant' } : null)}>
+          <SheetHead title={open.r.situation ?? 'A check'} sub={open.r.ok ? 'Passed' : 'Failed'} tone={open.r.ok ? 'good' : 'rust'} />
+          <Detail label="Said to it">“{open.r.said}”</Detail>
+          {open.r.problem && <Detail label="What went wrong" tone="rust">{open.r.problem}</Detail>}
+          <Detail label="What came back">{open.r.got?.text || '(nothing said)'}</Detail>
+          {open.r.got?.tool && <Detail label="Card">{open.r.got.tool.replace(/_/g, ' ')}{Object.keys(open.r.got.args ?? {}).length > 0 ? ` · ${Object.entries(open.r.got.args ?? {}).filter(([k]) => k !== 'id' && k !== 'expected_updated_at').map(([k, v]) => `${k.replace(/_/g, ' ')}: ${Array.isArray(v) ? v.join(', ') : String(v)}`).join(' · ')}` : ''}</Detail>}
+          {open.r.got?.ms != null && <Detail label="Took">{(open.r.got.ms / 1000).toFixed(1)} s</Detail>}
+          <SheetClose onClose={() => setOpen(assistant ? { kind: 'assistant' } : null)} label="Back" />
+        </Sheet>
+      )}
+      {bug && <BugSheet key={bug.id} bug={bug} now={now} edit={box.edit} remove={box.remove} onClose={() => setOpen(null)} />}
     </div>
+  )
+}
+
+function bugLine(b: BugReport, now: Date): string {
+  const status = BUG_STATUSES.find((s) => s.value === b.status)?.label ?? (b.status === 'resolved' ? 'Fixed' : 'Not relevant')
+  return [priorityName(b.severity), b.status === 'open' ? null : status, b.member_name, ago(b.created_at, now)].filter(Boolean).join(' · ')
+}
+
+function SheetHead({ title, sub, tone = 'quiet' }: { title: string; sub?: string; tone?: 'quiet' | 'rust' | 'good' }) {
+  const t = useType()
+  return (
+    <>
+      <h2 className={`m-0 font-display font-semibold text-wall-ink ${t.heading}`}>{title}</h2>
+      {sub && <p className={`m-0 mb-[6px] mt-[4px] ${t.detail} ${{ quiet: 'text-wall-ink-2', rust: 'text-wall-rust', good: 'text-wall-pigment-6' }[tone]}`}>{sub}</p>}
+    </>
+  )
+}
+
+function SheetClose({ onClose, label = 'Done' }: { onClose: () => void; label?: string }) {
+  return <div className="mt-[10px] flex justify-end"><Action onClick={onClose}>{label}</Action></div>
+}
+
+function Detail({ label, children, tone }: { label: string; children: ReactNode; tone?: 'rust' }) {
+  const t = useType()
+  return (
+    <div className="mt-[14px] px-[4px]">
+      <div className={`font-semibold uppercase tracking-[0.18em] text-wall-ink-2 ${t.label}`}>{label}</div>
+      <div className={`mt-[4px] whitespace-pre-wrap break-words ${t.body} ${tone === 'rust' ? 'text-wall-rust' : 'text-wall-ink'}`}>{children}</div>
+    </div>
+  )
+}
+
+/** One report: rename it, say more, set its priority and state, close it, or delete it. */
+function BugSheet({ bug, now, edit, remove, onClose }: { bug: BugReport; now: Date; edit: (id: string, patch: BugPatch) => Promise<SaveResult>; remove: (id: string) => Promise<SaveResult>; onClose: () => void }) {
+  const t = useType()
+  const [title, setTitle] = useState(bug.title)
+  const [details, setDetails] = useState(bug.details ?? '')
+  const [sure, setSure] = useState(false)
+  const [note, show] = useSaveNote()
+  const save = async (patch: BugPatch, saved = 'Saved') => show(await edit(bug.id, patch), saved)
+  const conversation = (bug.transcript ?? []).filter((m) => m.text)
+  const field = `w-full rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-body text-wall-ink ${t.body}`
+  const isOpen = bugIsOpen(bug.status)
+  return (
+    <Sheet label={`Bug: ${bug.title}`} onClose={onClose}>
+      <p className={`m-0 text-wall-ink-2 ${t.detail}`}>{[bug.member_name ? `From ${bug.member_name}` : bug.source === 'assistant' ? 'Filed by the assistant' : null, bug.page ? `on ${bug.page}` : null, new Date(bug.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + (now.getTime() - Date.parse(bug.created_at) < 86_400_000 ? ` (${ago(bug.created_at, now)})` : '')].filter(Boolean).join(' · ')}</p>
+      <textarea aria-label="What’s wrong" value={title} rows={2} onChange={(e) => setTitle(e.target.value)} onBlur={() => { if (title.trim() && title.trim() !== bug.title) void save({ title: title.trim() }) }}
+        className={`mt-[10px] resize-none py-[10px] font-display font-semibold ${field} ${t.heading}`} />
+      <Label>Priority</Label>
+      <Seg label="Priority" value={bug.severity} onChange={(severity) => void save({ severity }, `Priority: ${priorityName(severity)}`)} options={BUG_PRIORITIES} />
+      {isOpen && (
+        <>
+          <Label>Where it stands</Label>
+          <Seg label="Where it stands" value={bug.status as BugStatus} onChange={(status) => void save({ status })} options={BUG_STATUSES} />
+        </>
+      )}
+      <Label>Details</Label>
+      <textarea aria-label="Details" value={details} rows={5} placeholder="What happened, what you expected" onChange={(e) => setDetails(e.target.value)} onBlur={() => { if (details !== (bug.details ?? '')) void save({ details }) }}
+        className={`resize-y py-[10px] ${field}`} />
+      {conversation.length > 0 && (
+        <>
+          <Label>The conversation it came from</Label>
+          <div className="flex flex-col gap-[8px] px-[4px]">
+            {conversation.map((m, i) => (
+              <p key={i} className={`m-0 ${t.detail} ${m.role === 'user' ? 'text-wall-ink' : 'text-wall-ink-2'}`}><span className="font-semibold">{m.role === 'user' ? 'Said' : 'Answer'}:</span> {m.text}</p>
+            ))}
+          </div>
+        </>
+      )}
+      {note}
+      <div className="mt-[16px] flex flex-wrap items-center gap-x-[22px] gap-y-[4px] border-0 border-t border-solid border-wall-stone pt-[10px]">
+        {isOpen ? (
+          <>
+            <Action onClick={async () => { const r = await edit(bug.id, { status: 'resolved' }); show(r, 'Marked fixed.'); if (r.ok) onClose() }}>It’s fixed</Action>
+            <Action tone="quiet" onClick={async () => { const r = await edit(bug.id, { status: 'wont_fix' }); show(r, 'Closed.'); if (r.ok) onClose() }}>Not relevant any more</Action>
+          </>
+        ) : (
+          <Action onClick={() => void save({ status: 'open' }, 'Open again.')}>Open it again</Action>
+        )}
+        <Action tone="rust" onClick={async () => { if (!sure) { setSure(true); return } const r = await remove(bug.id); show(r, 'Deleted.'); if (r.ok) onClose() }}>{sure ? 'Tap again to delete for good' : 'Delete'}</Action>
+        <span className="flex-1" />
+        <Action tone="quiet" onClick={onClose}>Done</Action>
+      </div>
+    </Sheet>
   )
 }
 

@@ -178,3 +178,49 @@ export function moveInOrder(personId: string, dir: -1 | 1, ordered: Placed[], sh
     { id: b.id, sort_order: nb, pigment: (shown.get(b.id) ?? 0) % 6 },
   ]
 }
+
+// ── Checks you can dig into (Jake, Oct 6: "click and show me the details, allow me to edit the bugs captured,
+// prioritize, delete if not relevant any more") ─────────────────────────────────────────────────────────────
+interface CheckLike { kind: 'assistant' | 'screens'; ok: boolean; summary: string; details: unknown[] }
+
+/** A night's check in a short line: "11 screens failed", "1 of 18 assistant checks failed". */
+export function checkLine(c: CheckLike): string {
+  if (c.kind === 'screens') {
+    if (c.ok) return 'Screens all passed'
+    const n = Number(/(\d+) failed/.exec(c.summary)?.[1])
+    return Number.isFinite(n) && n > 0 ? `${n} screen${n === 1 ? '' : 's'} failed` : 'Screens failed'
+  }
+  return c.summary.split(':')[0].trim()
+}
+
+export interface ScreenFailure { area: string; name: string; where: string }
+const AREAS: Record<string, string> = { wall: 'The wall', phone: 'The phone', settings: 'Settings' }
+
+/** A screens run's failures ("visual-regression/wall.spec.mjs:1100:1 › wall: …"), in words. Its first line is the summary. */
+export function screenFailures(details: unknown[]): ScreenFailure[] {
+  return details.flatMap((d) => {
+    const m = typeof d === 'string' ? /([a-z-]+)\.spec\.mjs:(\d+)(?::\d+)?\s*›\s*(?:([a-z]+):\s*)?(.*)$/.exec(d) : null
+    if (!m) return []
+    const name = m[4].trim()
+    return [{ area: AREAS[m[1]] ?? m[1], name: name.charAt(0).toUpperCase() + name.slice(1), where: `${m[1]}.spec.mjs:${m[2]}` }]
+  })
+}
+
+export type BugSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type BugStatus = 'open' | 'in_progress' | 'blocked' | 'resolved' | 'wont_fix'
+export const BUG_PRIORITIES: Array<{ value: BugSeverity; label: string }> = [
+  { value: 'critical', label: 'Urgent' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Normal' }, { value: 'low', label: 'Low' },
+]
+export const BUG_STATUSES: Array<{ value: BugStatus; label: string }> = [
+  { value: 'open', label: 'Open' }, { value: 'in_progress', label: 'Working on it' }, { value: 'blocked', label: 'Stuck' },
+]
+export const bugIsOpen = (status: string) => status === 'open' || status === 'in_progress' || status === 'blocked'
+const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+
+/** The bug box in order: open before closed, most urgent first, then newest. */
+export function sortBugs<T extends { severity: string; status: string; created_at: string }>(bugs: T[]): T[] {
+  return [...bugs].sort((a, b) =>
+    Number(!bugIsOpen(a.status)) - Number(!bugIsOpen(b.status))
+    || (RANK[a.severity] ?? 2) - (RANK[b.severity] ?? 2)
+    || b.created_at.localeCompare(a.created_at))
+}

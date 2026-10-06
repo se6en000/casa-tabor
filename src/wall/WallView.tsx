@@ -554,6 +554,8 @@ export default function WallView(props: WallViewProps) {
   const meanwhile = smallJob && todos ? <WallQuietStep item={smallJob} onDone={() => void todos.act({ action: 'done', id: smallJob.id })} /> : null
 
   let face
+  // The night faces are dark; the corner mark takes their colours (its ink T would vanish on the dark ground).
+  let darkFace = false
   if (todoOpen && todos) {
     face = (
       <WallTodos
@@ -596,10 +598,12 @@ export default function WallView(props: WallViewProps) {
     )
   } else if (nightSettled) {
     // The night Calm (canvas 36a/36b): nobody at the wall for a while in the evening.
+    darkFace = true
     face = <WallNightCalm now={now} members={members} plan={planFor(dayOnShow)} stillTonight={tonightByClock(now) ? stillTonightCard : null} />
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
     // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
     const plan = planFor(dayOnShow)
+    darkFace = evening
     const isAuto = sameDay(dayOnShow, autoDay) && !picked
     const heading = evening && isAuto
       ? (focus.day === 'tomorrow' ? 'TOMORROW' : 'TODAY')
@@ -680,7 +684,7 @@ export default function WallView(props: WallViewProps) {
     >
       {face}
       {/* After midnight the settled night shows no buttons until a touch (canvas 36b). */}
-      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
+      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
       {!onLaunchFace && !(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
       {!onLaunchFace && calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
       {!onLaunchFace && !(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
@@ -805,6 +809,7 @@ export default function WallView(props: WallViewProps) {
       )}
       {menuOpen && (
         <WallMenu
+          side={onLaunchFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
           onPreview={(posture) => {
             setDayPreview(null)

@@ -169,3 +169,42 @@ test('adding someone needs nothing the new settings don’t send: the old colour
   const insert = live.slice(live.indexOf("from('family_members').insert("), live.indexOf("from('family_members').insert(") + 300)
   assert.doesNotMatch(insert, /color_hex|color_name/)
 })
+
+// Checks you can dig into (Jake, Oct 6: "allow me to dig into this information more, click and show me the details,
+// allow me to edit the bugs captured, prioritize, delete if not relevant any more").
+test('a night’s check in a short line — no log path in the side list', async () => {
+  const { checkLine } = await import('../src/settings/model.ts')
+  assert.equal(checkLine({ kind: 'screens', ok: false, summary: 'Tue Oct 6 3:47 AM FAILED — 11 failed (log: /home/jake/.casa-nightly/visual-20261006.log)', details: [] }), '11 screens failed')
+  assert.equal(checkLine({ kind: 'screens', ok: false, summary: 'Tue Oct 6 3:47 AM FAILED — 1 failed (log: x)', details: [] }), '1 screen failed')
+  assert.equal(checkLine({ kind: 'screens', ok: true, summary: 'Tue Oct 6 3:47 AM passed — 184 passed', details: [] }), 'Screens all passed')
+  assert.equal(checkLine({ kind: 'assistant', ok: false, summary: '1 of 18 assistant checks failed: Marking a to-do done', details: [] }), '1 of 18 assistant checks failed')
+  assert.equal(checkLine({ kind: 'assistant', ok: true, summary: 'All 18 assistant checks passed', details: [] }), 'All 18 assistant checks passed')
+})
+
+test('a failed screen: which part of the app, what it checks, where its test is', async () => {
+  const { screenFailures } = await import('../src/settings/model.ts')
+  const got = screenFailures([
+    'Tue Oct 6 3:47 AM FAILED — 11 failed (log: /x.log)',
+    'visual-regression/wall.spec.mjs:1100:1 › wall: an event with nobody on it waits on the "No one yet" row; a tap opens it on Who ',
+    'visual-regression/phone.spec.mjs:1009:1 › phone: Casa — the keyboard comes up',
+    'visual-regression/settings.spec.mjs:77:1 › settings: what the assistant knows — yes moves it to sure',
+  ])
+  assert.deepEqual(got, [
+    { area: 'The wall', name: 'An event with nobody on it waits on the "No one yet" row; a tap opens it on Who', where: 'wall.spec.mjs:1100' },
+    { area: 'The phone', name: 'Casa — the keyboard comes up', where: 'phone.spec.mjs:1009' },
+    { area: 'Settings', name: 'What the assistant knows — yes moves it to sure', where: 'settings.spec.mjs:77' },
+  ])
+})
+
+test('the bug box: most urgent first, then newest; closed ones last', async () => {
+  const { sortBugs } = await import('../src/settings/model.ts')
+  const bugs = [
+    { id: 'a', severity: 'low', status: 'open', created_at: '2026-10-05T00:00:00Z' },
+    { id: 'b', severity: 'high', status: 'open', created_at: '2026-09-01T00:00:00Z' },
+    { id: 'c', severity: 'medium', status: 'open', created_at: '2026-10-01T00:00:00Z' },
+    { id: 'd', severity: 'medium', status: 'open', created_at: '2026-10-03T00:00:00Z' },
+    { id: 'e', severity: 'critical', status: 'resolved', created_at: '2026-10-06T00:00:00Z' },
+    { id: 'f', severity: 'critical', status: 'in_progress', created_at: '2026-08-01T00:00:00Z' },
+  ]
+  assert.deepEqual(sortBugs(bugs).map((b) => b.id), ['f', 'b', 'd', 'c', 'a', 'e'])
+})

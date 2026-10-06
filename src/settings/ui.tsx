@@ -143,3 +143,16 @@ export function PersonDisc({ name, className }: { name: string; className: strin
   const wall = useSize() === 'wall'
   return <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-display font-bold text-wall-on-pigment ${wall ? 'h-[44px] w-[44px] text-wall-heading' : 'h-[32px] w-[32px] text-phone-body'} ${className}`}>{name.charAt(0)}</span>
 }
+
+/** A sheet over the page (an editor, a detail). */
+export function Sheet({ children, onClose, label }: { children: ReactNode; onClose: () => void; label: string }) {
+  return (
+    // A sheet from the bottom on a phone; on a laptop or the wall (the wide layout, 900px+) a card in the middle, so
+    // its bottom never sits under the Mac's dock or off the screen (Jake, Oct 6: "this screen is cut off on the bottom").
+    <div className="phone-scrim fixed inset-0 z-50 flex items-end justify-center bg-wall-ink/35 min-[900px]:items-center min-[900px]:p-[32px]" onClick={onClose}>
+      <section aria-label={label} onClick={(e) => e.stopPropagation()} className="phone-sheet max-h-[92vh] w-full max-w-[640px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px] min-[900px]:max-h-[85vh] min-[900px]:rounded-[26px] min-[900px]:px-[28px] min-[900px]:pb-[24px] min-[900px]:pt-[24px]">
+        {children}
+      </section>
+    </div>
+  )
+}

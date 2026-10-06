@@ -13,7 +13,7 @@ import type { FamilyMember } from '../types'
 import { pigmentStyleFor } from '../wall/lanes'
 import { everyone, people, useSource, type MemberPatch, type MemoryItem } from './data'
 import { ago, moveInOrder, pickColor } from './model'
-import { Action, Group, Label, PageHead, PersonDisc, Quiet, Row, Seg, Stepper, Toggle } from './ui'
+import { Action, Group, Label, PageHead, PersonDisc, Quiet, Row, Seg, Sheet, Stepper, Toggle } from './ui'
 import { LightDay, LightNow } from './WallLight'
 import { usePigment, useSize, useType } from './sizing'
 import { useSaveNote } from './saveNote'
@@ -33,17 +33,6 @@ function TextField({ value, onChange, placeholder, label, onEnter }: { value: st
       <input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onEnter?.() }} placeholder={placeholder}
         className={`min-w-0 flex-1 border-0 bg-transparent font-body text-wall-ink outline-none placeholder:text-wall-ink-2 ${t.body}`} />
     </label>
-  )
-}
-
-/** A sheet over the page (an editor), the phone's own. */
-function Sheet({ children, onClose, label }: { children: ReactNode; onClose: () => void; label: string }) {
-  return (
-    <div className="phone-scrim fixed inset-0 z-50 flex items-end justify-center bg-wall-ink/35" onClick={onClose}>
-      <section aria-label={label} onClick={(e) => e.stopPropagation()} className="phone-sheet max-h-[92vh] w-full max-w-[640px] overflow-y-auto rounded-t-[26px] bg-phone-ground px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+12px))] pt-[18px]">
-        {children}
-      </section>
-    </div>
   )
 }
 

@@ -4,7 +4,7 @@ import { ChevronLeft, Lock, ScanFace, Search } from 'lucide-react'
 import { choreDays } from '../wall/choreText'
 import { liveSource } from './liveSource'
 import { people, SettingsSourceContext, useSource, type SettingsSource } from './data'
-import { money, ownerId, pageById, pageFromPath, searchPages, SETTINGS_PAGES, type SettingsPage, type SettingsPageId } from './model'
+import { checkLine, money, ownerId, pageById, pageFromPath, searchPages, SETTINGS_PAGES, type SettingsPage, type SettingsPageId } from './model'
 import { Action, Group, PageHead, PageIcon, Row, Seg } from './ui'
 import { SizeContext, useType, type SettingsSize } from './sizing'
 import { CalendarsPage, ChoresPage, FamilyPage, KnowsPage, PlacesPage, WallPage } from './GeneralPages'
@@ -212,7 +212,7 @@ function AdvancedRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => voi
       <PageRow p={P('limits')} onOpen={onOpen} current={current} tone={summary?.breaker.paused ? 'rust' : 'quiet'}
         state={summary ? (summary.breaker.paused ? 'The AI is paused' : `${money(summary.spend.day_cost_usd)} of ${money(summary.breaker.daily_cost_cap_usd)} today`) : ''} />
       <PageRow p={P('checks')} onOpen={onOpen} current={current} tone={failed.length ? 'rust' : 'quiet'}
-        state={checks == null ? '' : last.length === 0 ? 'First run tonight at 3 AM' : failed.length ? failed.map((c) => c.summary).join(' · ') : 'All passed last night'} />
+        state={checks == null ? '' : last.length === 0 ? 'First run tonight at 3 AM' : failed.length ? failed.map((c) => checkLine(c)).join(' · ') : 'All passed last night'} />
       <PageRow p={P('voice')} onOpen={onOpen} current={current} state={src.onWall ? 'The wake word on this wall' : 'Microphone and tips'} />
       <PageRow p={P('maintenance')} onOpen={onOpen} current={current} state="Refresh the wall · old settings" />
     </>

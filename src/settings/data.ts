@@ -5,7 +5,7 @@ import type { WallChore } from '../wall/engine/chores'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { ScreensaverSettings } from '../hooks/useScreensaverSettings'
 import type { FamilyRoutine } from '../lib/familyRoutines'
-import type { Arrangement } from './model'
+import type { Arrangement, BugSeverity, BugStatus } from './model'
 import type { DayOffRow } from '../wall/RoutineEditor'
 
 // Settings V2's data, one source the pages read (canvas 47). The live source (liveSource.ts) is the app's own hooks and
@@ -46,9 +46,25 @@ export interface NightlyCheck {
   kind: 'assistant' | 'screens'
   ok: boolean
   summary: string
-  details: Array<{ situation?: string; said?: string; ok?: boolean; problem?: string | null } | string>
+  details: Array<{ situation?: string; said?: string; ok?: boolean; problem?: string | null; got?: { text?: string; tool?: string | null; ms?: number; args?: Record<string, unknown> } } | string>
   created_at: string
 }
+
+/** One report in the bug box (ai_bug_reports): from the phone's bug icon, the wall's, or said to the assistant. */
+export interface BugReport {
+  id: string
+  title: string
+  details: string | null
+  severity: BugSeverity
+  status: BugStatus
+  source: string
+  created_at: string
+  member_name: string | null
+  page: string | null
+  /** The conversation it was sent from (the bug icon sends it). */
+  transcript: Array<{ role?: string; text?: string; at?: string }> | null
+}
+export type BugPatch = Partial<Pick<BugReport, 'title' | 'details' | 'severity' | 'status'>>
 
 export interface DisplayConfigLite {
   brightness_min?: number
@@ -122,6 +138,8 @@ export interface SettingsSource {
   useHealth: () => { summary: HealthSummary | null; setPaused: (paused: boolean) => Promise<SaveResult>; setCaps: (hourly: number, daily: number) => Promise<SaveResult> }
   useChecks: () => NightlyCheck[] | null
   useBugs: () => { open: number; newest: string | null } | null
+  /** Every report, open ones first (most urgent, then newest); edit, close or delete one. */
+  useBugBox: () => { bugs: BugReport[] | null; edit: (id: string, patch: BugPatch) => Promise<SaveResult>; remove: (id: string) => Promise<SaveResult> }
   run: (job: 'sync_calendars' | 'refresh_wall') => Promise<SaveResult>
   /** Jake's PIN, checked (Advanced on the wall asks each visit, whoever the kiosk is signed in as). */
   checkOwnerPin: (ownerId: string, pin: string) => Promise<boolean>

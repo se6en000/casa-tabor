@@ -20,7 +20,8 @@ import { deserializeRoutinesFromAvailabilityRules } from '../lib/familyRoutines'
 import { addDayOff, removeDayOff, removeRoutine, saveRoutine } from '../wall/saveRoutine'
 import { useGoogleCalendarList, useSelectGoogleCalendar } from '../hooks/useCalendarConnections'
 import { invokeHistoryUnlock } from '../lib/assistantConversationHistoryClient'
-import type { DisplayConfigLite, HealthSummary, LightReading, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
+import type { BugPatch, BugReport, DisplayConfigLite, HealthSummary, LightReading, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
+import { bugIsOpen, sortBugs } from './model'
 
 const ok: SaveResult = { ok: true }
 const ymd = (iso: string) => {
@@ -302,6 +303,35 @@ export const liveSource: SettingsSource = {
     },
     staleTime: 5 * 60_000,
   }).data ?? null,
+  useBugBox: () => {
+    const qc = useQueryClient()
+    const { data } = useQuery({
+      queryKey: ['settings-bug-box'],
+      queryFn: async () => {
+        const { data, error } = await supabase.from('ai_bug_reports')
+          .select('id, title, details, severity, status, source, created_at, member_name, page, transcript')
+          .order('created_at', { ascending: false }).limit(150)
+        if (error) throw error
+        return sortBugs((data ?? []) as BugReport[])
+      },
+      staleTime: 60_000,
+    })
+    const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['settings-bug-box'] }), qc.invalidateQueries({ queryKey: ['settings-bugs'] })])
+    const edit = useCallback(async (id: string, patch: BugPatch) => {
+      const closing = patch.status && !bugIsOpen(patch.status)
+      const { error } = await supabase.from('ai_bug_reports')
+        .update({ ...patch, updated_at: new Date().toISOString(), ...(patch.status ? { resolved_at: closing ? new Date().toISOString() : null } : {}) })
+        .eq('id', id)
+      void refresh()
+      return error ? fail(error) : ok
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    const remove = useCallback(async (id: string) => {
+      const { error } = await supabase.from('ai_bug_reports').delete().eq('id', id)
+      void refresh()
+      return error ? fail(error) : ok
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    return { bugs: data ?? null, edit, remove }
+  },
   checkOwnerPin: async (ownerId, pin) => {
     try { await invokeHistoryUnlock(ownerId, pin); return true } catch { return false }
   },
