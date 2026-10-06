@@ -169,3 +169,45 @@ print(json.dumps(out))
   assert.equal(r.warmer, 3100)
   assert.ok(r.warmer_rgb[2] < r.cooler_rgb[2], `warmer has less blue: ${r.warmer_rgb} vs ${r.cooler_rgb}`)
 })
+
+// Jake, Oct 6: "a constant slight color shift happening like every one or 2 seconds … dramatic light/brightness shifts
+// i want to happen right away, but when the light is constant … not these slight micro changes … mostly when its
+// darker out". Tonight's real readings at 2 lux: the colour wobbled 2796 / 2844 / 2970 K and the blue gain followed.
+test('steady light stays steady: the dark wobble never reaches the screen; a lamp does at once; a slow dusk gets through', () => {
+  const script = `
+import sys, json
+sys.path.insert(0, ${JSON.stringify(sensorBridgeDir)})
+import main
+main._color_soften = 0.0
+main._room_dim_strength = 0.30
+def poll(lux, cct):
+    l, c, dramatic = main.steady_readings(lux, cct)
+    main.set_brightness_target(l, force=dramatic)
+    main.set_color_target(c, force=dramatic)
+    return [main._target_brightness, list(main._target_rgb), dramatic]
+out = {}
+wobble = [2796, 2844, 2796, 2970, 2844, 2796, 2970, 2796] * 6   # 24 s of tonight's readings
+seen = [poll(2.0, c) for c in wobble]
+out['dark_rgb'] = sorted(set(tuple(s[1]) for s in seen))
+out['dark_bright'] = sorted(set(s[0] for s in seen))
+lamp = poll(80.0, 3500)
+out['lamp'] = lamp
+# Dusk: 120 lux easing to 70 over three minutes, no single dramatic step.
+main._smooth_lux = None; main._target_brightness = None; main._target_rgb = None
+start = poll(120.0, 4200)[0]
+lux = 120.0
+for i in range(360):
+    lux = 120.0 - 50.0 * (i / 359)
+    last = poll(lux, 4200)
+out['dusk'] = [start, last[0], last[2]]
+print(json.dumps(out))
+`
+  const r = JSON.parse(execFileSync('python3', ['-c', script], { encoding: 'utf8' }).trim())
+  assert.equal(r.dark_rgb.length, 1, `the dark wobble moved the colour: ${JSON.stringify(r.dark_rgb)}`)
+  assert.equal(r.dark_bright.length, 1)
+  assert.equal(r.lamp[2], true, 'a lamp switching on is dramatic')
+  assert.ok(r.lamp[0] > r.dark_bright[0], `the lamp brightens it at once: ${r.lamp[0]} > ${r.dark_bright[0]}`)
+  assert.notDeepEqual(r.lamp[1], r.dark_rgb[0], 'and changes the colour at once')
+  assert.ok(r.dusk[1] < r.dusk[0], `a slow dusk still dims it: ${r.dusk[0]} → ${r.dusk[1]}`)
+  assert.equal(r.dusk[2], false)
+})

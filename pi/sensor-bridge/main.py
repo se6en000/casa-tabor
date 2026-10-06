@@ -557,10 +557,66 @@ def lux_to_brightness(lux: float) -> int:
     return max(lo, min(hi, int(round(ddc_level))))
 
 
-def set_brightness_target(lux: float):
-    """Called every 500 ms by sensor poll — updates brightness target from lux."""
+# ── Steady light stays steady (Jake, Oct 6: "a constant slight color shift happening like every one or 2 seconds …
+# dramatic light/brightness shifts i want to happen right away, but when the light is constant … not these slight
+# micro changes … mostly when its darker out"). In a dark room the sensor's colour reading wobbles ±100 K, and true
+# colour followed every wobble. Readings are now smoothed — slowly in the dark, faster in normal light — and reset at
+# once on a dramatic change (a lamp on or off); the screen moves only on a change of 2 or more.
+DRAMATIC_LUX_RATIO = 1.6     # the room's light ×1.6 or ÷1.6 between readings: a lamp, not noise
+SETTLE_DARK_S      = 60.0    # under DARK_LUX: settle over about a minute
+SETTLE_LIT_S       = 20.0    # otherwise: about 20 seconds
+DARK_LUX           = 10.0
+TARGET_STEP_MIN    = 2       # the screen changes by at least this (DDC units / RGB gain)
+
+_smooth_lux = None
+_smooth_cct = None
+
+
+def is_dramatic(prev_lux, lux) -> bool:
+    if prev_lux is None or lux is None:
+        return True
+    ratio = (lux + 0.5) / (prev_lux + 0.5)
+    return ratio >= DRAMATIC_LUX_RATIO or ratio <= 1.0 / DRAMATIC_LUX_RATIO
+
+
+def settle(prev, new, lux, dt: float):
+    """One reading's worth of settling toward `new` (exponential, slower in the dark)."""
+    if prev is None:
+        return new
+    tau = SETTLE_DARK_S if (lux is not None and lux < DARK_LUX) else SETTLE_LIT_S
+    alpha = min(1.0, dt / tau)
+    return prev + alpha * (new - prev)
+
+
+def steady_readings(lux, cct, dt: float = POLL_INTERVAL):
+    """The smoothed (lux, cct) the screen follows, and whether this reading was a dramatic change (reset at once)."""
+    global _smooth_lux, _smooth_cct
+    if lux is None:
+        return _smooth_lux, _smooth_cct, False
+    if is_dramatic(_smooth_lux, lux):
+        _smooth_lux, _smooth_cct = lux, cct
+        return lux, cct, True
+    _smooth_lux = settle(_smooth_lux, lux, lux, dt)
+    if cct is not None:
+        _smooth_cct = settle(_smooth_cct, cct, lux, dt)
+    return _smooth_lux, _smooth_cct, False
+
+
+def beyond_step(old, new) -> bool:
+    """A new target worth showing: 2 or more away (for RGB, on any channel)."""
+    if old is None or new is None:
+        return True
+    if isinstance(new, tuple):
+        return any(abs(a - b) >= TARGET_STEP_MIN for a, b in zip(old, new))
+    return abs(new - old) >= TARGET_STEP_MIN
+
+
+def set_brightness_target(lux: float, force: bool = True):
+    """The brightness to glide to. The poll passes force=False: steady light keeps the target unless it moves 2+."""
     global _target_brightness
-    _target_brightness = lux_to_brightness(lux)
+    new = lux_to_brightness(lux)
+    if force or beyond_step(_target_brightness, new):
+        _target_brightness = new
 
 
 def nudged_cct(cct: float) -> float:
@@ -568,11 +624,13 @@ def nudged_cct(cct: float) -> float:
     return max(1000.0, min(40000.0, cct + _cct_bias_k))
 
 
-def set_color_target(cct: float):
-    """Called by sensor poll — converts true spectral CCT to RGB gains and updates target."""
+def set_color_target(cct: float, force: bool = True):
+    """The screen's colour for the room's (smoothed) colour temperature; the poll keeps it unless a channel moves 2+."""
     global _target_rgb
     if cct is not None:
-        _target_rgb = cct_to_rgb_gains(nudged_cct(cct))
+        new = cct_to_rgb_gains(nudged_cct(cct))
+        if force or beyond_step(_target_rgb, new):
+            _target_rgb = new
 
 
 LIGHT_LOG_S = 300
@@ -1101,8 +1159,9 @@ def _poll_loop(reader):
                     "timestamp": time.time(),
                 })
             # Layer 1: update DDC targets for brightness and color temperature
-            set_brightness_target(data["lux"])
-            set_color_target(data["cct"])
+            lux_s, cct_s, dramatic = steady_readings(data["lux"], data["cct"])
+            set_brightness_target(lux_s, force=dramatic)
+            set_color_target(cct_s, force=dramatic)
             # Push to Supabase so any device (not just localhost) can read it (throttled to 3s)
             now = time.time()
             if now - _last_supabase_push >= 3.0:
