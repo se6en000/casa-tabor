@@ -40,6 +40,8 @@ import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
 
 const WEATHER = { temp: 84, condition: 'Partly cloudy' }
+// ?paper=1: the morning paper's words as the server writes them (canvas 48a); without it, the plain ones.
+const PAPER_WORDS = { headline: 'Spirit Day, and Giselle has both pickups.', deck: 'The rest is an ordinary Friday: Giselle collects Emme & Owen at 2:00 and Liv at 3:30.', sky: 'Warm and partly cloudy, 86° by two. A light jacket stays home.' }
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 seedKnown(queryClient)
@@ -92,6 +94,7 @@ const STEP_EVENT = new URLSearchParams(window.location.search).get('stepEvent') 
 // `?trip=1` (canvas 19): Jake's Dallas trip, Oct 7–8, his flights as the work email brought them in; he takes an hour
 // at the airport and an Uber (his page's travel settings).
 const TRIP = new URLSearchParams(window.location.search).get('trip') === '1'
+const PAPER = new URLSearchParams(window.location.search).get('paper') === '1'
 // `?chores=1`: the household chores as Jake listed them on Oct 1 (chores.ts).
 const CHORE_LIST = new URLSearchParams(window.location.search).get('chores') === '1'
   ? [
@@ -272,7 +275,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={FIXTURE_DAY_OFFS} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView paper={PAPER ? PAPER_WORDS : null} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={FIXTURE_DAY_OFFS} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

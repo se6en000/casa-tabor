@@ -197,6 +197,9 @@ export const DESIGN_TOKENS = {
     'wall-clock-calm': { size: '250px', lineHeight: '0.82' },
     'wall-date-calm': { size: '42px', lineHeight: '1.1' },
     'wall-quote': { size: '44px', lineHeight: '1.1' },
+    // The morning paper (canvas 48a): the headline and the line under it.
+    'wall-headline': { size: '84px', lineHeight: '1' },
+    'wall-deck': { size: '36px', lineHeight: '1.2' },
     'wall-answer': { size: '28px', lineHeight: '1.4' },
     'wall-countdown': { size: '88px', lineHeight: '0.85' },
     // Hours and minutes ("1:35") inside the same ring: smaller, so four digits and a colon fit.

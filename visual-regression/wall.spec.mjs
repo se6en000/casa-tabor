@@ -1192,6 +1192,8 @@ test('wall: tonight\'s timed to-do is in STILL TONIGHT on the evening face; tick
 
 test('wall: in a quiet stretch, one small job with Done', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
+  // A calm morning is the morning paper first (canvas 48a); put away, the calm face.
+  await page.getByRole('button', { name: 'Put it away' }).click()
   await expect(page.getByText(/A quiet stretch/)).toBeVisible()
   const meanwhile = page.getByRole('region', { name: 'Meanwhile' })
   await expect(meanwhile.getByText(/MEANWHILE · \d+ MIN/)).toBeVisible()
@@ -2545,4 +2547,40 @@ test('wall: the header’s two ends are the same width, the Next Move wider betw
   const move = await wall.getByRole('region', { name: 'Next move' }).boundingBox()
   expect(Math.round(left.width)).toBe(Math.round(then.width))
   expect(move.width).toBeGreaterThan(left.width)
+})
+
+// The morning paper (canvas 48a; Jake, Oct 6: "i kinda like A. very creative, also add a seting in the menu so I can
+// preview this face as well").
+test('wall: a calm morning is the morning paper — the runs, the sky, the rest; Put it away until tomorrow', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  await expect(paper.getByRole('heading', { name: 'Spirit Day, and Giselle has both pickups.' })).toBeVisible()
+  await expect(paper.getByText('Friday, September 25, 2026')).toBeVisible()
+  await expect(paper.getByRole('region', { name: 'The runs' })).toContainText('2:00')
+  await expect(paper.getByRole('region', { name: 'The runs' })).toContainText('Giselle picks up Emme & Owen at Palm Beach Public')
+  await expect(paper.getByRole('region', { name: 'Also today' })).toContainText('Emme & Owen · Spirit Day · wear school colors')
+  await expect(paper.getByRole('region', { name: 'The sky' })).toContainText('86° by two')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper.png')
+  await paper.getByRole('button', { name: 'Ask about it' }).click()
+  expect(await page.evaluate(() => window.__asked)).toBe('Tell me more about today')
+  await paper.getByRole('button', { name: 'Put it away' }).click()
+  await expect(paper).toHaveCount(0)
+  await expect(page.getByText(/A quiet stretch/)).toBeVisible()
+  // Put away for the day on this wall.
+  await page.reload()
+  await expect(page.getByText(/A quiet stretch/)).toBeVisible()
+  await expect(page.getByRole('article', { name: 'The morning paper' })).toHaveCount(0)
+})
+
+test('wall: the morning paper — plain words until the server’s arrive; gone after 11; previewed from the menu any time', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
+  await expect(page.getByRole('article', { name: 'The morning paper' }).getByRole('heading')).toHaveText('An easy Friday.')
+  await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
+  await expect(page.getByRole('article', { name: 'The morning paper' })).toHaveCount(0)
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  await wall.getByRole('button', { name: 'Morning paper' }).click()
+  await expect(page.getByRole('article', { name: 'The morning paper' })).toBeVisible()
+  await expect(page.getByText(/Previewing/)).toBeVisible()
 })

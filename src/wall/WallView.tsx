@@ -18,7 +18,9 @@ import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
-import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
+import { NIGHT_IDLE_MS, calmNextLine, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
+import { fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
+import WallPaper from './WallPaper'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
@@ -120,9 +122,12 @@ export interface WallViewProps {
   /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 27a/27c). */
   choreDone?: ReadonlySet<string>
   tickChore?: (choreId: string, date: Date, done: boolean) => Promise<void>
+  /** The morning paper's words for today (canvas 48a), once the server has written them; until then, plain ones. */
+  paper?: PaperWords | null
 }
 
 const NO_TICKS: ReadonlySet<string> = new Set()
+const PAPER_PUT_AWAY_KEY = 'casa.wall.paperPutAway'
 /** A tick crosses the line out this long before it's saved and leaves; a second tap in that time takes it back. */
 const TICK_MS = 4000
 const addTo = (key: string) => (set: Set<string>) => new Set(set).add(key)
@@ -159,7 +164,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
@@ -169,6 +174,15 @@ export default function WallView(props: WallViewProps) {
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [packingOpen, setPackingOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
+  // The morning paper (canvas 48a): put away for the day (remembered on this wall), or previewed from the menu.
+  const [paperPutAway, setPaperPutAway] = useState<string | null>(() => { try { return localStorage.getItem(PAPER_PUT_AWAY_KEY) } catch { return null } })
+  const [paperPreviewUntil, setPaperPreviewUntil] = useState(0)
+  const paperPreview = Date.now() < paperPreviewUntil
+  useEffect(() => {
+    if (!paperPreviewUntil) return
+    const timer = window.setTimeout(() => setPaperPreviewUntil(0), Math.max(0, paperPreviewUntil - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [paperPreviewUntil])
   // A day tapped in the week strip: shown until "Back", or 2 idle minutes.
   const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
   // A touch on Calm wakes the full day until this time (5 idle minutes).
@@ -631,6 +645,20 @@ export default function WallView(props: WallViewProps) {
         stillTonight={evening && !picked ? stillTonightCard : null}
       />
     )
+  } else if (shown.posture === 'calm' && shownToday && paperShows({ posture: 'calm', now, dismissedOn: paperPutAway, previewing: paperPreview })) {
+    const facts = paperFacts(shownToday, members, now, currentWeather)
+    face = (
+      <WallPaper now={now} facts={facts} words={paper ?? fallbackWords(facts)}
+        next={calmNextLine(describeNextMove(selectNextMove(shownToday, now), members, now))}
+        onAsk={onAsk ? () => onAsk('Tell me more about today') : undefined}
+        onPutAway={() => {
+          const day = paperDate(now)
+          try { localStorage.setItem(PAPER_PUT_AWAY_KEY, day) } catch { /* private mode: for this visit only */ }
+          setPaperPutAway(day)
+          setPaperPreviewUntil(0)
+          if (shown.preview) setPreview(null)
+        }} />
+    )
   } else if (shown.posture === 'calm') {
     face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} tomorrow={tomorrowNote} meanwhile={meanwhile} />
   } else {
@@ -704,9 +732,9 @@ export default function WallView(props: WallViewProps) {
           onClose={() => setTalkOpen(false)}
         />
       )}
-      {shown.preview && !selected && (
+      {(shown.preview || paperPreview) && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
-          Previewing {POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
+          Previewing {paperPreview ? 'Morning paper' : POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
         </div>
       )}
       {selected && (
@@ -811,9 +839,13 @@ export default function WallView(props: WallViewProps) {
         <WallMenu
           side={onLaunchFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
-          onPreview={(posture) => {
+          onPreview={(face) => {
             setDayPreview(null)
-            setPreview(posture === auto ? null : { posture, until: Date.now() + PREVIEW_MS })
+            // The morning paper is a calm face (any time of day, from the menu).
+            const until = Date.now() + PREVIEW_MS
+            setPaperPreviewUntil(face === 'paper' ? until : 0)
+            const posture: Posture = face === 'paper' ? 'calm' : face
+            setPreview(posture === auto ? null : { posture, until })
             setMenuOpen(false)
           }}
         />

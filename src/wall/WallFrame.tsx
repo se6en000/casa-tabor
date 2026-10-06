@@ -23,6 +23,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import { useCasaTalk } from './useCasaTalk'
 import WallQuickAsk from './WallQuickAsk'
 import { toImages } from './toImages'
+import { useMorningPaper } from './useMorningPaper'
 import type { TypedImage } from './typeLine'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
@@ -33,6 +34,7 @@ export default function WallFrame() {
   const { now, members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, saveTravel, travel, chores } = useFamilyDay({ kind: 'wall' }, aroundDay)
   const choreDone = useChoreDone(now)
   const { data: currentWeather } = useHomeWeather()
+  const paper = useMorningPaper(today, members, now, currentWeather)
 
   // The assistant band: the mic button or the wake word (heard on the Pi) opens it and starts listening.
   const [bandOpen, setBandOpen] = useState(false)
@@ -133,5 +135,5 @@ export default function WallFrame() {
       if (error) throw error
     },
   }), [talk])
-  return <><WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} choreDone={choreDone} tickChore={(id, date, done) => setChoreDone(queryClient, id, date, done)} />{quick}</>
+  return <><WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} choreDone={choreDone} tickChore={(id, date, done) => setChoreDone(queryClient, id, date, done)} paper={paper} />{quick}</>
 }

@@ -90,10 +90,11 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
   )
 }
 
-const PREVIEWS: Array<{ posture: Posture; label: string }> = [
-  { posture: 'launch', label: 'Full day' },
-  { posture: 'calm', label: 'Calm' },
-  { posture: 'evening', label: 'Evening' },
+const PREVIEWS: Array<{ face: Posture | 'paper'; label: string }> = [
+  { face: 'launch', label: 'Full day' },
+  { face: 'calm', label: 'Calm' },
+  { face: 'paper', label: 'Morning paper' },
+  { face: 'evening', label: 'Evening' },
 ]
 
 /**
@@ -101,7 +102,7 @@ const PREVIEWS: Array<{ posture: Posture; label: string }> = [
  * opens under the mark that opened it — top right on the day faces, top left on the launch face (Jake, Oct 6: "can
  * settings menu show up near the MT button?").
  */
-export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (posture: Posture) => void; side?: 'left' | 'right' }) {
+export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (face: Posture | 'paper') => void; side?: 'left' | 'right' }) {
   return (
     <div
       role="dialog"
@@ -129,13 +130,13 @@ export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClo
         {onPreview && (
           <div className="mt-[14px] flex flex-col gap-[10px] border-t border-wall-rule pt-[14px]">
             <div className="text-wall-label font-semibold tracking-[0.2em] text-wall-ink-2">PREVIEW A FACE</div>
-            <div className="flex gap-[10px]">
+            <div className="grid grid-cols-2 gap-[10px]">
               {PREVIEWS.map((p) => (
                 <button
-                  key={p.posture}
+                  key={p.face}
                   type="button"
-                  onClick={() => onPreview(p.posture)}
-                  className="h-[52px] flex-1 rounded-full border border-wall-rule bg-transparent text-wall-detail font-semibold text-wall-ink"
+                  onClick={() => onPreview(p.face)}
+                  className="h-[52px] rounded-full border border-wall-rule bg-transparent text-wall-detail font-semibold text-wall-ink"
                 >
                   {p.label}
                 </button>
