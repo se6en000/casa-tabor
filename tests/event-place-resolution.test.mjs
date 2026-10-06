@@ -141,3 +141,12 @@ test('a place given with its address is split into the two, and needs no search'
   assert.deepEqual(r, { name: 'Starbucks Coffee Company', address: '226 Clematis St, West Palm Beach, FL 33401, USA' })
   assert.equal(calls.length, 0)
 })
+
+test('a changed place is looked up when its drive is redone; a place with an address, or a re-enrich of other things, is not', async () => {
+  const { shouldLookUpPlace } = await import('../supabase/functions/_shared/event-place-resolution.mjs')
+  assert.equal(shouldLookUpPlace(['parking_notes', 'drive_time_mins', 'route_summary'], 'Dragon Elites', null), true)
+  assert.equal(shouldLookUpPlace([], 'Dragon Elites', ''), true)
+  assert.equal(shouldLookUpPlace(['drive_time_mins'], 'Dragon Elites', '1225 S Military Trail'), false)
+  assert.equal(shouldLookUpPlace(['what_to_bring'], 'Dragon Elites', null), false)
+  assert.equal(shouldLookUpPlace([], '', null), false)
+})

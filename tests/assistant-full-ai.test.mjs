@@ -214,3 +214,13 @@ test('a clear change is its card at once — never "is that right?" in words fir
   assert.match(system, /the card is the question/i)
   assert.match(system, /never ask "is that right\?"/i)
 })
+
+// Jake's bug report (Oct 5): "U didn't update the real address. Can u pull it for me" became a card moving the event to
+// "the real address". Words about a place aren't one: the model is told to put the place itself.
+test('a place that is only words about a place ("the real address") is refused, with what to do instead', () => {
+  const evs = [{ id: 'e1', title: 'Huskies Batting Practice', start_time: '2026-10-05T22:30:00Z', end_time: '2026-10-05T23:30:00Z' }]
+  const card = fullAiCard({ name: 'update_event', args: { id: 'e1', place: 'the real address' } }, { events: evs, utcOffset: '-04:00', now: new Date('2026-10-05T22:00:00Z') })
+  assert.match(card.error, /place itself/)
+  const ok = fullAiCard({ name: 'update_event', args: { id: 'e1', place: 'Dragon Elites batting cages' } }, { events: evs, utcOffset: '-04:00', now: new Date('2026-10-05T22:00:00Z') })
+  assert.equal(ok.args.location, 'Dragon Elites batting cages')
+})

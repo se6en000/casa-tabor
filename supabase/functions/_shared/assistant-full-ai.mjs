@@ -4,6 +4,7 @@
 // and four broad tools for changes only. Every change still comes back as the usual card that
 // needs a yes, and still meets the server's hard checks (a real date, an event that exists,
 // never a school-run copy). Dry runs only (`context.full_ai`), for side-by-side tests.
+import { isPlaceholderPlace } from './ai-event-edit.mjs'
 import { memberNamed } from './family-names.mjs'
 import { memoryContext } from './casa-memory.mjs'
 import { tipsByTopic } from './casa-tips.mjs'
@@ -559,6 +560,9 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     return { tool: 'add_gift_idea', args: { for_name: member?.name ?? who, for_member_id: member?.id ?? null, idea } }
   }
   const badDate = { error: "That isn't a real date and time I can put on the calendar." }
+  // "U didn't update the real address. Can u pull it for me" (Jake's bug report, Oct 5) became place "the real address".
+  const badPlace = { error: 'A place has to be the place itself: its name ("Dragon Elites batting cages") or its street address — the address of a name is looked up after. Not words like "the real address".' }
+  if ((call?.name === 'create_event' || call?.name === 'update_event') && isPlaceholderPlace(a.place)) return badPlace
   if (call?.name === 'create_event') {
     const title = text(a.title)
     const start = localToIso(a.start, utcOffset, now)

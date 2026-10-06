@@ -133,3 +133,47 @@ test('buildValidatedUpdatePayload enforces optimistic concurrency timestamp and 
   assert.ok(errors.includes(`what_to_bring cannot exceed ${AI_EVENT_EDIT_LIMITS.whatToBring} items`))
   assert.ok(errors.includes(`members_add cannot exceed ${AI_EVENT_EDIT_LIMITS.membersPerAction} names`))
 })
+
+// Jake's bug report (Oct 5): "Update the address" from a screenshot saved "Dragon Elites batting cages, 1225 S Military
+// Trail, …" as the place's name and kept the old address (Lake Lytal Park), so the drive and Directions still went
+// there. A new place never keeps the old one's address or pin.
+test('a new place with its street address: the name and the address apart, the old pin dropped', () => {
+  const { normalized } = buildValidatedUpdatePayload({ id: 'e1', location: 'Dragon Elites batting cages, 1225 S Military Trail, West Palm Beach, FL 33415' })
+  assert.equal(normalized.eventUpdates.location_name, 'Dragon Elites batting cages')
+  assert.equal(normalized.eventUpdates.address, '1225 S Military Trail, West Palm Beach, FL 33415')
+  assert.equal(normalized.eventUpdates.lat, null)
+  assert.equal(normalized.eventUpdates.lng, null)
+})
+
+test('a new place by name only: the old address goes, so the new one is looked up', () => {
+  const { normalized } = buildValidatedUpdatePayload({ id: 'e1', location: 'Dragon Elites' })
+  assert.equal(normalized.eventUpdates.location_name, 'Dragon Elites')
+  assert.equal(normalized.eventUpdates.address, null)
+  assert.equal(normalized.eventUpdates.lat, null)
+})
+
+test('a street address on its own is both the place and its address; one said apart is kept as said', () => {
+  const bare = buildValidatedUpdatePayload({ id: 'e1', location: '3645 Lake Lytal Park Rd, West Palm Beach, FL' }).normalized.eventUpdates
+  assert.equal(bare.location_name, '3645 Lake Lytal Park Rd')
+  assert.equal(bare.address, '3645 Lake Lytal Park Rd, West Palm Beach, FL')
+  const both = buildValidatedUpdatePayload({ id: 'e1', location: 'Dragon Elites', address: '1225 S Military Trail' }).normalized.eventUpdates
+  assert.equal(both.location_name, 'Dragon Elites')
+  assert.equal(both.address, '1225 S Military Trail')
+  // A name with a number in it isn't a street ("Studio 54", "Route 66 Diner, Palm Beach").
+  assert.equal(buildValidatedUpdatePayload({ id: 'e1', location: 'Route 66 Diner, Palm Beach' }).normalized.eventUpdates.location_name, 'Route 66 Diner, Palm Beach')
+})
+
+test('"the real address" is not a place (Jake: "U didn’t update the real address. Can u pull it for me")', () => {
+  for (const said of ['the real address', 'the address', 'real address', 'that location', 'the actual place']) {
+    const { errors } = buildValidatedUpdatePayload({ id: 'e1', location: said })
+    assert.ok(errors.length > 0, said)
+  }
+  assert.deepEqual(buildValidatedUpdatePayload({ id: 'e1', location: 'The Address Boutique Hotel' }).errors, [])
+})
+
+test('the place on a yes card is whole; only a very long one is cut, at a word', async () => {
+  const { placeOnCard } = await import('../supabase/functions/_shared/ai-event-edit.mjs')
+  assert.equal(placeOnCard('Dragon Elites batting cages, 1225 S Military Trail, West Palm Beach, FL 33415'), 'Dragon Elites batting cages, 1225 S Military Trail, West Palm Beach, FL 33415')
+  const long = placeOnCard('The Very Long Name of a Community Recreation Center and Aquatics Complex, 12345 Southern Boulevard, Royal Palm Beach, FL 33411')
+  assert.ok(long.length <= 91 && long.endsWith('…') && !/\s…$/.test(long), long)
+})

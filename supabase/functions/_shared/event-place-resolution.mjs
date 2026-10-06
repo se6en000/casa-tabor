@@ -163,6 +163,16 @@ export async function searchNearHome(sb, query, homeConfig) {
 }
 
 /**
+ * Whether enriching an event looks up where its place is: it has a place and no address, on a full enrichment or one
+ * redoing the drive — a changed place (Jake's bug report, Oct 5: a place changed by the assistant was re-enriched for
+ * its drive only, and its address was never looked up).
+ */
+export function shouldLookUpPlace(targetFields, location, address) {
+  if (!String(location ?? '').trim() || String(address ?? '').trim()) return false
+  return targetFields.length === 0 || targetFields.includes('drive_time_mins')
+}
+
+/**
  * A place said with its street address ("Starbucks Coffee Company - 226 Clematis St, West Palm Beach, FL"): the name
  * and the address apart; an address alone is both. Null when there's no street address in it (a number, a street,
  * then a comma and a town).

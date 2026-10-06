@@ -9,6 +9,7 @@ import {
   isGenericPlace,
   homeCoordinates,
   placeConfidence,
+  shouldLookUpPlace,
 } from '../_shared/event-place-resolution.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
@@ -122,7 +123,7 @@ Deno.serve(async (req) => {
   let resolvedDestination: ResolvedDestination | null = null
 
   const destinationQuery = normalizeText(event.location_name)
-  if (targetFields.length === 0 && destinationQuery && !normalizeText(event.address)) {
+  if (shouldLookUpPlace(targetFields, destinationQuery, normalizeText(event.address))) {
     const savedPlace = findSavedEventPlace(destinationQuery, savedPlaces)
     const savedAddress = savedPlace
       ? [savedPlace.address, savedPlace.city, savedPlace.state, savedPlace.zip].filter(Boolean).join(', ')

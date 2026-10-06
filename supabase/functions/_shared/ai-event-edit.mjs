@@ -1,3 +1,4 @@
+import { splitPlaceAddress } from './event-place-resolution.mjs'
 export const EVENT_CATEGORIES = [
   'sports',
   'school',
@@ -173,6 +174,19 @@ function normalizeActionItems(value, errors) {
   }).filter(Boolean)
 }
 
+/** "the real address", "that location": words about a place, not one (the model saved "the real address" as one). */
+export const PLACEHOLDER_PLACE = /^(?:the|that|this|its|their|our)?\s*(?:real|actual|right|correct|full|new|exact|proper)?\s*(?:address|location|place|spot|venue)$/i
+/** A place on a yes card, whole (Jake's bug report, Oct 5: cut at 30 it read "Dragon Elites batting cages, 1", and looked
+ *  like the address hadn't gone in); only a very long one is cut, at a word. */
+export const isPlaceholderPlace = (text) => PLACEHOLDER_PLACE.test(String(text ?? '').trim())
+
+export function placeOnCard(text, max = 90) {
+  const said = String(text ?? '').trim()
+  if (said.length <= max) return said
+  const cut = said.slice(0, max)
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 20)).replace(/[,\s]+$/, '')}…`
+}
+
 export function buildValidatedUpdatePayload(args) {
   const errors = []
 
@@ -228,8 +242,21 @@ export function buildValidatedUpdatePayload(args) {
     }
   }
 
-  if (args.location !== undefined) eventUpdates.location_name = normalizeOptionalText(args.location)
+  if (args.location !== undefined) {
+    const location = normalizeOptionalText(args.location)
+    if (location && PLACEHOLDER_PLACE.test(location)) errors.push(`location must be the place itself, not "${location}" — look it up first`)
+    // A new place never keeps the old one's address or pin (Jake's bug report, Oct 5: the place changed to Dragon
+    // Elites, the drive still went to Lake Lytal Park). Its street address, when said with it, is its address;
+    // otherwise there's none until it's looked up again.
+    const split = args.address === undefined && location ? splitPlaceAddress(location) : null
+    eventUpdates.location_name = split?.name ?? location
+    if (args.address === undefined) eventUpdates.address = split?.address ?? null
+  }
   if (args.address !== undefined) eventUpdates.address = normalizeOptionalText(args.address)
+  if (args.location !== undefined || args.address !== undefined) {
+    eventUpdates.lat = null
+    eventUpdates.lng = null
+  }
   if (args.description !== undefined) eventUpdates.description = normalizeOptionalText(args.description)
 
   if (args.all_day !== undefined) {
@@ -342,7 +369,8 @@ export function buildValidatedUpdatePayload(args) {
         ...(args.start !== undefined ? ['start_time'] : []),
         ...(args.end !== undefined ? ['end_time'] : []),
         ...(args.location !== undefined ? ['location_name'] : []),
-        ...(args.address !== undefined ? ['address'] : []),
+        // A new place's address changes with it (to its own, or none until looked up).
+        ...(args.address !== undefined || args.location !== undefined ? ['address'] : []),
         ...(args.description !== undefined ? ['description'] : []),
         ...(args.all_day !== undefined ? ['all_day'] : []),
       ],

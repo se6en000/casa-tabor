@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { placeOnCard } from '../_shared/ai-event-edit.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 import { createSupabaseRouteEtaCache } from '../_shared/route-eta-cache.mjs'
 import { PLANNING_GEMINI_MODEL, PRIMARY_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
@@ -1736,7 +1737,7 @@ Deno.serve(async (req) => {
       if (args.title !== undefined) parts.push(`title → "${String(args.title)}"`)
       if (args.start !== undefined) parts.push(`time → ${humanWhen(args.start, args.end, utcOffsetForDisplay, { allDay: args.all_day === true })}`)
       if (args.all_day !== undefined) parts.push(args.all_day ? 'all-day' : 'timed')
-      if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
+      if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${placeOnCard([args.location, args.address].filter(Boolean).join(', '))}"`)
       if (args.driver_name !== undefined) parts.push(`driver → ${String(args.driver_name || 'none')}`)
       if (args.driver_leg1 !== undefined || args.driver_leg2 !== undefined) {
         parts.push(`drivers → dropoff: ${String(args.driver_leg1 ?? '—')}, pickup: ${String(args.driver_leg2 ?? '—')}`)
