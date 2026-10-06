@@ -156,3 +156,16 @@ test('calendar sync: an event already saved from another family calendar is left
   assert.match(legacy, /\} else if \(legacy\) \{[\s\S]*return\s*\}/)
   assert.match(src, /error\?\.code === '23505' && \/google_event_id\/\.test\(error\.message\)\) return/)
 })
+
+// Jake, Oct 6: "adding someone/pet to the family fails save" — family_members' old colour columns were required with
+// no default, and Settings › Family's insert (name, role, drives, order, on the wall) doesn't set them.
+test('adding someone needs nothing the new settings don’t send: the old colour columns have defaults', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs')
+  const dir = new URL('../supabase/migrations/', import.meta.url)
+  const all = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n')
+  assert.match(all, /alter table public\.family_members alter column color_hex set default/)
+  assert.match(all, /alter table public\.family_members alter column color_name set default/)
+  const live = readFileSync(new URL('../src/settings/liveSource.ts', import.meta.url), 'utf8')
+  const insert = live.slice(live.indexOf("from('family_members').insert("), live.indexOf("from('family_members').insert(") + 300)
+  assert.doesNotMatch(insert, /color_hex|color_name/)
+})
