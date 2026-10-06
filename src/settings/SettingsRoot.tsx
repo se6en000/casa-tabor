@@ -169,7 +169,7 @@ function GeneralRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => void
   const n = (count: number | undefined, one: string, many: string) => (count == null ? '' : `${count} ${count === 1 ? one : many}`)
   const linked = (connections ?? []).filter((m) => m.connection)
   const broken = linked.some((m) => m.connection?.reauthorization_required || m.connection?.last_sync_error)
-  const calendars = linked.reduce((sum, m) => sum + (m.connection?.read_calendar_metadata?.length ?? 1), 0)
+  const calendars = linked.reduce((sum, m) => sum + (m.connection?.read_calendar_metadata?.length || 1), 0)
   const unsure = items?.filter((i) => i.confidence !== 'sure').length ?? 0
   const trash = chores?.find((c) => /trash/i.test(c.title))
   return (

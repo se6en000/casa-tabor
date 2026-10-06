@@ -16,6 +16,8 @@ import { useSaveNote } from './saveNote'
 // and asks before anything that can't be taken back.
 
 const ROLE: Record<string, string> = { parent: 'Parent', child: 'Kid', caregiver: 'Caregiver' }
+/** Where a memory came from, in words (casa_memory.source). */
+const SOURCE: Record<string, string> = { learned: 'picked up on its own', told: 'you told it', old_app: 'from the old app' }
 
 function TextField({ value, onChange, placeholder, label, onEnter }: { value: string; onChange: (v: string) => void; placeholder: string; label: string; onEnter?: () => void }) {
   const t = useType()
@@ -108,7 +110,10 @@ export function PlacesPage({ head }: { head: ReactNode }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [note, show] = useSaveNote()
   const match = (...parts: Array<string | null | undefined>) => !q.trim() || parts.some((p) => p?.toLowerCase().includes(q.trim().toLowerCase()))
-  const shownPlaces = (places ?? []).filter((p) => match(p.name, p.address, p.city, p.category)).sort((a, b) => a.name.localeCompare(b.name))
+  // The ones you go to most first (170 saved, many seen once in an email); a place dismissed in the old directory stays hidden.
+  const uses = (p: object) => Number((p as { occurrence_count?: number | null }).occurrence_count ?? 0)
+  const shownPlaces = (places ?? []).filter((p) => !(p as { dismissed_at?: string | null }).dismissed_at && match(p.name, p.address, p.city, p.category))
+    .sort((a, b) => uses(b) - uses(a) || a.name.localeCompare(b.name))
   const shownPeople = (contacts ?? []).filter((c) => match(c.name, c.relationship, c.place_name))
 
   return (
@@ -124,7 +129,7 @@ export function PlacesPage({ head }: { head: ReactNode }) {
           <Group label={places ? `Saved · ${places.length}` : 'Saved'}>
             {places == null ? <Quiet>Loading…</Quiet> : shownPlaces.length === 0 ? <Quiet>No place matches “{q}”.</Quiet> : shownPlaces.map((p) => (
               <Row key={p.id} label={`Open ${p.name}`} onClick={() => { setEditing({ id: p.id, name: p.name }); setConfirmDelete(false) }} name={p.name}
-                state={[p.category && p.category !== 'other' ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : null, [p.address, p.city].filter(Boolean).join(', ')].filter(Boolean).join(' · ')} />
+                state={[p.category && p.category !== 'other' ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : null, [p.address, p.city].filter(Boolean).join(', '), uses(p) > 1 ? `used ${uses(p)} times` : null].filter(Boolean).join(' · ')} />
             ))}
           </Group>
         </>
@@ -275,10 +280,10 @@ export function KnowsPage({ head }: { head: ReactNode }) {
   const sure = shown.filter((i) => i.confidence === 'sure')
   const line = (i: MemoryItem) => (
     <div key={i.id} className={`flex items-start gap-[12px] px-[14px] py-[12px]`}>
-      {i.about_member_id ? <PersonDisc name={nameOf(i)} className={pigment(i.about_member_id)} /> : <PersonDisc name="H" className="bg-wall-ink-2" />}
+      {i.about_member_id ? <PersonDisc name={nameOf(i)} className={pigment(i.about_member_id)} /> : <PersonDisc name={i.about_label ?? 'House'} className="bg-wall-ink-2" />}
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className={`text-wall-ink ${t.body}`}>{i.text}</span>
-        <span className={`text-wall-ink-2 ${t.detail}`}>{[nameOf(i), i.kind === 'thought' ? 'something to come back to' : null, i.sensitive ? 'private' : null, i.source ? `from ${i.source}` : null, new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}</span>
+        <span className={`text-wall-ink-2 ${t.detail}`}>{[nameOf(i), i.kind === 'thought' ? 'something to come back to' : null, i.sensitive ? 'private' : null, i.source ? SOURCE[i.source] ?? `from ${i.source}` : null, new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}</span>
         <div className="flex gap-[18px]">
           {i.confidence !== 'sure' && <Action label={`Yes, keep: ${i.text}`} onClick={async () => show(await confirm(i.id), 'Kept as sure.')}>Yes, it’s right</Action>}
           <Action label={`Forget: ${i.text}`} tone="quiet" onClick={async () => show(await forget(i.id), 'Forgotten.')}>Forget</Action>
@@ -342,7 +347,7 @@ export function ChoresPage({ head }: { head: ReactNode }) {
       </Group>
       <div className="mt-[8px] px-[4px]"><Action onClick={() => setEditing({ chore: newChore(viewer.id, now), isNew: true })}><Plus size={18} aria-hidden="true" /> Add a chore</Action></div>
       <Group label="Keep from">
-        <Row name={kept === 1 ? '1 event is kept from someone' : `${kept} events are kept from someone`} state="Set on each event: open it and choose “Keep from”" />
+        <Row name={kept === 0 ? 'Nothing is kept from anyone' : kept === 1 ? '1 event is kept from someone' : `${kept} events are kept from someone`} state="Set on each event: open it and choose “Keep from”" />
       </Group>
       {editing && members && (
         <Sheet label={editing.isNew ? 'New chore' : `${editing.chore.title} — edit`} onClose={() => setEditing(null)}>

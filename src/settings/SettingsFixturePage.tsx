@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsRoot from './SettingsRoot'
+import { liveSource } from './liveSource'
 import type { MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { MemberWithConnection } from '../hooks/useCalendarConnections'
@@ -10,7 +11,7 @@ import { SCREENSAVER_DEFAULTS, type ScreensaverSettings } from '../hooks/useScre
 
 // /__settings-fixture (visual-test builds only): Settings V2 with fixed data, so every page is drawn and checked.
 //   ?page=family|…|maintenance  ?wall=1 (the kitchen wall's size)  ?viewer=kelly (not Jake: Advanced is closed)
-//   ?wide=1 is just a wide window (the test sets the viewport).
+//   ?live=<member id> reads the real data instead (a developer's check; see below).
 
 const NOW = new Date('2026-10-06T08:40:00-04:00')
 const at = (iso: string) => new Date(iso).toISOString()
@@ -141,7 +142,13 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
 
 export default function SettingsFixturePage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), [])
-  const source = useMemo(() => fixtureSource(params), [params])
+  // ?live=<member id>: the real data, read as that person (no PIN in a test build) — for checking pages against the
+  // family's own data on a developer machine. Nothing here changes anything unless a control is used.
+  const source = useMemo(() => {
+    const live = params.get('live')
+    if (!live) return fixtureSource(params)
+    return { ...liveSource, onWall: params.get('wall') === '1', useViewer: () => ({ id: live, name: 'Jake', token: null, signOut: null }), useFaceId: () => ({ here: false, available: false, setUp: null }) }
+  }, [params])
   const client = useMemo(() => new QueryClient(), [])
   const page = params.get('page')
   return (
