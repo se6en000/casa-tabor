@@ -147,8 +147,10 @@ export const DESIGN_TOKENS = {
     'night-gold': '#A08050',
     // Family Wall (src/wall). Limestone ground, ink, brass; rust is reserved
     // for "move now". Pigments are assigned to people by lane order.
-    'wall-ground': '#E7E0D4',
-    'wall-ground-calm': '#DDD5C8',
+    // Linen (Jake, Oct 6: "make the background … the color of the background of that pill … I want that linen color to
+    // pop"): the ground is what the Tomorrow pill was (brass at 10% over #E7E0D4); calm stays a step darker.
+    'wall-ground': '#E1D7C7',
+    'wall-ground-calm': '#D7CCBB',
     'wall-ink': '#26221D',
     'wall-ink-2': '#5E564B',
     'wall-rule': '#CBC1B1',
