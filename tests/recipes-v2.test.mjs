@@ -102,3 +102,15 @@ test('groceries: salt, pepper, oil and water start unticked; a bell pepper doesn
   for (const line of ['Salt and pepper', 'Kosher salt', '2 tbsp olive oil', '1 cup water', 'Black pepper', 'Cooking spray']) assert.equal(likelyHave(line), true, line)
   for (const line of ['1 red bell pepper', '1 jalapeño pepper', '10 oz shrimp', 'Saltines', '1 lemon']) assert.equal(likelyHave(line), false, line)
 })
+
+test('an ingredient line as its amount and its name (canvas 50: the amount in brass beside the name)', async () => {
+  const { splitAmount } = await import('../src/recipes/model.ts')
+  assert.deepEqual(splitAmount('10 oz Shrimp'), ['10 oz', 'Shrimp'])
+  assert.deepEqual(splitAmount('1 (5 oz) can tuna, drained — or 5 oz mashed firm tofu'), ['1 (5 oz) can', 'tuna, drained — or 5 oz mashed firm tofu'])
+  assert.deepEqual(splitAmount('2 cups cauliflower rice (store-bought frozen)'), ['2 cups', 'cauliflower rice (store-bought frozen)'])
+  assert.deepEqual(splitAmount('1/2 Broccoli'), ['1/2', 'Broccoli'])
+  assert.deepEqual(splitAmount('1 small green onion, thinly sliced'), ['1 small', 'green onion, thinly sliced'])
+  assert.deepEqual(splitAmount('2-3 cloves garlic'), ['2-3 cloves', 'garlic'])
+  assert.deepEqual(splitAmount('Salt and pepper'), ['', 'Salt and pepper'])
+  assert.deepEqual(splitAmount('1 Lemon'), ['1', 'Lemon'])
+})

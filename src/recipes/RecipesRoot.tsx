@@ -87,8 +87,8 @@ export function RecipesScreens() {
   return (
     <LayoutContext.Provider value={layout}>
       <main className="min-h-[100dvh] bg-phone-ground font-body text-wall-ink">
-        <div className={frame[layout]}>{body}</div>
-        {flash && <div role="status" className="fixed bottom-[max(24px,calc(env(safe-area-inset-bottom)+12px))] left-1/2 z-40 -translate-x-1/2 rounded-full bg-wall-ink px-[22px] py-[12px] font-body text-phone-body font-semibold text-wall-on-pigment">{flash}</div>}
+        <div className={route.screen === 'recipe' && recipe ? '' : frame[layout]}>{body}</div>
+        {flash && <div role="status" className="fixed left-1/2 top-[max(16px,calc(env(safe-area-inset-top)+8px))] z-40 -translate-x-1/2 rounded-full bg-wall-ink px-[22px] py-[12px] font-body text-phone-body font-semibold text-wall-on-pigment">{flash}</div>}
       </main>
       {route.screen === 'wall' && route.adding && (
         <LayoutContext.Provider value={layout}>

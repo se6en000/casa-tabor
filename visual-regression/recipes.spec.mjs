@@ -45,7 +45,7 @@ test('recipes: a recipe — serves 4 doubles the card’s amounts; Groceries add
   await expect(page).toHaveScreenshot('recipes-phone-recipe.png')
   await s.getByRole('button', { name: '4', exact: true }).click()
   await expect(ingredients).toContainText('20 oz Shrimp')
-  await expect(ingredients).toContainText('for 4')
+  await expect(s.getByRole('button', { name: '4', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await s.getByRole('button', { name: 'Groceries' }).click()
   const sheet = page.getByRole('dialog', { name: 'Add to Groceries' })
   await sheet.getByRole('button', { name: '1/2 Broccoli' }).click()

@@ -215,3 +215,12 @@ export function linesFor(recipe: { ingredients: string[]; servings: string | nul
   const choice = choices[servingsIndex] ?? choices[0]
   return recipe.ingredients.map((line) => scaleAmount(amountFor(line, choice.variant), choice.factor))
 }
+
+const UNITS = String.raw`cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|cloves?|cans?|packets?|packages?|small|medium|large|pinch(?:es)?|slices?|heads?|bunch(?:es)?|sticks?|jars?|pieces?|sprigs?|stalks?|dash(?:es)?|quarts?|pints?`
+const AMOUNT = new RegExp(String.raw`^(${QTY}(?:\s*(?:-|–|to)\s*${QTY})?(?:\s*\([^)]*\))?(?:\s+(?:${UNITS})\b\.?)?)\s+(.+)$`, 'i')
+
+/** "10 oz Shrimp" → ["10 oz", "Shrimp"]; a line with no amount → ["", the line]. */
+export function splitAmount(line: string): [string, string] {
+  const m = AMOUNT.exec(line.trim())
+  return m ? [m[1].trim(), m[m.length - 1].trim()] : ['', line.trim()]
+}
