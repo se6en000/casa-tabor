@@ -17,7 +17,7 @@ export default function WallTomorrowNote({ note, quiet = false }: { note: Tomorr
         note.onOpen()
       }}
       className={`flex h-[56px] w-full shrink-0 items-center gap-[16px] rounded-full text-left text-wall-ink ${
-        quiet ? 'border-0 bg-transparent px-0' : 'border border-solid border-wall-brass bg-wall-brass/15 px-[26px]'
+        quiet ? 'border-0 bg-transparent px-0' : 'border border-solid border-wall-brass bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] px-[26px]'
       }`}
     >
       <span className="shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-rust">TOMORROW</span>

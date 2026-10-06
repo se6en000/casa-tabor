@@ -494,7 +494,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         )}
       </span>
     )
-    const card = `flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-on-pigment'} ${past ? 'opacity-45' : ''} ${ticked ? 'opacity-55 transition-opacity duration-500' : ''}`
+    const card = `flex items-stretch gap-[12px] rounded-[16px] border border-solid px-[14px] py-[12px] ${next ? 'border-wall-brass/50 bg-wall-brass/12' : 'border-wall-stone bg-wall-paper'} ${past ? 'opacity-45' : ''} ${ticked ? 'opacity-55 transition-opacity duration-500' : ''}`
     if (tickable) {
       // A to-do or chore (canvas 46c; Jake, Oct 5: "can we do the swipe 46c? … right to done, swipe left to snooze a
       // day?"): the card like the others, its bar dotted brass and who it's for in words — no box, no faces. Swipe right
@@ -637,7 +637,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // it on Today; a card opens the event.
   const agendaCard = (i: FamilyItem) => (
     <button key={i.id} type="button" disabled={!openable(i.id)} onClick={() => setOpenId(i.id)}
-      className="flex w-full items-stretch gap-[12px] rounded-[16px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] py-[12px] text-left text-wall-ink disabled:opacity-100">
+      className="flex w-full items-stretch gap-[12px] rounded-[16px] border border-solid border-wall-stone bg-wall-paper px-[14px] py-[12px] text-left text-wall-ink disabled:opacity-100">
       <span className="flex w-[48px] shrink-0 flex-col pt-[1px] leading-tight">
         <span className="text-phone-body font-bold">{i.time === 'All day' ? 'All' : i.time}</span>
         <span className="text-phone-label font-semibold text-wall-ink-2">{i.time === 'All day' ? 'day' : i.at.getHours() < 12 ? 'AM' : 'PM'}</span>
@@ -1067,7 +1067,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
                   setHandOff(null)
                   void tripActions.handOff(handOff.trip, c.memberId, handOff.plan.date)
                 }}
-                className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[14px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-left text-wall-ink"
+                className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[14px] border border-solid border-wall-stone bg-wall-paper px-[12px] text-left text-wall-ink"
               >
                 <Disc id={c.memberId} members={members} pigments={pigments} />
                 <span className="flex flex-col">

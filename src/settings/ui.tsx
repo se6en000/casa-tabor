@@ -44,7 +44,7 @@ export function Group({ children, label }: { children: ReactNode; label?: string
   return (
     <section aria-label={label}>
       {label && <Label>{label}</Label>}
-      <div className="overflow-hidden rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment [&>*+*]:border-0 [&>*+*]:border-t [&>*+*]:border-solid [&>*+*]:border-wall-stone">{children}</div>
+      <div className="overflow-hidden rounded-[18px] border border-solid border-wall-stone bg-wall-paper [&>*+*]:border-0 [&>*+*]:border-t [&>*+*]:border-solid [&>*+*]:border-wall-stone">{children}</div>
     </section>
   )
 }

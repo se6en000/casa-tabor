@@ -192,7 +192,7 @@ export default function CookMode({ recipe, place, startServings, onClose, onFini
   const others = lines.map((_, i) => i).filter((i) => !uses.includes(i))
   const [allOthers, setAllOthers] = [showAll, setShowAll]
   const thisStep = (
-    <section aria-label="For this step" className={`rounded-[24px] bg-wall-on-pigment ${wall ? 'px-[30px] pb-[20px] pt-[26px]' : layout === 'tablet' ? 'px-[26px] pb-[16px] pt-[22px]' : 'px-[16px] pb-[8px] pt-[14px]'}`}>
+    <section aria-label="For this step" className={`rounded-[24px] bg-wall-paper ${wall ? 'px-[30px] pb-[20px] pt-[26px]' : layout === 'tablet' ? 'px-[26px] pb-[16px] pt-[22px]' : 'px-[16px] pb-[8px] pt-[14px]'}`}>
       <h2 className={`m-0 font-body font-bold uppercase tracking-[0.22em] text-wall-brass-ink ${t.label}`}>For this step</h2>
       {uses.length
         ? <ul className="m-0 mt-[8px] list-none p-0">{uses.map((i) => row(i, 'big'))}</ul>

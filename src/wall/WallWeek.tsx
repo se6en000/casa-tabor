@@ -39,7 +39,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                 event.stopPropagation()
                 onSelect(day.date)
               }}
-              className={`flex h-[124px] min-w-0 flex-1 flex-col justify-between rounded-[18px] bg-transparent text-left text-wall-ink ${selected ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-rule px-[20px] py-[14px]'}`}
+              className={`flex h-[124px] min-w-0 flex-1 flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${selected ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-rule px-[20px] py-[14px]'}`}
             >
               <div className="flex items-baseline gap-[10px]">
                 <span className={`text-wall-label font-bold tracking-[0.15em] ${selected ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{day.weekday.toUpperCase()}</span>
@@ -82,7 +82,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
               event.stopPropagation()
               comingUp.onOpen()
             }}
-            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-brass/10 text-left text-wall-ink ${comingUp.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
+            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${comingUp.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
           >
             <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">COMING UP</span>
             <span className="font-display text-wall-heading font-bold leading-none">{comingUp.count} to plan</span>
@@ -100,7 +100,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
               event.stopPropagation()
               todo.onOpen()
             }}
-            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-brass/10 text-left text-wall-ink ${todo.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
+            className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${todo.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
           >
             <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">TO DO</span>
             <span className="font-display text-wall-heading font-bold leading-none">{todo.ready ? `${todo.ready} ready` : 'All clear'}</span>

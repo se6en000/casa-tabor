@@ -153,12 +153,15 @@ export const DESIGN_TOKENS = {
     'wall-ground-calm': '#D7CCBB',
     'wall-ink': '#26221D',
     'wall-ink-2': '#5E564B',
-    'wall-rule': '#CBC1B1',
-    'wall-stone': '#D6CCBC',
+    'wall-rule': '#BCAF9B',
+    'wall-stone': '#CEC2AE',
     'wall-brass': '#A88450',
     'wall-brass-ink': '#7A5A26',
     'wall-rust': '#9A4A2A',
     'wall-on-pigment': '#F6F1E8',
+    // Paper on linen (canvas 53C; Jake, Oct 6: "paper on linen but with a little tanner white? like the one used on to
+    // do"): what sits on the linen ground — tiles, the Tomorrow pill, cards — the cream at half over the linen.
+    'wall-paper': '#EBE4D7',
     // The assistant band's surface: the wall's ink by day; raised and warmer over the night face.
     'wall-band': '#26221D',
     'wall-pigment-1': '#4A4640',
