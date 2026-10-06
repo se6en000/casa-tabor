@@ -139,6 +139,14 @@ out['true'] = list(main.cct_to_rgb_gains(2700))
 main._color_soften = 0.4
 out['soft'] = list(main.cct_to_rgb_gains(2700))
 out['neutral'] = list(main.cct_to_rgb_gains(6600))
+main._color_soften = 0.0
+main._cct_bias_k = 0
+out['as_is'] = main.nudged_cct(3500)
+main._cct_bias_k = -400
+out['warmer'] = main.nudged_cct(3500)
+out['warmer_rgb'] = list(main.cct_to_rgb_gains(main.nudged_cct(3500)))
+main._cct_bias_k = 400
+out['cooler_rgb'] = list(main.cct_to_rgb_gains(main.nudged_cct(3500)))
 print(json.dumps(out))
 `
   const r = JSON.parse(execFileSync('python3', ['-c', script], { encoding: 'utf8' }).trim())
@@ -156,4 +164,8 @@ print(json.dumps(out))
   assert.ok(r.true[2] < r.soft[2] && r.true[1] < r.soft[1], `true ${r.true} warmer than softened ${r.soft}`)
   assert.ok(r.true[2] < 25, `true blue gain at 2700 K is strong: ${r.true[2]}`)
   assert.deepEqual(r.neutral.map((v) => Math.abs(v - 50) <= 3), [true, true, true])
+  // The colour nudge (Jake, Oct 6: "to tweak the warming cooling of the light just a tad"): warmer = less blue.
+  assert.equal(r.as_is, 3500)
+  assert.equal(r.warmer, 3100)
+  assert.ok(r.warmer_rgb[2] < r.cooler_rgb[2], `warmer has less blue: ${r.warmer_rgb} vs ${r.cooler_rgb}`)
 })

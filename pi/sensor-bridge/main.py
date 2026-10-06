@@ -147,7 +147,7 @@ def _is_push_enabled() -> bool:
     global _push_enabled, _push_checked_at
     global _brightness_min, _brightness_max, _user_brightness_min, _user_brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
-    global _room_dim_strength, _color_soften
+    global _room_dim_strength, _color_soften, _cct_bias_k
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
         return _push_enabled
@@ -180,6 +180,7 @@ def _is_push_enabled() -> bool:
             _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
             _room_dim_strength   = max(0.0, min(0.9, float(cfg.get("room_dim_strength", 0.30))))
             _color_soften        = max(0.0, min(1.0, float(cfg.get("color_soften", 0.0))))
+            _cct_bias_k          = max(-1500.0, min(1500.0, float(cfg.get("cct_bias_k", 0) or 0)))
         log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
                  _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
     except Exception as exc:
@@ -292,6 +293,9 @@ _room_dim_strength = 0.0
 # The colour shift: 0 = true to the room's light, 1 = none (display_config.color_soften; Jake: "put the color shift to
 # true so I can see the difference"). It was a fixed 0.4 toward neutral.
 _color_soften = 0.0
+# A nudge on the room's colour temperature before the screen matches it, in kelvin: below 0 warmer, above 0 cooler
+# (display_config.cct_bias_k; Jake, Oct 6: "the color nudge slider … to tweak the warming cooling of the light just a tad").
+_cct_bias_k = 0.0
 
 PANEL_CALIBRATION_PATH = "/home/jake/sensor-bridge/panel-calibration.json"
 
@@ -559,11 +563,16 @@ def set_brightness_target(lux: float):
     _target_brightness = lux_to_brightness(lux)
 
 
+def nudged_cct(cct: float) -> float:
+    """The room's colour temperature with the nudge: -300 K is a touch warmer, +300 K a touch cooler."""
+    return max(1000.0, min(40000.0, cct + _cct_bias_k))
+
+
 def set_color_target(cct: float):
     """Called by sensor poll — converts true spectral CCT to RGB gains and updates target."""
     global _target_rgb
     if cct is not None:
-        _target_rgb = cct_to_rgb_gains(cct)
+        _target_rgb = cct_to_rgb_gains(nudged_cct(cct))
 
 
 LIGHT_LOG_S = 300

@@ -81,6 +81,8 @@ export interface DisplayConfigLite {
   room_dim_strength?: number
   /** The colour shift toward the room's light: 0 = true to it, 0.4 = softened. */
   color_soften?: number
+  /** A nudge on the room's colour before the screen matches it, in kelvin: below 0 warmer, above 0 cooler. */
+  cct_bias_k?: number
 }
 
 export type SaveResult = { ok: boolean; message?: string }

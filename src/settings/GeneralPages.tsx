@@ -429,6 +429,8 @@ export function WallPage({ head }: { head: ReactNode }) {
       <Group label="Colour">
         <Row name="True to the room’s light" state={(c.color_soften ?? 0) > 0 ? 'Off: a gentle shift toward the lamp’s warmth' : 'The screen takes on the lamp’s warmth, or the daylight’s cool, fully'}
           right={<Toggle label="True to the room’s light" on={(c.color_soften ?? 0) === 0} onChange={(on) => void set({ color_soften: on ? 0 : 0.4 }, on ? 'True to the room.' : 'Softened.')} />} />
+        <Row name="Warmer or cooler" state="A nudge on the room’s colour, if the screen reads a touch too warm or too cool"
+          right={<Stepper label="Warmer or cooler" value={c.cct_bias_k ?? 0} min={-1000} max={1000} step={100} format={(v) => (v === 0 ? 'As the room' : v < 0 ? `${-v} K warmer` : `${v} K cooler`)} onChange={(v) => void set({ cct_bias_k: v })} />} />
       </Group>
       <Group label="Sleep">
         <Row name="Sleep when the room is dark" state="Wakes as soon as a light comes on" right={<Toggle label="Sleep when the room is dark" on={c.auto_sleep_enabled !== false} onChange={(on) => void set({ auto_sleep_enabled: on })} />} />
