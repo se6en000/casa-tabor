@@ -315,6 +315,9 @@ async function readTurn(
       // as a title change): the delete card for the item named; a repeating one goes on to the full assistant.
       const card = fullAiCard({ name: 'delete_event', args: { id: about.id } }, { events: loaded, utcOffset, now: new Date() }) as { tool?: string; args?: Record<string, unknown> }
       if (card.tool && card.args) out.card = { tool: card.tool, args: { ...card.args, start: about.start_time, all_day: about.all_day }, about, note: resolution.calledOff ? 'Sorry it’s off. ' : '' }
+    } else if (resolution.act === 'done' && about && about.event_type === 'reminder') {
+      // A to-do finished, by name: its done card, no model guessing (nightly check, Oct 6).
+      out.card = { tool: 'complete_reminder', args: { id: about.id, title: about.title }, about }
     } else if (resolution.act === 'change' && about && !about.repeating) {
       // Answering Casa's "which one?": apply the change asked for then to the item picked now.
       const asked = context?.conversationState as { activeEntityType?: string; candidateEvents?: Array<{ id: string }>; pendingMutation?: { tool?: string; args?: Record<string, unknown> } } | undefined
@@ -1051,12 +1054,17 @@ Deno.serve(async (req) => {
     // His open to-dos (the "To Do" list on his phone): so a repeat is noticed and a project grows from it.
     // With its time and whether it's late, and the household's chores beside it (Jake's bug report, Oct 1: "nothing on
     // todos or reminders?" was answered from the calendar, calling Kelly's gym a reminder, and never named a chore).
-    const [todoRes, choreRes, choreDoneRes] = await Promise.all([
+    const [todoRes, choreRes, choreDoneRes, finishedRes] = await Promise.all([
       sb.from('events').select('id, title, has_due_date, start_time, all_day').eq('event_type', 'reminder').eq('record_kind', 'single')
         .is('deleted_at', null).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(60),
       sb.from('household_chores').select('id, title, member_id, days_of_week, time_local, enabled, every_weeks, starts_on').eq('enabled', true),
       sb.from('household_chore_done').select('chore_id').eq('on_date', new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)),
+      // To-dos ticked off in the last two days (Oct 6: "I finished order groceries for travel", already done, became
+      // "clear the checked groceries" — the model couldn't see it anywhere).
+      sb.from('events').select('title').eq('event_type', 'reminder').eq('status', 'cancelled').is('deleted_at', null)
+        .gte('updated_at', new Date(now.getTime() - 2 * 86_400_000).toISOString()).order('updated_at', { ascending: false }).limit(20),
     ])
+    const finished = ((finishedRes.data ?? []) as Array<{ title: string }>).map((t) => t.title)
     const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
     const todayNy = nyDay(now.toISOString())
     const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string; all_day: boolean | null }>)
@@ -1094,7 +1102,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family) })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.

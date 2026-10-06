@@ -31,3 +31,15 @@ test('the reader knows an item\'s name is its title, and naming it after its pla
   assert.match(prompt, /The item's "name" is its "title"/)
   assert.match(prompt, /the place stays as it is; "place" changes only when it's somewhere else/)
 })
+
+// Nightly check, Oct 6: "I finished order groceries for travel" was read as a change (a change card) or left to the
+// model (which once said it was done without doing it). Finishing a listed to-do is its own act: the done card.
+test('the reader’s “done”: a listed to-do finished becomes the done card’s act; nothing listed goes on to the model', async () => {
+  const { readTurnResolution, buildTurnPrompt } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  assert.equal(readTurnResolution({ act: 'done', event_id: 'todo-1' }, { knownIds: ['todo-1'] }).act, 'done')
+  assert.equal(readTurnResolution({ act: 'done', event_id: null }, { knownIds: ['todo-1'] }).act, 'other')
+  assert.equal(readTurnResolution({ act: 'done', event_id: 'unknown' }, { knownIds: ['todo-1'] }).act, 'other')
+  const prompt = buildTurnPrompt({ messages: [{ role: 'user', content: 'I finished order groceries for travel' }], draft: null, referents: [], upcoming: [], family: [], nowLine: 'Now', utcOffset: '-04:00', nowIso: '2026-10-06T14:00:00Z' })
+  assert.match(prompt, /"done": says a to-do or reminder is finished/)
+  assert.match(prompt, /Finishing is never a "change"/)
+})

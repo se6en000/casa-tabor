@@ -75,3 +75,29 @@ test('marking something done, or describing a tool call, is a promise', () => {
     assert.equal(promisesAction(said), true, said)
   assert.equal(promisesAction('Can I mark it done?'), false)
 })
+
+// Nightly check, Oct 6: "I finished order groceries for travel" → "Okay, I've marked “Order groceries for travel” as
+// done." and nothing done. Saying it's done is sent back like promising it.
+test('a reply that says something was done when no tool ran is sent back; plans and questions are not', async () => {
+  const { promisesAction } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  for (const said of [
+    'Okay, I’ve marked “Order groceries for travel” as done.',
+    'Done — I marked the tire sensor as finished.',
+    'I have added the dentist to Friday at 3:30.',
+    'The photobook pickup is now marked as done.',
+    'I’ve moved Liv’s practice to 5.',
+  ]) assert.equal(promisesAction(said), true, said)
+  for (const said of [
+    'I’ve put together a few ideas for Halloween.',
+    'I’ve added some ideas below.',
+    'Here’s what’s on your to-do list: the tire sensor and the photobook.',
+    'Liv finished practice at 5 yesterday.',
+    'Should I mark it done?',
+  ]) assert.equal(promisesAction(said), false, said)
+})
+
+test('the assistant sees what was ticked off lately, so "I did X" for a done one is "already done", not a guess', async () => {
+  const { buildFullAiSystem } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: null, onScreenIds: [], utcOffset: '-04:00', now: new Date('2026-10-06T14:00:00Z'), homeCity: 'West Palm Beach', finished: ['Order groceries for travel'] })
+  assert.match(system, /FINISHED LATELY[^\n]*already ticked off[^\n]*\n- Order groceries for travel/)
+})

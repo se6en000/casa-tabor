@@ -146,6 +146,7 @@ Then the act — what they want (besides dropping the draft). Decide in this ord
 - "confirm_draft": says yes / go ahead to the draft and nothing else.
 - "add": asks Casa to put something new on the calendar (an event or a reminder) — give "new_item". Something to get ready for a listed item ("add checking Liv's cleats are dry to tomorrow's game", "for tomorrow's get and pack, add …") is still "add", and also give "prep" for it.
 - "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id" and "changes". (Taking something off is "remove".) When the person corrects which item they meant, carry over the change they asked for before.
+- "done": says a to-do or reminder is finished, or asks to mark, tick or check it off ("I finished ordering groceries for travel", "mark the tire sensor done", "I did the photobook pickup", "the trash is out") — give "event_id" when it's one of the items listed (a reminder), else null. Finishing is never a "change".
 - "remove": asks to take one calendar item off — delete it, cancel it, call it off, it's rained out or not happening any more ("cancel the softball game tonight, it rained", "the dentist canceled on us", "take Friday's party off") — give "event_id", and "called_off": true when it's off because of something that happened (the weather, someone canceled), false when it was a mistake or isn't wanted. More than one item could fit: "clarify".
 - "clarify": asks to change something, but more than one calendar item fits what they said (for example several on the day they named, and nothing in the message tells them apart) — give "candidates" (their ids) and "question" (asking which, naming them). Never pick one when it's unclear; "my" or "the" doesn't make it clear.
 - "question": (asking what's on the Coming up list, or about gift ideas, is "other") asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web). A question about any or every time something happens or happened, the last or first time, or anything before today — is false: those need the whole calendar, not the weeks listed.
@@ -169,7 +170,7 @@ Dates: always take them from the Days list. In scheduling, pushing or moving som
 Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false, "day": {...} or null, "directions_to": "..." or null, "address_for": {...} or null, "search": {...} or null, "prep": {...} or null, "keep_posted": "..." or null, "called_off": true|false}`
 }
 
-const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'remove', 'clarify', 'question', 'other']
+const ACTS = ['aside', 'none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'remove', 'done', 'clarify', 'question', 'other']
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
 /** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
@@ -204,6 +205,9 @@ export function readTurnResolution(raw, { draft = null, knownIds = [], pendingCh
   if (act === 'add' && !newItem) act = 'other'
   // Taking one item off (2026-09-30: "cancel the softball game tonight" became a title change).
   if (act === 'remove' && !eventId) act = 'other'
+  // A to-do finished (nightly check, Oct 6: "I finished order groceries for travel" came back as a change card, or as
+  // "I've marked it done" with nothing done): the done card for the item named; without one, the full assistant.
+  if (act === 'done' && !eventId) act = 'other'
   const calledOff = act === 'remove' && r.called_off === true
   const candidates = Array.isArray(r.candidates) ? r.candidates.filter((id) => (knownIds ?? []).includes(id)).slice(0, 6) : []
   const question = typeof r.question === 'string' && r.question.trim() ? r.question.trim().slice(0, 400) : null
