@@ -5,6 +5,7 @@ import WallFrame from './WallFrame'
 import WallStage from './WallStage'
 import { lazy, Suspense } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useWallReload } from './useWallReload'
 
 const WallGroceriesPage = lazy(() => import('./WallGroceriesPage'))
 
@@ -15,6 +16,8 @@ export default function WallRoot() {
   // Keep the existing display-sleep behavior; the old art screensaver isn't part of the Wall.
   const { settings } = useScreensaverSettings()
   useIdleTimer(Infinity, settings.displaySleepEnabled ? settings.displayOffMins * 60_000 : Infinity)
+  // Settings › Maintenance › Refresh the wall.
+  useWallReload()
 
   const { pathname } = useLocation()
   return (

@@ -11,7 +11,7 @@ test('memory settings has a dedicated canonical destination', () => {
   assert.match(memorySettings, /create_memory/)
   assert.match(memorySettings, /Food & meal preferences/)
   assert.match(routes, /path="memory"/)
-  assert.match(shell, /\/settings\/memory/)
+  assert.match(shell, /\/settings\/old\/memory/)
 })
 
 test('supabase migration defines memory and bug report tables with RLS', () => {

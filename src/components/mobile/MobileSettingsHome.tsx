@@ -56,7 +56,7 @@ export default function MobileSettingsHome() {
       <div className="grid grid-cols-2 gap-3">
         {/* Family & Colors */}
         <div
-          onClick={() => navigate('/settings/family')}
+          onClick={() => navigate('/settings/old/family')}
           className="flex flex-col p-4 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all cursor-pointer min-h-[115px] justify-between"
         >
           <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-600 shrink-0">
@@ -74,7 +74,7 @@ export default function MobileSettingsHome() {
 
         {/* Saved Places */}
         <div
-          onClick={() => navigate('/settings/places')}
+          onClick={() => navigate('/settings/old/places')}
           className="flex flex-col p-4 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all cursor-pointer min-h-[115px] justify-between"
         >
           <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-600 shrink-0">
@@ -92,7 +92,7 @@ export default function MobileSettingsHome() {
 
         {/* Food Profile */}
         <div
-          onClick={() => navigate('/settings/food-profile')}
+          onClick={() => navigate('/settings/old/food-profile')}
           className="flex flex-col p-4 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all cursor-pointer min-h-[115px] justify-between"
         >
           <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 shrink-0">
@@ -110,7 +110,7 @@ export default function MobileSettingsHome() {
 
         {/* Google Sync */}
         <div
-          onClick={() => navigate('/settings/google')}
+          onClick={() => navigate('/settings/old/google')}
           className="flex flex-col p-4 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all cursor-pointer min-h-[115px] justify-between"
         >
           <div className="w-9 h-9 rounded-xl bg-indigo-500/15 flex items-center justify-center text-indigo-600 shrink-0">
@@ -135,7 +135,7 @@ export default function MobileSettingsHome() {
         <div className="flex flex-col divide-y divide-casa-border/50 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs overflow-hidden">
           <Button
             variant="ghost"
-            onClick={() => navigate('/settings/display')}
+            onClick={() => navigate('/settings/old/display')}
             className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -147,7 +147,7 @@ export default function MobileSettingsHome() {
 
           <Button
             variant="ghost"
-            onClick={() => navigate('/settings/art-mode')}
+            onClick={() => navigate('/settings/old/art-mode')}
             className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -159,7 +159,7 @@ export default function MobileSettingsHome() {
 
           <Button
             variant="ghost"
-            onClick={() => navigate('/settings/memory')}
+            onClick={() => navigate('/settings/old/memory')}
             className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -171,7 +171,7 @@ export default function MobileSettingsHome() {
 
           <Button
             variant="ghost"
-            onClick={() => navigate('/settings/sms')}
+            onClick={() => navigate('/settings/old/sms')}
             className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -186,7 +186,7 @@ export default function MobileSettingsHome() {
       {/* ── 4. Advanced & Diagnostics Mode Entry ── */}
       <div className="mt-2">
         <div
-          onClick={() => navigate('/settings/ai')}
+          onClick={() => navigate('/settings/old/ai')}
           className="flex items-center justify-between p-4 rounded-2xl bg-casa-bg border border-casa-border/80 shadow-2xs hover:border-casa-gold active:scale-[0.99] transition-all cursor-pointer"
         >
           <div className="flex items-center gap-3.5 min-w-0">

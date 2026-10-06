@@ -7,7 +7,7 @@ test('settings shell exposes a dedicated AI shortcuts entry and route', () => {
   const routes = readFileSync(new URL('../src/components/shared/AnimatedRoutes.tsx', import.meta.url), 'utf8')
 
   assert.match(shell, /label:\s*'AI Shortcuts'/)
-  assert.match(shell, /to:\s*'\/settings\/ai\/shortcuts'/)
+  assert.match(shell, /to:\s*'\/settings\/old\/ai\/shortcuts'/)
   assert.match(routes, /path="ai\/shortcuts"/)
 })
 

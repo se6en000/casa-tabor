@@ -95,10 +95,13 @@ type BugReportRow = {
 }
 
 const DEFAULT_GEMINI_MODEL = PRIMARY_GEMINI_MODEL
+/** Correlation ids of the dry runs in flight: their calls are testing (or the nightly check), not the family. */
+const dryRunIds = new Set<string>()
 const providerFetch = createTrackedProviderFetch({
   functionName: 'ai-assistant',
   capability: 'assistant',
   trafficClass: 'user',
+  causeOf: (cid: string | null | undefined) => (cid && dryRunIds.has(cid) ? (cid.startsWith('nightly-check') ? 'nightly' : 'testing') : 'family'),
 })
 const mapsFetch = createTrackedMapsFetch({
   functionName: 'ai-assistant',
@@ -525,6 +528,8 @@ Deno.serve(async (req) => {
   const lane = typeof laneRaw === 'string' && laneRaw.trim().length > 0 ? laneRaw : 'llm'
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim().length > 0 ? deviceIdRaw : null
   const dryRun = dryRunRaw === true
+  // Its calls are testing (or the nightly check) in Usage and cost, not the family's.
+  if (dryRun) { dryRunIds.add(cid); setTimeout(() => dryRunIds.delete(cid), 120_000) }
   // Side-by-side tests only (scripts/assistant-situations --thinking=…): a dry run may ask for a
   // thinking budget. Real turns never can: null keeps each call's own fast setting.
   const thinkingOverrideRaw = (context as Record<string, unknown> | undefined)?.thinking_budget_override

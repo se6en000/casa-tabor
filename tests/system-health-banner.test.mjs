@@ -57,7 +57,7 @@ test('banner is mounted everywhere the Gmail sync banner is', () => {
 
 test('System Health page is routed and linked from settings', () => {
   assert.match(source('src/components/shared/AnimatedRoutes.tsx'), /path="health"/)
-  assert.match(source('src/components/settings/SettingsShell.tsx'), /\/settings\/health/)
+  assert.match(source('src/components/settings/SettingsShell.tsx'), /\/settings\/old\/health/)
 })
 
 test('Cost & Usage pause buttons go through the merging RPC, not a whole-value overwrite', () => {

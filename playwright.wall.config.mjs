@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test'
 // Baselines are per platform, since font rendering differs between Linux and macOS.
 export default defineConfig({
   testDir: './visual-regression',
-  testMatch: ['wall.spec.mjs', 'phone.spec.mjs'],
+  testMatch: ['wall.spec.mjs', 'phone.spec.mjs', 'settings.spec.mjs'],
   globalSetup: './visual-regression/warmup.mjs',
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
   reporter: 'line',

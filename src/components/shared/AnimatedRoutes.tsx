@@ -80,27 +80,27 @@ export default function AnimatedRoutes() {
           <Route path="/trips/:id" element={<PageTransition><TripDetailPage /></PageTransition>} />
 
           {/* Settings — shell wraps all sub-pages with sidebar nav */}
-          <Route path="/settings" element={<PageTransition><SettingsShell /></PageTransition>}>
-            <Route index element={<Navigate to="/settings/display" replace />} />
+          <Route path="/settings/old" element={<PageTransition><SettingsShell /></PageTransition>}>
+            <Route index element={<Navigate to="/settings/old/display" replace />} />
             <Route path="family"     element={<FamilySettingsPage />} />
             <Route path="home"       element={<SavedPlacesSettingsPage initialTab="home" />} />
-            <Route path="profile"    element={<Navigate to="/settings/places?tab=home" replace />} />
+            <Route path="profile"    element={<Navigate to="/settings/old/places?tab=home" replace />} />
             <Route path="places"     element={<SavedPlacesSettingsPage initialTab="places" />} />
             <Route path="google"     element={<GoogleServicesPage />} />
-            <Route path="calendars"  element={<Navigate to="/settings/google" replace />} />
-            <Route path="gmail-scan" element={<Navigate to="/settings/google" replace />} />
+            <Route path="calendars"  element={<Navigate to="/settings/old/google" replace />} />
+            <Route path="gmail-scan" element={<Navigate to="/settings/old/google" replace />} />
             <Route path="ai"         element={<AISettingsPage />} />
             <Route path="ai/shortcuts" element={<AISettingsPage />} />
-            <Route path="bug-tracker" element={<Navigate to="/settings/ai" replace />} />
+            <Route path="bug-tracker" element={<Navigate to="/settings/old/ai" replace />} />
             <Route path="memory" element={<MemorySettingsPage />} />
             <Route path="memory/projects" element={<ProjectSettingsPage />} />
             <Route path="memory/food-profile" element={<FoodProfileSettingsPage initialTab="diet" />} />
             <Route path="sms"        element={<SmsSettingsPage />} />
-            <Route path="music"      element={<Navigate to="/settings/google" replace />} />
+            <Route path="music"      element={<Navigate to="/settings/old/google" replace />} />
             <Route path="display"    element={<DisplaySettingsPage />} />
             <Route path="art-mode"   element={<ArtModeSettingsPage />} />
-            <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
-            <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
+            <Route path="screensaver" element={<Navigate to="/settings/old/display" replace />} />
+            <Route path="theme"      element={<Navigate to="/settings/old/display" replace />} />
             <Route path="status"     element={<StatusDashboardPage />} />
             <Route path="health"     element={<SystemHealthPage />} />
             <Route path="analytics"  element={<DataAnalyticsPage />} />
@@ -112,7 +112,7 @@ export default function AnimatedRoutes() {
             <Route path="design-system" element={<DesignSystemGalleryPage />} />
             {/* Any unknown settings sub-path falls back to a valid page instead
                 of rendering a blank Outlet (guards against link/route drift). */}
-            <Route path="*" element={<Navigate to="/settings/display" replace />} />
+            <Route path="*" element={<Navigate to="/settings/old/display" replace />} />
           </Route>
         </Routes>
       </AnimatePresence>

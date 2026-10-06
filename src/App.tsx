@@ -331,6 +331,7 @@ function AppShell() {
 
 const WallRoot = lazyWithReload(() => import('./wall/WallRoot'), 'WallRoot')
 const PhoneFrame = lazyWithReload(() => import('./phone/PhoneFrame'), 'PhoneFrame')
+const SettingsRoot = lazyWithReload(() => import('./settings/SettingsRoot'), 'SettingsRoot')
 
 // /wall is the Family Wall and renders without the old app shell.
 function RootSwitch() {
@@ -341,6 +342,14 @@ function RootSwitch() {
   const screen = { wide: isWideScreen() }
   const home = homeRedirect(pathname, search, urlFlag ?? readWallHomeFlag(), screen) ?? phoneRedirect(pathname, search, urlFlag ?? readWallHomeFlag(), screen)
   if (home) return <Navigate to={home} replace />
+  // Settings V2 (canvas 47): its own page on the phone, the laptop and the wall; the old settings live at /settings/old.
+  if ((pathname === '/settings' || pathname.startsWith('/settings/')) && !pathname.startsWith('/settings/old')) {
+    return (
+      <Suspense fallback={<div className="fixed inset-0 bg-phone-ground" />}>
+        <SettingsRoot />
+      </Suspense>
+    )
+  }
   // The phone lens (Phase 4): the same family day, one person's view.
   if (pathname === '/phone') {
     return (

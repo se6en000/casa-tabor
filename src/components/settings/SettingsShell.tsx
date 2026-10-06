@@ -16,34 +16,34 @@ const HOUSEHOLD_GROUPS = [
   {
     label: 'Visual & Display',
     items: [
-      { to: '/settings/display', icon: Sun,           label: 'Appearance & Themes', desc: 'Palettes, text size, room tone' },
-      { to: '/settings/art-mode', icon: Palette,      label: 'Art Mode',            desc: 'Art feed, photos, screensaver' },
+      { to: '/settings/old/display', icon: Sun,           label: 'Appearance & Themes', desc: 'Palettes, text size, room tone' },
+      { to: '/settings/old/art-mode', icon: Palette,      label: 'Art Mode',            desc: 'Art feed, photos, screensaver' },
     ],
   },
   {
     label: 'Home & Places',
     items: [
-      { to: '/settings/places',  icon: BookmarkCheck, label: 'Places & Directory',  desc: 'Home address, places & contacts' },
+      { to: '/settings/old/places',  icon: BookmarkCheck, label: 'Places & Directory',  desc: 'Home address, places & contacts' },
     ],
   },
   {
     label: 'Kitchen & Food',
     items: [
-      { to: '/settings/food-profile', icon: ChefHat, label: 'Kitchen & Pantry',     desc: 'Dietary goals, budget & pantry stock' },
+      { to: '/settings/old/food-profile', icon: ChefHat, label: 'Kitchen & Pantry',     desc: 'Dietary goals, budget & pantry stock' },
     ],
   },
   {
     label: 'Family & Memory',
     items: [
-      { to: '/settings/family',  icon: Users,         label: 'Family Members',      desc: 'Profiles, colors, routines' },
-      { to: '/settings/memory',  icon: Brain,         label: 'Memory',              desc: 'Household preferences & projects' },
+      { to: '/settings/old/family',  icon: Users,         label: 'Family Members',      desc: 'Profiles, colors, routines' },
+      { to: '/settings/old/memory',  icon: Brain,         label: 'Memory',              desc: 'Household preferences & projects' },
     ],
   },
   {
     label: 'Connected Services',
     items: [
-      { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
-      { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
+      { to: '/settings/old/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
+      { to: '/settings/old/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],
   },
 ]
@@ -52,24 +52,24 @@ const ADVANCED_GROUPS = [
   {
     label: 'AI Engine & Routing',
     items: [
-      { to: '/settings/ai',      icon: Bot,           label: 'AI Provider & Models', desc: 'Vendor, model routing, API key' },
-      { to: '/settings/ai/shortcuts', icon: Bot,      label: 'AI Shortcuts',        desc: 'Action Button and Apple Shortcut setup' },
+      { to: '/settings/old/ai',      icon: Bot,           label: 'AI Provider & Models', desc: 'Vendor, model routing, API key' },
+      { to: '/settings/old/ai/shortcuts', icon: Bot,      label: 'AI Shortcuts',        desc: 'Action Button and Apple Shortcut setup' },
     ],
   },
   {
     label: 'System Telemetry & Costs',
     items: [
-      { to: '/settings/health',  icon: HeartPulse,    label: 'System Health',       desc: 'Alerts, AI circuit breaker & app error log' },
-      { to: '/settings/status',  icon: Activity,      label: 'Cost & Token Dashboard', desc: 'AI usage & billing reconciliation' },
-      { to: '/settings/analytics', icon: LineChart,   label: 'Orchestration & Graph Health', desc: 'Pipeline telemetry, sub-engine status & graph' },
-      { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Taxonomy quality & dedupe signals' },
+      { to: '/settings/old/health',  icon: HeartPulse,    label: 'System Health',       desc: 'Alerts, AI circuit breaker & app error log' },
+      { to: '/settings/old/status',  icon: Activity,      label: 'Cost & Token Dashboard', desc: 'AI usage & billing reconciliation' },
+      { to: '/settings/old/analytics', icon: LineChart,   label: 'Orchestration & Graph Health', desc: 'Pipeline telemetry, sub-engine status & graph' },
+      { to: '/settings/old/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Taxonomy quality & dedupe signals' },
     ],
   },
   {
     label: 'Developer & Diagnostics',
     items: [
-      { to: '/settings/design-system', icon: LayoutGrid, label: 'Design System Reference', desc: 'Component tokens & visual audits' },
-      { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'PIN-gated bulk operations' },
+      { to: '/settings/old/design-system', icon: LayoutGrid, label: 'Design System Reference', desc: 'Component tokens & visual audits' },
+      { to: '/settings/old/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'PIN-gated bulk operations' },
     ],
   },
 ]
@@ -101,19 +101,19 @@ export default function SettingsShell() {
   useEffect(() => {
     if (isAdvancedRoute && mode !== 'advanced') {
       setMode('advanced')
-    } else if (!isAdvancedRoute && location.pathname !== '/settings' && mode !== 'household') {
+    } else if (!isAdvancedRoute && location.pathname !== '/settings/old' && mode !== 'household') {
       setMode('household')
     }
   }, [isAdvancedRoute, location.pathname, mode])
 
   // On mobile: are we looking at the root list or a detail page?
-  const isRoot = location.pathname === '/settings'
+  const isRoot = location.pathname === '/settings/old'
 
   // Redirect /settings → first item on desktop (no-op on mobile since we show MobileSettingsHome)
   useEffect(() => {
-    if (location.pathname === '/settings') {
+    if (location.pathname === '/settings/old') {
       if (window.innerWidth >= 1024) {
-        navigate('/settings/display', { replace: true })
+        navigate('/settings/old/display', { replace: true })
       }
     }
   }, [location.pathname, navigate])
@@ -242,7 +242,7 @@ export default function SettingsShell() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate('/settings/old')}
                 leadingIcon={<ChevronLeft size={18} />}
                 className="font-bold text-caption text-casa-gold"
               >

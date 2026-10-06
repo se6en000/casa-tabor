@@ -296,6 +296,19 @@ function circuitBreakerResponse(state) {
   })
 }
 
+/**
+ * Who caused an AI call (Settings › Usage and cost, Jake Oct 5: "label every AI call by who caused it"): the nightly
+ * checks, Claude's testing, or the family. A function that knows (the assistant knows a dry run) says so through
+ * `causeOf`; otherwise the test scripts' correlation ids give it away; anything else is null (counted as the family).
+ */
+export function causeFromCorrelation(correlationId) {
+  const cid = String(correlationId ?? '')
+  if (/^nightly-check/.test(cid)) return 'nightly'
+  if (/^(which-live|[a-z-]*-eval)/.test(cid)) return 'testing'
+  return null
+}
+const causeOf = (baseContext, callContext) => callContext.causedBy ?? baseContext.causeOf?.(callContext.correlationId) ?? causeFromCorrelation(callContext.correlationId)
+
 export function createTrackedProviderFetch(baseContext) {
   return async function trackedProviderFetch(url, init, callContext = {}) {
     const startedAt = Date.now()
@@ -319,6 +332,7 @@ export function createTrackedProviderFetch(baseContext) {
         call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
         call_index: callContext.callIndex ?? 1,
         traffic_class: trafficClass,
+        caused_by: causeOf(baseContext, callContext),
         provider,
         model,
         endpoint: safeEndpoint(url),
@@ -356,6 +370,7 @@ export function createTrackedProviderFetch(baseContext) {
           call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
           call_index: callContext.callIndex ?? 1,
           traffic_class: trafficClass,
+          caused_by: causeOf(baseContext, callContext),
           provider,
           model,
           endpoint: safeEndpoint(url),
@@ -394,6 +409,7 @@ export function createTrackedProviderFetch(baseContext) {
         call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
         call_index: callContext.callIndex ?? 1,
         traffic_class: trafficClass,
+        caused_by: causeOf(baseContext, callContext),
         provider,
         model,
         endpoint: safeEndpoint(url),
