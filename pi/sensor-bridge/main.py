@@ -552,6 +552,45 @@ def set_color_target(cct: float):
         _target_rgb = cct_to_rgb_gains(cct)
 
 
+LIGHT_LOG_S = 300
+
+def _light_log_loop():
+    """
+    Every five minutes, what the room's light was and what the screen was set to, saved for Settings › The wall
+    (Jake, Oct 6: "where it is on the color spectrum currently, brightness graph"). The database keeps three days.
+    """
+    while True:
+        time.sleep(LIGHT_LOG_S)
+        if not REQUESTS_AVAILABLE:
+            continue
+        try:
+            with _lock:
+                data = dict(_latest)
+            with _ddc_lock:
+                brightness = _current_brightness
+                rgb = list(_current_rgb) if _current_rgb else None
+                disp_on = _display_on
+            if data.get("cct") is None and brightness is None:
+                continue
+            res = _requests.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/log_wall_light",
+                headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": "application/json"},
+                json={
+                    "p_cct": int(round(data["cct"])) if data.get("cct") is not None else None,
+                    "p_lux": float(data["lux"]) if data.get("lux") is not None else None,
+                    "p_brightness": int(brightness) if brightness is not None else None,
+                    "p_rgb": [int(x) for x in rgb] if rgb else None,
+                    "p_display_on": bool(disp_on),
+                    "p_zone": data.get("zone"),
+                },
+                timeout=5,
+            )
+            if res.status_code >= 400:
+                log.warning("Light log HTTP %s: %s", res.status_code, res.text[:200])
+        except Exception as exc:
+            log.warning("Light log failed: %s", exc)
+
+
 def _touch_wake_loop():
     """
     Watches all /dev/input/event* devices for touch/key events.
@@ -1064,6 +1103,7 @@ async def lifespan(app: FastAPI):
     brightness_thread.start()
     color_thread = threading.Thread(target=_color_loop, daemon=True)
     color_thread.start()
+    threading.Thread(target=_light_log_loop, daemon=True).start()
     touch_wake_thread = threading.Thread(target=_touch_wake_loop, daemon=True)
     touch_wake_thread.start()
     log.info("Sensor bridge started — http://127.0.0.1:8765")

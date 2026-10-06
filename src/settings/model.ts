@@ -108,3 +108,38 @@ export function nightStatus(checks: Array<{ run_date: string; ok: boolean }>): A
   for (const c of checks) byDate.set(c.run_date, (byDate.get(c.run_date) ?? true) && c.ok)
   return [...byDate.entries()].map(([date, ok]) => ({ date, ok })).sort((a, b) => a.date.localeCompare(b.date))
 }
+
+// ── The wall's light (Settings › The wall; Jake, Oct 6: "where it is on the color spectrum currently") ──────────
+// The Pi measures the room's colour temperature (K) and brightness (lux) and sets the screen to match: warmer
+// colours in warm light, brighter in a bright room.
+export const CCT_WARM = 2500
+export const CCT_COOL = 6500
+
+/** Where a colour temperature sits on the band, 0 (warmest) to 1 (coolest). */
+export const spectrumAt = (cct: number) => Math.min(1, Math.max(0, (cct - CCT_WARM) / (CCT_COOL - CCT_WARM)))
+
+/** The light in words: "candle-warm", "warm", "neutral", "cool daylight". */
+export function lightWords(cct: number | null | undefined): string {
+  if (cct == null) return 'not measured'
+  if (cct < 3000) return 'candle-warm'
+  if (cct < 4300) return 'warm'
+  if (cct < 5300) return 'neutral'
+  return 'cool daylight'
+}
+
+/** A colour temperature as an RGB colour (Tanner Helland's blackbody fit), for drawing it. */
+export function cctColor(cct: number): string {
+  const t = Math.min(40000, Math.max(1000, cct)) / 100
+  const clamp = (v: number) => Math.round(Math.min(255, Math.max(0, v)))
+  const r = t <= 66 ? 255 : 329.698727446 * (t - 60) ** -0.1332047592
+  const g = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * (t - 60) ** -0.0755148492
+  const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307
+  return `rgb(${clamp(r)}, ${clamp(g)}, ${clamp(b)})`
+}
+
+/** The screen's tint (the monitor's R/G/B gains, 50 = neutral) as the colour white turns into. */
+export function tintColor(rgb: number[] | null | undefined): string | null {
+  if (!rgb || rgb.length !== 3) return null
+  const top = Math.max(...rgb, 1)
+  return `rgb(${rgb.map((v) => Math.round((v / top) * 255)).join(', ')})`
+}

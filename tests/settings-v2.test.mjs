@@ -83,3 +83,22 @@ test('the new settings change the breaker only through its merging functions, ne
   assert.match(live, /rpc\('set_ai_circuit_breaker_caps', /)
   assert.doesNotMatch(live, /setSetting\('ai_circuit_breaker'/)
 })
+
+test('the wall’s light: where a colour temperature sits, in words, and drawn', async () => {
+  const { spectrumAt, lightWords, cctColor, tintColor } = await import('../src/settings/model.ts')
+  assert.equal(spectrumAt(2500), 0)
+  assert.equal(spectrumAt(6500), 1)
+  assert.equal(spectrumAt(4500), 0.5)
+  assert.equal(spectrumAt(9000), 1)
+  assert.equal(lightWords(2800), 'candle-warm')
+  assert.equal(lightWords(4366), 'neutral')
+  assert.equal(lightWords(3793), 'warm')
+  assert.equal(lightWords(null), 'not measured')
+  // Warm light is orange-ish (red high, blue low); daylight is near white.
+  const [r, , b] = cctColor(2700).match(/\d+/g).map(Number)
+  assert.ok(r === 255 && b < 200, cctColor(2700))
+  assert.equal(cctColor(6600), 'rgb(255, 255, 255)')
+  // The screen's gains 50/45/41 (tinted warm) turn white into a warm white.
+  assert.equal(tintColor([50, 45, 41]), 'rgb(255, 230, 209)')
+  assert.equal(tintColor(null), null)
+})

@@ -15,9 +15,17 @@ import { useKeepFrom } from '../wall/useKeepFrom'
 import { faceIdAvailable, hasFaceId, setUpFaceId } from '../signin/passkey'
 import { readWallHomeFlag } from '../wall/kioskHome'
 import { WALL_RELOAD_KEY } from '../wall/wallReload'
-import type { DisplayConfigLite, HealthSummary, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
+import { useMemberAvailability } from '../hooks/useMemberAvailability'
+import { deserializeRoutinesFromAvailabilityRules } from '../lib/familyRoutines'
+import { addDayOff, removeDayOff, removeRoutine, saveRoutine } from '../wall/saveRoutine'
+import { useGoogleCalendarList, useSelectGoogleCalendar } from '../hooks/useCalendarConnections'
+import type { DisplayConfigLite, HealthSummary, LightReading, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
 
 const ok: SaveResult = { ok: true }
+const ymd = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const fail = (error: unknown): SaveResult => ({ ok: false, message: error instanceof Error ? error.message : 'That didn’t save.' })
 
 async function memory(body: Record<string, unknown>) {
@@ -48,6 +56,12 @@ export const liveSource: SettingsSource = {
     }, [profile])
     return { here, available, setUp: profile ? setUp : null }
   },
+  addMember: async (name, role, canDrive) => {
+    // Last in the family's order, so nobody's color changes (colors follow that order).
+    const { data: last } = await supabase.from('family_members').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+    const { error } = await supabase.from('family_members').insert({ name: name.trim(), role, can_drive: canDrive, sort_order: (Number(last?.sort_order) || 0) + 1, show_on_home_sidebar: true })
+    return error ? fail(error) : ok
+  },
   setCanDrive: async (memberId, canDrive) => {
     const { error } = await supabase.from('family_members').update({ can_drive: canDrive }).eq('id', memberId)
     return error ? fail(error) : ok
@@ -57,6 +71,14 @@ export const liveSource: SettingsSource = {
     return data ? [data.address, data.city, data.state].filter(Boolean).join(', ') || null : null
   },
   usePlaces: () => useSavedPlaces().data ?? null,
+  keepPlace: async (id) => {
+    const { error } = await supabase.from('saved_places').update({ confirmed: true }).eq('id', id)
+    return error ? fail(error) : ok
+  },
+  dismissPlace: async (id) => {
+    const { error } = await supabase.from('saved_places').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
+    return error ? fail(error) : ok
+  },
   useContacts: () => (useContactDirectory().data ?? null) as ReturnType<SettingsSource['useContacts']>,
   renamePlace: async (id, name) => {
     const { error } = await supabase.from('saved_places').update({ name: name.trim() }).eq('id', id)
@@ -72,6 +94,39 @@ export const liveSource: SettingsSource = {
     const { data, error } = await supabase.functions.invoke('google-oauth-start', { body: { family_member_id: memberId, return_url: `${window.location.origin}/settings/google` } })
     if (error || !data?.url) throw error ?? new Error('Google didn’t answer.')
     window.open(data.url as string, '_self')
+  },
+  useCalendarChoices: (memberId) => {
+    const { data } = useGoogleCalendarList(memberId ?? undefined, Boolean(memberId))
+    const select = useSelectGoogleCalendar()
+    const writeId = data?.current_calendar_id ?? null
+    const calendars = data?.calendars ? data.calendars.map((c) => ({ id: c.id, summary: c.summary, color: c.backgroundColor, primary: c.primary })) : null
+    const save = useCallback(async (readIds: string[]) => {
+      if (!memberId || !writeId) return { ok: false, message: 'Google didn’t answer.' }
+      try {
+        const reads = readIds.filter((id) => id !== writeId)
+        await select.mutateAsync({ familyMemberId: memberId, writeCalendarId: writeId, readCalendarIds: reads, readCalendarMetadata: (data?.calendars ?? []).filter((c) => reads.includes(c.id)).map((c) => ({ id: c.id, summary: c.summary, backgroundColor: c.backgroundColor ?? undefined })) })
+        return ok
+      } catch (error) { return fail(error) }
+    }, [memberId, writeId, data, select])
+    return { calendars, readIds: data?.read_calendar_ids ?? [], writeId, save }
+  },
+  useEmailReaders: () => {
+    const queryClient = useQueryClient()
+    const { data } = useQuery({
+      queryKey: ['settings-email-readers'],
+      queryFn: async () => {
+        const { data: rows, error } = await supabase.from('google_connection_status').select('family_member_id, gmail_scan_enabled')
+        if (error) throw error
+        return Object.fromEntries((rows ?? []).map((r: { family_member_id: string; gmail_scan_enabled: boolean | null }) => [r.family_member_id, r.gmail_scan_enabled === true]))
+      },
+      staleTime: 60_000,
+    })
+    const set = useCallback(async (memberId: string, on: boolean) => {
+      const { data: res, error } = await supabase.functions.invoke('toggle-gmail-scan', { body: { family_member_id: memberId, enabled: on } })
+      void queryClient.invalidateQueries({ queryKey: ['settings-email-readers'] })
+      return error || res?.error ? fail(error ?? new Error(res.error)) : ok
+    }, [queryClient])
+    return { on: data ?? null, set }
   },
   useEmail: () => {
     const { data, change } = useEmailSettings()
@@ -93,6 +148,31 @@ export const liveSource: SettingsSource = {
     return { config: data ?? null, save }
   },
   useScreen: () => useScreensaverSettings(),
+  useWallLight: () => {
+    const onWall = readWallHomeFlag() === '1'
+    const { data: today } = useQuery({
+      queryKey: ['settings-wall-light'],
+      queryFn: async () => {
+        const { data, error } = await supabase.rpc('get_wall_light', { p_hours: 24 })
+        if (error) throw error
+        return data as LightReading[]
+      },
+      staleTime: 60_000,
+      refetchInterval: 5 * 60_000,
+    })
+    // On the wall itself the sensor answers this second (the Pi's bridge, as the wall's own light code reads it).
+    const { data: live } = useQuery({
+      queryKey: ['settings-wall-light-live'],
+      enabled: onWall,
+      queryFn: async () => {
+        const res = await fetch('http://127.0.0.1:8765/room-tone', { signal: AbortSignal.timeout(2000) })
+        const r = await res.json() as { cct: number | null; lux: number | null; brightness: number | null; rgb: number[] | null; display_on: boolean | null }
+        return { at: new Date().toISOString(), cct: r.cct, lux: r.lux, brightness: r.brightness, rgb: r.rgb, display_on: r.display_on } as LightReading
+      },
+      refetchInterval: 5000,
+    })
+    return { now: live ?? today?.at(-1) ?? null, today: today ?? null }
+  },
   useMemory: () => {
     const queryClient = useQueryClient()
     const { data } = useQuery({ queryKey: ['settings-memory'], queryFn: async () => (await memory({ action: 'list' })).items ?? [], staleTime: 30_000 })
@@ -122,6 +202,35 @@ export const liveSource: SettingsSource = {
     const queryClient = useQueryClient()
     return { chores: useChores(), save: (chore) => saveChore(queryClient, chore), remove: (id) => deleteChore(queryClient, id) }
   },
+  useRoutines: () => {
+    const queryClient = useQueryClient()
+    const members = useFamilyMembers().data ?? null
+    const ids = (members ?? []).map((m) => m.id)
+    const { rules, exceptions } = useMemberAvailability(ids)
+    const items = members && rules ? members.flatMap((person) => deserializeRoutinesFromAvailabilityRules(person.id, rules).map((routine) => ({ routine, person }))) : null
+    return {
+      items,
+      dayOffs: (memberId: string) => (exceptions ?? []).filter((d) => d.member_id === memberId && d.override_type === 'day_off' && d.id).map((d) => ({ id: d.id!, start: ymd(d.start_at), end: ymd(d.end_at) })),
+      save: async (routine, offs) => {
+        await saveRoutine(queryClient, routine, members ?? [])
+        for (const day of offs.add) await addDayOff(queryClient, routine.memberId, day)
+        for (const id of offs.remove) await removeDayOff(queryClient, id)
+      },
+      remove: (routine) => removeRoutine(queryClient, routine),
+    }
+  },
+  useVoiceTurns: () => useQuery({
+    queryKey: ['settings-voice-turns'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('ai_drawer_debug_events').select('received_at, detail, page, correlation_id, payload')
+        .eq('event', 'server_ai_assistant_ingress_user_text').order('received_at', { ascending: false }).limit(60)
+      if (error) throw error
+      // The family's own words only: the nightly check and test scripts name themselves.
+      return (data ?? []).filter((r: { correlation_id: string | null; payload: { client_build?: string } | null }) => !/^(nightly-check|which-live|[a-z-]*-eval)/.test(r.correlation_id ?? '') && !/(nightly-check|eval|which-live)/.test(r.payload?.client_build ?? ''))
+        .slice(0, 20).map((r: { received_at: string; detail: string | null; page: string | null }) => ({ at: r.received_at, text: r.detail ?? '', page: r.page }))
+    },
+    staleTime: 60_000,
+  }).data ?? null,
   useKeptCount: () => Object.values(useKeepFrom().keep ?? {}).filter((ids) => Array.isArray(ids) && ids.length > 0).length,
   useUsage: () => useQuery({
     queryKey: ['settings-usage'],

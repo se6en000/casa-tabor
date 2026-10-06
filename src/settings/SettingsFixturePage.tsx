@@ -3,7 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsRoot from './SettingsRoot'
 import { liveSource } from './liveSource'
-import type { MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
+import type { LightReading, MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
+import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { MemberWithConnection } from '../hooks/useCalendarConnections'
 import type { WallChore } from '../wall/engine/chores'
@@ -32,7 +33,24 @@ const PLACES = [
   place('p1', 'Lake Lytal Park', 'sports' as SavedPlace['category'], '3645 Gun Club Rd'), place('p2', 'Palm Beach Public Elementary', 'school' as SavedPlace['category'], '239 Cocoanut Row', 'Palm Beach'),
   place('p3', 'John S. Ledakis, DDS', 'medical' as SavedPlace['category'], '4512 N Flagler Dr'), place('p4', 'Cox Science Center and Aquarium', 'other' as SavedPlace['category'], '4801 Dreher Trail N'),
   place('p5', 'Dragon Elites batting cages', 'sports' as SavedPlace['category'], '1225 S Military Trail'),
+  { ...place('p6', 'Pet Supermarket on Dixie', 'other' as SavedPlace['category'], '2501 N Dixie Hwy'), confirmed: false } as SavedPlace,
 ]
+/** A day of the wall's light: cool and bright at midday, warm and dim at night (5-minute samples). */
+const LIGHT: LightReading[] = Array.from({ length: 24 * 12 }, (_, i) => {
+  const t = new Date(NOW.getTime() - (24 * 12 - 1 - i) * 5 * 60_000)
+  const h = t.getHours() + t.getMinutes() / 60
+  const day = Math.max(0, Math.sin(((h - 6.5) / 13) * Math.PI))
+  const lamp = h >= 18 && h < 23 ? 0.35 : 0
+  const lux = Math.round((day * 420 + lamp * 90 + 0.6) * 10) / 10
+  const cct = Math.round(lamp && day < 0.2 ? 2900 : 3200 + day * 2600)
+  const brightness = Math.round(Math.min(50, 4 + Math.log10(lux + 1) * 17))
+  const g = Math.round(50 - (6500 - cct) / 260), b = Math.round(50 - (6500 - cct) / 150)
+  return { at: t.toISOString(), cct, lux, brightness, rgb: [50, g, b], display_on: !(h >= 23.5 || h < 6) }
+})
+const ROUTINE = (memberId: string, title: string, venue: string, start: string, end: string, drop: string, pick: string): FamilyRoutine => ({
+  id: `r-${memberId}`, key: 'main', memberId, title, routineType: 'school', venueName: venue, venueAddress: '', daysOfWeek: [1, 2, 3, 4, 5], startLocal: start, endLocal: end,
+  dropoffDriverName: drop, dropoffDriverId: drop.toLowerCase(), pickupDriverName: pick, pickupDriverId: pick.toLowerCase(), enabled: true, startDate: '2026-08-10', endDate: '2027-05-28',
+})
 const CONTACTS = [
   { id: 'c1', name: 'Coach Salas', relationship: 'Liv’s softball coach', phone: '(561) 555-0142', place_name: 'Lake Lytal Park' },
   { id: 'c2', name: 'Dr. Ledakis', relationship: 'Dentist', phone: '(561) 555-0199', place_name: 'John S. Ledakis, DDS' },
@@ -92,13 +110,21 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     useViewer: () => ({ id: viewerId, name: MEMBERS.find((m) => m.id === viewerId)?.name ?? null, token: 't', signOut: () => {} }),
     useFaceId: () => ({ here: viewerId === 'jake', available: true, setUp: async () => true }),
     setCanDrive: ok,
+    addMember: ok,
     useHome: () => '412 Palm Way, West Palm Beach, FL',
     usePlaces: () => PLACES,
     useContacts: () => CONTACTS,
     renamePlace: ok,
+    keepPlace: ok,
+    dismissPlace: ok,
     deletePlace: ok,
     useConnections: () => [conn(MEMBERS[0], 'jake@example.com'), conn(MEMBERS[1], 'kelly@example.com', { reauthorization_required: true }), conn(MEMBERS[2], null), conn(MEMBERS[3], null)],
     connectGoogle: async () => {},
+    useCalendarChoices: (memberId) => ({
+      calendars: memberId ? [{ id: 'w', summary: 'Tabor House', color: null, primary: false }, { id: 'p', summary: 'jake@example.com', color: null, primary: true }, { id: 's', summary: 'Huskies Softball', color: null, primary: false }, { id: 'h', summary: 'US Holidays', color: null, primary: false }] : null,
+      readIds: ['s'], writeId: 'w', save: ok,
+    }),
+    useEmailReaders: () => ({ on: { jake: true, kelly: false }, set: ok }),
     useEmail: () => {
       const [data, setData] = useState({ keep: [{ id: 'r1', kind: 'sender' as const, label: 'Liv’s softball coach', source: 'voice', created_at: '' }, { id: 'r2', kind: 'topic' as const, label: 'the school', source: 'settings', created_at: '' }], quiet: [{ id: 'q1', from: 'Target', kind: 'promotion', since: null, skipped: 12 }], text_on_wall: true })
       return { data, change: async (body: Record<string, unknown>) => { if (body.action === 'text_on_wall') setData((d) => ({ ...d, text_on_wall: body.on === true })); return { ok: true } } }
@@ -111,6 +137,7 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
       const [settings, setSettings] = useState<ScreensaverSettings>(SCREENSAVER_DEFAULTS)
       return { settings, update: (patch) => setSettings((s) => ({ ...s, ...patch })) }
     },
+    useWallLight: () => ({ now: LIGHT.at(-1)!, today: LIGHT }),
     useMemory: () => {
       const [items, setItems] = useState(MEMORY)
       return {
@@ -125,6 +152,21 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     },
     useChores: () => ({ chores: CHORES, save: async () => {}, remove: async () => {} }),
     useKeptCount: () => 2,
+    useRoutines: () => ({
+      items: [
+        { routine: ROUTINE('liv', 'School', 'Bak Middle School of the Arts', '08:15', '15:30', 'Jake', 'Kelly'), person: MEMBERS[2] },
+        { routine: ROUTINE('emme', 'School', 'Palm Beach Public Elementary', '07:45', '14:00', 'Jake', 'Giselle'), person: MEMBERS[3] },
+        { routine: ROUTINE('owen', 'School', 'Palm Beach Public Elementary', '07:45', '14:00', 'Jake', 'Giselle'), person: MEMBERS[5] },
+      ],
+      dayOffs: () => [],
+      save: async () => {},
+      remove: async () => {},
+    }),
+    useVoiceTurns: () => [
+      { at: at('2026-10-06T07:52:00-04:00'), text: 'What do we have going on today?', page: 'wall' },
+      { at: at('2026-10-05T21:40:00-04:00'), text: 'Add milk and eggs to the grocery list', page: 'phone' },
+      { at: at('2026-10-05T18:26:00-04:00'), text: 'Update the address for batting practice', page: 'phone' },
+    ],
     useUsage: () => USAGE,
     useHealth: () => {
       const [paused, setPausedState] = useState(false)

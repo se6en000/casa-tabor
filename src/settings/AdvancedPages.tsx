@@ -184,6 +184,8 @@ const TIP_KEYS = ['casa.askTip.opens', 'casa.askTip.done', 'casa.swipeTip.opens'
 export function VoicePage({ head }: { head: ReactNode }) {
   const src = useSource()
   const screen = src.useScreen()
+  const turns = src.useVoiceTurns()
+  const now = src.now()
   const [mic, setMic] = useState<string | null>(null)
   const [note, show] = useSaveNote()
   useEffect(() => {
@@ -211,6 +213,11 @@ export function VoicePage({ head }: { head: ReactNode }) {
           right={<Action onClick={() => { try { TIP_KEYS.forEach((k) => localStorage.removeItem(k)) } catch { /* private mode */ } show({ ok: true }, 'The tips will show again.') }}>Show again</Action>} />
       </Group>
       {note}
+      <Group label="The last things it heard">
+        {turns == null ? <Quiet>Loading…</Quiet> : turns.length === 0 ? <Quiet>Nothing yet.</Quiet> : turns.map((v, i) => (
+          <Row key={i} name={`“${v.text}”`} state={[v.page === 'wall' ? 'On the wall' : v.page === 'phone' ? 'On a phone' : v.page, ago(v.at, now)].filter(Boolean).join(' · ')} />
+        ))}
+      </Group>
     </div>
   )
 }

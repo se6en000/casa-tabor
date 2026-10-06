@@ -3,12 +3,16 @@ import { Plus, Search, X } from 'lucide-react'
 import { pigmentIndexes } from '../wall/score'
 import { choreDays, choreTime, newChore } from '../wall/choreText'
 import ChoreEditor from '../wall/ChoreEditor'
+import RoutineEditor from '../wall/RoutineEditor'
+import { newRoutine, routineDetail, routineHeadline } from '../wall/routines'
+import type { FamilyRoutine } from '../lib/familyRoutines'
 import FamilyPins from '../signin/FamilyPins'
 import type { WallChore } from '../wall/engine/chores'
 import type { WallMember } from '../wall/engine/types'
 import { people, useSource, type MemoryItem } from './data'
 import { ago } from './model'
 import { Action, Group, Label, PageHead, PersonDisc, Quiet, Row, Seg, Stepper, Toggle } from './ui'
+import { LightDay, LightNow } from './WallLight'
 import { usePigment, useSize, useType } from './sizing'
 import { useSaveNote } from './saveNote'
 
@@ -51,7 +55,9 @@ export function FamilyPage({ head }: { head: ReactNode }) {
   const pigment = usePigment(members)
   const [open, setOpen] = useState<string | null>(null)
   const [pins, setPins] = useState(false)
+  const [adding, setAdding] = useState<{ name: string; role: 'parent' | 'child' | 'caregiver'; drives: boolean } | null>(null)
   const [note, show] = useSaveNote()
+  const t = useType()
   const person = people(members).find((m) => m.id === open) ?? null
 
   if (person) {
@@ -84,6 +90,7 @@ export function FamilyPage({ head }: { head: ReactNode }) {
             name={m.name} state={[ROLE[m.role] ?? m.role, m.can_drive ? 'drives' : null, viewer.id === m.id && faceId.here ? 'Face ID' : null].filter(Boolean).join(' · ')} />
         ))}
       </Group>
+      <div className="mt-[8px] px-[4px]"><Action onClick={() => setAdding({ name: '', role: 'child', drives: false })}><Plus size={18} aria-hidden="true" /> Add someone</Action></div>
       <Group label="Signing in">
         <Row name="Family PINs" state="Set, change or reset anyone’s PIN" onClick={() => setPins(true)} />
         {viewer.id && (
@@ -93,6 +100,22 @@ export function FamilyPage({ head }: { head: ReactNode }) {
       </Group>
       {note}
       {pins && <Sheet label="Family PINs" onClose={() => setPins(false)}><FamilyPins onDone={() => setPins(false)} /></Sheet>}
+      {adding && (
+        <Sheet label="Add someone" onClose={() => setAdding(null)}>
+          <h2 className={`m-0 font-display font-semibold text-wall-ink ${t.heading}`}>Add someone</h2>
+          <p className={`m-0 mt-[4px] text-wall-ink-2 ${t.detail}`}>They get the next color and a row on the wall.</p>
+          <input aria-label="Their name" placeholder="Their name" value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })}
+            className={`mt-[12px] h-[48px] w-full rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-body text-wall-ink ${t.body}`} />
+          <div className="mt-[12px]">
+            <Seg label="Who they are" value={adding.role} onChange={(role) => setAdding({ ...adding, role, drives: role !== 'child' })} options={[{ value: 'parent', label: 'Parent' }, { value: 'child', label: 'Kid' }, { value: 'caregiver', label: 'Caregiver' }]} />
+          </div>
+          <div className="mt-[8px]"><Row name="Drives" right={<Toggle label="They drive" on={adding.drives} onChange={(on) => setAdding({ ...adding, drives: on })} />} /></div>
+          <div className="mt-[8px] flex justify-end gap-[18px]">
+            <Action tone="quiet" onClick={() => setAdding(null)}>Cancel</Action>
+            <Action disabled={!adding.name.trim()} onClick={async () => { const r = await src.addMember(adding.name, adding.role, adding.drives); show(r, `${adding.name.trim()} is in the family.`); if (r.ok) setAdding(null) }}>Add</Action>
+          </div>
+        </Sheet>
+      )}
     </div>
   )
 }
@@ -112,7 +135,10 @@ export function PlacesPage({ head }: { head: ReactNode }) {
   const match = (...parts: Array<string | null | undefined>) => !q.trim() || parts.some((p) => p?.toLowerCase().includes(q.trim().toLowerCase()))
   // The ones you go to most first (170 saved, many seen once in an email); a place dismissed in the old directory stays hidden.
   const uses = (p: object) => Number((p as { occurrence_count?: number | null }).occurrence_count ?? 0)
-  const shownPlaces = (places ?? []).filter((p) => !(p as { dismissed_at?: string | null }).dismissed_at && match(p.name, p.address, p.city, p.category))
+  const live = (places ?? []).filter((p) => !(p as { dismissed_at?: string | null }).dismissed_at)
+  const [gone, setGone] = useState<Set<string>>(new Set())
+  const suggested = live.filter((p) => p.confirmed === false && !gone.has(p.id))
+  const shownPlaces = live.filter((p) => p.confirmed !== false && match(p.name, p.address, p.city, p.category))
     .sort((a, b) => uses(b) - uses(a) || a.name.localeCompare(b.name))
   const shownPeople = (contacts ?? []).filter((c) => match(c.name, c.relationship, c.place_name))
 
@@ -126,7 +152,18 @@ export function PlacesPage({ head }: { head: ReactNode }) {
       {tab === 'places' ? (
         <>
           <Group label="Home"><Row name="Home" state={home ?? 'Not set'} /></Group>
-          <Group label={places ? `Saved · ${places.length}` : 'Saved'}>
+          {suggested.length > 0 && !q.trim() && (
+            <Group label={`Found in email and events · ${suggested.length}`}>
+              {suggested.slice(0, 6).map((p) => (
+                <Row key={p.id} name={p.name} state={[p.address, p.city].filter(Boolean).join(', ')}
+                  right={<div className="flex gap-[14px]">
+                    <Action label={`Keep ${p.name}`} onClick={async () => { setGone(new Set(gone).add(p.id)); show(await src.keepPlace(p.id), `${p.name} is saved.`) }}>Keep</Action>
+                    <Action label={`Not a place: ${p.name}`} tone="quiet" onClick={async () => { setGone(new Set(gone).add(p.id)); show(await src.dismissPlace(p.id), 'Put away.') }}>No</Action>
+                  </div>} />
+              ))}
+            </Group>
+          )}
+          <Group label={places ? `Saved · ${shownPlaces.length}` : 'Saved'}>
             {places == null ? <Quiet>Loading…</Quiet> : shownPlaces.length === 0 ? <Quiet>No place matches “{q}”.</Quiet> : shownPlaces.map((p) => (
               <Row key={p.id} label={`Open ${p.name}`} onClick={() => { setEditing({ id: p.id, name: p.name }); setConfirmDelete(false) }} name={p.name}
                 state={[p.category && p.category !== 'other' ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : null, [p.address, p.city].filter(Boolean).join(', '), uses(p) > 1 ? `used ${uses(p)} times` : null].filter(Boolean).join(' · ')} />
@@ -169,6 +206,8 @@ export function CalendarsPage({ head }: { head: ReactNode }) {
   const members = src.useMembers()
   const pigment = usePigment(members)
   const { data: email, change } = src.useEmail()
+  const readers = src.useEmailReaders()
+  const [choosing, setChoosing] = useState<{ id: string; name: string } | null>(null)
   const [topic, setTopic] = useState('')
   const [note, show] = useSaveNote()
   const linked = (connections ?? []).filter((m) => m.connection || m.role === 'parent')
@@ -188,6 +227,9 @@ export function CalendarsPage({ head }: { head: ReactNode }) {
               right={!c || broken ? <Action onClick={() => void src.connectGoogle(m.id)}>{c ? 'Reconnect' : 'Connect'}</Action> : undefined} />
           )
         })}
+        {linked.filter((m) => m.connection && !m.connection.reauthorization_required).map((m) => (
+          <Row key={`choose-${m.id}`} label={`Choose ${m.name}’s calendars`} onClick={() => setChoosing({ id: m.id, name: m.name })} name={`${m.name}’s calendars`} state="Choose which ones show on the family calendar" />
+        ))}
         <Row name="Check calendars now" state="They’re checked every few minutes on their own" right={<Action onClick={async () => show(await src.run('sync_calendars'), 'Checking now.')}>Check</Action>} />
       </Group>
       {calendars.length > 0 && (
@@ -195,6 +237,12 @@ export function CalendarsPage({ head }: { head: ReactNode }) {
           {calendars.map((c) => <Row key={`${c.who}-${c.id}`} name={c.summary} state={c.who} lead={<span aria-hidden="true" className="h-[12px] w-[12px] shrink-0 rounded-full bg-wall-brass" style={c.backgroundColor ? { background: c.backgroundColor } : undefined} />} />)}
         </Group>
       )}
+      <Group label="The email reader">
+        {readers.on == null ? <Quiet>Loading…</Quiet> : linked.filter((m) => m.connection).map((m) => (
+          <Row key={`gmail-${m.id}`} name={`Reads ${m.name}’s email`} state={readers.on?.[m.id] ? 'On · it adds what has a date, and asks first' : 'Off'}
+            right={<Toggle label={`Read ${m.name}’s email`} on={Boolean(readers.on?.[m.id])} onChange={async (on) => show(await readers.set(m.id, on), on ? `Reading ${m.name}’s email.` : `Not reading ${m.name}’s email.`)} />} />
+        ))}
+      </Group>
       <Label>Keep me posted</Label>
       <div className="flex flex-col gap-[10px]">
         <TextField value={topic} onChange={setTopic} label="Keep me posted on" placeholder="“Liv’s coach”, “the school”" onEnter={async () => { if (topic.trim()) { show(await change({ action: 'add_rule', text: topic }), `I’ll keep you posted on ${topic.trim()}.`); setTopic('') } }} />
@@ -210,12 +258,40 @@ export function CalendarsPage({ head }: { head: ReactNode }) {
           {email.quiet.map((q) => <Row key={q.id} name={q.from} state={`${q.skipped} skipped`} right={<Action onClick={async () => show(await change({ action: 'bring_back', id: q.id }), `${q.from} will come to you again.`)}>Bring back</Action>} />)}
         </Group>
       )}
+      {choosing && <CalendarChooser who={choosing} onClose={() => setChoosing(null)} onSaved={(r) => { show(r, 'Calendars saved.'); setChoosing(null) }} />}
       <Group label="On the wall">
         <Row name="What an email says" state={email?.text_on_wall === false ? 'Off · the wall shows only who it’s from' : 'On · the wall shows a line of what it says'}
           right={<Toggle label="Email text on the wall" on={email?.text_on_wall !== false} disabled={!email} onChange={async (on) => show(await change({ action: 'text_on_wall', on }))} />} />
       </Group>
       {note}
     </div>
+  )
+}
+
+function CalendarChooser({ who, onClose, onSaved }: { who: { id: string; name: string }; onClose: () => void; onSaved: (r: { ok: boolean; message?: string }) => void }) {
+  const src = useSource()
+  const t = useType()
+  const { calendars, readIds, writeId, save } = src.useCalendarChoices(who.id)
+  const [picked, setPicked] = useState<string[] | null>(null)
+  const chosen = picked ?? readIds
+  return (
+    <Sheet label={`${who.name}’s calendars`} onClose={onClose}>
+      <h2 className={`m-0 font-display font-semibold text-wall-ink ${t.heading}`}>{who.name}’s calendars</h2>
+      <p className={`m-0 mt-[4px] text-wall-ink-2 ${t.detail}`}>The ones switched on show on the family calendar. New events go to the first.</p>
+      <div className="mt-[12px]">
+        <Group>
+          {calendars == null ? <Quiet>Asking Google…</Quiet> : calendars.map((c) => (
+            <Row key={c.id} lead={<span aria-hidden="true" className="h-[12px] w-[12px] shrink-0 rounded-full bg-wall-brass" style={c.color ? { background: c.color } : undefined} />}
+              name={c.summary} state={c.id === writeId ? 'Where new events go' : c.primary ? 'Their main calendar' : undefined}
+              right={c.id === writeId ? undefined : <Toggle label={`Show ${c.summary}`} on={chosen.includes(c.id)} onChange={(on) => setPicked(on ? [...chosen, c.id] : chosen.filter((x) => x !== c.id))} />} />
+          ))}
+        </Group>
+      </div>
+      <div className="mt-[12px] flex justify-end gap-[18px]">
+        <Action tone="quiet" onClick={onClose}>Cancel</Action>
+        <Action disabled={!calendars || picked == null} onClick={async () => onSaved(await save(chosen))}>Save</Action>
+      </div>
+    </Sheet>
   )
 }
 
@@ -226,6 +302,8 @@ export function WallPage({ head }: { head: ReactNode }) {
   const src = useSource()
   const { config, save } = src.useDisplay()
   const screen = src.useScreen()
+  const light = src.useWallLight()
+  const now = src.now()
   const [note, show] = useSaveNote()
   const c = config ?? {}
   const min = c.brightness_min ?? 0
@@ -235,6 +313,8 @@ export function WallPage({ head }: { head: ReactNode }) {
   return (
     <div>
       {head}
+      <LightNow now={light.now} live={src.onWall} at={now} />
+      <LightDay samples={light.today} at={now} />
       <Group label="Brightness">
         <Row name="Follows the room’s light" state="The wall sensor dims it in a dark room and brightens it in a bright one, between these two." />
         <Row name="Dimmest" right={<Stepper label="Dimmest brightness" value={min} min={0} max={Math.max(0, max - 5)} step={5} unit="%" onChange={(v) => void set({ brightness_min: v })} />} />
@@ -332,6 +412,9 @@ export function ChoresPage({ head }: { head: ReactNode }) {
   const { chores, save: saveChore, remove: removeChore } = src.useChores()
   const kept = src.useKeptCount()
   const [editing, setEditing] = useState<{ chore: WallChore; isNew: boolean } | null>(null)
+  const routines = src.useRoutines()
+  const [routineEditing, setRoutineEditing] = useState<{ routine: FamilyRoutine; isNew: boolean; name: string } | null>(null)
+  const [adding, setAdding] = useState(false)
   const pigmentIndex = useMemo(() => pigmentIndexes((members ?? []) as unknown as WallMember[]), [members])
   const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.name ?? 'Nobody yet'
   const sorted = [...(chores ?? [])].sort((a, b) => nameOf(a.member_id).localeCompare(nameOf(b.member_id)) || a.time_local.localeCompare(b.time_local))
@@ -346,9 +429,32 @@ export function ChoresPage({ head }: { head: ReactNode }) {
         ))}
       </Group>
       <div className="mt-[8px] px-[4px]"><Action onClick={() => setEditing({ chore: newChore(viewer.id, now), isNew: true })}><Plus size={18} aria-hidden="true" /> Add a chore</Action></div>
+      <Group label="Routines: school, work, camp">
+        {routines.items == null ? <Quiet>Loading…</Quiet> : routines.items.length === 0 ? <Quiet>No routines yet.</Quiet> : routines.items.map(({ routine, person }) => (
+          <Row key={`${person.id}-${routine.key ?? routine.id ?? routine.title}`} label={`Edit ${person.name}’s ${routineHeadline(routine)}`} onClick={() => setRoutineEditing({ routine, isNew: false, name: person.name })}
+            lead={<PersonDisc name={person.name} className={pigment(person.id)} />} name={`${person.name} · ${routineHeadline(routine)}`} state={routineDetail(routine)} />
+        ))}
+      </Group>
+      {adding ? (
+        <div className="mt-[8px] flex flex-wrap items-center gap-[8px] px-[4px]" role="group" aria-label="Add a routine for">
+          {people(members).map((m) => (
+            <Action key={m.id} onClick={() => { setAdding(false); setRoutineEditing({ routine: newRoutine(m.role === 'child' ? 'school' : 'work', m.id, (routines.items ?? []).filter((r) => r.person.id === m.id).map((r) => r.routine)), isNew: true, name: m.name }) }}>{m.name}</Action>
+          ))}
+          <Action tone="quiet" onClick={() => setAdding(false)}>Cancel</Action>
+        </div>
+      ) : <div className="mt-[8px] px-[4px]"><Action onClick={() => setAdding(true)}><Plus size={18} aria-hidden="true" /> Add a routine</Action></div>}
       <Group label="Keep from">
         <Row name={kept === 0 ? 'Nothing is kept from anyone' : kept === 1 ? '1 event is kept from someone' : `${kept} events are kept from someone`} state="Set on each event: open it and choose “Keep from”" />
       </Group>
+      {routineEditing && members && (
+        <Sheet label={routineEditing.isNew ? 'New routine' : `${routineEditing.name}’s ${routineHeadline(routineEditing.routine)} — edit`} onClose={() => setRoutineEditing(null)}>
+          <RoutineEditor surface={size === 'wall' ? 'wall' : 'phone'} personName={routineEditing.name} routine={routineEditing.routine} isNew={routineEditing.isNew}
+            drivers={people(members).filter((m) => m.can_drive).map((m) => ({ id: m.id, name: m.name }))} dayOffs={routines.dayOffs(routineEditing.routine.memberId)} now={now}
+            onSave={async (routine, offs) => { await routines.save(routine, offs); setRoutineEditing(null) }}
+            onRemove={async () => { await routines.remove(routineEditing.routine); setRoutineEditing(null) }}
+            onCancel={() => setRoutineEditing(null)} />
+        </Sheet>
+      )}
       {editing && members && (
         <Sheet label={editing.isNew ? 'New chore' : `${editing.chore.title} — edit`} onClose={() => setEditing(null)}>
           <ChoreEditor surface={size === 'wall' ? 'wall' : 'phone'} chore={editing.chore} isNew={editing.isNew} members={people(members) as unknown as WallMember[]}

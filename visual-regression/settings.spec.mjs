@@ -153,3 +153,59 @@ test('settings: on a laptop — two columns, Family first', async ({ page }) => 
   await expect(s.getByRole('heading', { name: 'Family', level: 1 })).toBeVisible()
   await expect(page).toHaveScreenshot('settings-laptop.png')
 })
+
+// Jake, Oct 6 ("I dont see some of the functionality … where it is on the color spectrum currently, brightness graph,
+// routines … identify the gaps and fill them"): what the canvas boards showed and the first build left out.
+test('settings: the wall — the room’s light on the band right now, the screen, and the last 24 hours', async ({ page }) => {
+  const s = await open(page, { page: 'wall' })
+  const now = s.getByRole('region', { name: 'Right now' })
+  await expect(now).toContainText('The room’s light is')
+  await expect(now.getByRole('img', { name: /On the band from candle-warm to daylight/ })).toBeVisible()
+  await expect(now).toContainText('% bright')
+  await expect(s.getByRole('img', { name: /The screen's brightness over the last day/ })).toBeVisible()
+})
+
+test('settings: chores and routines — the school runs, opened in the wall’s routine editor; add one', async ({ page }) => {
+  const s = await open(page, { page: 'chores' })
+  const routines = s.getByRole('region', { name: 'Routines: school, work, camp' })
+  await expect(routines).toContainText('Liv · School')
+  await expect(routines).toContainText('Jake drops off')
+  await routines.getByRole('button', { name: /Edit Liv’s/ }).click()
+  await expect(page.getByRole('region', { name: /Liv’s .* — edit/ })).toBeVisible()
+})
+
+test('settings: family — add someone', async ({ page }) => {
+  const s = await open(page, { page: 'family' })
+  await s.getByRole('button', { name: 'Add someone' }).click()
+  const sheet = page.getByRole('region', { name: 'Add someone' })
+  await sheet.getByRole('textbox', { name: 'Their name' }).fill('Grandma')
+  await sheet.getByRole('tab', { name: 'Caregiver' }).click()
+  await expect(sheet.getByRole('switch', { name: 'They drive' })).toHaveAttribute('aria-checked', 'true')
+  await sheet.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(s.getByRole('status')).toHaveText('Grandma is in the family.')
+})
+
+test('settings: places — a place found in email is kept or put away', async ({ page }) => {
+  const s = await open(page, { page: 'places' })
+  const found = s.getByRole('region', { name: 'Found in email and events · 1' })
+  await expect(found).toContainText('Pet Supermarket on Dixie')
+  await found.getByRole('button', { name: 'Keep Pet Supermarket on Dixie' }).click()
+  await expect(s.getByRole('status')).toHaveText('Pet Supermarket on Dixie is saved.')
+  await expect(s.getByRole('region', { name: /Found in email/ })).toHaveCount(0)
+})
+
+test('settings: calendars — choose a person’s calendars, and whose email the reader reads', async ({ page }) => {
+  const s = await open(page, { page: 'calendars' })
+  await expect(s.getByRole('switch', { name: 'Read Jake’s email' })).toHaveAttribute('aria-checked', 'true')
+  await s.getByRole('button', { name: 'Choose Jake’s calendars' }).click()
+  const sheet = page.getByRole('region', { name: 'Jake’s calendars' })
+  await expect(sheet).toContainText('Where new events go')
+  await sheet.getByRole('switch', { name: 'Show US Holidays' }).click()
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(s.getByRole('status')).toHaveText('Calendars saved.')
+})
+
+test('settings: voice — the last things it heard', async ({ page }) => {
+  const s = await open(page, { page: 'voice' })
+  await expect(s.getByRole('region', { name: 'The last things it heard' })).toContainText('What do we have going on today?')
+})

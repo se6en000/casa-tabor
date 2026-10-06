@@ -4,6 +4,8 @@ import type { MemberWithConnection } from '../hooks/useCalendarConnections'
 import type { WallChore } from '../wall/engine/chores'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { ScreensaverSettings } from '../hooks/useScreensaverSettings'
+import type { FamilyRoutine } from '../lib/familyRoutines'
+import type { DayOffRow } from '../wall/RoutineEditor'
 
 // Settings V2's data, one source the pages read (canvas 47). The live source (liveSource.ts) is the app's own hooks and
 // the server; the fixture (SettingsFixturePage) is fixed data, so every page can be drawn and screenshot-checked.
@@ -57,6 +59,11 @@ export interface DisplayConfigLite {
 
 export type SaveResult = { ok: boolean; message?: string }
 
+/** What the wall's sensor measured and what the screen was set to (the Pi's bridge; Settings › The wall). */
+export interface LightReading { at: string; cct: number | null; lux: number | null; brightness: number | null; rgb: number[] | null; display_on: boolean | null }
+
+export interface CalendarChoice { id: string; summary: string; color: string | null; primary: boolean }
+
 export interface SettingsSource {
   now: () => Date
   /** The phone/laptop, or the kitchen wall itself (its own screen settings and the wake word live there). */
@@ -65,21 +72,40 @@ export interface SettingsSource {
   useViewer: () => { id: string | null; name: string | null; token: string | null; signOut: (() => void) | null }
   useFaceId: () => { here: boolean; available: boolean; setUp: (() => Promise<boolean>) | null }
   setCanDrive: (memberId: string, canDrive: boolean) => Promise<SaveResult>
+  addMember: (name: string, role: 'parent' | 'child' | 'caregiver', canDrive: boolean) => Promise<SaveResult>
   /** Where every drive starts (settings home_config). */
   useHome: () => string | null
   usePlaces: () => SavedPlace[] | null
   useContacts: () => Array<{ id: string; name: string; relationship: string | null; phone: string | null; place_name: string | null }> | null
   renamePlace: (id: string, name: string) => Promise<SaveResult>
+  /** A place found in an email or an event, kept (confirmed) or put away (dismissed). */
+  keepPlace: (id: string) => Promise<SaveResult>
+  dismissPlace: (id: string) => Promise<SaveResult>
   deletePlace: (id: string) => Promise<SaveResult>
   useConnections: () => MemberWithConnection[] | null
   connectGoogle: (memberId: string) => Promise<void>
+  /** A person's Google calendars: the one we write to, and which others are read onto the family calendar. */
+  useCalendarChoices: (memberId: string | null) => { calendars: CalendarChoice[] | null; readIds: string[]; writeId: string | null; save: (readIds: string[]) => Promise<SaveResult> }
+  /** Whose email the email reader reads (Google connection's Gmail switch). */
+  useEmailReaders: () => { on: Record<string, boolean> | null; set: (memberId: string, on: boolean) => Promise<SaveResult> }
   useEmail: () => { data: EmailSettings | null; change: (body: Record<string, unknown>) => Promise<SaveResult> }
   useDisplay: () => { config: DisplayConfigLite | null; save: (patch: DisplayConfigLite) => Promise<SaveResult> }
   useScreen: () => { settings: ScreensaverSettings; update: (patch: Partial<ScreensaverSettings>) => void }
+  /** Right now (live on the wall itself; else the last five-minute sample) and the last 24 hours. */
+  useWallLight: () => { now: LightReading | null; today: LightReading[] | null }
   useMemory: () => { items: MemoryItem[] | null; forget: (id: string) => Promise<SaveResult>; confirm: (id: string) => Promise<SaveResult> }
   usePrivateOnWall: () => [boolean, (hide: boolean) => Promise<SaveResult>]
   useChores: () => { chores: WallChore[] | null; save: (chore: WallChore) => Promise<void>; remove: (id: string) => Promise<void> }
   useKeptCount: () => number
+  /** Everyone's routines — school, work, camp — with their days off (the wall's school runs). */
+  useRoutines: () => {
+    items: Array<{ routine: FamilyRoutine; person: FamilyMember }> | null
+    dayOffs: (memberId: string) => DayOffRow[]
+    save: (routine: FamilyRoutine, offs: { add: string[]; remove: string[] }) => Promise<void>
+    remove: (routine: FamilyRoutine) => Promise<void>
+  }
+  /** The last things the assistant heard, family only (no test runs). */
+  useVoiceTurns: () => Array<{ at: string; text: string; page: string | null }> | null
   useUsage: () => UsageSummary | null
   useHealth: () => { summary: HealthSummary | null; setPaused: (paused: boolean) => Promise<SaveResult>; setCaps: (hourly: number, daily: number) => Promise<SaveResult> }
   useChecks: () => NightlyCheck[] | null
