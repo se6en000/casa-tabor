@@ -20,3 +20,14 @@ test('before the check, a target outside the three weeks is read from the calend
   assert.ok(i > 0 && i < server.indexOf('const changes = parts.filter'))
   assert.match(server, /from\('events'\)\.select\('id'\)\.in\('id', unseen\)\.is\('deleted_at', null\)\.neq\('status', 'cancelled'\)/)
 })
+
+// Bug reports 21296d2d / 92d41098 (Oct 1: "Can you use the location of the orthodontist appointment to fix the name?");
+// replayed Oct 5 it changed the place to the place's name. The reader is told the name is the title, and naming it after
+// its place leaves the place alone (live replays: three wordings rename it; "it's at the Wellington office now" still
+// moves it).
+test('the reader knows an item\'s name is its title, and naming it after its place keeps the place', async () => {
+  const { buildTurnPrompt } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  const prompt = buildTurnPrompt({ messages: [{ role: 'user', content: 'use the location to fix the name' }], draft: null, referents: [], upcoming: [], family: [], nowLine: 'Now', utcOffset: '-04:00', nowIso: '2026-10-05T14:00:00Z' })
+  assert.match(prompt, /The item's "name" is its "title"/)
+  assert.match(prompt, /the place stays as it is; "place" changes only when it's somewhere else/)
+})
