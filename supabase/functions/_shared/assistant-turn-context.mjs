@@ -329,7 +329,11 @@ export function changeArgs(event, changes, { utcOffset, familyNames } = {}) {
   const applied = applyDraftChanges(base, changes, { utcOffset, familyNames })
   const args = { id: event.id, ...(event.updated_at ? { expected_updated_at: event.updated_at } : {}) }
   if (applied.start !== event.start_time || applied.end !== event.end_time) Object.assign(args, { start: applied.start, end: applied.end })
-  for (const key of ['title', 'location', 'notes', 'all_day', 'members_add', 'members_remove']) if (applied[key] !== undefined) args[key] = applied[key]
+  for (const key of ['title', 'location', 'all_day', 'members_add', 'members_remove']) if (applied[key] !== undefined) args[key] = applied[key]
+  // Notes on something already there are added under what's written (bug report 8ae37110, Oct 7: replacing them
+  // would have wiped the birthday texts) — canvas 65.
+  const lines = String(applied.notes ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
+  if (lines.length) args.notes_add = lines
   if (typeof changes?.driver === 'string' && changes.driver.trim()) {
     const driver = changes.driver.trim()
     args.driver_name = (familyNames ?? []).find((n) => n.toLowerCase() === driver.toLowerCase()) ?? driver

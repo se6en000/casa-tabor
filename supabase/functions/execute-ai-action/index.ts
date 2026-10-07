@@ -1095,8 +1095,13 @@ Deno.serve(async (req) => {
       const { cleanArgs, membersPrimary, membersAttendees } = extractMemberRoleOverrides(args as Record<string, unknown>)
       // Lines for its notes (canvas 65: what Alexa adds, an email's new specifics) go under what's written; the house's
       // tags and Google's details block stay. Replaced as a whole description, so prep notes aren't touched.
-      const notesAdd = Array.isArray(cleanArgs.notes_add) ? (cleanArgs.notes_add as unknown[]).map((l) => String(l ?? '').trim()).filter(Boolean).slice(0, 12) : []
+      // A plain `notes` on a change (an older card) is added too — never a replacement that wipes what's written.
+      const notesAdd = [
+        ...(Array.isArray(cleanArgs.notes_add) ? (cleanArgs.notes_add as unknown[]) : []),
+        ...(typeof cleanArgs.notes === 'string' && cleanArgs.description === undefined ? cleanArgs.notes.split('\n') : []),
+      ].map((l) => String(l ?? '').trim()).filter(Boolean).slice(0, 12)
       delete cleanArgs.notes_add
+      if (typeof cleanArgs.notes === 'string' && cleanArgs.description === undefined) delete cleanArgs.notes
       if (notesAdd.length) {
         const { data: current } = await sb.from('events').select('description').eq('id', String(cleanArgs.id ?? cleanArgs.event_id ?? '')).maybeSingle()
         const next = addNotes((current as { description?: string | null } | null)?.description ?? null, notesAdd)

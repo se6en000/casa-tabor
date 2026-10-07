@@ -252,3 +252,12 @@ test('an aside gets a second look that asks only who the words were said to', as
   assert.match(ai, /if \(resolution\.act === 'aside'\) \{/)
   assert.match(ai, /buildAsidePrompt\(\{ messages \}\), 'aside-check'/)
 })
+
+// Bug report 8ae37110 (Oct 7): "add to that reminder's notes: she loves lilies …" — a change adds lines under what's
+// there (the birthday texts stay); it never replaces the notes.
+test('a change to an item’s notes adds lines, never replaces them', () => {
+  const event = { id: 'e1', start_time: '2026-10-08T11:00:00.000Z', end_time: '2026-10-08T11:15:00.000Z', updated_at: 'v7' }
+  const args = changeArgs(event, { notes: 'she loves lilies\ncall her after 6' }, { utcOffset: '-04:00' })
+  assert.deepEqual(args, { id: 'e1', expected_updated_at: 'v7', notes_add: ['she loves lilies', 'call her after 6'] })
+  assert.equal(changeArgs(event, { notes: '  ' }, { utcOffset: '-04:00' }), null)
+})
