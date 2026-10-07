@@ -9,6 +9,7 @@ import { memberNamed } from './family-names.mjs'
 import { memoryContext } from './casa-memory.mjs'
 import { tipsByTopic } from './casa-tips.mjs'
 import { personaSection } from './house-persona.mjs'
+import { allDayWords } from './all-day.mjs'
 
 /** Synced copies of school-routine runs ("Drop off Emme @ Palm Beach Public …"): never changed. */
 export function isRoutineCopy(title) {
@@ -36,7 +37,8 @@ function local(iso, utcOffset) {
 function describeEvent(e, utcOffset) {
   const s = local(e.start_time, utcOffset)
   // A to-do's midnight is its day without a time (it read "due by 12:00 AM tomorrow", Oct 3).
-  const when = e.all_day ? `${s.weekday} ${s.month} ${s.day}, all day`
+  // An all-day event's day is the date on it: read in local time, Heather's birthday (midnight UTC, Oct 8) was the 7th.
+  const when = e.all_day ? `${allDayWords(e.start_time, e.end_time) || `${s.weekday} ${s.month} ${s.day}`}, all day`
     : e.event_type === 'reminder' && s.clock === '12:00 AM' ? `${s.weekday} ${s.month} ${s.day}, no set time`
     : `${s.weekday} ${s.month} ${s.day}, ${s.clock}–${local(e.end_time, utcOffset).clock}`
   const parts = [`[${e.id}] ${when} · ${e.title}`]

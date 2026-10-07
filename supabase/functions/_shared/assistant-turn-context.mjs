@@ -13,6 +13,8 @@
 // The meaning comes from the model, never from phrase lists; this file only builds the
 // prompt, reads the answer and applies a draft's changes. Pure, so it's tested directly.
 
+import { allDayWords } from './all-day.mjs'
+
 const DRAFT_TOOLS = new Set(['create_event', 'update_event'])
 const MAX_HISTORY = 12
 const MAX_REFERENTS = 12
@@ -81,7 +83,9 @@ function describeDraft(draft, utcOffset) {
   return [
     draft.tool === 'create_event' ? 'ADD a new item to the calendar' : `CHANGE an existing calendar item (id ${a.id ?? '?'})`,
     a.title ? `title: ${a.title}` : null,
-    s ? `when: ${s.weekday} ${s.date}, ${a.all_day ? 'all day' : `${s.spoken}${e ? ` to ${e.spoken}` : ''}`}` : null,
+    // An all-day draft is on the date written on it.
+    a.all_day && a.start ? `when: ${allDayWords(`${String(a.start).slice(0, 10)}T12:00:00Z`, `${String(a.end ?? a.start).slice(0, 10)}T12:00:00Z`, 'long')}, all day`
+      : s ? `when: ${s.weekday} ${s.date}, ${s.spoken}${e ? ` to ${e.spoken}` : ''}` : null,
     a.location || a.location_name || a.address ? `place: ${a.location ?? a.location_name ?? a.address}` : null,
     people.length ? `people: ${people.join(', ')}` : null,
     a.event_type ? `kind: ${a.event_type}` : null,
@@ -92,7 +96,8 @@ function describeDraft(draft, utcOffset) {
 function describeReferent(e, i, utcOffset) {
   const s = localParts(e.start_time, utcOffset)
   const end = localParts(e.end_time, utcOffset)
-  const when = s ? (e.all_day ? `${s.weekday} ${s.date}, all day` : `${s.weekday} ${s.date}, ${s.spoken}${end ? ` to ${end.spoken}` : ''}`) : ''
+  // An all-day item is on the date written on it, never moved by the time zone (Heather's birthday, Oct 7).
+  const when = e.all_day ? `${allDayWords(e.start_time, e.end_time, 'long')}, all day` : s ? `${s.weekday} ${s.date}, ${s.spoken}${end ? ` to ${end.spoken}` : ''}` : ''
   return `${i >= 0 ? `${i + 1}.` : '-'} [${e.id}] ${e.title} — ${when}` +
     (e.people?.length ? ` — people: ${e.people.join(', ')}` : '') +
     (e.drivers?.length ? ` — drivers: ${e.drivers.join(', ')}` : '') +

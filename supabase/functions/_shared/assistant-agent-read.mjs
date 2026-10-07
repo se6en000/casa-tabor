@@ -2,6 +2,7 @@ import {
   compareCalendarEvents,
   eventOverlapsCalendarRange,
 } from './assistant-event-range.mjs'
+import { allDayDates } from './all-day.mjs'
 
 const SUPPORTED_READ_TOOLS = new Set([
   'calendar.get_event',
@@ -237,22 +238,14 @@ function normalizeText(value) {
 }
 
 function formatRange(event, utcOffset) {
-  const start = formatDate(event.start_time, utcOffset, event.all_day)
+  // An all-day event is on the dates written on it (all-day.mjs), never moved by the time zone (Heather's birthday, Oct 7).
   if (event.all_day) {
-    const endExclusive = shiftToOffset(event.end_time, utcOffset)
-    const startDate = shiftToOffset(event.start_time, utcOffset)
-    if (startDate && endExclusive) {
-      const inclusiveEnd = new Date(endExclusive.getTime() - 1)
-      if (
-        inclusiveEnd.getUTCFullYear() !== startDate.getUTCFullYear() ||
-        inclusiveEnd.getUTCMonth() !== startDate.getUTCMonth() ||
-        inclusiveEnd.getUTCDate() !== startDate.getUTCDate()
-      ) {
-        return `${start} through ${formatDate(inclusiveEnd.toISOString(), '+00:00', true)}, all day`
-      }
-    }
-    return `${start}, all day`
+    const days = allDayDates(event.start_time, event.end_time)
+    if (!days) return 'all day'
+    const first = formatDate(`${days.first}T12:00:00Z`, '+00:00', true)
+    return days.first === days.last ? `${first}, all day` : `${first} through ${formatDate(`${days.last}T12:00:00Z`, '+00:00', true)}, all day`
   }
+  const start = formatDate(event.start_time, utcOffset, event.all_day)
   const end = formatTime(event.end_time, utcOffset)
   return `${start}–${end}`
 }

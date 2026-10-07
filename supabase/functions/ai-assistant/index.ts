@@ -37,7 +37,7 @@ import {
 import { classifyAssistantAmbiguity } from '../_shared/assistant-request-safety.mjs'
 import { groceryAddedText, saveGroceryItems } from '../_shared/assistant-grocery-write.mjs'
 import { draftPlace } from '../_shared/event-place-resolution.mjs'
-import { resolveBugReportRequest } from '../_shared/assistant-memory-insights.mjs'
+import { resolveBugReportRequest, voiceBugReportRow } from '../_shared/assistant-memory-insights.mjs'
 import { retrieveFamilyContext } from '../_shared/retrieve-family-context.mjs'
 import { verifyProfileSessionToken } from '../_shared/profile-session.mjs'
 import { explicitReminderCreateRequestForMessages, explicitReminderSearchForMessages, hasReminderLanguage, isExplicitReminderCompletion, isExplicitReminderRequest, isReminderCompletionFollowUp, looksLikeCompoundCalendarRequest, reminderCreateClarification, resolveExplicitReminderDaypartRange, resolveStructuredReminderDueBy } from '../_shared/assistant-reminder-intent.mjs'
@@ -45,6 +45,7 @@ import { runLookup } from './lookups.ts'
 import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine } from '../_shared/casa-memory.mjs'
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { PERSONA_KEY } from '../_shared/house-persona.mjs'
+import { allDayWords } from '../_shared/all-day.mjs'
 import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
@@ -409,7 +410,8 @@ async function answerFromCalendar(
     const family = (Array.isArray(context?.family) ? context.family : []) as Array<{ id: string; name: string }>
     known = await loadReferents(sb, [...new Set([...events.map((e) => e.id), ...(await loadUpcomingIds(sb))])], family)
   }
-  const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${formatLocal(e.start_time, utcOffset)}${e.all_day ? ' (all day)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
+  // An all-day item is on the date written on it, never the evening before (Heather's birthday read "8:00 PM", Oct 7).
+  const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${e.all_day ? `${allDayWords(e.start_time, e.end_time, 'long')} (all day)` : formatLocal(e.start_time, utcOffset)}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
   const draft = openDraft(context?.pendingAction as { tool: string; args: Record<string, unknown> } | undefined)
   const prompt = buildAnswerPrompt({
     question,
@@ -1608,7 +1610,10 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (talkPlanCommandLane && bugReportRequest.kind === 'clarify') {
+  // "File a bug report" works in every mode (Oct 7: since version D took the main lane on Sep 30, this was only
+  // reached in Talk & Plan, and D said "I've updated the bug report" with nothing saved).
+  const filesBug = talkPlanCommandLane || (bugReportRequest as { explicit?: boolean }).explicit === true
+  if (filesBug && bugReportRequest.kind === 'clarify') {
     const requestTotalMs = Date.now() - requestStartMs
     const text = 'What happened? Include the problem you want me to put in the bug tracker.'
     appendServerTrace('server_ai_assistant_bug_report_clarification', 'missing_report_details', {
@@ -1625,7 +1630,7 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (talkPlanCommandLane && bugReportRequest.kind === 'create') {
+  if (filesBug && bugReportRequest.kind === 'create') {
     if (dryRun) {
       const requestTotalMs = Date.now() - requestStartMs
       appendServerTrace('server_ai_assistant_bug_report_dry_run', bugReportRequest.title, {
@@ -1647,13 +1652,13 @@ Deno.serve(async (req) => {
     }
     const { data: createdBug, error: createBugError } = await sb
       .from('ai_bug_reports')
-      .insert({
-        title: bugReportRequest.title,
-        details: bugReportRequest.details,
-        severity: bugReportRequest.severity,
-        status: 'open',
-        source: 'assistant',
-      })
+      .insert(voiceBugReportRow(bugReportRequest, {
+        messages: Array.isArray(messages) ? messages as Array<{ role: string; content: string }> : [],
+        page: typeof context?.page === 'string' ? context.page : null,
+        sessionId: traceId,
+        deviceId,
+        memberName: (activeMemberId && (await sb.from('family_members').select('name').eq('id', activeMemberId).maybeSingle()).data?.name) || null,
+      }))
       .select('id, title, severity, status')
       .single()
     const requestTotalMs = Date.now() - requestStartMs

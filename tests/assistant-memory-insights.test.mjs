@@ -95,3 +95,34 @@ test('legacy observations are migrated and family indexing reads canonical memor
   assert.doesNotMatch(indexer, /from\('ai_memory_observations'\)/)
   assert.match(projection, /row\.scope !== 'household'/)
 })
+
+// Oct 7: "Can you create a bug report for the UTC time zone reminder thing …" — D said "I've updated the bug report"
+// and nothing was saved (the filing only ran in Talk & Plan). Now every lane files an explicit request, with the talk.
+import { parseBugReportRequest as parseBug, resolveBugReportRequest as resolveBug, voiceBugReportRow } from '../supabase/functions/_shared/assistant-memory-insights.mjs'
+
+test('bug reports by voice: Jake’s words file one, titled plainly; loose words never do', () => {
+  const r = parseBug('Can you create a bug report for the UTC time zone reminder thing where you almost had me wish my sister a happy birthday a day before she was actually born?')
+  assert.equal(r.kind, 'create')
+  assert.equal(r.explicit, true)
+  assert.equal(r.title, 'The UTC time zone reminder thing where you almost had me wish my sister a happy birthday a day before she was actually born')
+  assert.deepEqual(parseBug('Can you create a bug report'), { kind: 'clarify', explicit: true })
+  assert.equal(parseBug('That is a problem, can we move dinner to 7').explicit, false)
+  assert.equal(parseBug('I found a bug in the kitchen').explicit, false)
+  // The answer to "What happened?" is the report — only when the question came from an explicit ask.
+  const followed = resolveBug('Heather’s birthday showed a day early', 'Can you create a bug report')
+  assert.equal(followed.kind, 'create')
+  assert.equal(followed.explicit, true)
+  assert.equal(resolveBug('Heather’s birthday showed a day early', 'that is a bug').explicit, false)
+})
+
+test('a voice bug report carries the conversation before it, the page and who', () => {
+  const row = voiceBugReportRow({ title: 'T', details: 'D', severity: 'medium' }, {
+    messages: [{ role: 'system', content: 'x' }, ...Array.from({ length: 14 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `line ${i}` }))],
+    page: 'wall', sessionId: 's', deviceId: 'd', memberName: 'Jake',
+  })
+  assert.equal(row.source, 'assistant')
+  assert.equal(row.page, 'wall')
+  assert.equal(row.member_name, 'Jake')
+  assert.equal(row.transcript.length, 12)
+  assert.deepEqual(row.transcript.at(-1), { role: 'assistant', text: 'line 13' })
+})

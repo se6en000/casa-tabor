@@ -20,11 +20,35 @@ function cleanBugTitle(text) {
     : /^(?:this|that|it)\s+(?:is|has)\s+(?:a\s+)?(?:bug|issue|defect|problem)\s*[:\-–—]?\s*/i.test(raw)
       ? raw.replace(/^\s*(?:this|that|it)\s+(?:is|has)\s+(?:a\s+)?(?:bug|issue|defect|problem)\s*[:\-–—]?\s*/i, '')
       : raw.replace(/^\s*(?:bug|issue|defect)\s*(?:report)?\s*[:\-–—]\s*/i, '')
-  return withoutPrefix
+  const title = withoutPrefix
     .replace(/\s+/g, ' ')
     .trim()
+    // "…a bug report for the UTC time zone thing" is titled "The UTC time zone thing" (Oct 7).
+    .replace(/^(?:for|about|on|that|saying|re)\s+/i, '')
     .replace(/[.?!]+$/, '')
     .slice(0, 240)
+  return title.charAt(0).toUpperCase() + title.slice(1)
+}
+
+/**
+ * A bug report said to the assistant, as a row: with the conversation before it (the last dozen lines), the page
+ * and the device — as the bug button sends — so the report shows what happened, not only its title (Oct 7).
+ */
+export function voiceBugReportRow(request, { messages = [], page = null, sessionId = null, deviceId = null, memberName = null } = {}) {
+  return {
+    title: request.title,
+    details: request.details,
+    severity: request.severity,
+    status: 'open',
+    source: 'assistant',
+    page,
+    session_id: sessionId,
+    device_id: deviceId,
+    member_name: memberName,
+    transcript: (Array.isArray(messages) ? messages : []).slice(-12)
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, text: String(m.content ?? '').slice(0, 1200) })),
+  }
 }
 
 export function parseBugReportRequest(text) {
@@ -41,11 +65,13 @@ export function parseBugReportRequest(text) {
   if (!explicitSubmission && !directDeclaration && !discoveryDeclaration) return { kind: 'none' }
 
   const title = cleanBugTitle(raw)
+  // explicit: asked to file one ("create a bug report"), not only said "that's a problem" — the main lane files only these.
   if (!title || /^(?:a |this |the )?(?:bug|issue|defect|problem)(?: report)?$/i.test(title)) {
-    return { kind: 'clarify' }
+    return { kind: 'clarify', explicit: explicitSubmission }
   }
   return {
     kind: 'create',
+    explicit: explicitSubmission,
     title,
     details: raw.length > title.length + 8 ? raw.slice(0, 2000) : null,
     severity: bugSeverityFor(raw),
@@ -55,13 +81,16 @@ export function parseBugReportRequest(text) {
 export function resolveBugReportRequest(latestText, previousUserText) {
   const current = parseBugReportRequest(latestText)
   if (current.kind !== 'none') return current
-  if (parseBugReportRequest(previousUserText).kind !== 'clarify') return current
+  const asked = parseBugReportRequest(previousUserText)
+  if (asked.kind !== 'clarify') return current
 
   const raw = String(latestText ?? '').trim()
   const title = cleanBugTitle(raw)
-  if (!title) return { kind: 'clarify', follow_up: true }
+  // The answer to "What happened?" counts as asked for only when the question was (an explicit request before it).
+  if (!title) return { kind: 'clarify', follow_up: true, explicit: asked.explicit === true }
   return {
     kind: 'create',
+    explicit: asked.explicit === true,
     title,
     details: raw.slice(0, 2000),
     severity: bugSeverityFor(raw),

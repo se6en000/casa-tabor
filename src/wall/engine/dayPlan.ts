@@ -1,4 +1,5 @@
 import type { FamilyRoutine } from '../../lib/familyRoutines'
+import { allDayCovers } from '../../../supabase/functions/_shared/all-day.mjs'
 import { applyTimeToDate, formatDisplayVenueName, getEstimatedDriveMinutes } from '../../lib/familyRoutines.ts'
 import { isEventAtHome } from '../../lib/driverConflictEngine.ts'
 import { buildTrips, tripDay, type TravelPrefs, type TravelSettings, type TravelTrip } from './travel.ts'
@@ -59,6 +60,9 @@ const CHAIN_EARLY_MIN = 15
 const MAX_PLAUSIBLE_LEAD_MIN = 6 * 60
 
 const addMinutes = (d: Date, minutes: number) => new Date(d.getTime() + minutes * MINUTE)
+
+/** The house's own date, YYYY-MM-DD. */
+const ymdOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 function dayBounds(date: Date): { start: Date; end: Date } {
   const start = new Date(date)
@@ -300,7 +304,8 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   for (const event of events) {
     const start = new Date(event.start_time)
     const end = new Date(event.end_time)
-    if (!(start < dayEnd && end > dayStart)) continue
+    // An all-day event is on the dates written on it (Heather's birthday, midnight UTC on the 8th, showed on the 7th).
+    if (event.all_day ? !allDayCovers(event.start_time, event.end_time, ymdOf(dayStart)) : !(start < dayEnd && end > dayStart)) continue
     if (event.status === 'cancelled') continue
     // A to-do with no due date isn't on any day (Jake, Oct 5: "Reply to Natasha Ahles" showed at 12:00 AM as an event
     // with "No one yet"): its time is a placeholder. It lives on the to-do lists, with a tick.

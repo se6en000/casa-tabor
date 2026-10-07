@@ -24,6 +24,7 @@ import {
 import { normalizeLegacyCalendarActionArgs } from '../_shared/assistant-agent-write.mjs'
 import { validateCalendarTemporalProvenance } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
+import { replayableResult } from '../_shared/action-replay.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -79,13 +80,13 @@ async function getExistingActionResult(sb: ReturnType<typeof createClient>, acti
   if (!actionId) return null
   const { data, error } = await sb
     .from('ai_event_edit_history')
-    .select('result_payload')
+    .select('result_payload, status')
     .eq('action_id', actionId)
     .order('created_at', { ascending: false })
     .limit(1)
 
   if (error) throw new Error(error.message)
-  return data?.[0]?.result_payload ?? null
+  return replayableResult(data?.[0])
 }
 
 async function updateAuditResult(
