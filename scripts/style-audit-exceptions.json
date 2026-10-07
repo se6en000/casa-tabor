@@ -580,6 +580,10 @@
       {
         "path": "src/wall/WallRail.tsx",
         "reason": "Family Wall left panel (canvas 56A): each count opens its page, each TAKE WITH YOU line ticks, \"N more\" opens every list — part of the Wall's own component set."
+      },
+      {
+        "path": "src/settings/ui.tsx",
+        "reason": "Settings V2's own small kit (canvas 47): built on the Wall's tokens at two sizes (hand and wall), like the Family Wall's component set (CLAUDE.md Wall exception); the pages' buttons come from here."
       }
     ]
   }

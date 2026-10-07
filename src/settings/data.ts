@@ -7,6 +7,7 @@ import type { ScreensaverSettings } from '../hooks/useScreensaverSettings'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { Arrangement, BugSeverity, BugStatus } from './model'
 import type { DayOffRow } from '../wall/RoutineEditor'
+import type { Persona } from '../../supabase/functions/_shared/house-persona.mjs'
 
 // Settings V2's data, one source the pages read (canvas 47). The live source (liveSource.ts) is the app's own hooks and
 // the server; the fixture (SettingsFixturePage) is fixed data, so every page can be drawn and screenshot-checked.
@@ -129,6 +130,8 @@ export interface SettingsSource {
   useWallLight: () => { now: LightReading | null; today: LightReading[] | null }
   useMemory: () => { items: MemoryItem[] | null; forget: (id: string) => Promise<SaveResult>; confirm: (id: string) => Promise<SaveResult> }
   usePrivateOnWall: () => [boolean, (hide: boolean) => Promise<SaveResult>]
+  /** Alexa's character, how much of it, and the house notes she's picked up (settings.assistant_personality, canvas 60). */
+  usePersona: () => { persona: Persona | null; save: (next: Persona) => Promise<SaveResult> }
   useChores: () => { chores: WallChore[] | null; save: (chore: WallChore) => Promise<void>; remove: (id: string) => Promise<void> }
   useKeptCount: () => number
   /** Everyone's routines — school, work, camp — with their days off (the wall's school runs). */

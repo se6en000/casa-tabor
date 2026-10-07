@@ -4,6 +4,7 @@ import { requireEnv } from '../_shared/env.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { PERSONA_KEY, personaForBrief } from '../_shared/house-persona.mjs'
 import { cleanBriefFacts, cleanFacts, paperPrompt, parsePaperWords, searchPrompt, skyFacts } from '../_shared/morning-paper.mjs'
 
 // The morning paper (canvas 48a; Jake, Oct 6): the wall sends the day's facts (src/wall/paper.ts) and gets back the
@@ -45,7 +46,11 @@ Deno.serve(async (req) => {
     if (kept) return json({ words: kept, kept: true }, 200, correlationId)
 
     // The sky, from the home's cached geocode (home-weather keeps it): free, no key.
-    const { data: home } = await sb.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+    const [{ data: home }, { data: persona }] = await Promise.all([
+      sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+      // Alexa's voice and the house notes (canvas 60): the aside and the joke can call back to them.
+      sb.from('settings').select('value').eq('key', PERSONA_KEY).maybeSingle(),
+    ])
     const geo = home?.value?.geocode_cache
     let sky: string | null = null
     if (typeof geo?.lat === 'number' && typeof geo?.lng === 'number') {
@@ -83,7 +88,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: paperPrompt(facts, sky, more, found) }] }],
+        contents: [{ parts: [{ text: paperPrompt(facts, sky, more, found, more ? personaForBrief(persona?.value) : null) }] }],
         generationConfig: { maxOutputTokens: more ? 4000 : 400, temperature: 0.8, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: more ? 1024 : 0 } },
       }),
     }, { correlationId })

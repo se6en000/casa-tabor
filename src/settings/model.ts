@@ -4,7 +4,7 @@
 // go, who sees Advanced, and search.
 
 export type SettingsPageId =
-  | 'family' | 'places' | 'calendars' | 'wall' | 'knows' | 'chores'
+  | 'family' | 'places' | 'calendars' | 'wall' | 'knows' | 'alexa' | 'chores'
   | 'usage' | 'limits' | 'checks' | 'voice' | 'maintenance'
 
 export type SettingsIcon = 'users' | 'pin' | 'cal' | 'wall' | 'spark' | 'chores' | 'chart' | 'gauge' | 'check' | 'mic' | 'wrench'
@@ -12,6 +12,8 @@ export type SettingsIcon = 'users' | 'pin' | 'cal' | 'wall' | 'spark' | 'chores'
 export interface SettingsPage {
   id: SettingsPageId
   name: string
+  /** The page's own title when it differs from its name in the list ("Alexa"). */
+  heading?: string
   /** What the page is for, in a line (under its title). */
   about: string
   icon: SettingsIcon
@@ -26,6 +28,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'calendars', name: 'Calendars and email', about: 'Google, which calendars show, and what the email reader does.', icon: 'cal', advanced: false, words: ['google', 'gmail', 'calendar', 'sync', 'email', 'keep me posted', 'mailbox', 'inbox'] },
   { id: 'wall', name: 'The wall', about: 'How bright the kitchen screen is, and when it sleeps.', icon: 'wall', advanced: false, words: ['brightness', 'sleep', 'screen', 'display', 'night glow', 'led', 'light', 'kiosk', 'dark'] },
   { id: 'knows', name: 'What the assistant knows', about: 'What it remembers to answer better. Correct or forget any of it.', icon: 'spark', advanced: false, words: ['memory', 'memories', 'remember', 'forget', 'facts', 'private', 'assistant'] },
+  { id: 'alexa', name: 'Alexa’s personality', heading: 'Alexa', about: 'The house’s voice — who she is, and what she’s picked up about you. She learns a little each week.', icon: 'spark', advanced: false, words: ['alexa', 'personality', 'character', 'jokes', 'humor', 'funny', 'playful', 'house notes', 'running jokes'] },
   { id: 'chores', name: 'Chores and routines', about: 'Who does what and when, the school runs, and what’s kept from whom.', icon: 'chores', advanced: false, words: ['chore', 'routine', 'trash', 'school run', 'drop-off', 'pickup', 'keep from', 'privacy'] },
   { id: 'usage', name: 'Usage and cost', about: 'What the AI and maps cost, by day, by who, by feature.', icon: 'chart', advanced: true, words: ['cost', 'spend', 'money', 'tokens', 'gemini', 'billing', 'usage', 'dollars'] },
   { id: 'limits', name: 'Limits and health', about: 'The breaker’s caps, the models each job uses, and whether everything’s running.', icon: 'gauge', advanced: true, words: ['breaker', 'throttle', 'throttling', 'cap', 'caps', 'pause', 'models', 'errors', 'health', 'sync'] },

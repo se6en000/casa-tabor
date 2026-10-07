@@ -5,6 +5,7 @@ import SettingsRoot from './SettingsRoot'
 import { liveSource } from './liveSource'
 import type { BugReport, LightReading, MemoryItem, NightlyCheck, SettingsSource, UsageSummary } from './data'
 import { sortBugs } from './model'
+import { DEFAULT_CORE, type Persona } from '../../supabase/functions/_shared/house-persona.mjs'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { FamilyMember, SavedPlace } from '../types'
 import type { MemberWithConnection } from '../hooks/useCalendarConnections'
@@ -67,6 +68,20 @@ const conn = (m: FamilyMember, email: string | null, extra: object = {}): Member
 const MEM = (id: string, text: string, who: string | null, sure: boolean, extra: Partial<MemoryItem> = {}): MemoryItem => ({
   id, kind: 'fact', about_label: who ? null : 'The house', about_member_id: who, text, confidence: sure ? 'sure' : 'not_sure', source: 'conversation', sensitive: false, created_at: at('2026-10-01T12:00:00Z'), ...extra,
 })
+// Alexa's personality as canvas 60 drew it: the house, Some, two notes kept.
+const PERSONA: Persona = {
+  core: DEFAULT_CORE,
+  level: 'some',
+  notes: [
+    { id: 'p1', text: 'Two games in one park is “the Taborville Classic.”', source: 'A running joke · you laughed, Oct 6', pinned: true, added: '2026-10-06' },
+    { id: 'p2', text: 'Jake likes the plan first and the joke after.', source: 'From how you answer', pinned: true, added: '2026-10-04' },
+    { id: 'p3', text: 'Friday is pizza night.', source: 'You’ve said it three times', pinned: false, added: '2026-10-04' },
+    { id: 'p4', text: 'Liv’s cleats are always the last thing found.', source: 'A running bit · used twice', pinned: false, added: '2026-10-03' },
+    { id: 'p5', text: 'Don’t remind Liv twice before 8.', source: 'You said so · Oct 2', pinned: false, added: '2026-10-02' },
+  ],
+  updatedAt: '2026-10-04',
+}
+
 const MEMORY: MemoryItem[] = [
   MEM('m1', 'Liv’s debate is on Thursdays', 'liv', false, { source: 'conversation' }),
   MEM('m2', 'Owen sees his therapist at Hope Center ABA', 'owen', false, { source: 'email', sensitive: true }),
@@ -176,6 +191,10 @@ function fixtureSource(params: URLSearchParams): SettingsSource {
     usePrivateOnWall: () => {
       const [hide, setHide] = useState(false)
       return [hide, async (v) => { setHide(v); return { ok: true } }]
+    },
+    usePersona: () => {
+      const [persona, setPersona] = useState<Persona>(PERSONA)
+      return { persona, save: async (next) => { setPersona(next); return { ok: true } } }
     },
     useChores: () => ({ chores: CHORES, save: async () => {}, remove: async () => {} }),
     useKeptCount: () => 2,

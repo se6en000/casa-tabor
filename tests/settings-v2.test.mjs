@@ -4,8 +4,8 @@ import { SETTINGS_PAGES, ownerId, pageFromPath, searchPages, money, ago } from '
 
 // Settings V2 (canvas 47; Jake, Oct 5: "redo the settings page … keep the general and advanced areas").
 
-test('six household pages and five of Jake’s', () => {
-  assert.deepEqual(SETTINGS_PAGES.filter((p) => !p.advanced).map((p) => p.id), ['family', 'places', 'calendars', 'wall', 'knows', 'chores'])
+test('seven household pages (Alexa’s personality, canvas 60) and five of Jake’s', () => {
+  assert.deepEqual(SETTINGS_PAGES.filter((p) => !p.advanced).map((p) => p.id), ['family', 'places', 'calendars', 'wall', 'knows', 'alexa', 'chores'])
   assert.deepEqual(SETTINGS_PAGES.filter((p) => p.advanced).map((p) => p.id), ['usage', 'limits', 'checks', 'voice', 'maintenance'])
 })
 
@@ -207,4 +207,10 @@ test('the bug box: most urgent first, then newest; closed ones last', async () =
     { id: 'f', severity: 'critical', status: 'in_progress', created_at: '2026-08-01T00:00:00Z' },
   ]
   assert.deepEqual(sortBugs(bugs).map((b) => b.id), ['f', 'b', 'd', 'c', 'a', 'e'])
+})
+
+test('“personality” and “jokes” find Alexa’s page; her title is just Alexa', () => {
+  assert.equal(searchPages('personality', false)[0]?.id, 'alexa')
+  assert.equal(searchPages('jokes', false)[0]?.id, 'alexa')
+  assert.equal(SETTINGS_PAGES.find((p) => p.id === 'alexa')?.heading, 'Alexa')
 })

@@ -30,7 +30,7 @@ Only real, current places and events, with their sources. Short factual notes, n
 
 const list = (label, items, each) => `${label}: ${items.length ? items.map(each).join(' | ') : 'none'}`
 
-export function paperPrompt(facts, sky, more = null, found = null) {
+export function paperPrompt(facts, sky, more = null, found = null, voice = null) {
   const lines = [
     `Day: ${facts.day}`,
     `On the road today (time · what): ${facts.runs.length ? facts.runs.map((r) => `${r.at} · ${r.text}${r.alert ? ` (${r.alert})` : ''}`).join(' | ') : 'nothing'}`,
@@ -48,7 +48,8 @@ export function paperPrompt(facts, sky, more = null, found = null) {
     )
   }
   if (found) lines.push(`Found on the web this morning (real places and events — use only these for the surprise): ${found}`)
-  return `You write Tabor House's morning brief: the front page on the family's kitchen wall, read over coffee. You have creative freedom (Jake: "surprise me … make it what you think would be a great morning brief"), within the rules below.
+  return `You write Tabor House's morning brief: the front page on the family's kitchen wall, read over coffee. You have creative freedom (Jake: "surprise me … make it what you think would be a great morning brief"), within the rules below.${voice ? `
+${voice} Let the aside and the joke sound like her; the logistics stay plain.` : ''}
 
 ${lines.join('\n')}
 

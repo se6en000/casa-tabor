@@ -132,6 +132,17 @@ export function Action({ children, onClick, tone = 'brass', label, disabled }: {
   return <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={`flex min-h-[44px] shrink-0 items-center gap-[8px] border-0 bg-transparent p-0 font-semibold disabled:opacity-40 ${color} ${t.body}`}>{children}</button>
 }
 
+/** A round outlined button beside a row (Keep, Forget, Edit); filled when it's on. */
+export function Pill({ children, onClick, label, filled, tone = 'ink' }: { children: ReactNode; onClick: () => void; label: string; filled?: boolean; tone?: 'ink' | 'rust' }) {
+  const t = useType()
+  const wall = useSize() === 'wall'
+  const look = filled ? 'border-wall-brass-ink bg-wall-brass-ink text-wall-on-pigment' : `border-wall-stone bg-transparent ${tone === 'rust' ? 'text-wall-rust' : 'text-wall-ink'}`
+  return (
+    <button type="button" aria-label={label} aria-pressed={filled} onClick={onClick}
+      className={`flex shrink-0 items-center rounded-full border border-solid font-semibold ${wall ? 'h-[56px] px-[22px]' : 'h-[44px] px-[16px]'} ${look} ${t.detail}`}>{children}</button>
+  )
+}
+
 /** Nothing to show yet, or still loading. */
 export function Quiet({ children }: { children: ReactNode }) {
   const t = useType()

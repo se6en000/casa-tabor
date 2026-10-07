@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test'
 // mine as well be thorough"). Fixed data (/__settings-fixture): every page on the phone, the wall's and a laptop's
 // layout, Advanced closed to anyone but Jake, search, and the controls doing what they say.
 
-const PAGES = ['family', 'places', 'calendars', 'wall', 'knows', 'chores', 'usage', 'limits', 'checks', 'voice', 'maintenance']
+const PAGES = ['family', 'places', 'calendars', 'wall', 'knows', 'alexa', 'chores', 'usage', 'limits', 'checks', 'voice', 'maintenance']
 const open = async (page, q = {}, viewport = { width: 390, height: 844 }) => {
   await page.setViewportSize(viewport)
   await page.goto(`/__settings-fixture?${new URLSearchParams(q)}`)
@@ -87,6 +87,39 @@ test('settings: what the assistant knows — yes moves it to sure, forget takes 
   await expect(s.getByText('The kids’ dentist is Dr. Ledakis')).toHaveCount(0)
   await s.getByRole('switch', { name: 'Keep private things off the wall' }).click()
   await expect(s.getByRole('switch', { name: 'Keep private things off the wall' })).toHaveAttribute('aria-checked', 'true')
+})
+
+test('settings: Alexa’s personality (canvas 60) — who she is, how much, keep or forget what she picked up, start over', async ({ page }) => {
+  const s = await open(page)
+  await expect(s.getByRole('button', { name: 'Open Alexa’s personality' })).toContainText('The house · 5 things picked up')
+  await s.getByRole('button', { name: 'Open Alexa’s personality' }).click()
+  await expect(s.getByRole('heading', { name: 'Alexa', level: 1 })).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Who she is' })).toContainText('The house itself. Warm, a little wry')
+  await s.getByRole('tab', { name: 'Playful' }).click()
+  await expect(s.getByRole('tab', { name: 'Playful' })).toHaveAttribute('aria-selected', 'true')
+  await expect(s.getByRole('status')).toHaveText('Playful: more of the house.')
+  // Keep and Kept: a kept note is never changed by her weekly look back.
+  await s.getByRole('button', { name: 'Keep: Friday is pizza night.' }).click()
+  await expect(s.getByRole('button', { name: 'Kept: Friday is pizza night.' })).toHaveAttribute('aria-pressed', 'true')
+  await s.getByRole('button', { name: 'Kept: Two games in one park is “the Taborville Classic.”' }).click()
+  await expect(s.getByRole('button', { name: 'Keep: Two games in one park is “the Taborville Classic.”' })).toHaveAttribute('aria-pressed', 'false')
+  await s.getByRole('button', { name: 'Forget: Liv’s cleats are always the last thing found.' }).click()
+  await expect(s.getByText('Liv’s cleats are always the last thing found.')).toHaveCount(0)
+  await expect(s.getByText('What she’s picked up · 4')).toBeVisible()
+  // Who she is, in his own words; and back.
+  await s.getByRole('button', { name: 'Edit who she is' }).click()
+  await s.getByRole('textbox', { name: 'Who she is' }).fill('The house, a bit dry, fond of everyone.')
+  await s.getByRole('button', { name: 'Save' }).click()
+  await expect(s.getByRole('region', { name: 'Who she is' })).toContainText('The house, a bit dry, fond of everyone.')
+  // Start over asks first.
+  await s.getByRole('button', { name: 'Start over' }).click()
+  await s.getByRole('button', { name: 'Keep her' }).click()
+  await expect(s.getByText('What she’s picked up · 4')).toBeVisible()
+  await s.getByRole('button', { name: 'Start over' }).click()
+  await s.getByRole('button', { name: 'Yes, start over' }).click()
+  await expect(s.getByText('What she’s picked up · 0')).toBeVisible()
+  await expect(s.getByRole('region', { name: 'Who she is' })).toContainText('The house itself. Warm, a little wry')
+  await expect(s.getByRole('tab', { name: 'Some' })).toHaveAttribute('aria-selected', 'true')
 })
 
 test('settings: limits — pause and resume the AI, and the caps', async ({ page }) => {

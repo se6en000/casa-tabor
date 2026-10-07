@@ -13,10 +13,11 @@ import type { FamilyMember } from '../types'
 import { pigmentStyleFor } from '../wall/lanes'
 import { everyone, people, useSource, type MemberPatch, type MemoryItem } from './data'
 import { ago, moveInOrder, pickColor } from './model'
-import { Action, Group, Label, PageHead, PersonDisc, Quiet, Row, Seg, Sheet, Stepper, Toggle } from './ui'
+import { Action, Group, Label, PageHead, PersonDisc, Pill, Quiet, Row, Seg, Sheet, Stepper, Toggle } from './ui'
 import { LightDay, LightNow } from './WallLight'
 import { usePigment, useSize, useType } from './sizing'
 import { useSaveNote } from './saveNote'
+import { DEFAULT_CORE, type Persona } from '../../supabase/functions/_shared/house-persona.mjs'
 
 // Settings V2 › General (canvas 47b–c): the household's six pages. Each answers one question, saves as it changes,
 // and asks before anything that can't be taken back.
@@ -517,6 +518,89 @@ export function KnowsPage({ head }: { head: ReactNode }) {
       <Group label="On the wall">
         <Row name="Keep private things off the wall" state={hidePrivate ? 'On · private things show only on your phone' : 'Off · everything shows on the wall'}
           right={<Toggle label="Keep private things off the wall" on={hidePrivate} onChange={async (on) => show(await setHidePrivate(on))} />} />
+      </Group>
+    </div>
+  )
+}
+
+// ── Alexa's personality ─────────────────────────────────────────────────────────────────────────────────
+// Canvas 60 (Jake, Oct 7: "give Tabor House AI a personality, that evolves over time … call it Alexa"): who she is in
+// a line he can rewrite, how much of it comes through, and what she's picked up — each note kept or forgotten. She
+// looks back over the week's conversations every Sunday night (house-notes); a kept note is never changed by her.
+
+export function AlexaPage({ head }: { head: ReactNode }) {
+  const src = useSource()
+  const t = useType()
+  const wall = useSize() === 'wall'
+  const { persona, save } = src.usePersona()
+  const [editing, setEditing] = useState<string | null>(null)
+  const [restart, setRestart] = useState(false)
+  const [note, show] = useSaveNote()
+  if (!persona) return <div>{head}<Group><Quiet>Loading…</Quiet></Group></div>
+  const put = async (patch: Partial<Persona>, words: string) => show(await save({ ...persona, ...patch }), words)
+
+  return (
+    <div>
+      {head}
+      {note}
+      <Group label="Who she is">
+        {editing == null ? (
+          <div className={`flex items-start gap-[16px] ${wall ? 'px-[26px] py-[22px]' : 'px-[14px] py-[14px]'}`}>
+            <p className={`m-0 min-w-0 flex-1 font-display text-wall-ink ${wall ? t.heading : t.body}`}>{persona.core}</p>
+            <Pill label="Edit who she is" onClick={() => setEditing(persona.core)}>Edit</Pill>
+          </div>
+        ) : (
+          <div className={`flex flex-col gap-[10px] ${wall ? 'px-[26px] py-[22px]' : 'px-[14px] py-[14px]'}`}>
+            <textarea aria-label="Who she is" value={editing} onChange={(e) => setEditing(e.target.value)} rows={4}
+              className={`w-full resize-none rounded-[12px] border border-solid border-wall-stone bg-phone-ground px-[12px] py-[10px] font-display text-wall-ink ${t.heading}`} />
+            <div className="flex flex-wrap items-center gap-[18px]">
+              <Action onClick={async () => { await put({ core: editing.trim() || DEFAULT_CORE }, 'She’ll be that from the next thing you ask.'); setEditing(null) }}>Save</Action>
+              <Action tone="quiet" onClick={() => setEditing(null)}>Cancel</Action>
+              {editing !== DEFAULT_CORE && <Action tone="quiet" onClick={() => setEditing(DEFAULT_CORE)}>Back to the house</Action>}
+            </div>
+          </div>
+        )}
+      </Group>
+
+      <Label>How much personality</Label>
+      <div className={wall ? 'max-w-[560px]' : ''}>
+        <Seg label="How much personality" value={persona.level} onChange={(level) => void put({ level }, { quiet: 'Quiet: mostly business.', some: 'Some: a light touch now and then.', playful: 'Playful: more of the house.' }[level])}
+          options={[{ value: 'quiet', label: 'Quiet' }, { value: 'some', label: 'Some' }, { value: 'playful', label: 'Playful' }]} />
+      </div>
+      <p className={`m-0 mt-[10px] px-[4px] text-wall-ink-2 ${t.detail}`}>Times, drivers and yes-or-no answers always stay plain.</p>
+
+      <div className={wall ? 'flex items-baseline justify-between gap-[12px]' : ''}>
+        <Label>What she’s picked up · {persona.notes.length}</Label>
+        <span className={`block px-[4px] text-wall-ink-2 ${wall ? '' : '-mt-[4px] mb-[8px]'} ${t.detail}`}>Next look back: Sunday night</span>
+      </div>
+      <Group>
+        {persona.notes.length ? persona.notes.map((n) => (
+          <div key={n.id} className={`flex ${wall ? 'items-center gap-[14px] px-[26px] py-[16px]' : 'flex-col gap-[10px] px-[14px] py-[12px]'}`}>
+            <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <span className={`text-wall-ink ${t.body}`}>{n.text}</span>
+              {n.source && <span className={`text-wall-ink-2 ${t.detail}`}>{n.source}</span>}
+            </div>
+            <div className="flex shrink-0 gap-[10px]">
+              <Pill label={n.pinned ? `Kept: ${n.text}` : `Keep: ${n.text}`} filled={n.pinned}
+                onClick={() => void put({ notes: persona.notes.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x)) }, n.pinned ? 'She may let that one go someday.' : 'Kept. She won’t change it.')}>{n.pinned ? 'Kept' : 'Keep'}</Pill>
+              <Pill label={`Forget: ${n.text}`} tone="rust" onClick={() => void put({ notes: persona.notes.filter((x) => x.id !== n.id) }, 'Forgotten.')}>Forget</Pill>
+            </div>
+          </div>
+        )) : <Quiet>Nothing yet. Every Sunday night she looks back over the week’s conversations for running jokes, family words and how you like things said.</Quiet>}
+      </Group>
+
+      <Group label="Start over">
+        {restart ? (
+          <div className={`flex flex-col gap-[8px] ${wall ? 'px-[26px] py-[18px]' : 'px-[14px] py-[12px]'}`}>
+            <span className={`text-wall-ink ${t.body}`}>Forget everything she’s picked up and go back to the house?</span>
+            <div className="flex gap-[18px]">
+              <Action tone="rust" onClick={async () => { await put({ core: DEFAULT_CORE, level: 'some', notes: [] }, 'Back to the house, nothing picked up.'); setRestart(false) }}>Yes, start over</Action>
+              <Action tone="quiet" onClick={() => setRestart(false)}>Keep her</Action>
+            </div>
+          </div>
+        ) : (
+          <Row name="Start over" state="Back to the house, with nothing picked up" onClick={() => setRestart(true)} label="Start over" />
+        )}
       </Group>
     </div>
   )

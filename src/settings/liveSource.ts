@@ -22,6 +22,7 @@ import { useGoogleCalendarList, useSelectGoogleCalendar } from '../hooks/useCale
 import { invokeHistoryUnlock } from '../lib/assistantConversationHistoryClient'
 import type { BugPatch, BugReport, DisplayConfigLite, HealthSummary, LightReading, MemoryItem, NightlyCheck, SaveResult, SettingsSource, UsageSummary } from './data'
 import { bugIsOpen, sortBugs } from './model'
+import { PERSONA_KEY, cleanPersona, type Persona } from '../../supabase/functions/_shared/house-persona.mjs'
 
 const ok: SaveResult = { ok: true }
 const ymd = (iso: string) => {
@@ -214,6 +215,16 @@ export const liveSource: SettingsSource = {
       return error ? fail(error) : ok
     }, [queryClient])
     return [data === true, set]
+  },
+  usePersona: () => {
+    const queryClient = useQueryClient()
+    const { data, isLoading } = useSetting<unknown>(PERSONA_KEY)
+    const save = useCallback(async (next: Persona) => {
+      queryClient.setQueryData(settingsQueryKey(PERSONA_KEY), next)
+      const { error } = await setSetting(PERSONA_KEY, next)
+      return error ? fail(error) : ok
+    }, [queryClient])
+    return { persona: isLoading ? null : cleanPersona(data), save }
   },
   useChores: () => {
     const queryClient = useQueryClient()

@@ -7,7 +7,8 @@ import { people, SettingsSourceContext, useSource, type SettingsSource } from '.
 import { checkLine, money, ownerId, pageById, pageFromPath, searchPages, SETTINGS_PAGES, type SettingsPage, type SettingsPageId } from './model'
 import { Action, Group, PageHead, PageIcon, Row, Seg } from './ui'
 import { SizeContext, useType, type SettingsSize } from './sizing'
-import { CalendarsPage, ChoresPage, FamilyPage, KnowsPage, PlacesPage, WallPage } from './GeneralPages'
+import { AlexaPage, CalendarsPage, ChoresPage, FamilyPage, KnowsPage, PlacesPage, WallPage } from './GeneralPages'
+import { DEFAULT_CORE } from '../../supabase/functions/_shared/house-persona.mjs'
 import { ChecksPage, LimitsPage, MaintenancePage, UsagePage, VoicePage } from './AdvancedPages'
 
 // Settings V2 (canvas 47; Jake, Oct 5: "go, A on the settings landing page"). /settings: on a phone, the home (47a A,
@@ -177,6 +178,7 @@ function GeneralRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => void
   const { config } = src.useDisplay()
   const { items } = src.useMemory()
   const { chores } = src.useChores()
+  const { persona } = src.usePersona()
   const n = (count: number | undefined, one: string, many: string) => (count == null ? '' : `${count} ${count === 1 ? one : many}`)
   const linked = (connections ?? []).filter((m) => m.connection)
   const signIn = linked.some((m) => m.connection?.reauthorization_required || m.connection?.health_status === 'reauthorization_required')
@@ -193,6 +195,7 @@ function GeneralRows({ onOpen, current }: { onOpen: (id: SettingsPageId) => void
         state={signIn ? 'A calendar needs signing in again' : failing ? 'A calendar isn’t syncing' : [connections ? n(calendars, 'calendar', 'calendars') : null, email ? (email.keep.length ? `kept posted on ${email.keep.length}` : 'the email reader is on') : null].filter(Boolean).join(' · ')} />
       <PageRow p={P('wall')} onOpen={onOpen} current={current} state={config ? `Up to ${config.brightness_max ?? 100}% bright · ${config.auto_sleep_enabled !== false ? 'sleeps in the dark' : 'stays on in the dark'}` : ''} />
       <PageRow p={P('knows')} onOpen={onOpen} current={current} tone={unsure ? 'brass' : 'quiet'} state={items ? `${n(items.length, 'thing', 'things')}${unsure ? ` · ${unsure} not sure yet` : ''}` : ''} />
+      <PageRow p={P('alexa')} onOpen={onOpen} current={current} tone="brass" state={persona ? [persona.core === DEFAULT_CORE ? 'The house' : 'In your words', n(persona.notes.length, 'thing picked up', 'things picked up')].join(' · ') : ''} />
       <PageRow p={P('chores')} onOpen={onOpen} current={current} state={chores ? [n(chores.length, 'chore', 'chores'), trash ? `${trash.title.toLowerCase()} ${choreDays(trash.days_of_week)}` : null].filter(Boolean).join(' · ') : ''} />
     </>
   )
@@ -276,7 +279,7 @@ function WallPin({ unlock }: { unlock: NonNullable<Unlock> }) {
 
 function PageView({ id, isOwner, unlock, onBack, onOld }: { id: SettingsPageId; isOwner: boolean; unlock: Unlock; onBack?: () => void; onOld: () => void }) {
   const p = pageById(id)!
-  const head = <PageHead title={p.name} about={p.about} back={p.advanced ? 'Advanced' : 'Settings'} onBack={onBack} />
+  const head = <PageHead title={p.heading ?? p.name} about={p.about} back={p.advanced ? 'Advanced' : 'Settings'} onBack={onBack} />
   if (p.advanced && !isOwner) return <div>{head}<Gate unlock={unlock} /></div>
   const pages: Record<SettingsPageId, ReactNode> = {
     family: <FamilyPage head={head} />,
@@ -284,6 +287,7 @@ function PageView({ id, isOwner, unlock, onBack, onOld }: { id: SettingsPageId; 
     calendars: <CalendarsPage head={head} />,
     wall: <WallPage head={head} />,
     knows: <KnowsPage head={head} />,
+    alexa: <AlexaPage head={head} />,
     chores: <ChoresPage head={head} />,
     usage: <UsagePage head={head} />,
     limits: <LimitsPage head={head} />,
