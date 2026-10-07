@@ -51,7 +51,7 @@ test('the assistant knows his words: reminders have a time, to-dos may not, proj
 test('the assistant sees his open to-do list, and a project grows from an item on it', () => {
   const todos = [{ id: 'paint', title: 'Paint the house', due: '2026-11-01' }, { id: 'gfi', title: 'Replace the outside GFI outlet', due: null }]
   const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: [], onScreenIds: [], utcOffset: '-04:00', now, todos })
-  assert.match(system, /TO-DO LIST[^\n]*\n- \[paint\] Paint the house · by Sun Nov 1\n- \[gfi\] Replace the outside GFI outlet/)
+  assert.match(system, /TO-DO LIST[^\n]*\n[A-Z][^\n]*:\n- \[paint\] Paint the house · by Sun Nov 1\n- \[gfi\] Replace the outside GFI outlet/)
   assert.match(system, /already on (it|the list|his list)/i)
   const card = fullAiCard({ name: 'plan_project', args: { title: 'Paint the house', from_id: 'paint', steps: [{ title: 'a' }, { title: 'b' }] } }, { ...ctx, events: [], todos })
   assert.equal(card.args.from_event_id, 'paint')
@@ -113,8 +113,10 @@ test('the chores Casa is told: who, when, and whether today\'s is done — every
 })
 
 test('a to-do for Casa: its day, its time (midnight is a day without one), and whether it\'s late', async () => {
-  const { todoForCasa } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const { todoForCasa: forCasa } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
   const now = new Date('2026-10-03T15:00:00-04:00')
+  // The day, time and lateness (the stage and what it takes ride along: todo-stage.test.mjs).
+  const todoForCasa = (...a) => { const { id, title, due, time, late } = forCasa(...a); return { id, title, due, time, late } }
   assert.deepEqual(todoForCasa({ id: 'a', title: 'Dedication page', has_due_date: true, all_day: false, start_time: '2026-10-03T13:00:00-04:00' }, now), { id: 'a', title: 'Dedication page', due: '2026-10-03', time: '1:00 PM', late: true })
   assert.deepEqual(todoForCasa({ id: 'b', title: 'Costume', has_due_date: true, all_day: false, start_time: '2026-10-04T00:00:00-04:00' }, now), { id: 'b', title: 'Costume', due: '2026-10-04', time: null, late: false }, 'midnight: the day only')
   assert.deepEqual(todoForCasa({ id: 'c', title: 'Fix cracks', has_due_date: true, all_day: true, start_time: '2026-09-28T04:00:00Z' }, now), { id: 'c', title: 'Fix cracks', due: '2026-09-28', time: null, late: true })

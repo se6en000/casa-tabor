@@ -76,6 +76,14 @@ Deno.serve(async (req) => {
       .or('status.is.null,status.neq.cancelled')
 
     if (error) throw error
+    // A snoozed reminder is silent until its snooze ends (Jake, Oct 7: "if I snooze it I want it actually snoozed from
+    // all conversations till its due again"): no push for it either.
+    const reminderIds = (events ?? []).filter((e) => e.event_type === 'reminder').map((e) => e.id)
+    const todayNy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+    const { data: snoozedRows } = reminderIds.length
+      ? await supabase.from('todo_details').select('event_id').in('event_id', reminderIds).gt('snoozed_until', todayNy)
+      : { data: [] }
+    const snoozed = new Set(((snoozedRows ?? []) as Array<{ event_id: string }>).map((r) => r.event_id))
     let fired = 0
 
     if (events && events.length > 0) {
@@ -94,6 +102,7 @@ Deno.serve(async (req) => {
 
         if (!bucket) continue
         if (applyQuietToPush && quiet) continue
+        if (snoozed.has(event.id)) continue
 
         const normTitle = (event.title || 'event')
           .toLowerCase()

@@ -46,6 +46,7 @@ export function paperPrompt(facts, sky, more = null, found = null, voice = null)
       list('Coming up (days away · what · next step)', more.comingUp, (c) => `${c.daysAway} days · ${c.title}${c.late ? ' (late to start)' : ''} · ${c.nextStep}`),
       list('Projects not finished (done of steps · next step)', more.projects, (p) => `${p.title} (${p.done} of ${p.total}${p.aim ? `, aiming for ${p.aim}` : ''}) · next: ${p.next ?? 'none written'}`),
       list('To-dos that have gone quiet', more.quiet, (q) => q),
+      list('To-dos coming due (a heads-up: today or soon)', more.soon ?? [], (q) => q),
     )
   }
   // Holidays and the kids' school breaks ahead, for the weekend, month and way-out columns (Jake, Oct 7).
@@ -138,5 +139,6 @@ export function cleanBriefFacts(more) {
     comingUp: list(more.comingUp, 16, (c) => ({ title: str(c?.title, 100), date: str(c?.date, 10), daysAway: num(c?.daysAway), nextStep: str(c?.nextStep, 140), late: Boolean(c?.late) })),
     projects: list(more.projects, 8, (p) => ({ title: str(p?.title, 100), done: num(p?.done), total: num(p?.total), next: p?.next ? str(p.next, 140) : null, aim: p?.aim ? str(p.aim, 10) : null })),
     quiet: list(more.quiet, 8, (q) => str(q, 140)),
+    soon: list(more.soon, 6, (q) => str(q, 140)),
   }
 }

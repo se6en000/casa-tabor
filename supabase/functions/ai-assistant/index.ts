@@ -46,6 +46,7 @@ import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine }
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { PERSONA_KEY } from '../_shared/house-persona.mjs'
 import { allDayWords } from '../_shared/all-day.mjs'
+import { overdueToRaise } from '../_shared/todo-stage.mjs'
 import { routinesSection } from '../_shared/routines-for-assistant.mjs'
 import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
@@ -1065,7 +1066,7 @@ Deno.serve(async (req) => {
     // His open to-dos (the "To Do" list on his phone): so a repeat is noticed and a project grows from it.
     // With its time and whether it's late, and the household's chores beside it (Jake's bug report, Oct 1: "nothing on
     // todos or reminders?" was answered from the calendar, calling Kelly's gym a reminder, and never named a chore).
-    const [todoRes, choreRes, choreDoneRes, finishedRes] = await Promise.all([
+    const [todoRes, choreRes, choreDoneRes, finishedRes, todoDetailRes, raisedRes] = await Promise.all([
       sb.from('events').select('id, title, has_due_date, start_time, all_day').eq('event_type', 'reminder').eq('record_kind', 'single')
         .is('deleted_at', null).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(60),
       sb.from('household_chores').select('id, title, member_id, days_of_week, time_local, enabled, every_weeks, starts_on').eq('enabled', true),
@@ -1074,12 +1075,18 @@ Deno.serve(async (req) => {
       // "clear the checked groceries" — the model couldn't see it anywhere).
       sb.from('events').select('title').eq('event_type', 'reminder').eq('status', 'cancelled').is('deleted_at', null)
         .gte('updated_at', new Date(now.getTime() - 2 * 86_400_000).toISOString()).order('updated_at', { ascending: false }).limit(20),
+      // What each takes and whether it's snoozed (todo-stage.mjs), and which late one was raised today.
+      sb.from('todo_details').select('event_id, shape, minutes, needs, next_step, snoozed_until'),
+      sb.from('settings').select('value').eq('key', 'todo_raise').maybeSingle(),
     ])
     const finished = ((finishedRes.data ?? []) as Array<{ title: string }>).map((t) => t.title)
     const nyDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
     const todayNy = nyDay(now.toISOString())
+    const todoDetails = new Map(((todoDetailRes.data ?? []) as Array<{ event_id: string }>).map((d) => [d.event_id, d]))
     const todos = ((todoRes.data ?? []) as Array<{ id: string; title: string; has_due_date: boolean; start_time: string; all_day: boolean | null }>)
-      .map((t) => todoForCasa(t, now))
+      .map((t) => todoForCasa(t, now, 'America/New_York', todoDetails.get(t.id) ?? null))
+    // The one late to-do Alexa raises today, with an offer (overdueToRaise): none once one has been raised today.
+    const raise = overdueToRaise(todos as Array<{ id: string; title: string; due: string | null; snoozedUntil: string | null; needs: string[] }>, todayNy, (raisedRes.data?.value ?? null) as { date: string } | null)
     const chores = choresForCasa(choreRes.data ?? [], new Set(((choreDoneRes.data ?? []) as Array<{ chore_id: string }>).map((r) => r.chore_id)), family, todayNy)
     // His saved projects with every step (P3.25 phase 1), so "change that project" isn't answered with
     // a second one and "what's left on the roof?" is answered from the steps.
@@ -1113,7 +1120,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []) })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.
@@ -1399,6 +1406,9 @@ Deno.serve(async (req) => {
     const mentioned = mentionedIds(text, events).flatMap((id) => events.filter((e) => e.id === id))
     // The due thought was offered with this answer: counted, so it comes back no more than weekly (quiet after three).
     const dueWords = due ? String((memory.find((m) => m.id === due.id) as { text?: string } | undefined)?.text ?? '').toLowerCase().match(/\p{L}{5,}/gu) ?? [] : []
+    // The late to-do was raised with this answer: once a day (todo_raise), so it isn't brought up again until tomorrow.
+    const raiseWords = raise ? raise.title.toLowerCase().match(/\p{L}{5,}/gu) ?? [] : []
+    if (raise && !dryRun && raiseWords.some((w) => text.toLowerCase().includes(w))) await sb.from('settings').upsert({ key: 'todo_raise', value: { date: todayNy, id: raise.id }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     if (due && !dryRun && text && dueWords.some((w) => text.toLowerCase().includes(w))) await sb.from('casa_memory').update({ last_nudged_at: new Date().toISOString(), nudge_count: (Number((memory.find((m) => m.id === due.id) as { nudge_count?: number } | undefined)?.nudge_count) || 0) + 1 }).eq('id', due.id)
     return { status: 200, payload: { ...(planning ? { planning: true } : {}), ...(shownDay ? { show_day: shownDay } : {}), ...(shownRoute ? { directions: shownRoute } : {}), ...(emailReview ? { email_review: true } : {}), ...(memoryCalls.length ? { memory: memoryCalls } : {}), ...(nudgedPromise ? { promise_sent_back: true } : {}), ...(dryRun ? { rounds: roundLog } : {}), type: 'text', text: text || 'I didn’t get an answer that time.', conversation_state: answerState(mentioned, null) ?? incomingConversationState ?? null, semantic_intent: planning ? 'full_ai.plan_answer' : 'full_ai.answer', correlation_id: cid } }
   }
@@ -1505,8 +1515,22 @@ Deno.serve(async (req) => {
       },
     }
   }
+  // A late to-do waiting to be raised today (overdueToRaise): the day's first answer goes to version D, which knows
+  // the to-dos and can offer to move it — the quick calendar answer can't (Oct 7: "Anything I should know about today?"
+  // was answered without it). Once raised, the quick answers are back for the rest of the day.
+  const raisePending = async () => {
+    const todayNy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    const { data: raised } = await sb.from('settings').select('value').eq('key', 'todo_raise').maybeSingle()
+    if ((raised?.value as { date?: string } | null)?.date === todayNy) return false
+    const { data: late } = await sb.from('events').select('id, start_time').eq('event_type', 'reminder').eq('record_kind', 'single').eq('has_due_date', true)
+      .is('deleted_at', null).neq('status', 'cancelled').lt('start_time', `${todayNy}T04:00:00Z`).limit(40)
+    const ids = ((late ?? []) as Array<{ id: string }>).map((r) => r.id)
+    if (!ids.length) return false
+    const { data: snoozed } = await sb.from('todo_details').select('event_id').in('event_id', ids).gt('snoozed_until', todayNy)
+    return ids.length > (snoozed ?? []).length
+  }
   // A question the calendar can't answer (a drive time, the weather) goes on to layer 2, which can look it up.
-  if (turnContext?.answer && !(hybridLayer2 && turnContext.answer.calendarSays === false)) {
+  if (turnContext?.answer && !(hybridLayer2 && turnContext.answer.calendarSays === false) && !(await raisePending().catch(() => false))) {
     return {
       status: 200,
       payload: {

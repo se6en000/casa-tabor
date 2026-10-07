@@ -54,10 +54,27 @@ test('never in Next up: nudges, snoozed things, dated things more than 3 days of
   for (const id of ['trash', 'pool', 'tryouts', 'mystery']) assert.ok(!ids(list.nextUp).includes(id), id)
 })
 
-test('a dated thing joins Next up when its day is close, and says so', () => {
-  const forms = list.nextUp.find((i) => i.id === 'forms') ?? list.groups.dated.find((i) => i.id === 'forms')
+test('a small dated thing waits under Later until its day, then joins Next up (Jake, Oct 7: "till the day its actually due")', () => {
+  const forms = list.groups.later.find((i) => i.id === 'forms')
   assert.equal(forms.due, '2026-09-30')
-  assert.ok(ids(list.nextUp).includes('forms'))
+  assert.equal(forms.stage, 'quiet')
+  assert.ok(!ids(list.nextUp).includes('forms'))
+  const onTheDay = buildTodoList({ reminders, details, today: '2026-09-30' })
+  assert.ok(ids(onTheDay.nextUp).includes('forms'))
+  assert.equal(onTheDay.nextUp.find((i) => i.id === 'forms').stage, 'due')
+})
+
+test('a job that needs room shows a few days ahead; far-off ones fold under Later, soonest first', () => {
+  const rs = [
+    r('washer', 'Run the washing machine cleaning cycle', { has_due_date: true, start_time: '2026-10-12T21:00:00Z' }),
+    r('gutter', 'Replace the gutter section', { has_due_date: true, start_time: '2026-09-30T21:00:00Z' }),
+    r('hello', 'Re-up Hello Fresh dinners', { has_due_date: true, start_time: '2026-10-27T04:00:00Z' }),
+  ]
+  const ds = { washer: d('quick', { minutes: 10 }), gutter: d('fix', { minutes: 60, needs: ['Buy'] }), hello: d('quick', { minutes: 10 }) }
+  const l = buildTodoList({ reminders: rs, details: ds, today: '2026-09-28' })
+  assert.deepEqual(ids(l.nextUp), ['gutter'], 'a fix due in two days: there’s room to get the part')
+  assert.deepEqual(ids(l.groups.later), ['washer', 'hello'])
+  assert.deepEqual(ids(l.groups.quick), [])
 })
 
 test('the rest folds by kind; nothing appears twice; undated things are never "overdue"', () => {
@@ -115,7 +132,7 @@ test('suggestions are listed for a yes, with the other item named for a merge', 
 })
 
 // First live run: a vet visit and a shirt order, both dated a month ago, led Next up. A dated item
-// belongs in Next up only around its day (2 days late to 3 days ahead); older ones wait in Dated.
+// belongs in Next up from its day until a week late (Oct 7); older ones wait in Dated.
 test('a dated thing long past its day does not lead Next up', () => {
   const list2 = buildTodoList({
     reminders: [r('vet', 'Bring Gilbert to vet', { has_due_date: true, start_time: '2026-08-24T21:00:00Z' }), r('call', 'Call Anthony')],
@@ -141,4 +158,11 @@ test('a dated step whose last day has passed is asked about, not marked done', (
     ],
   })
   assert.deepEqual(l.pastSteps, [{ id: 'ask', projectId: 'hc', project: 'Halloween costumes', title: 'Ask the kids what they want to be', date: '2026-09-29', start: '2026-09-29' }])
+})
+
+test('late leads Next up, a dated one too — the dedication page four days past its date (Oct 7)', () => {
+  const rs = [r('page', 'Work on Olivia’s dedication page', { has_due_date: true, start_time: '2026-10-03T21:00:00Z' }), r('call', 'Call Anthony', {})]
+  const l = buildTodoList({ reminders: rs, details: { page: d('dated', { minutes: 60 }), call: d('quick', { minutes: 15 }) }, today: '2026-10-07' })
+  assert.deepEqual(ids(l.nextUp), ['page', 'call'])
+  assert.equal(l.nextUp[0].stage, 'overdue')
 })

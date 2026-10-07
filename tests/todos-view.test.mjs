@@ -19,7 +19,7 @@ test('a row\'s size line: kind, time, cost, what it needs; a late date says so',
 })
 
 test('the folded groups, in order', () => {
-  assert.deepEqual(GROUPS.map((g) => g.key), ['quick', 'fix', 'projects', 'nudge', 'dated', 'unsorted'])
+  assert.deepEqual(GROUPS.map((g) => g.key), ['quick', 'fix', 'projects', 'nudge', 'dated', 'unsorted', 'later'])
 })
 
 // Board 09a: the surface — tonight's nudge on the evening face, one small step in a quiet stretch.

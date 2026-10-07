@@ -5,6 +5,8 @@
 // checked). The rest folds by kind: quick ones, fixes, nudges, dated (they live on Coming up), and
 // "Not sure" for anything Casa couldn't sort. Projects show as progress and their current step.
 
+import { leadDays, todoStage } from './todo-stage.mjs'
+
 const TZ = 'America/New_York'
 const NEXT_UP_MAX = 4
 // Needs that make something jump the queue: a hazard, or the house not working.
@@ -12,6 +14,7 @@ const URGENT = { Safety: 50, 'Hot water': 35, Leak: 35, 'No power': 35 }
 
 const localDate = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
 const plusDays = (date, days) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86400e3).toISOString().slice(0, 10)
+const todoStageLead = (i) => leadDays(i)
 const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400e3)
 
 /**
@@ -30,8 +33,9 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
       const snoozes = d.snooze_count ?? 0
       const age = r.created_at ? Math.max(0, daysBetween(localDate(r.created_at), today)) : 0
       const score = needs.reduce((s, n) => s + (URGENT[n] ?? 0), 0)
-        // Late matters for a job still to do; a dated moment long gone isn't "urgent", it's probably over.
-        + (due && due < today && d.shape !== 'dated' ? 40 : 0)
+        // Late leads (Jake, Oct 7: "stuff that is overdue, we should always be talking about") — dated ones too: the
+        // dedication page, two days past its date, had dropped off Next up entirely.
+        + (due && due < today ? 40 : 0)
         + (due && due >= today && due <= soon ? 30 : 0)
         + (d.project_id ? 15 : 0)
         + (minutes != null && minutes <= 15 ? 10 : 0)
@@ -57,11 +61,19 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         score,
       }
     })
+    // Where it is in its time (todo-stage.mjs): due and late lead; further off waits under Later.
+    .map((i) => ({ ...i, stage: todoStage(i, today).stage }))
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
 
   // A merge candidate, a grocery or one that looks over waits for a yes instead of being offered.
+  // A dated one waits until its day — or a little before, for a job that needs room (a fix, a part, a pro): Jake, Oct 7,
+  // "the washing machine cleaning cycle, I dont need to see that till the day its actually due". Late ones stay.
+  const inTime = (i) => i.stage === 'due' || i.stage === 'overdue' || (i.stage === 'heads_up' && todoStageLead(i) >= 3)
   const eligible = items.filter((i) => !i.snoozedUntil && !i.suggestion && (
-    i.shape === 'quick' || i.shape === 'fix' || i.shape === 'project' || (i.shape === 'dated' && i.due && i.due <= soon && i.due >= plusDays(today, -2))
+    // A dated one late a week or more leaves Next up for Dated (a month-old vet visit led it on the first live run);
+    // Alexa asks "still want this?" about it instead.
+    i.shape === 'dated' ? i.due && i.due <= soon && i.due >= plusDays(today, -7) && inTime(i)
+      : (i.shape === 'quick' || i.shape === 'fix' || i.shape === 'project') && (!i.due || inTime(i))
   ))
   const nextUp = eligible.slice(0, NEXT_UP_MAX)
   // Always one quick win in view when there is one: momentum beats the perfect order.
@@ -72,12 +84,15 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
   }
   const shown = new Set(nextUp.map((i) => i.id))
   const rest = items.filter((i) => !shown.has(i.id))
+  // Further off (or a small one before its day): folded under Later, by date, until it's time.
+  const later = (i) => i.stage === 'quiet' || (i.stage === 'heads_up' && todoStageLead(i) < 3)
   const groups = {
-    quick: rest.filter((i) => i.shape === 'quick'),
-    fix: rest.filter((i) => i.shape === 'fix'),
-    nudge: rest.filter((i) => i.shape === 'nudge'),
-    dated: rest.filter((i) => i.shape === 'dated'),
-    unsorted: rest.filter((i) => i.shape === 'unsorted'),
+    quick: rest.filter((i) => i.shape === 'quick' && !later(i)),
+    fix: rest.filter((i) => i.shape === 'fix' && !later(i)),
+    nudge: rest.filter((i) => i.shape === 'nudge' && !later(i)),
+    dated: rest.filter((i) => i.shape === 'dated' && !later(i)),
+    unsorted: rest.filter((i) => i.shape === 'unsorted' && !later(i)),
+    later: rest.filter(later).sort((a, b) => a.due.localeCompare(b.due)),
   }
 
   // Projects (P3.23): the shelf draws each card from the project and its steps. A project inside

@@ -101,3 +101,21 @@ test('the plain brief, before the server’s words: nothing wrong today, the day
   assert.deepEqual(brief.forgot, { title: 'Treehouse — step 3 of 6', detail: 'Next: Buy the lumber.' })
   assert.equal(brief.feature, null)
 })
+
+// Jake, Oct 7: "maybe the morning paper can mention it a couple of times … if I snooze it I want it actually snoozed
+// from all conversations till its due again".
+test('the brief: a heads-up for what’s coming due; nothing snoozed, however often it was put off', async () => {
+  const { briefFacts } = await import('../src/wall/paper.ts')
+  const todos = {
+    nextUp: [{ id: 'w', title: 'Clean the washing machine', snoozeCount: 0, overdue: false, due: '2026-09-25', stage: 'due' }],
+    groups: {
+      quick: [{ id: 'p', title: 'Call the plumber', snoozeCount: 3, snoozedUntil: '2026-10-02', overdue: true, due: '2026-09-20', stage: 'snoozed' }],
+      fix: [], nudge: [], dated: [], unsorted: [],
+      later: [{ id: 'h', title: 'Re-up Hello Fresh', snoozeCount: 0, overdue: false, due: '2026-10-27', stage: 'quiet' }, { id: 'g', title: 'Fix the gate latch', snoozeCount: 0, overdue: false, due: '2026-09-27', stage: 'heads_up' }],
+    },
+    projects: [], suggestions: [],
+  }
+  const more = briefFacts({ members, week: [friday], now: at(25, 9, 0), todos })
+  assert.deepEqual(more.soon, ['Clean the washing machine (today)', 'Fix the gate latch (in 2 days)'])
+  assert.deepEqual(more.quiet, [])
+})

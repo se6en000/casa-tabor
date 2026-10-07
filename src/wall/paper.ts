@@ -59,6 +59,8 @@ export interface BriefFacts {
   comingUp: Array<{ title: string; date: string; daysAway: number; nextStep: string; late: boolean }>
   projects: Array<{ title: string; done: number; total: number; next: string | null; aim: string | null }>
   quiet: string[]
+  /** Due today or soon enough for a heads-up (todo-stage.mjs): "Clean the washing machine (tomorrow)". */
+  soon?: string[]
 }
 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -178,11 +180,21 @@ export function briefFacts(input: {
     .map((p) => ({ title: p.title, done: p.done, total: p.total, next: p.next, aim: p.aimDate }))
     .slice(0, 8)
   const items = input.todos ? [...input.todos.nextUp, ...Object.values(input.todos.groups).flat()] : []
+  // Snoozed is silent in the brief too (Jake, Oct 7: "snoozed from all conversations till its due again").
   const quiet = [...new Map(items
-    .filter((t) => t.snoozeCount >= 2 || t.overdue)
+    .filter((t) => !t.snoozedUntil && (t.snoozeCount >= 2 || t.overdue))
     .map((t) => [t.id, t.snoozeCount >= 2 ? `${t.title} (put off ${t.snoozeCount} times)` : `${t.title} (overdue${t.due ? ` since ${t.due}` : ''})`] as const)).values()]
     .slice(0, 8)
-  return { people: members.map((m) => m.name), week, comingUp, projects, quiet }
+  // A heads-up for what's coming due (Jake, Oct 7: "maybe the morning paper can mention it a couple of times").
+  const when = (due: string) => {
+    const days = Math.round((Date.parse(`${due}T12:00:00Z`) - Date.parse(`${localDate(input.now)}T12:00:00Z`)) / 86_400_000)
+    return days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`
+  }
+  const soon = [...new Map(items
+    .filter((t) => (t.stage === 'due' || t.stage === 'heads_up') && t.due)
+    .map((t) => [t.id, `${t.title} (${when(t.due!)})`] as const)).values()]
+    .slice(0, 6)
+  return { people: members.map((m) => m.name), week, comingUp, projects, quiet, soon }
 }
 
 const weeksOut = (days: number) => (days < 14 ? `${days} days` : `${Math.round(days / 7)} weeks`)

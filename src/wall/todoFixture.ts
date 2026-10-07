@@ -29,6 +29,7 @@ export const TODOS: TodoList = {
     ],
     dated: [],
     unsorted: [],
+    later: [],
   },
   projects: [{ id: 'pr-paint', title: 'Paint the house', done: 3, total: 9, next: 'Pick colours: 3 sample pots', nextEventId: 'td-paint', aimDate: '2026-11-21' }],
   suggestions: [

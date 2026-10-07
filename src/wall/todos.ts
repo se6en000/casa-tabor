@@ -19,6 +19,8 @@ export interface TodoItem {
   overdue: boolean
   snoozedUntil: string | null
   snoozeCount: number
+  /** Where it is in its time (todo-stage.mjs): from the server's list. */
+  stage?: 'snoozed' | 'overdue' | 'due' | 'heads_up' | 'quiet' | 'undated'
   projectId: string | null
   suggestion: { kind: 'merge' | 'done' | 'shopping'; with?: string; reason?: string } | null
 }
@@ -33,7 +35,8 @@ export interface PastStep { id: string; projectId: string; project: string; titl
 export interface TodoList {
   pastSteps?: PastStep[]
   nextUp: TodoItem[]
-  groups: Record<'quick' | 'fix' | 'nudge' | 'dated' | 'unsorted', TodoItem[]>
+  /** later: dated ones not yet near their day (todo-stage.mjs), soonest first. */
+  groups: Record<'quick' | 'fix' | 'nudge' | 'dated' | 'unsorted' | 'later', TodoItem[]>
   projects: TodoProject[]
   suggestions: TodoSuggestion[]
   today?: string
@@ -93,6 +96,8 @@ export const GROUPS = [
   { key: 'nudge', label: 'Nudges' },
   { key: 'dated', label: 'Dated' },
   { key: 'unsorted', label: 'Not sure' },
+  // Dated ones not near their day yet (Jake, Oct 7).
+  { key: 'later', label: 'Later' },
 ] as const
 
 const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
