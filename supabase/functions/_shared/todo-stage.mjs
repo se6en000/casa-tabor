@@ -52,15 +52,21 @@ export function overdueToRaise(items, today, raised = null) {
 
 /**
  * The one offer that moves a late to-do, as a yes/no question (Jake, Oct 7: "look up a part number, suggest a
- * professional … put a post on a work job site … Something thats an action item i can say yes or no to").
+ * professional … put a post on a work job site … Something thats an action item i can say yes or no to" → "for Pros,
+ * lets keep it local … im looking for mostly DYI guys, handimen, for a big project I wont use alexa"). Only what she
+ * can do: look up, find, a calendar card, a draft — never "open" or "start" something outside the app.
  */
+const HANDYMEN = 'find three well-reviewed local handymen near home, with their numbers — or write a short TaskRabbit or Nextdoor post he can send'
 export function offerFor(item) {
   const n = (item.needs ?? []).map((x) => String(x).toLowerCase())
-  if (n.some((x) => /pro\b|hire|quote/.test(x))) return 'find three well-reviewed pros nearby, with their numbers (or write a post for a job site he can send)'
-  if (n.some((x) => /buy|order|part/.test(x))) return 'find the exact part and what it costs, and where to get it'
+  // A big project is his to run: time for it, never pros or a post.
+  const big = item.shape === 'project' || (item.minutes != null && item.minutes >= 240)
+  if (big) return `put ${Math.min(item.minutes ?? 120, 180)} minutes for it on the calendar this week — a day and time he can say yes to`
+  if (n.some((x) => /pro\b|hire|quote|handy/.test(x))) return HANDYMEN
+  if (n.some((x) => /buy|order|part/.test(x))) return 'find the exact part and what it costs, and where to get it nearby'
   if (n.some((x) => /look-?up|research/.test(x))) return 'look it up right now'
-  if (item.shape === 'fix') return 'find three well-reviewed pros nearby who could do it'
+  if (item.shape === 'fix') return HANDYMEN
   if (n.some((x) => /call/.test(x))) return 'find the number and put a 10-minute call on the calendar'
-  if (item.nextStep) return `do its first step with him now (${item.nextStep}), or put ${item.minutes ?? 30} minutes for it on the calendar this week`
+  if (item.nextStep) return `help with its first step right here (${item.nextStep}), or put ${item.minutes ?? 30} minutes for it on the calendar this week`
   return `put ${item.minutes ?? 60} minutes for it on the calendar this week — a day and time he can say yes to`
 }

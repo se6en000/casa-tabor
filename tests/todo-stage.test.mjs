@@ -59,18 +59,21 @@ test('Alexa: snoozed and far-off to-dos are named so she leaves them be; the lat
   assert.match(system, /LATER \(further off — don't bring these up[^\n]*\n- \[hello\]/)
   assert.match(system, /SNOOZED \(he put these off — never bring them up[^\n]*\n- \[tesla\] Look up replacing my Tesla windshield \(snoozed until Tue Oct 13\)/)
   assert.match(system, /LATE TO-DO TO RAISE TODAY: \[gfi\] Replace the outside GFI outlet — 7 days late/)
-  assert.match(system, /ONE concrete offer[^\n]*"Want me to find the exact part and what it costs, and where to get it\?"/)
+  assert.match(system, /ONE concrete offer[^\n]*"Want me to find the exact part and what it costs, and where to get it nearby\?"/)
   assert.match(system, /Still want this\? Do it this week, snooze it, or drop it/)
   assert.doesNotMatch(buildFullAiSystem({ family: [], events: [], groceries: [], pending: null, onScreenIds: [], utcOffset: '-04:00', now, homeCity: 'West Palm Beach', todos }), /^LATE TO-DO TO RAISE TODAY:/m)
 })
 
 import { offerFor } from '../supabase/functions/_shared/todo-stage.mjs'
-test('the offer fits the job: pros, a part, a look-up, a call, a first step, or time on the calendar', () => {
-  assert.match(offerFor({ needs: ['Call', 'Needs a pro'] }), /three well-reviewed pros/)
+test('the offer fits the job: local handymen or a post, a part, a look-up, a call, a first step, or time — no pros for a big project', () => {
+  assert.match(offerFor({ needs: ['Call', 'Needs a pro'] }), /three well-reviewed local handymen near home.*TaskRabbit or Nextdoor post/)
   assert.match(offerFor({ needs: ['Safety', 'Buy'] }), /exact part/)
   assert.match(offerFor({ needs: ['Look-up'] }), /look it up/)
-  assert.match(offerFor({ shape: 'fix' }), /pros nearby/)
+  assert.match(offerFor({ shape: 'fix' }), /local handymen/)
   assert.match(offerFor({ needs: ['Call'] }), /10-minute call/)
-  assert.match(offerFor({ nextStep: 'Pick the photos', minutes: 45 }), /first step with him now \(Pick the photos\), or put 45 minutes/)
+  assert.match(offerFor({ nextStep: 'Pick the photos', minutes: 45 }), /help with its first step right here \(Pick the photos\), or put 45 minutes/)
   assert.match(offerFor({ shape: 'dated', minutes: 60 }), /60 minutes for it on the calendar this week/)
+  // Jake, Oct 7: "for a big project I wont use alexa".
+  assert.match(offerFor({ shape: 'project', needs: ['Needs a pro'] }), /minutes for it on the calendar/)
+  assert.doesNotMatch(offerFor({ minutes: 480, needs: ['Needs a pro'] }), /handymen|post/)
 })
