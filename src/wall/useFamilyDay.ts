@@ -13,6 +13,7 @@ import { useWallDay } from './useWallDay'
 import { useWallTripState } from './useWallTripState'
 import { useKeepFrom } from './useKeepFrom'
 import type { Audience } from './audience'
+import { addDayOff, setDayOffCover } from './saveRoutine'
 
 /**
  * The family's day as the Wall and the phone both see it: the minute clock, the day
@@ -44,6 +45,9 @@ export function useFamilyDay(audience: Audience = { kind: 'wall' }, around: Date
         await saveEventTransportationOverride({ supabase, queryClient, event, transportationPlan: plan, waits: event.plan_override?.waits, modeOverride: event.plan_override?.mode_override })
       },
       dismiss: (date: Date, key: string) => trips.save(withDismissed(trips.state, date, key)),
+      // A school holiday (holidays.ts): the kids off that day, and who has them.
+      daysOff: async (memberIds: string[], ymd: string, note: string) => { for (const id of memberIds) await addDayOff(queryClient, id, ymd, note) },
+      cover: (memberIds: string[], ymd: string, note: string) => setDayOffCover(queryClient, memberIds, ymd, note),
     }
   }, [today?.date, now, trips, allEvents, members, queryClient])
   // Prep for the whole week: the week strip counts it, and any day can be opened.

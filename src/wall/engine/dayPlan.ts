@@ -229,6 +229,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       sourceId,
       fromRoutine: true,
       work,
+      ...(care && (routine.pickupDriverName || routine.dropoffDriverName) ? { coverName: routine.pickupDriverName || routine.dropoffDriverName } : {}),
     })
     // Work (and someone having them) is where they are, not a drop-off and pickup.
     if (work || care) continue

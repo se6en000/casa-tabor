@@ -46,6 +46,7 @@ import { defaultPeople, dueThought, mayChangeMemory, readRemember, speakerLine }
 import { promisesAction } from '../_shared/assistant-full-ai.mjs'
 import { PERSONA_KEY } from '../_shared/house-persona.mjs'
 import { allDayWords } from '../_shared/all-day.mjs'
+import { routinesSection } from '../_shared/routines-for-assistant.mjs'
 import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
@@ -1038,8 +1039,11 @@ Deno.serve(async (req) => {
     ])
     // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
     // health, therapy and money facts are left out on the wall; they're answered on a phone.
-    const [{ data: privacy }, { data: personaRow }] = await Promise.all([
+    const [{ data: privacy }, { data: personaRow }, { data: routineRows }, { data: dayOffRows }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle(),
+      // The routines (school, work, who has whom) and the days off in the next three weeks (Oct 7).
+      sb.from('member_availability_rules').select('member_id, day_of_week, reason').limit(200),
+      sb.from('member_availability_exceptions').select('member_id, start_at, note').eq('override_type', 'day_off').gte('start_at', new Date(Date.now() - 86400e3).toISOString()).lt('start_at', new Date(Date.now() + 21 * 86400e3).toISOString()).limit(60),
       // Alexa's character and house notes (canvas 60), from Settings → Alexa's personality and the weekly look back.
       sb.from('settings').select('value').eq('key', PERSONA_KEY).maybeSingle(),
     ])
@@ -1109,7 +1113,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.

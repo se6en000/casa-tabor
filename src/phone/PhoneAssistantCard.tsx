@@ -99,6 +99,10 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
       {card.touches.some((t) => t.startsWith('Clashes')) && (
         <div className="text-phone-detail font-semibold text-wall-rust">{card.touches.filter((t) => t.startsWith('Clashes')).join(' · ')}</div>
       )}
+      {/* Someone else has them then ("Owen's with Giselle then — who's taking Owen?"): a question, not an alert. */}
+      {card.touches.filter((t) => t.includes(' then — who’s taking ')).map((t) => (
+        <div key={t} className="text-phone-detail text-wall-ink-2">{t}</div>
+      ))}
       <div className="flex gap-[8px]">
         <button type="button" disabled={working} onClick={onYes} className="flex h-[48px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink px-[16px] text-phone-body font-bold text-wall-on-pigment">
           {working ? 'Saving…' : card.kind === 'add' ? 'Yes, add it' : card.before ? 'Yes, move it' : 'Yes, change it'}

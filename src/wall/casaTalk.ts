@@ -81,10 +81,27 @@ export function casaTopic(
 ): CasaTopic | null {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const ready = decisions
-    .filter((d) => (d.kind === 'no_driver' || d.kind === 'driver_busy') && d.at > now && d.at.getTime() - now.getTime() <= TALK_HORIZON_MS)
+    .filter((d) => d.at > now && (
+      ((d.kind === 'no_driver' || d.kind === 'driver_busy') && d.at.getTime() - now.getTime() <= TALK_HORIZON_MS)
+      // A school holiday is asked days ahead, so there's time to sort out who has the kids (holidays.ts).
+      || d.kind === 'holiday_off' || d.kind === 'holiday_cover'))
     .filter((d) => !(state.snoozed?.[d.key] && new Date(state.snoozed[d.key]) > now))
     .sort((a, b) => a.at.getTime() - b.at.getTime())
   for (const decision of ready) {
+    if (decision.kind === 'holiday_off' || decision.kind === 'holiday_cover') {
+      return {
+        key: decision.key,
+        decision,
+        at: decision.at,
+        forId: null,
+        forName: null,
+        eyebrow: eyebrowFor(decision.at, now, null),
+        said: decision.text,
+        ask: null,
+        why: [decision.kind === 'holiday_off' ? 'It’s a school day for them otherwise.' : 'Nobody’s named for them that day yet.'],
+        answers: [...decision.answers, { label: 'Not now', action: { type: 'snooze' } }],
+      }
+    }
     const trip = planOn(decision.date)?.trips.find((t) => t.id === decision.tripIds[0])
     if (!trip) continue
     const when = dayWord(decision.at, now)

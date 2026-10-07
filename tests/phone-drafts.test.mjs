@@ -9,8 +9,9 @@ import { FRIDAY, members, routines, events } from './fixtures/wall-day-2026-09-2
 const friday = buildDayPlan({ date: FRIDAY, members, routines, events })
 const at = (h, m = 0) => new Date(2026, 8, 25, h, m)
 
-test('a clash for anyone going, said the way Casa’s card says it; nothing for a free hour', () => {
-  assert.deepEqual(clashLines(friday, ['liv'], at(10), at(11), members), ['Clashes with Bak Middle School (Liv)'])
+test('a clash for anyone going, said the way Casa’s card says it; nothing for a free hour, nor for a routine', () => {
+  // School is a routine, not a clash (Jake, Oct 7: "If there is a clash with a 'routine' schedule - I really dont need the alert").
+  assert.deepEqual(clashLines(friday, ['liv'], at(10), at(11), members), [])
   assert.deepEqual(clashLines(friday, ['liv'], at(19), at(20), members), [])
   assert.deepEqual(clashLines(friday, [], at(10), at(11), members), [])
   assert.deepEqual(clashLines(null, ['liv'], at(10), at(11), members), [])

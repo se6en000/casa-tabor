@@ -120,6 +120,8 @@ export interface LaneSegment {
   driverId?: string | null
   /** From a routine (school, work, a class): what "Hide routines" tidies away. */
   fromRoutine?: boolean
+  /** Someone has them then (a care routine, "With Giselle"): who to ask when something lands in it (Oct 7). */
+  coverName?: string
   /** Work hours: their own drives at the edges come off it (Kelly drops Liv at Bak on the way in). */
   work?: boolean
   /** Part of a trip away (canvas 19): the ride, the wait at the airport, the flight, or the time away. */

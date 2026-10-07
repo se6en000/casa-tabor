@@ -1,5 +1,5 @@
 import type { DayPlan, LaneSegment, WallEvent, WallMember } from './engine/types'
-import { clashLines } from './clashes.ts'
+import { clashLines, coverLines } from './clashes.ts'
 import { reconcileTransportationLegTimes, rescheduledDepartureIso } from '../lib/eventMutations.ts'
 import { NEW_EVENT_ID, withDriver, type EditableEvent } from './editing.ts'
 import { driverChoices } from './people.ts'
@@ -180,7 +180,8 @@ export function assistantCard(action: CardAction | null, previous: CardAction | 
   const lane = plan && lanePerson ? { memberId: lanePerson, segments: plan.lanes.get(lanePerson) ?? [] } : null
 
   // What else is going on for these people while it happens.
-  const clashes = allDay ? [] : clashLines(plan, people, start, end, ctx.members, event.id)
+  // A routine isn't a clash; someone else having them then is a question to settle (Oct 7).
+  const clashes = allDay ? [] : [...clashLines(plan, people, start, end, ctx.members, event.id), ...coverLines(plan, people, start, end, ctx.members)]
   const nameList = people.map((id) => ctx.members.find((m) => m.id === id)?.name).filter(Boolean) as string[]
   const touches = clashes.length > 0
     ? clashes

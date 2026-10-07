@@ -28,6 +28,7 @@ import { usePhoneGroceries } from './usePhoneGroceries'
 import { useQuery } from '@tanstack/react-query'
 import type { PastPlace } from './drafts'
 import { primePermissionsOnLaunch } from './permissionsPrime'
+import { holidayDecisions } from '../wall/holidays'
 
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 /** What's already on the calendar on the scanned days: one read for the whole span, matched in the app. */
@@ -92,12 +93,16 @@ export default function PhoneFrame() {
   // "Casa wants to talk to you" (canvas 21c): the same one thing as the wall's band, from this week's decisions.
   const talk = useCasaTalk()
   const topic = useMemo(() => casaTopic(
-    week.flatMap((plan) => decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date }))),
+    [
+      ...week.flatMap((plan) => decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date }))),
+      // School holidays ahead: "are they off?", then "who has them?" (holidays.ts).
+      ...holidayDecisions({ now, routines, dayOffs, members, dismissedOn: (date) => tripStateFor?.(date).dismissed }),
+    ],
     (date) => week.find((p) => p.date.toDateString() === date.toDateString()) ?? null,
     members,
     now,
     talk.state,
-  ), [week, members, now, tripStateFor, talk.state])
+  ), [week, members, now, tripStateFor, talk.state, routines, dayOffs])
   return (
     <PhoneView
       choreDone={choreDone}

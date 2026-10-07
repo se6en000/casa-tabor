@@ -9,6 +9,7 @@ import { selectNextMove } from './engine/nextMove'
 import { describeNextMove } from './header'
 import type { DayTripState } from './tripState'
 import { decisionsFor, type DecisionAction } from './decisions'
+import { holidayDecisions } from './holidays'
 import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
 import { packingGroups, type WallChecklistItem } from './packing'
@@ -88,6 +89,9 @@ export interface WallViewProps {
     handOff: (trip: Trip, driverId: string, date?: Date) => Promise<void>
     /** Remembers a "keep it as it is" answer for that day. */
     dismiss: (date: Date, decisionKey: string) => Promise<void>
+    /** A school holiday: the kids off that day (a day off each, named for it), and who has them (on those days off). */
+    daysOff?: (memberIds: string[], ymd: string, note: string) => Promise<void>
+    cover?: (memberIds: string[], ymd: string, note: string) => Promise<void>
   }
   /** Today and the next six days (decisions look this far ahead). */
   week?: DayPlan[]
@@ -348,14 +352,22 @@ export default function WallView(props: WallViewProps) {
     if (selectedId && !eventsById.has(selectedId)) setSelectedId(null)
   }, [selectedId, eventsById])
 
+  // School holidays ahead (holidays.ts; Jake, Oct 7): "are they off?", then "who has them?" — answered or waved off
+  // on the holiday's own day, as the other decisions are.
+  const holidayDay = now.toDateString()
+  const holidayList: DatedDecision[] = useMemo(
+    () => holidayDecisions({ now, routines, dayOffs, members, dismissedOn: (date) => tripStateFor?.(date).dismissed }),
+    [holidayDay, routines, dayOffs, members, tripStateFor], // eslint-disable-line react-hooks/exhaustive-deps -- holidayDay stands for now
+  )
   const weekDecisions: DatedDecision[] = useMemo(
     () =>
-      week
-        .flatMap((plan) =>
+      [
+        ...week.flatMap((plan) =>
           decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date })),
-        )
-        .sort((a, b) => a.at.getTime() - b.at.getTime()),
-    [week, members, now, tripStateFor],
+        ),
+        ...holidayList,
+      ].sort((a, b) => a.at.getTime() - b.at.getTime()),
+    [week, members, now, tripStateFor, holidayList],
   )
   // The one thing Casa raises (canvas row 21): within the next day, from this week's decisions.
   const [talkOpen, setTalkOpen] = useState(false)
@@ -432,6 +444,9 @@ export default function WallView(props: WallViewProps) {
       stripDecisions.filter((d) => date && sameDay(d.date, date)).flatMap((d) => d.sourceIds.map((id) => [id, d.key])),
     ) as Record<string, string>
   const answer = async (decision: DatedDecision, action: DecisionAction) => {
+    // A school holiday: the kids off that day (one day off each, named for it), or who has them.
+    if (action.type === 'days_off') return tripActions?.daysOff?.(action.memberIds, action.ymd, action.holiday)
+    if (action.type === 'cover') return tripActions?.cover?.(action.memberIds, action.ymd, `${action.holiday} · ${action.name} has them`)
     if (!tripActions) return
     const plan = strip.find((p) => sameDay(p.date, decision.date)) ?? week.find((p) => sameDay(p.date, decision.date))
     if (action.type === 'dismiss') return tripActions.dismiss(decision.date, decision.key)

@@ -1984,6 +1984,29 @@ test('wall: chores on a person’s page — edit, add on the keyboard, and open 
   await expect(wall.getByRole('region', { name: 'Give Liv her meds' })).toBeVisible()
 })
 
+// School holidays as one of Alexa's questions (Jake, Oct 7: "can you just make the holidays as part of the 'alexa has a
+// question for you?'"): Thanksgiving ten days out — are they off? — they're off; then who has them? — Giselle.
+test('wall: a school holiday — are they off? then who has them? — asked as Something for you', async ({ page }) => {
+  await page.goto('/__wall-fixture?talk=1&at=2026-11-17T09:00:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Something for you' }).click()
+  const band = wall.getByRole('region', { name: 'Something for you' })
+  await expect(band.getByText('Thanksgiving is Thursday — are Liv, Emme and Owen off school?')).toBeVisible()
+  await expect(band.getByText('It’s a school day for them otherwise.')).toBeVisible()
+  await band.getByRole('button', { name: 'They’re off' }).click()
+  await expect(band).toHaveCount(0)
+  // Off now: who has them? (Giselle, who picks them up, first.)
+  await wall.getByRole('button', { name: 'Something for you' }).click()
+  await expect(band.getByText('Liv, Emme and Owen are home Thursday for Thanksgiving — who has them?')).toBeVisible()
+  await band.getByRole('button', { name: 'Giselle has them' }).click()
+  await expect(band).toHaveCount(0)
+  // Next up, the day after: are they off then too?
+  await wall.getByRole('button', { name: 'Something for you' }).click()
+  await expect(band.getByText('the day after Thanksgiving is Friday — are Liv, Emme and Owen off school?')).toBeVisible()
+  await band.getByRole('button', { name: 'School’s open' }).click()
+  await expect(wall.getByRole('button', { name: 'Something for you' })).toHaveCount(0)
+})
+
 // Canvas row 21 (Jake, 2026-10-01: "approved on row 21 boards"): "Casa wants to talk to you". Wednesday 3:05 PM, Jake
 // in Dallas, nobody on Thursday's 7:35 drop-off: the mic glows, the quiet line names him, the phones hear once; a tap
 // opens the band on Thursday with the run outlined, said in two sentences, with the answers.
@@ -2009,7 +2032,11 @@ test('wall: Casa wants to talk — the glow and the line, the band, an answer se
   await band.getByRole('button', { name: 'Giselle will' }).click()
   await expect(band).toHaveCount(0)
   await expect(line).toHaveCount(0)
-  expect(await page.evaluate(() => window.__casaPushed.length)).toBe(1)
+  // The next one is Monday's school holiday (Owen's off for Columbus Day; who has him?) — it reaches the phones once too.
+  await expect(wall.getByRole('button', { name: 'Something for you' })).toBeVisible()
+  const after = await page.evaluate(() => window.__casaPushed)
+  expect(after).toHaveLength(2)
+  expect(after[1].body).toBe('Owen is home Monday for Columbus Day — who has Owen?')
 })
 
 test('wall: Casa wants to talk — "Not now" puts it away until the evening; the mic opens it too', async ({ page }) => {

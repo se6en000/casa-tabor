@@ -172,6 +172,7 @@ export default function WallFixturePage() {
     } as unknown as WallEvent] : []),
   ])
   const [checklist, setChecklist] = useState(CHECKLIST)
+  const [dayOffs, setDayOffs] = useState<Array<(typeof FIXTURE_DAY_OFFS)[number] & { note?: string }>>(FIXTURE_DAY_OFFS)
   // `?talk=1` (canvas row 21): "Casa wants to talk to you", its state in memory; what reaches the phones is recorded.
   const [talkState, setTalkState] = useState<CasaTalkState>({})
   const casaTalk = new URLSearchParams(window.location.search).get('talk') === '1' ? {
@@ -194,6 +195,12 @@ export default function WallFixturePage() {
         : e)))
     },
     dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
+    // A school holiday's answers, in memory (holidays.ts).
+    daysOff: async (ids: string[], ymd: string, note: string) => {
+      const [y, m, d] = ymd.split('-').map(Number)
+      setDayOffs((list) => [...list, ...ids.map((id) => ({ id: `off-${id}-${ymd}`, member_id: id, override_type: 'day_off', start_at: new Date(y, m - 1, d, 0, 0).toISOString(), end_at: new Date(y, m - 1, d, 23, 59).toISOString(), note }))])
+    },
+    cover: async (ids: string[], ymd: string, note: string) => setDayOffs((list) => list.map((o) => (ids.includes(o.member_id) && o.start_at.slice(0, 10) === ymd ? { ...o, note } : o))),
   }
   // The assistant band with a canned conversation (design section 06): `?band=add|change|which|answer`.
   const ledLog = ((window as unknown as { __led?: { mode: string; outcomes: string[] } }).__led ??= { mode: 'off', outcomes: [] })
@@ -288,7 +295,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
-      <WallView paper={PAPER ? PAPER_WORDS : null} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={FIXTURE_DAY_OFFS} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView paper={PAPER ? PAPER_WORDS : null} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

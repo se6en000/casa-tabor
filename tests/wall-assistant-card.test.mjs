@@ -30,9 +30,18 @@ test('without a known drive there is no leave-by, and no place means no drive at
   assert.equal(home.place, null)
 })
 
-test('an add during school says it clashes', () => {
+test('an add during school is no clash — routines are what the day is built around (Oct 7)', () => {
   const card = assistantCard(add({ start: local(25, 10, 0), end: local(25, 11, 0) }), null, ctx())
-  assert.ok(card.touches.some((t) => /^Clashes with .*Bak Middle.* \(Liv\)$/.test(t)), card.touches.join(' | '))
+  assert.ok(!card.touches.some((t) => t.startsWith('Clashes')), card.touches.join(' | '))
+})
+
+test('a real appointment still clashes; an add while Giselle has Owen asks who’s taking him', () => {
+  const dentist = { id: 'dentist', title: 'Dentist', event_type: 'event', all_day: false, status: 'confirmed', start_time: local(25, 16, 0), end_time: local(25, 17, 0), members: [{ family_member_id: 'liv', role: 'primary' }] }
+  const clash = assistantCard(add({ title: 'Haircut', start: local(25, 16, 30), end: local(25, 17, 30) }), null, ctx({ events: [...events, dentist], planDay: (date, evs) => buildDayPlan({ date, members, routines, events: [...evs, dentist] }) }))
+  assert.ok(clash.touches.includes('Clashes with Dentist (Liv)'), clash.touches.join(' | '))
+  const giselle = { id: 'owen-giselle', key: 'care-giselle', memberId: 'owen', title: 'With Giselle', routineType: 'care', venueName: 'Giselle’s house', venueAddress: '', daysOfWeek: [1, 2, 3, 4, 5], startLocal: '14:00', endLocal: '17:00', dropoffDriverName: '', pickupDriverName: 'Giselle', enabled: true }
+  const owen = assistantCard(add({ members: ['Owen'], start: local(25, 15, 0), end: local(25, 16, 0) }), null, ctx({ planDay: (date, evs) => buildDayPlan({ date, members, routines: [...routines, giselle], events: evs }) }))
+  assert.deepEqual(owen.touches, ['Owen’s with Giselle then — who’s taking Owen?'])
 })
 
 test('the card says what the latest turn changed on it', () => {

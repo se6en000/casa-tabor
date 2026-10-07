@@ -1,6 +1,7 @@
 import type { DayPlan, Trip, WallMember } from './engine/types'
 import { clockTime, placeName } from './header.ts'
 import { driverChoices, firstClash, tripWindow } from './people.ts'
+import type { HolidayAction } from './holidays.ts'
 
 // "Needs a decision" (P3.4): only what the wall can't settle on its own, each
 // with two answers that save. At most three, soonest first. Answers reuse the
@@ -12,11 +13,13 @@ export type DecisionAction =
   | { type: 'drive'; driverId: string; tripIds: string[] }
   | { type: 'pick'; tripIds: string[] }
   | { type: 'dismiss' }
+  // A school holiday (holidays.ts): mark the kids off; name who has them.
+  | HolidayAction
 
 export interface Decision {
   /** Stable, so a "keep" answer can be remembered. */
   key: string
-  kind: 'one_car' | 'no_driver' | 'driver_busy' | 'away_clash'
+  kind: 'one_car' | 'no_driver' | 'driver_busy' | 'away_clash' | 'holiday_off' | 'holiday_cover'
   at: Date
   text: string
   detail?: string

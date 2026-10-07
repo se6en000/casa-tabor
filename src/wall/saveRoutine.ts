@@ -28,12 +28,12 @@ export async function removeRoutine(qc: QueryClient, routine: FamilyRoutine): Pr
 }
 
 /** A day off for the person (no school, no work): the whole day, in the family's time zone. */
-export async function addDayOff(qc: QueryClient, memberId: string, ymd: string): Promise<void> {
+export async function addDayOff(qc: QueryClient, memberId: string, ymd: string, note = 'Day off'): Promise<void> {
   const [y, m, d] = ymd.split('-').map(Number)
   const start = new Date(y, m - 1, d, 0, 0, 0)
   const end = new Date(y, m - 1, d, 23, 59, 0)
   const { error } = await supabase.from('member_availability_exceptions').insert({
-    member_id: memberId, start_at: start.toISOString(), end_at: end.toISOString(), override_type: 'day_off', note: 'Day off',
+    member_id: memberId, start_at: start.toISOString(), end_at: end.toISOString(), override_type: 'day_off', note,
   })
   if (error) throw new Error('That day off didn’t save.')
   await refresh(qc)
@@ -42,5 +42,16 @@ export async function addDayOff(qc: QueryClient, memberId: string, ymd: string):
 export async function removeDayOff(qc: QueryClient, id: string): Promise<void> {
   const { error } = await supabase.from('member_availability_exceptions').delete().eq('id', id)
   if (error) throw new Error('That day off wasn’t removed.')
+  await refresh(qc)
+}
+
+/** Who has them on a day off ("Columbus Day · Giselle has them"), kept on the day off itself — Alexa reads it (Oct 7). */
+export async function setDayOffCover(qc: QueryClient, memberIds: string[], ymd: string, note: string): Promise<void> {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const from = new Date(y, m - 1, d, 0, 0, 0).toISOString()
+  const to = new Date(y, m - 1, d, 23, 59, 59).toISOString()
+  const { error } = await supabase.from('member_availability_exceptions').update({ note })
+    .in('member_id', memberIds).eq('override_type', 'day_off').gte('start_at', from).lte('start_at', to)
+  if (error) throw new Error('That didn’t save.')
   await refresh(qc)
 }

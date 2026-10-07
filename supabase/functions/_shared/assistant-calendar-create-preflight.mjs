@@ -125,6 +125,9 @@ export function assessCalendarCreatePreflight(events, args) {
     ? []
     : candidates.filter((event) => {
         if (eventType(event?.event_type) === 'reminder') return false
+        // A school run's calendar copy ("Drop off Emme @ Palm Beach Public") is the routine, and a routine is never a
+        // clash (Jake, Oct 7: "If there is a clash with a 'routine' schedule - I really dont need the alert").
+        if (/^(drop off|pick up|pickup|dropoff)\b.*@/i.test(String(event?.title ?? ''))) return false
         if (overlapMinutes(proposedInterval, interval(event)) <= 15) return false
         const existingMembers = eventMemberNames(event)
         if (requestedMembers.size > 0 && existingMembers.length > 0) {
