@@ -137,3 +137,20 @@ test('the same flight in the calendar twice (a synced copy) is still one trip', 
   assert.equal(trips[0].inbound.eventId, 'f2640')
   assert.deepEqual(trips[0].legEventIds, ['f1419-copy'])
 })
+
+// Jake, Oct 7: "a delete button for trips which will remove all instances of the trip from the calendar and events/
+// todos reminders".
+test('deleting a trip takes every event that is it — the trip, both legs, the hotel, a copy — once each', async () => {
+  const { tripEventIds } = await import('../src/wall/engine/travel.ts')
+  const trip = { tripEventId: 'trip', outbound: { eventId: 'out' }, inbound: { eventId: 'home' }, legEventIds: ['hotel', 'out-copy', 'out'] }
+  assert.deepEqual(tripEventIds(trip), ['trip', 'out', 'home', 'hotel', 'out-copy'])
+  assert.deepEqual(tripEventIds({ tripEventId: null, outbound: null, inbound: { eventId: 'home' }, legEventIds: [] }), ['home'])
+})
+
+test('the to-dos offered with it are the ones that name the trip’s city or a flight number — whole words only', async () => {
+  const { tripTodos } = await import('../src/wall/engine/travel.ts')
+  const trip = { city: 'Dallas', outbound: { number: 'AA2467' }, inbound: { number: 'AA2540' } }
+  const todos = [{ id: '1', title: 'Pack for Dallas' }, { id: '2', title: 'Check in AA2467' }, { id: '3', title: 'Call the plumber' }, { id: '4', title: 'Dallasburg fair tickets' }]
+  assert.deepEqual(tripTodos(trip, todos).map((t) => t.id), ['1', '2'])
+  assert.deepEqual(tripTodos({ city: '', outbound: null, inbound: null }, todos), [])
+})

@@ -313,3 +313,23 @@ export function tripDay(trip: TravelTrip, date: Date): TripDay | null {
   const phase: TripPhase = leaving && returning ? 'day' : leaving ? 'leaving' : returning ? 'returning' : 'away'
   return { trip, phase, dayIndex, dayCount }
 }
+
+/**
+ * Every calendar event that is the trip (Jake, Oct 7: "a delete button for trips which will remove all instances of
+ * the trip from the calendar"): its all-day event, the flights or drives out and home, the importer's other legs
+ * (hotel, rental car) and any copies of a leg synced twice.
+ */
+export function tripEventIds(trip: Pick<TravelTrip, 'tripEventId' | 'outbound' | 'inbound' | 'legEventIds'>): string[] {
+  return [...new Set([trip.tripEventId, trip.outbound?.eventId, trip.inbound?.eventId, ...trip.legEventIds].filter((id): id is string => Boolean(id)))]
+}
+
+/**
+ * To-dos that are about the trip — they aren't linked to it, so they're found by name: one that says the trip's city
+ * or a flight number ("Pack for Dallas", "Check in AA2467"). Offered in the delete's yes, each one its own tick.
+ */
+export function tripTodos<T extends { id: string; title: string }>(trip: Pick<TravelTrip, 'city' | 'outbound' | 'inbound'>, todos: T[]): T[] {
+  const words = [trip.city, trip.outbound?.number, trip.inbound?.number].filter((w): w is string => Boolean(w && w.trim().length > 2))
+  if (words.length === 0) return []
+  const said = (title: string) => words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(title))
+  return todos.filter((t) => said(t.title))
+}

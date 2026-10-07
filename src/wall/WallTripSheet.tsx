@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { Car, Minus, Plane, Plus, X } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Car, Check, Minus, Plane, Plus, X } from 'lucide-react'
 import { formatWallClock } from './clock'
 import type { WallMember } from './engine/types'
 import type { TravelSettings, TravelTrip, TravelWay } from './engine/travel'
@@ -60,9 +60,32 @@ export interface WallTripSheetProps {
   /** The runs they usually drive while away (coverage.ts), and who takes one. */
   coverage?: CoverageRun[]
   onCover?: (run: CoverageRun, driverId: string) => void
+  /**
+   * Deletes the whole trip — every event that is it, everywhere it syncs — and the to-dos ticked in the yes (Jake,
+   * Oct 7). Absent: no Delete button.
+   */
+  onDelete?: (todoIds: string[]) => Promise<void>
+  /** To-dos that look like they're about this trip (tripTodos), offered in the yes. */
+  todos?: Array<{ id: string; title: string }>
 }
 
-export default function WallTripSheet({ trip, members, pigmentOf, onChange, onClose, coverage = [], onCover }: WallTripSheetProps) {
+export default function WallTripSheet({ trip, members, pigmentOf, onChange, onClose, coverage = [], onCover, onDelete, todos = [] }: WallTripSheetProps) {
+  // Delete asks first, in place of the footer (as an event's does): nothing goes until "Yes, delete the trip".
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [keepTodo, setKeepTodo] = useState<Set<string>>(new Set())
+  const remove = async () => {
+    if (!onDelete) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await onDelete(todos.filter((t) => !keepTodo.has(t.id)).map((t) => t.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That didn’t delete. Nothing else changed.')
+      setDeleting(false)
+    }
+  }
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const who = trip.memberIds.map(nameOf).join(' & ')
   // Who could drive them: anyone who drives and isn't on the trip.
@@ -187,13 +210,56 @@ export default function WallTripSheet({ trip, members, pigmentOf, onChange, onCl
           </section>
         )}
 
-        <div className="flex items-center justify-between border-0 border-t border-solid border-wall-rule pt-[18px]">
-          <span className="text-wall-detail text-wall-ink-2">
+        {confirming ? (
+          <div className="flex flex-col gap-[14px] rounded-[22px] border-2 border-solid border-wall-rust px-[28px] py-[20px]">
+            <div className="font-display text-wall-date font-semibold">Delete the {trip.city} trip?</div>
+            <div className="text-wall-detail text-wall-ink-2">
+              {trip.mode === 'fly' ? 'The flights' : 'The drives'}{trip.legEventIds.length ? ', the hotel and anything else booked with it' : ''}{trip.tripEventId ? ' and the trip itself' : ''} come off the wall and Google Calendar, for everyone.
+            </div>
+            {todos.length > 0 && (
+              <div className="flex flex-col">
+                <span className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">AND THESE TO-DOS</span>
+                {todos.map((t) => {
+                  const on = !keepTodo.has(t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={(e) => { e.stopPropagation(); setKeepTodo((k) => { const next = new Set(k); if (on) next.add(t.id); else next.delete(t.id); return next }) }}
+                      className="flex h-[48px] items-center gap-[14px] border-0 bg-transparent p-0 text-left text-wall-body text-wall-ink"
+                    >
+                      <span aria-hidden="true" className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[5px] border-2 border-solid ${on ? 'border-wall-rust bg-wall-rust text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>{on && <Check size={16} strokeWidth={3} />}</span>
+                      <span className="truncate">{t.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {error && <div className="text-wall-detail font-semibold text-wall-rust">{error}</div>}
+            <div className="flex gap-[14px]">
+              <button type="button" disabled={deleting} onClick={(e) => { e.stopPropagation(); void remove() }} className="h-[56px] shrink-0 rounded-full border-0 bg-wall-rust px-[28px] text-wall-detail font-semibold text-wall-on-pigment">
+                {deleting ? 'Deleting…' : 'Yes, delete the trip'}
+              </button>
+              <button type="button" disabled={deleting} onClick={(e) => { e.stopPropagation(); setConfirming(false); setError(null) }} className="h-[56px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[28px] text-wall-detail font-semibold text-wall-ink">
+                Keep it
+              </button>
+            </div>
+          </div>
+        ) : (
+        <div className="flex items-center justify-between gap-[14px] border-0 border-t border-solid border-wall-rule pt-[18px]">
+          <span className="min-w-0 flex-1 truncate text-wall-detail text-wall-ink-2">
             {trip.leaveHomeAt ? `Away ${trip.leaveHomeAt.toLocaleDateString('en-US', { weekday: 'short' })} ${clock(trip.leaveHomeAt)}` : 'Away'}
             {trip.homeAt ? ` → home ${trip.homeAt.toLocaleDateString('en-US', { weekday: 'short' })} about ${clock(trip.homeAt)}` : ''}
           </span>
-          <button type="button" onClick={onClose} className="h-[52px] rounded-full border-0 bg-wall-ink px-[28px] text-wall-detail font-semibold text-wall-on-pigment">Done</button>
+          {onDelete && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); setConfirming(true) }} className="h-[52px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-detail font-semibold text-wall-rust">
+              Delete trip
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="h-[52px] shrink-0 rounded-full border-0 bg-wall-ink px-[28px] text-wall-detail font-semibold text-wall-on-pigment">Done</button>
         </div>
+        )}
       </section>
     </div>
   )

@@ -15,7 +15,7 @@ import { packingGroups, type WallChecklistItem } from './packing'
 import WallPackingSheet from './WallPackingSheet'
 import WallTripSheet from './WallTripSheet'
 import { coverageComingUp, tripCoverage } from './coverage'
-import type { TravelSettings, TravelTrip } from './engine/travel'
+import { tripEventIds, tripTodos, type TravelSettings, type TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
 import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
@@ -847,6 +847,13 @@ export default function WallView(props: WallViewProps) {
             onClose={() => setTripKey(null)}
             coverage={tripCoverageByKey.get(trip.key) ?? []}
             onCover={tripActions ? (run, driverId) => void tripActions.handOff({ id: run.tripId, source: run.source, sourceId: run.sourceId } as Trip, driverId, run.date) : undefined}
+            todos={todos ? tripTodos(trip, [...todos.list.nextUp, ...Object.values(todos.list.groups).flat()].filter((t, i, all) => all.findIndex((x) => x.id === t.id) === i)) : []}
+            onDelete={deleteEvent ? async (todoIds) => {
+              // Each event through the app's own delete (Google, its checklist and the rest), then the ticked to-dos.
+              for (const id of tripEventIds(trip)) await deleteEvent(eventsById.get(id) ?? ({ id } as WallEvent))
+              for (const id of todoIds) await todos?.act({ action: 'delete', id })
+              setTripKey(null)
+            } : undefined}
           />
         )
       })()}

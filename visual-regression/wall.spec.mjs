@@ -1807,6 +1807,25 @@ test('wall: the trip sheet — going and coming home in one; someone drives, mor
 
 // A work trip by car (Jake: "driving for a work trip is good too since I do that"): the long drive out on his lane,
 // "Away · Orlando", a tiny car on the tiles, and the Next Move in the family's words.
+// Jake, Oct 7: "can i get a delete button for trips which will remove all instances of the trip from the calendar and
+// events/ todos reminders?" — asked first, then every event that is the trip goes; "Keep it" changes nothing.
+test('wall: a trip deletes from its sheet — after a clear yes, the whole trip is gone from the wall', async ({ page }) => {
+  await page.goto('/__wall-fixture?trip=1&at=2026-10-07T12:30:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await wall.getByRole('button', { name: 'Open Jake in Dallas' }).click()
+  const sheet = wall.getByRole('region', { name: 'Jake in Dallas' })
+  await sheet.getByRole('button', { name: 'Delete trip' }).click()
+  await expect(sheet.getByText('Delete the Dallas trip?')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Keep it' }).click()
+  await expect(sheet.getByText('Delete the Dallas trip?')).toHaveCount(0)
+  await sheet.getByRole('button', { name: 'Delete trip' }).click()
+  await sheet.getByRole('button', { name: 'Yes, delete the trip' }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(wall.getByRole('button', { name: 'Open Jake in Dallas' })).toHaveCount(0)
+  await expect(wall.getByText(/Dallas/)).toHaveCount(0)
+})
+
 test('wall: a driving trip — the drive out, away, a car on the tiles', async ({ page }) => {
   await page.goto('/__wall-fixture?drive=1&at=2026-10-13T06:05:00')
   const wall = page.getByTestId('wall-fixture')
