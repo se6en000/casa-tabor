@@ -175,3 +175,28 @@ test('snoozed and far off: under Later by its date, still marked snoozed (Hello 
   assert.equal(l.groups.later[0].stage, 'snoozed')
   assert.deepEqual(ids(l.groups.quick), ['tesla'], 'late and snoozed: stays with its kind, marked snoozed')
 })
+
+// Jake, Oct 7 (a screenshot): "why are these steps for the project under next up? christmas stuff shouldnt be showing
+// here till at least after halloween?"
+test('project steps: on the card, not Next up — unless planned for a day that’s close; a far-off project waits off the shelf', () => {
+  const rs = [
+    r('lights-1', 'Christmas lights: Storage unit run', {}),
+    r('paint-1', 'Paint the house: get quote to fix cracks', {}),
+    r('roof-1', 'Replace roof decking: Assess the floorboards', {}),
+  ]
+  const ds = { 'lights-1': d('project', { minutes: 60, project_id: 'lights' }), 'paint-1': d('project', { minutes: 240, project_id: 'paint' }), 'roof-1': d('project', { minutes: 120, project_id: 'roof' }) }
+  const projects = [{ id: 'lights', title: 'Christmas lights', status: 'active' }, { id: 'paint', title: 'Paint the house', status: 'active' }, { id: 'roof', title: 'Replace roof decking', status: 'active' }]
+  const steps = [
+    { id: 's1', project_id: 'lights', position: 1, grp: 1, title: 'Storage unit run', reminder_event_id: 'lights-1', cal_start: '2026-11-07', done_at: null },
+    { id: 's2', project_id: 'paint', position: 1, grp: 1, title: 'get quote to fix cracks', reminder_event_id: 'paint-1', cal_start: null, done_at: null },
+    { id: 's3', project_id: 'roof', position: 1, grp: 1, title: 'Assess the floorboards', reminder_event_id: 'roof-1', cal_start: '2026-10-08', done_at: null },
+  ]
+  const oct7 = buildTodoList({ reminders: rs, details: ds, projects, steps, today: '2026-10-07' })
+  assert.deepEqual(ids(oct7.nextUp), ['roof-1'], 'only the step planned for tomorrow')
+  assert.deepEqual(oct7.projects.map((p) => p.title), ['Paint the house', 'Replace roof decking'], 'Christmas lights waits off the shelf')
+  assert.deepEqual(ids(oct7.groups.later), ['lights-1'])
+  assert.equal(oct7.groups.later[0].due, '2026-11-07')
+  const oct31 = buildTodoList({ reminders: rs, details: ds, projects, steps, today: '2026-10-31' })
+  assert.ok(ids(oct31.nextUp).includes('lights-1'), 'a week before its day, after Halloween')
+  assert.ok(oct31.projects.some((p) => p.title === 'Christmas lights'))
+})

@@ -22,11 +22,13 @@ const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.pa
  */
 export function buildTodoList({ reminders, details, projects = [], steps = [], today }) {
   const soon = plusDays(today, 3)
+  // A project step's day is the one it's planned on (Christmas lights' storage unit run, Nov 7).
+  const stepDay = new Map((steps ?? []).filter((st) => st.reminder_event_id && st.cal_start).map((st) => [st.reminder_event_id, String(st.cal_start).slice(0, 10)]))
   const items = (reminders ?? [])
     .filter((r) => r.status !== 'cancelled' && !r.deleted_at)
     .map((r) => {
       const d = details?.[r.id] ?? {}
-      const due = r.has_due_date ? localDate(r.start_time) : null
+      const due = r.has_due_date ? localDate(r.start_time) : stepDay.get(r.id) ?? null
       const snoozedUntil = d.snoozed_until && d.snoozed_until > today ? d.snoozed_until : null
       const minutes = d.minutes ?? null
       const needs = d.needs ?? []
@@ -73,7 +75,11 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
     // A dated one late a week or more leaves Next up for Dated (a month-old vet visit led it on the first live run);
     // Alexa asks "still want this?" about it instead.
     i.shape === 'dated' ? i.due && i.due <= soon && i.due >= plusDays(today, -7) && inTime(i)
-      : (i.shape === 'quick' || i.shape === 'fix' || i.shape === 'project') && (!i.due || inTime(i))
+      // A project's step: only when its planned day is close or past (Jake, Oct 7: "why are these steps for the project
+      // under next up? christmas stuff shouldnt be showing here till at least after halloween") — an undated one is
+      // already the project card's NOW.
+      : i.shape === 'project' ? Boolean(i.due) && inTime(i)
+      : (i.shape === 'quick' || i.shape === 'fix') && (!i.due || inTime(i))
   ))
   const nextUp = eligible.slice(0, NEXT_UP_MAX)
   // Always one quick win in view when there is one: momentum beats the perfect order.
@@ -110,8 +116,13 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
     const own = stepsOf(id)
     return { id, title: p.title, done: own.filter((s) => s.done_at).length, total: own.length, next: own.find((s) => !s.done_at)?.title ?? null, status: p.status }
   }
+  // A project whose next step is planned more than a week out waits off the shelf until then (its step is under Later).
+  const notYet = (p) => {
+    const current = stepsOf(p.id).find((st) => !st.done_at && !st.child_project_id)
+    return Boolean(current?.cal_start) && String(current.cal_start).slice(0, 10) > plusDays(today, 7)
+  }
   const projectList = (projects ?? [])
-    .filter((p) => (p.status === 'active' || p.status === 'paused') && !childIds.has(p.id))
+    .filter((p) => (p.status === 'active' || p.status === 'paused') && !childIds.has(p.id) && !notYet(p))
     .map((p) => {
       const own = stepsOf(p.id)
       const current = own.find((s) => !s.done_at && !s.child_project_id) ?? null
