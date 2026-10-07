@@ -213,6 +213,9 @@ export function buildFullAiSystem({ family, events, groceries, pending, onScreen
     sections.push(`LATE TO-DO TO RAISE TODAY: [${raise.id}] ${raise.title} — ${daysLate} day${daysLate === 1 ? '' : 's'} late${raise.needs?.length ? ` · needs: ${raise.needs.join(', ')}` : ''}${raise.nextStep ? ` · next: ${raise.nextStep}` : ''}
 Once today, at the end of this answer (not if this answer is a card, a confirmation or a quick yes/no — then wait for the next one): one line naming it as his to-do, then ONE concrete offer as a yes/no question that moves it forward — for this one: "Want me to ${offerFor(raise)}?" (say it your way, but keep it that concrete; never "anything I can do to help?", and only what you can do here — look up, find, a calendar card, a draft — never "open" or "start" a file or an app). Pros means local handymen, near home; a big project is his to run, so no pros or posts for one. If another small job on the list could go to the same handyman (the outlet and the gate latch), offer them together as one visit. ${daysLate >= 7 ? 'It\'s been late a week or more: instead ask once, "Still want this? Do it this week, snooze it, or drop it."' : ''} Never buy, book or send anything — a yes leads to a card or a look-up.`)
   }
+  // A line tapped on Ahead (canvas 63B; Jake, Oct 7: "she will guess at a todo/ or maybe just say, hey I see you want to
+  // talk about xyz, heres what I know about it, what do you want to do").
+  sections.push(`TALKING SOMETHING THROUGH FROM AHEAD: when he opens with "Let's talk about <it> on <day> — it's on Ahead (…)", say in two or three short sentences what you know about it (from the calendar, what you know of the family, routines, gift ideas, holidays and school days off), then ask what he'd like to do, with one or two likely ways (a reminder on the day with what he needs in its notes — say, three text ideas —, a to-do, a plan, who covers). No card until he says. When he says, make the one card; its notes carry the details. Once he says yes to it, it comes off Ahead by itself — say so in a few words if it fits.`)
   // Ticked off lately: "I did X" about one of these is already done — say so, no card (Oct 6).
   if (finished.length) sections.push(`FINISHED LATELY (to-dos already ticked off in the last two days; if he says he did one of these, tell him it's already ticked off — no card, and it's not the grocery list):\n${finished.map((t) => `- ${t}`).join('\n')}`)
   // The household's chores (Jake's bug report, Oct 1: "nothing on todos or reminders?" never mentioned the trash or
@@ -253,7 +256,7 @@ export const FULL_AI_TOOLS = [
   {
     name: 'create_event',
     description: 'Propose a new calendar event or reminder (the person confirms the card).',
-    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself — never prefixed with a person ("Dentist", not "Liv: Dentist"); who goes in people' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] } }, required: ['title', 'start'] },
+    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself — never prefixed with a person ("Dentist", not "Liv: Dentist"); who goes in people' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] }, notes: { type: 'STRING', description: 'Details to keep with it, shown when it is opened and in that morning’s paper — what to bring, the ideas he asked for (three birthday texts), a number to call' } }, required: ['title', 'start'] },
   },
   {
     name: 'update_event',
@@ -611,6 +614,9 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     if (text(a.place)) args.location = text(a.place)
     args.event_type = a.kind === 'reminder' ? 'reminder' : 'event'
     args.all_day = a.all_day === true
+    // Details kept with it (Jake, Oct 7: "a reminder on oct 8th to send her a birthday text … give me some ideas … alexa
+    // would package that up as part of the reminder") — saved as its description.
+    if (text(a.notes)) args.notes = String(a.notes).trim().slice(0, 2000)
     return { tool: 'create_event', args }
   }
   if (call?.name === 'update_event' || call?.name === 'delete_event') {

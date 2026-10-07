@@ -25,6 +25,7 @@ import { numbered, PAINT, pstep, summary, useFixtureTodos } from './todoFixture'
 import { WallSpeechContext } from './speechContext'
 import WallGroceriesFixture from './WallGroceriesFixture'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
+import type { HandledItem } from './comingUp'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members as baseMembers, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -273,7 +274,17 @@ export default function WallFixturePage() {
     return pid
   }
   const [ideas, setIdeas] = useState(IDEAS)
-  const comingUp = { items: comingUpItems, ideas, today: ymd(0), act: async (key: string) => setComingUpItems((list) => list.filter((i) => i.key !== key)), start,
+  // Ahead's ✓s on the timeline: one handled (by Alexa, linked) in the fixture; a ✓ in the test adds its own (canvas 64).
+  const [handled, setHandled] = useState<HandledItem[]>(() => [{ key: 'h-columbus', title: 'Columbus Day', date: ymd(5), text: 'Giselle has them · days off set', eventId: null, by: 'alexa', at: new Date().toISOString() }])
+  const comingUp = { items: comingUpItems, ideas, today: ymd(0), handled,
+    act: async (key: string, action: string, extra?: { outcome?: { text: string; title: string; date: string } }) => {
+      const it = comingUpItems.find((i) => i.key === key)
+      setComingUpItems((list) => list.filter((i) => i.key !== key))
+      if (action === 'done' && it) setHandled((h) => [...h, { key, title: it.title, date: it.date, text: extra?.outcome?.text ?? 'Marked handled', eventId: null, by: 'you', at: new Date().toISOString() }])
+      ;(window as unknown as { __aheadActs?: unknown[] }).__aheadActs = [...((window as unknown as { __aheadActs?: unknown[] }).__aheadActs ?? []), { key, action, extra }]
+      return action === 'dismiss' ? 'fall festival' : null
+    },
+    start,
     editIdea: async (id: string, idea: string | null) => setIdeas((list) => (idea == null ? list.filter((g) => g.id !== id) : list.map((g) => (g.id === id ? { ...g, idea } : g)))) }
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.

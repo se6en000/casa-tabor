@@ -139,6 +139,6 @@ export function cleanBriefFacts(more) {
     comingUp: list(more.comingUp, 16, (c) => ({ title: str(c?.title, 100), date: str(c?.date, 10), daysAway: num(c?.daysAway), nextStep: str(c?.nextStep, 140), late: Boolean(c?.late) })),
     projects: list(more.projects, 8, (p) => ({ title: str(p?.title, 100), done: num(p?.done), total: num(p?.total), next: p?.next ? str(p.next, 140) : null, aim: p?.aim ? str(p.aim, 10) : null })),
     quiet: list(more.quiet, 8, (q) => str(q, 140)),
-    soon: list(more.soon, 6, (q) => str(q, 140)),
+    soon: list(more.soon, 6, (q) => str(q, 360)),
   }
 }

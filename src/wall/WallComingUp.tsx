@@ -1,30 +1,41 @@
-import { useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Check, Mic, X } from 'lucide-react'
 import WallKeyboard from './WallKeyboard'
 import { formatWallDate } from './clock'
-import { comingUpPages, comingUpSections, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
+import { horizonDate, horizonGroups, horizonPages, horizonTone, ideasByPerson, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import type { ActExtra } from './useComingUp'
 import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 
-// Coming up (board 07a, approved by Jake 2026-09-27): only what needs planning — each item's next
-// step, its plan-by date, the gift ideas for it, and three answers. The wall and the desktop show the
-// same screen. Opened from the week strip's eighth tile; Back to today, or 2 idle minutes, return.
+// Ahead — drawn as On the Horizon (canvas 63–64; Jake, Oct 7: "this is more of a Future view, vs a planner, that done on the to do side"
+// → "lets go with On the Horizon" → "ahead maybe the better page name" → "please dont make this 3 buttons for each row" → the list with a timeline). What's
+// coming, nearest boldest. A tap on a line talks it through with Alexa (she marks it handled when that makes something);
+// ✕ not for us — fewer like it; the small ✓ for something done outside the app. A cleared line says so for a moment,
+// fades, and the list closes up; the strip below is the weeks ahead as dots, handled ones as ✓.
 
 export interface WallComingUpProps {
   now: Date
   items: ComingUpItem[]
   ideas: GiftIdea[]
+  /** What was handled, with what was done: the timeline's ✓s. */
+  handled?: HandledItem[]
   /** YYYY-MM-DD in the family's timezone (from the service). */
   today: string
-  onAct: (key: string, action: ComingUpAction) => Promise<void>
+  /** ✓ or ✕ (with what it keeps, or "fewer like this"); the words a ✕ taught. */
+  onAct: (key: string, action: ComingUpAction, extra?: ActExtra) => Promise<string | null | void>
   onBack: () => void
-  week: ReactNode
+  /** No longer shown (the strip below is the timeline); kept so callers needn't change. */
+  week?: ReactNode
   /** The way around, at the left panel's foot (canvas 59): ‹ Today and the counts, this page filled in. */
   tabs?: ReactNode
+  /** A tap on a line: talk it through with Alexa. */
+  onTalk?: (item: ComingUpItem) => void
   /** A project's step or target opens its project (P3.23, canvas 10e). */
   onOpenProject?: (id: string) => void
   /** A trip away (coverage.ts): opens its sheet, where its runs are covered. */
   onOpenTrip?: (key: string) => void
-  /** A season starts as this year's project, then opens (canvas 11c). */
+  /** What a handled one made (its reminder or event), opened from the timeline. */
+  onOpenEvent?: (id: string) => void
+  /** Kept for callers; seasons start from the To do shelf now. */
   onStart?: (key: string) => void
   /** A gift idea corrected by hand, or removed (null). */
   onEditIdea?: (id: string, idea: string | null) => Promise<void>
@@ -45,41 +56,121 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
   )
 }
 
-function Row({ item, today, onAct, onOpenProject, onStart, onOpenTrip }: { item: ComingUpItem; today: string; onAct: WallComingUpProps['onAct']; onOpenProject?: (id: string) => void; onStart?: (key: string) => void; onOpenTrip?: (key: string) => void }) {
-  const day = new Date(`${item.date}T12:00:00Z`)
-  const part = (options: Intl.DateTimeFormatOptions) => day.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' }).toUpperCase()
+/** How long a cleared line says so before it fades (Jake: "its satisfying to chek soemthing off and know … for a moment"). */
+export const CLEAR_HOLD_MS = 1600
+const FADE_MS = 400
+
+type Leaving = { kind: 'handled' | 'dismissed'; phase: 'hold' | 'fade' }
+
+const without = <T,>(o: Record<string, T>, key: string): Record<string, T> => Object.fromEntries(Object.entries(o).filter(([k]) => k !== key))
+
+const DOT = { rust: 'bg-wall-rust', brass: 'bg-wall-brass', stone: 'bg-wall-stone' } as const
+
+function HorizonRow({ item, leaving, dim, onTalk, onHandle, onDismiss, onUndo }: { item: ComingUpItem; leaving: Leaving | null; dim: boolean; onTalk: () => void; onHandle: () => void; onDismiss: () => void; onUndo: () => void }) {
+  const tone = horizonTone(item)
+  const gone = leaving?.phase === 'fade'
   return (
-    // Beside the left panel (canvas 59) the columns are narrower: the answers sit under the words, so the title stays whole.
-    <div className="flex items-start gap-[20px] border-0 border-t border-solid border-wall-rule py-[14px]">
-      <div className="flex w-[64px] shrink-0 flex-col items-center pt-[4px]">
-        <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{part({ weekday: 'short' })}</span>
-        <span className="font-display text-wall-heading font-bold lining-nums">{day.getUTCDate()}</span>
-        <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{part({ month: 'short' })}</span>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-        {/* One line each, so every row is the height the columns are planned with (comingUpPages). */}
-        <span className="truncate font-display text-wall-date font-semibold leading-tight">{item.title}</span>
-        <span className="truncate text-wall-body font-bold text-wall-brass-ink">{item.nextStep}</span>
-        <span className={`text-wall-detail ${item.late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{planByLine(item, today)}</span>
-        {item.ideas && item.ideas.length > 0 && <span className="truncate text-wall-detail text-wall-ink-2">Gift ideas: {item.ideas.join('; ')}</span>}
-      {item.tripKey ? (
-        // A trip away: its coverage is set in the trip sheet (Done / Snooze have nothing to mean here).
-        <div className="mt-[8px] flex shrink-0 gap-[8px]">
-          {onOpenTrip && <Answer label="Open trip" primary onClick={() => onOpenTrip(item.tripKey!)} />}
+    // The row folds away (grid rows 1fr → 0fr) as it fades, so the lines below slide up into its place.
+    <div className={`grid transition-[grid-template-rows,opacity] duration-[400ms] ease-out ${gone ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}>
+      <div className="overflow-hidden">
+        <div className={`flex items-center gap-[16px] border-0 border-b border-solid border-wall-stone py-[10px] transition-opacity duration-300 ${dim ? 'opacity-35' : ''} ${leaving ? 'opacity-60' : ''}`}>
+          <button type="button" aria-label={item.tripKey ? `Open trip: ${item.title}` : item.projectId ? `Open project: ${item.title}` : `Talk about ${item.title} with Alexa`} disabled={Boolean(leaving)} onClick={(e) => { e.stopPropagation(); onTalk() }}
+            className="flex min-h-[64px] min-w-0 flex-1 items-center gap-[16px] border-0 bg-transparent p-0 text-left text-wall-ink">
+            <span aria-hidden="true" className={`h-[12px] w-[12px] shrink-0 rounded-full ${DOT[tone]}`} />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className={`truncate font-display text-wall-date font-semibold ${leaving?.kind === 'dismissed' ? 'line-through' : ''}`}>{item.title}</span>
+              {leaving ? (
+                <span className="text-wall-detail text-wall-brass-ink">{leaving.kind === 'handled' ? '✓ Handled' : 'Not for us — fewer like this'}</span>
+              ) : (
+                <span className="truncate text-wall-detail text-wall-ink-2">{item.nextStep}</span>
+              )}
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-wall-label font-semibold text-wall-ink-2">{horizonDate(item.date)}</span>
+            {!leaving && !item.tripKey && !item.projectId && <Mic aria-hidden="true" size={22} className="shrink-0 text-wall-brass-ink" />}
+          </button>
+          {leaving ? (
+            <button type="button" onClick={(e) => { e.stopPropagation(); onUndo() }} className="h-[48px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[18px] text-wall-detail font-semibold text-wall-ink">Undo</button>
+          ) : (
+            <>
+              <button type="button" aria-label={`Not for us: ${item.title}`} onClick={(e) => { e.stopPropagation(); onDismiss() }}
+                className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-solid border-wall-stone bg-transparent p-0 text-wall-ink-2"><X size={20} /></button>
+              <button type="button" aria-label={`Handled: ${item.title}`} onClick={(e) => { e.stopPropagation(); onHandle() }}
+                className="flex h-[48px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0 text-wall-ink-2 opacity-70"><Check size={18} /></button>
+            </>
+          )}
         </div>
-      ) : (
-      <div className="mt-[8px] flex shrink-0 gap-[8px]">
-        <Answer label="Done" primary onClick={() => void onAct(item.key, 'done')} />
-        {item.projectId && onOpenProject
-          ? <Answer label="Open project" onClick={() => onOpenProject(item.projectId!)} />
-          : item.startable && onStart
-            ? <Answer label="Start it" onClick={() => onStart(item.key)} />
-            : <Answer label="Snooze" onClick={() => void onAct(item.key, 'snooze')} />}
-        <Answer label="Not needed" onClick={() => void onAct(item.key, 'dismiss')} />
-      </div>
-      )}
       </div>
     </div>
+  )
+}
+
+const STRIP_DAYS = 84
+
+/**
+ * The weeks ahead as dots (Jake's note on 63A: "a small timeline on the bottom with dots for the days things are
+ * happening, so can see the clusters … on touch or mouse over … highlight the week"): a dot a thing on its day, a ✓
+ * for one handled; a tap (or the mouse) on a week lights it and its lines; a tap on a ✓ says what was done.
+ */
+function HorizonStrip({ items, handled, today, focus, onFocus, onOpenEvent }: { items: ComingUpItem[]; handled: HandledItem[]; today: string; focus: number | null; onFocus: (week: number | null) => void; onOpenEvent?: (id: string) => void }) {
+  const [shown, setShown] = useState<HandledItem | null>(null)
+  const [pinned, setPinned] = useState<number | null>(null)
+  const [hover, setHover] = useState<number | null>(null)
+  useEffect(() => { onFocus(pinned ?? hover) }, [pinned, hover]) // eslint-disable-line react-hooks/exhaustive-deps -- onFocus is the page's setter
+  const dayOf = (date: string) => Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000)
+  const pct = (d: number) => `${(Math.max(0, Math.min(STRIP_DAYS, d)) / STRIP_DAYS) * 100}%`
+  const stacks = new Map<number, number>()
+  const stackAt = (d: number) => { const n = stacks.get(d) ?? 0; stacks.set(d, n + 1); return n }
+  const weeks = Array.from({ length: Math.ceil(STRIP_DAYS / 7) }, (_, w) => w)
+  const label = (d: number) => new Date(Date.parse(`${today}T12:00:00Z`) + d * 86_400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const inWeek = (w: number) => items.filter((i) => Math.floor(dayOf(i.date) / 7) === w).length
+  return (
+    <section aria-label="The weeks ahead" className="relative h-[150px] shrink-0 rounded-[22px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]" onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHover(null) }}>
+      <div className="absolute inset-x-[30px] bottom-[42px] top-[34px]">
+        {/* The weeks: a tap (or the mouse) lights one. */}
+        {weeks.map((w) => (
+          <button key={w} type="button" aria-label={`Week of ${label(w * 7)} · ${inWeek(w)} ${inWeek(w) === 1 ? 'thing' : 'things'}`} aria-pressed={pinned === w}
+            // A tap (or click) pins a week until it's tapped again; a mouse passing over shows one meanwhile.
+            onClick={() => setPinned((p) => (p === w ? null : w))} onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHover(w) }}
+            style={{ left: pct(w * 7), width: pct(7) }}
+            className={`absolute inset-y-0 rounded-[12px] border-0 p-0 ${focus === w ? 'bg-wall-brass/15 outline outline-2 outline-wall-brass-ink' : 'bg-transparent'}`} />
+        ))}
+        <span aria-hidden="true" className="absolute inset-x-0 top-[56px] h-[2px] bg-wall-ink-2/40" />
+        {items.map((i) => {
+          const d = dayOf(i.date)
+          if (d < 0 || d > STRIP_DAYS) return null
+          const tone = horizonTone(i)
+          const n = stackAt(d)
+          const dim = focus != null && Math.floor(d / 7) !== focus
+          return <span key={i.key} aria-hidden="true" style={{ left: pct(d), top: 60 - n * 16 }} className={`pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 rounded-full ${DOT[tone]} ${dim ? 'opacity-35' : ''}`} />
+        })}
+        {handled.map((h) => {
+          const d = dayOf(h.date)
+          if (d < -7 || d > STRIP_DAYS) return null
+          const n = stackAt(Math.max(0, d))
+          return (
+            <button key={h.key} type="button" aria-label={`Handled: ${h.title} — ${h.text}`} onClick={() => setShown(shown?.key === h.key ? null : h)}
+              style={{ left: pct(d), top: 56 - n * 16 }}
+              className="absolute flex h-[22px] w-[22px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-solid border-wall-brass-ink bg-wall-on-pigment p-0 text-wall-brass-ink">
+              <Check size={12} strokeWidth={3.5} />
+            </button>
+          )
+        })}
+      </div>
+      <div className="pointer-events-none absolute inset-x-[30px] bottom-[14px] h-[20px] text-wall-label font-semibold text-wall-ink-2">
+        {[0, 7, 14, 28, 56].map((d) => <span key={d} style={{ left: pct(d) }} className="absolute whitespace-nowrap">{d === 0 ? 'Today' : label(d)}</span>)}
+      </div>
+      <span className="pointer-events-none absolute right-[24px] top-[12px] flex items-center gap-[14px] text-wall-label text-wall-ink-2">
+        <span className="flex items-center gap-[6px]"><span className="h-[11px] w-[11px] rounded-full bg-wall-brass" />coming</span>
+        <span className="flex items-center gap-[6px]"><span className="h-[13px] w-[13px] rounded-full border-2 border-solid border-wall-brass-ink" />done</span>
+      </span>
+      {focus != null && <span className="pointer-events-none absolute left-[30px] top-[8px] text-wall-label font-bold tracking-[0.16em] text-wall-brass-ink">{`${label(focus * 7)} – ${label(focus * 7 + 6)}`.toUpperCase()} · {inWeek(focus)} {inWeek(focus) === 1 ? 'THING' : 'THINGS'}</span>}
+      {shown && (
+        <div role="status" className="absolute bottom-[160px] left-1/2 flex max-w-[90%] -translate-x-1/2 items-center gap-[14px] rounded-[14px] bg-wall-ink px-[18px] py-[12px] text-wall-detail font-semibold text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
+          <span className="truncate">✓ {shown.title} · {shown.text}{shown.by === 'alexa' ? ' · by Alexa' : ''}</span>
+          {shown.eventId && onOpenEvent && <button type="button" onClick={() => onOpenEvent(shown.eventId!)} className="shrink-0 rounded-full border-0 bg-wall-on-pigment px-[14px] py-[6px] text-wall-detail font-semibold text-wall-ink">Open ›</button>}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -128,62 +219,88 @@ function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: ()
   )
 }
 
-export default function WallComingUp({ now, items, ideas, today, onAct, week, tabs, onOpenProject, onStart, onEditIdea, onOpenTrip }: WallComingUpProps) {
+export default function WallComingUp({ now, items, ideas, handled = [], today, onAct, tabs, onTalk, onOpenProject, onOpenTrip, onOpenEvent, onEditIdea }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
-  const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
-  // Two columns filled by height; what doesn't fit goes to the next page, behind "N more".
-  const pages = comingUpPages(items, today)
+  const [focus, setFocus] = useState<number | null>(null)
+  const [leaving, setLeaving] = useState<Record<string, Leaving>>({})
+  // Each clearing line's two timers (hold, then fade), so Undo can stop them.
+  const [timers] = useState(() => new Map<string, number[]>())
+  useEffect(() => () => { for (const list of timers.values()) list.forEach((t) => window.clearTimeout(t)) }, [timers])
+  const groups = useMemo(() => horizonGroups(items, today), [items, today])
+  const pages = useMemo(() => horizonPages(groups), [groups])
   const page = Math.min(pageIndex, Math.max(0, pages.length - 1))
-  const columns = pages[page] ?? []
+  const columns = pages[page] ?? [[], []]
   const shownBefore = pages.slice(0, page + 1).flat(2).length
   const more = items.length - shownBefore
-  const sections = comingUpSections(items, today)
-  // Which page each section starts on, so a tap on it in the panel goes there.
-  const pageOf = (heading: string) => Math.max(0, pages.findIndex((p) => p.flat().some((e) => sections.find((x) => x.heading === heading)?.items.includes(e.item))))
+  const pageOf = (heading: string) => Math.max(0, pages.findIndex((p) => p.flat().some((e) => e.heading === heading)))
+  const dayOf = (date: string) => Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000)
+
+  // ✓ or ✕: it says so for a moment (with Undo), fades and folds away; only then is it sent, so Undo costs nothing.
+  const clear = useCallback((item: ComingUpItem, kind: Leaving['kind']) => {
+    setLeaving((l) => ({ ...l, [item.key]: { kind, phase: 'hold' } }))
+    timers.set(item.key, [
+      window.setTimeout(() => setLeaving((l) => (l[item.key] ? { ...l, [item.key]: { kind, phase: 'fade' } } : l)), CLEAR_HOLD_MS),
+      window.setTimeout(() => {
+        timers.delete(item.key)
+        setLeaving((l) => without(l, item.key))
+        void onAct(item.key, kind === 'handled' ? 'done' : 'dismiss', kind === 'handled'
+          ? { outcome: { text: 'Marked handled', title: item.title, date: item.date, by: 'you' } }
+          : { fewer: true, item: { title: item.title, kind: item.kind } })
+      }, CLEAR_HOLD_MS + FADE_MS),
+    ])
+  }, [onAct, timers])
+  const undo = useCallback((key: string) => {
+    for (const t of timers.get(key) ?? []) window.clearTimeout(t)
+    timers.delete(key)
+    setLeaving((l) => without(l, key))
+  }, [timers])
+  const open = (item: ComingUpItem) => {
+    if (item.tripKey && onOpenTrip) return onOpenTrip(item.tripKey)
+    if (item.projectId && onOpenProject) return onOpenProject(item.projectId)
+    onTalk?.(item)
+  }
 
   return (
-    // Canvas 59: the left panel stays — the clock, the buttons, what this page is and its sections, Gift ideas, the
-    // way back at its foot — and the list is the stage, with the week strip where it is on Today.
-    <section aria-label="Coming up" className="relative h-full w-full bg-wall-ground font-body text-wall-ink">
+    <section aria-label="Ahead" className="relative h-full w-full bg-wall-ground font-body text-wall-ink">
       <RailShell foot={tabs}>
         <RailClock now={now}>
           <div className="font-display text-wall-date font-semibold">{formatWallDate(now)}</div>
         </RailClock>
         <RailRule />
-        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass">COMING UP</span>
-        <h1 className="m-0 mt-[12px] font-display text-wall-move font-semibold text-wall-ink">{items.length === 0 ? 'Nothing to plan' : `${items.length} to plan`}</h1>
-        <span className="mt-[8px] text-wall-detail text-wall-ink-2">{startNow > 0 ? `${startNow === 1 ? 'One' : startNow === 2 ? 'Two' : startNow} to start now` : 'Nothing to start yet'}</span>
+        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass">AHEAD</span>
+        <h1 className="m-0 mt-[12px] font-display text-wall-move font-semibold text-wall-ink">{items.length === 0 ? 'Nothing ahead' : `${items.length} ${items.length === 1 ? 'thing' : 'things'}`}</h1>
+        <span className="mt-[8px] text-wall-detail text-wall-ink-2">Birthdays, school days, breaks and seasons</span>
         <div className="mt-[28px]">
           <RailNav items={[
-            ...sections.map((x) => ({ key: x.heading, label: x.heading.charAt(0) + x.heading.slice(1).toLowerCase(), aside: String(x.items.length), onOpen: pages.length > 1 ? () => setPageIndex(pageOf(x.heading)) : undefined })),
+            ...groups.map((g) => ({ key: g.key, label: g.heading, aside: String(g.items.length), onOpen: pages.length > 1 ? () => setPageIndex(pageOf(g.heading)) : undefined })),
             { key: 'ideas', label: 'Gift ideas', aside: String(ideas.length), onOpen: () => setIdeasOpen(true), ariaLabel: `Gift ideas · ${ideas.length}` },
             ...(more > 0 ? [{ key: 'more', label: 'Next page', aside: `${more} more`, onOpen: () => setPageIndex(page + 1), ariaLabel: `${more} more` }] : more === 0 && page > 0 ? [{ key: 'first', label: 'First page', aside: '', onOpen: () => setPageIndex(0), ariaLabel: 'First page' }] : []),
           ]} />
         </div>
-        <p className="m-0 mt-[20px] text-wall-detail text-wall-ink-2">Games, school runs and chores are left off — they’re on the days.</p>
+        <p className="m-0 mt-[20px] text-wall-detail text-wall-ink-2">Tap anything to talk it through with Alexa.</p>
       </RailShell>
 
-      <div className="absolute inset-y-0 left-[560px] right-0 flex animate-[wall-stage-in_180ms_ease-out] flex-col gap-[18px] px-[56px] py-[44px]">
-      <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
-        {items.length === 0 && (
-          <div className="font-display text-wall-date italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach it what to watch for.</div>
-        )}
-        {items.length > 0 && [0, 1].map((c) => (
-          <div key={c} className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            {(columns[c] ?? []).map(({ item, heading }) => (
-              <div key={item.key}>
-                {heading && (
-                  <div className="pb-[8px] pt-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{heading}</div>
-                )}
-                <Row item={item} today={today} onAct={onAct} onOpenProject={onOpenProject} onStart={onStart} onOpenTrip={onOpenTrip} />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {week}
+      <div className="absolute inset-y-0 left-[560px] right-0 flex animate-[wall-stage-in_180ms_ease-out] flex-col gap-[24px] px-[64px] pb-[34px] pt-[40px]">
+        <div className="flex min-h-0 flex-1 gap-[52px] overflow-hidden">
+          {items.length === 0 && (
+            <div className="font-display text-wall-date italic text-wall-ink-2">Nothing ahead. Say “any spirit day, give me 5 days” to teach it what to watch for.</div>
+          )}
+          {items.length > 0 && [0, 1].map((c) => (
+            <div key={c} className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              {(columns[c] ?? []).map(({ item, heading, tone }) => (
+                <div key={item.key}>
+                  {heading && (
+                    <div className={`pb-[4px] pt-[12px] text-wall-label font-bold tracking-[0.22em] ${tone === 'near' ? 'text-wall-rust' : tone === 'soon' ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{heading.toUpperCase()}</div>
+                  )}
+                  <HorizonRow item={item} leaving={leaving[item.key] ?? null} dim={focus != null && Math.floor(dayOf(item.date) / 7) !== focus}
+                    onTalk={() => open(item)} onHandle={() => clear(item, 'handled')} onDismiss={() => clear(item, 'dismissed')} onUndo={() => undo(item.key)} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <HorizonStrip items={items} handled={handled} today={today} focus={focus} onFocus={setFocus} onOpenEvent={onOpenEvent} />
       </div>
       {ideasOpen && <IdeasSheet ideas={ideas} onEdit={onEditIdea} onClose={() => setIdeasOpen(false)} />}
     </section>

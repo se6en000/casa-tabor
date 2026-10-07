@@ -322,6 +322,10 @@
       {
         "path": "src/wall/WallNightCalm.tsx",
         "reason": "Family Wall night calm (canvas 56A): the get-ready bar's width is the share of tomorrow's lists done, computed at runtime."
+      },
+      {
+        "path": "src/wall/WallComingUp.tsx",
+        "reason": "Family Wall: Ahead's timeline strip (canvas 64) places each dot, ✓ and week band by its date — runtime-derived geometry (left/width/top), no colors."
       }
     ],
     "nativeControlRecreations": [

@@ -115,3 +115,66 @@ export function comingUpPages(items: ComingUpItem[], today: string, sizes = COMI
 export function forViewer(items: ComingUpItem[], viewerId: string): ComingUpItem[] {
   return items.map((i) => (i.ideas && viewerId && i.ideasFor?.includes(viewerId) ? { ...i, ideas: undefined } : i))
 }
+
+// ── On the Horizon (canvas 63–64; Jake, Oct 7: "this is more of a Future view, vs a planner, that done on the to do
+// side" → "lets go with On the Horizon"). A reading list by time, nearest boldest; a tap talks a line through with
+// Alexa; ✓ handled / ✕ not for us clear it; a strip below shows the weeks ahead as dots. ─────────────────────────
+
+/** Something handled (the coming-up function's `handled`): on the timeline as a ✓, with what was done. */
+export interface HandledItem { key: string; title: string; date: string; text: string; eventId: string | null; by: string; at: string }
+
+export interface HorizonGroup { key: string; heading: string; tone: 'near' | 'soon' | 'far'; items: ComingUpItem[] }
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** This week · Next two weeks · Later in <this month> · <next month> and on — empty ones left out, each by date. */
+export function horizonGroups(items: ComingUpItem[], today: string): HorizonGroup[] {
+  const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+  const month = Number(today.slice(5, 7)) - 1
+  const groups: HorizonGroup[] = [
+    { key: 'week', heading: 'This week', tone: 'near', items: sorted.filter((i) => i.daysAway <= 6) },
+    { key: 'two', heading: 'Next two weeks', tone: 'soon', items: sorted.filter((i) => i.daysAway > 6 && i.daysAway <= 20) },
+    { key: 'month', heading: `Later in ${MONTHS[month]}`, tone: 'far', items: sorted.filter((i) => i.daysAway > 20 && Number(i.date.slice(5, 7)) - 1 === month && i.date.slice(0, 4) === today.slice(0, 4)) },
+  ]
+  const placed = new Set(groups.flatMap((g) => g.items.map((i) => i.key)))
+  groups.push({ key: 'later', heading: `${MONTHS[(month + 1) % 12]} and on`, tone: 'far', items: sorted.filter((i) => !placed.has(i.key)) })
+  return groups.filter((g) => g.items.length > 0)
+}
+
+/** "Thu Oct 8" */
+export function horizonDate(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+}
+
+/** Its dot: tomorrow or sooner rust, the next three weeks brass, further stone. */
+export function horizonTone(item: Pick<ComingUpItem, 'daysAway'>): 'rust' | 'brass' | 'stone' {
+  return item.daysAway <= 2 ? 'rust' : item.daysAway <= 20 ? 'brass' : 'stone'
+}
+
+export interface HorizonEntry { item: ComingUpItem; heading: string | null; tone: HorizonGroup['tone'] }
+
+/** Two columns a page, filled in order by rows (a heading is half a row); what doesn't fit goes to the next page. */
+export function horizonPages(groups: HorizonGroup[], rowsPerColumn = 9): HorizonEntry[][][] {
+  const pages: HorizonEntry[][][] = [[[], []]]
+  let col = 0
+  let used = 0
+  const place = (entry: HorizonEntry, cost: number) => {
+    if (used + cost > rowsPerColumn) {
+      col += 1
+      used = 0
+      if (col > 1) { pages.push([[], []]); col = 0 }
+      // A heading carried over to a new column says so again.
+      if (!entry.heading) { entry = { ...entry, heading: lastHeading }; cost += 0.5 }
+    }
+    pages[pages.length - 1][col].push(entry)
+    used += cost
+  }
+  let lastHeading: string | null = null
+  for (const g of groups) {
+    g.items.forEach((item, i) => {
+      lastHeading = g.heading
+      place({ item, heading: i === 0 ? g.heading : null, tone: g.tone }, i === 0 ? 1.5 : 1)
+    })
+  }
+  return pages
+}

@@ -256,3 +256,33 @@ export function buildComingUp({ now, events, giftIdeas = [], state = {}, rules =
   }
   return items.sort((a, b) => a.pokeOn.localeCompare(b.pokeOn) || a.date.localeCompare(b.date))
 }
+
+// ── On the Horizon (canvas 63–64; Jake, Oct 7) ─────────────────────────────────────────────────────────
+const STOP = new Set(['the', 'and', 'for', 'with', 'day', 'of', 'at', 'a', 'an', 'to', 'in', 'on', 'pto', 'no', 'school'])
+
+/**
+ * "Not for us — fewer like this": the words a ✕ teaches (a "never flag" rule matches every word in a title). A
+ * birthday or anniversary is that person's alone (dismissing Heather's never quiets every birthday); anything else, the
+ * last words that name it ("Bak Fall Festival" → "fall festival", "Science & PTO Spirit Day" → "spirit day").
+ */
+export function fewerLikeMatch(item, family = []) {
+  const title = String(item?.title ?? '').toLowerCase().replace(/[’']s\b/g, '').replace(/[^a-z ]/g, ' ')
+  const words = title.split(/\s+/).filter(Boolean)
+  if (/birthday|anniversary|remembrance/.test(item?.kind ?? '') || /birthday|anniversary/.test(title)) return words.join(' ') || null
+  const names = new Set(family.flatMap((m) => [m.name, ...(String(m.full_name ?? '').split(/\s+/))]).map((n) => String(n).toLowerCase()).filter(Boolean))
+  const kept = words.filter((w) => w.length > 2 && !names.has(w))
+  const nounish = kept.filter((w) => !STOP.has(w))
+  // "Spirit Day", "Picture Day": the word before "day" names it.
+  const dayAt = words.lastIndexOf('day')
+  if (dayAt > 0 && !STOP.has(words[dayAt - 1])) return `${words[dayAt - 1]} day`
+  return nounish.slice(-2).join(' ') || null
+}
+
+/** What was handled, for the timeline's ✓s: kept with its date, still ahead or this week past. */
+export function handledFromState(stateRows, today) {
+  const since = new Date(Date.parse(`${today}T12:00:00Z`) - 7 * 86400e3).toISOString().slice(0, 10)
+  return (stateRows ?? [])
+    .filter((s) => s.done_at && s.outcome && typeof s.outcome === 'object' && String(s.outcome.date ?? '') >= since)
+    .map((s) => ({ key: s.item_key, title: String(s.outcome.title ?? ''), date: String(s.outcome.date), text: String(s.outcome.text ?? 'Marked handled'), eventId: s.outcome.eventId ?? null, by: s.outcome.by ?? 'you', at: s.done_at }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}

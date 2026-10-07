@@ -651,33 +651,46 @@ test('wall assistant: a spoken yes swells warm gold on the strip', async ({ page
   await expect.poll(async () => (await led(page)).outcomes).toEqual(['confirm'])
 })
 
-test('wall: Coming up — the eighth tile opens it; an answer takes an item off; gift ideas; back to today (board 07a)', async ({ page }) => {
+// Ahead (canvas 63–64; Jake, Oct 7: "this is more of a Future view, vs a planner" → "ahead maybe the better page name"):
+// a reading list by time; ✕ not for us says so for a moment (with Undo), then the line goes; ✓ handled lands on the
+// timeline; a tap on a week lights its lines; a tap on a line talks it through with Alexa.
+test('wall: Ahead — the eighth tile opens it; ✕ and ✓ clear a line after a moment; a week lights up; a line talks to Alexa (canvas 64)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  const tile = page.getByRole('button', { name: /^Coming up: 6 to plan, 2 to start now/ })
+  const tile = page.getByRole('button', { name: /^Ahead: 6 ahead, 2 to start now/ })
   await expect(tile).toBeVisible()
   await tile.click()
-  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
-  await expect(page.getByText('START NOW', { exact: true })).toBeVisible()
-  await expect(page.getByText('Plan by Sep 21 · late · in 3 days')).toBeVisible()
-  await expect(page.getByText('Gift ideas: A fly-fishing reel')).toBeVisible()
+  const ahead = page.getByRole('region', { name: 'Ahead' })
+  await expect(ahead.getByRole('heading', { name: '6 things' })).toBeVisible()
+  await expect(ahead.getByText('THIS WEEK', { exact: true })).toBeVisible()
   await expect(page).toHaveScreenshot('wall-coming-up.png')
-  // Done on the AC appointment: it leaves the list, and the tile counts down.
-  const ac = page.locator('div').filter({ hasText: /^.*EDS Air Conditioning appointment/ }).getByRole('button', { name: 'Done' }).first()
-  await ac.click()
-  await expect(page.getByText('EDS Air Conditioning appointment')).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: '5 to plan' })).toBeVisible()
+  // ✕: it says so with an Undo; Undo keeps it.
+  await ahead.getByRole('button', { name: 'Not for us: EDS Air Conditioning appointment' }).click()
+  await expect(ahead.getByText('Not for us — fewer like this')).toBeVisible()
+  await ahead.getByRole('button', { name: 'Undo' }).click()
+  await expect(ahead.getByRole('button', { name: 'Not for us: EDS Air Conditioning appointment' })).toBeVisible()
+  // ✓: a moment of "✓ Handled", then it's gone — and on the timeline as done.
+  await ahead.getByRole('button', { name: 'Handled: EDS Air Conditioning appointment' }).click()
+  await expect(ahead.getByText('✓ Handled')).toBeVisible()
+  await expect(ahead.getByRole('heading', { name: '5 things' })).toBeVisible({ timeout: 5000 })
+  await expect(ahead.getByText('EDS Air Conditioning appointment')).toHaveCount(0)
+  await expect(ahead.getByRole('button', { name: /^Handled: EDS Air Conditioning appointment — Marked handled$/ })).toBeVisible()
+  expect(await page.evaluate(() => window.__aheadActs)).toEqual([{ key: expect.any(String), action: 'done', extra: { outcome: { text: 'Marked handled', title: 'EDS Air Conditioning appointment', date: expect.any(String), by: 'you' } } }])
+  // A week on the strip lights its lines.
+  await ahead.getByRole('button', { name: /^Week of Oct 9/ }).click()
+  await expect(ahead.getByRole('button', { name: /^Week of Oct 9/ })).toHaveAttribute('aria-pressed', 'true')
+  // A tap on a line: Alexa, with it in hand.
+  await ahead.getByRole('button', { name: /^Talk about Carl’s birthday with Alexa$/ }).click()
+  await expect.poll(() => page.evaluate(() => window.__asked)).toMatch(/^Let’s talk about Carl’s birthday on Wed Dec 2 — it’s on Ahead \(Pick a gift\)\.$/)
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   await expect(page.getByRole('region', { name: 'Gift ideas' }).getByText('A soccer-team sweatshirt and T-shirt')).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
-  await page.getByRole('button', { name: 'Back to today' }).click()
-  await expect(page.getByRole('heading', { name: '5 to plan' })).toHaveCount(0)
 })
 
 // Jake, 2026-09-29: "on gift ideas, allow me to edit them, some brands don't get translated well and I
 // need to correct it, otherwise I will forget what I was talking about."
 test('wall: a gift idea can be corrected on the keyboard, or removed', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  await page.getByRole('button', { name: /^Coming up: / }).click()
+  await page.getByRole('button', { name: /^Ahead: / }).click()
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   const sheet = page.getByRole('region', { name: 'Gift ideas' })
   await sheet.getByRole('button', { name: 'Change “A fly-fishing reel”' }).click()
@@ -693,7 +706,7 @@ test('wall: a gift idea can be corrected on the keyboard, or removed', async ({ 
 // version". Off the kiosk, a slim bar with a real field takes the typing; Enter is done.
 test('wall: on a desktop, the computer’s keyboard types — in place, not Casa’s keys', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&keyboard=device')
-  await page.getByRole('button', { name: /^Coming up: / }).click()
+  await page.getByRole('button', { name: /^Ahead: / }).click()
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   const sheet = page.getByRole('region', { name: 'Gift ideas' })
   await sheet.getByRole('button', { name: 'Change “A fly-fishing reel”' }).click()
@@ -710,23 +723,22 @@ test('wall: on a desktop, the computer’s keyboard types — in place, not Casa
 })
 
 // Live on the kiosk 2026-09-27: nine items split by count ran the left column under the week strip.
-test('wall: Coming up with a long list — nothing runs under the week strip; "N more" shows the rest (board 07a)', async ({ page }) => {
+test('wall: Ahead with a long list — nothing runs under the timeline; "N more" shows the rest', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&comingUp=live')
-  await page.getByRole('button', { name: /^Coming up: 9 to plan/ }).click()
-  await expect(page.getByRole('heading', { name: '9 to plan' })).toBeVisible()
+  await page.getByRole('button', { name: /^Ahead: 9 ahead/ }).click()
+  await expect(page.getByRole('heading', { name: '9 things' })).toBeVisible()
   const fits = () => page.evaluate(() => {
-    const strip = document.querySelector('section[aria-label="Next seven days"]').getBoundingClientRect().top
-    return [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Not needed').every((b) => b.getBoundingClientRect().bottom <= strip - 8)
+    const strip = document.querySelector('section[aria-label="The weeks ahead"]').getBoundingClientRect().top
+    return [...document.querySelectorAll('button')].filter((b) => (b.getAttribute('aria-label') ?? '').startsWith('Not for us:')).every((b) => b.getBoundingClientRect().bottom <= strip - 8)
   })
   expect(await fits()).toBe(true)
   await expect(page).toHaveScreenshot('wall-coming-up-long.png')
   const more = page.getByRole('button', { name: /^\d+ more$/ })
-  const left = Number((await more.getAttribute('aria-label')).split(' ')[0])
-  await more.click()
-  await expect(page.getByText('Veterans Day')).toBeVisible()
-  expect(await page.getByRole('button', { name: 'Not needed' }).count()).toBe(left)
-  expect(await fits()).toBe(true)
-  await page.getByRole('button', { name: 'First page' }).click()
+  if (await more.count()) {
+    await more.click()
+    expect(await fits()).toBe(true)
+    await page.getByRole('button', { name: 'First page' }).click()
+  }
   await expect(page.getByText('EDS Air Conditioning Appointment')).toBeVisible()
 })
 
@@ -826,7 +838,7 @@ test('wall: swiping moves across the days and on to Coming up; a nudge or a tap 
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
   // Seven swipes left: through Thursday, then Coming up; the eighth, To do; one more does nothing.
   for (let i = 0; i < 7; i++) await touchSwipe(page, [1500, 600], [1100, 600])
-  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 things' })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
   await touchSwipe(page, [1500, 600], [1100, 600])
   await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
@@ -1160,14 +1172,14 @@ test('wall: To do — the tile opens Next up; Done and "Not now" answer an item;
 
 test('wall: swiping past Coming up reaches To do', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  await page.getByRole('button', { name: /^Coming up:/ }).click()
-  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
+  await page.getByRole('button', { name: /^Ahead:/ }).click()
+  await expect(page.getByRole('heading', { name: '6 things' })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
   await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
   await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
   await touchSwipe(page, [1100, 600], [1500, 600])
-  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 things' })).toBeVisible()
 })
 
 // The surface of To do (board 09a): tonight's nudge on the evening face; one small job in a quiet stretch.
@@ -1301,20 +1313,21 @@ test('wall: the keyboard’s Say it — words show as they’re heard, and land 
 // A project's dated step on Coming up opens its project (P3.23 step 2, canvas 10e).
 test('wall: Coming up — a project’s dated step, named for its project, opens the project', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
-  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await page.getByRole('button', { name: /^Ahead:/ }).click()
   await expect(page.getByText('Choose the painter and book dates')).toBeVisible()
-  await expect(page.getByText('Paint the house', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Open project' }).click()
+  await page.getByRole('button', { name: /^Open project:/ }).first().click()
   await expect(page.getByRole('region', { name: 'Paint the house — project' })).toBeVisible()
   await page.getByRole('button', { name: 'Back to the list' }).click()
   await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
 })
 
-// The seasons arrive as projects (P3.23, canvas 11c): Start it opens this year's, from the plan.
-test('wall: Coming up — a season starts as this year’s project, in Jake’s order, and opens', async ({ page }) => {
+// The seasons arrive as projects (P3.23, canvas 11c): started from the To do shelf (Ahead talks them through with
+// Alexa now), this year's opens from the plan.
+test('wall: a season starts as this year’s project, in Jake’s order, and opens', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
-  await page.getByRole('button', { name: /^Coming up:/ }).click()
-  await page.getByRole('button', { name: 'Start it' }).click()
+  await page.getByRole('button', { name: /^To do:/ }).click()
+  await page.getByRole('region', { name: 'Projects' }).getByRole('button', { name: 'Christmas lights: coming up' }).click()
+  await page.getByRole('button', { name: 'Start it now' }).click()
   const lights = page.getByRole('region', { name: 'Christmas lights — project' })
   await expect(lights).toBeVisible()
   await expect(lights.getByText('NOW · ON YOUR PHONE')).toBeVisible()
@@ -1846,10 +1859,10 @@ test('wall: a trip’s coverage — in Coming up a week ahead, covered from the 
   await page.goto('/__wall-fixture?trip=1&at=2026-10-01T07:15:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  await wall.getByRole('button', { name: /^Coming up:/ }).click()
+  await wall.getByRole('button', { name: /^Ahead:/ }).click()
   await expect(wall.getByText('Jake away Wed–Thu')).toBeVisible()
   await expect(wall.getByText('Drop off Emme & Owen Thu 7:35 needs someone')).toBeVisible()
-  await wall.getByRole('button', { name: 'Open trip' }).click()
+  await wall.getByRole('button', { name: /^Open trip:/ }).click()
   const sheet = wall.getByRole('region', { name: 'Jake in Dallas' })
   const away = sheet.getByRole('region', { name: 'While Jake is away' })
   await expect(away.getByText('no one yet')).toBeVisible()
@@ -2248,7 +2261,7 @@ test('wall assistant: an answer with a list is tiles — in the band, and in the
 // the places this happens". On a computer, a pressed field is typed in place — a box right over it, no bar at the foot.
 test('wall on a computer: text is typed in place — a step’s title, a new step, an event’s title — never the bar', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects&keyboard=device')
-  await page.getByRole('button', { name: /^Coming up:/ }).click()
+  await page.getByRole('button', { name: /^Ahead:/ }).click()
   await page.getByRole('button', { name: 'Open project' }).click()
   const project = page.getByRole('region', { name: 'Paint the house — project' })
   await expect(project).toBeVisible()

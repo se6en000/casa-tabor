@@ -600,6 +600,9 @@ Deno.serve(async (req) => {
   const hybridRequested = (context as Record<string, unknown> | undefined)?.hybrid
   const hybridLayer2 = dryRun && typeof hybridRequested === 'boolean' ? hybridRequested : HYBRID_LAYER2_LIVE
   const turnContext = image || turnRulesOff || fullAi ? null : await resolveTurnContext(sb, messages, context, cid, drawerThinkingBudget ?? 0)
+  // A talk started from Ahead (canvas 63B): version D makes its card, so the details he asked for go in its notes ("three
+  // text ideas") — the turn reader's plain add card can't carry them (live Oct 7: the reminder came without its ideas).
+  if (turnContext?.card?.tool === 'create_event' && Array.isArray(messages) && (messages as Array<{ role: string; content: string }>).some((m) => m.role === 'user' && /it[’']s on Ahead/i.test(String(m.content ?? '')))) turnContext.card = null
   const turnResolution = turnContext?.resolution ?? null
   // Words not said to Casa, heard by the wall's open mic (P3.13): no reply, nothing changes.
   // (Only once Casa has answered: the first thing said follows the wake word or a tap, so it's for Casa —
@@ -1530,7 +1533,9 @@ Deno.serve(async (req) => {
     return ids.length > (snoozed ?? []).length
   }
   // A question the calendar can't answer (a drive time, the weather) goes on to layer 2, which can look it up.
-  if (turnContext?.answer && !(hybridLayer2 && turnContext.answer.calendarSays === false) && !(await raisePending().catch(() => false))) {
+  // Something talked through from Ahead goes to version D, which knows the family and can make the card (canvas 63B).
+  const fromAhead = /it[’']s on Ahead/i.test(String(latestUserText ?? '')) || (Array.isArray(messages) && (messages as Array<{ role: string; content: string }>).some((m) => m.role === 'user' && /it[’']s on Ahead/i.test(String(m.content ?? ''))))
+  if (turnContext?.answer && !fromAhead && !(hybridLayer2 && turnContext.answer.calendarSays === false) && !(await raisePending().catch(() => false))) {
     return {
       status: 200,
       payload: {

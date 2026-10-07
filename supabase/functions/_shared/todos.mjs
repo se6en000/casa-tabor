@@ -60,6 +60,8 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         snoozeCount: snoozes,
         projectId: d.project_id ?? null,
         suggestion: d.suggestion ?? null,
+        // Details kept with it (a reminder Alexa made with "three text ideas"), for the morning paper and its sheet.
+        notes: typeof r.description === 'string' && r.description.trim() ? r.description.trim().slice(0, 600) : null,
         score,
       }
     })

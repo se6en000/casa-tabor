@@ -1,9 +1,12 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import type { ComingUpAction, ComingUpItem, GiftIdea } from './comingUp'
+import type { ComingUpAction, ComingUpItem, GiftIdea, HandledItem } from './comingUp'
 
-export interface ComingUpData { items: ComingUpItem[]; ideas: GiftIdea[]; today: string }
+export interface ComingUpData { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; handled: HandledItem[] }
+
+/** On the Horizon (canvas 63–64): what a ✓ kept (what was done, its event), or a ✕'s "fewer like this". */
+export interface ActExtra { outcome?: { text: string; title: string; date: string; eventId?: string | null; by: 'you' | 'alexa' }; fewer?: boolean; item?: { title: string; kind: string } }
 
 /**
  * The Coming up list and gift ideas (P3.19), from the `coming-up` function — the same list the Sunday
@@ -17,15 +20,23 @@ export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' }
     queryFn: async (): Promise<ComingUpData> => {
       const { data, error } = await supabase.functions.invoke('coming-up', { body: { action: 'list' } })
       if (error) throw error
-      return { items: data?.items ?? [], ideas: data?.ideas ?? [], today: String(data?.today ?? '') }
+      return { items: data?.items ?? [], ideas: data?.ideas ?? [], today: String(data?.today ?? ''), handled: data?.handled ?? [] }
     },
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
   })
-  const act = useCallback(async (key: string, action: ComingUpAction) => {
+  const act = useCallback(async (key: string, action: ComingUpAction, extra: ActExtra = {}): Promise<string | null> => {
     // Gone from the list straight away; the refresh confirms it.
     queryClient.setQueryData<ComingUpData>(['coming-up'], (old) => (old ? { ...old, items: old.items.filter((i) => i.key !== key) } : old))
-    const { error } = await supabase.functions.invoke('coming-up', { body: { action, key, surface } })
+    const { data, error } = await supabase.functions.invoke('coming-up', { body: { action, key, surface, ...extra } })
+    await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
+    if (error) throw error
+    // The words a ✕ taught ("fall festival"), to say so.
+    return (data as { taught?: string } | null)?.taught ?? null
+  }, [queryClient, surface])
+  // Undo from the timeline: back on the list as it was; a ✕'s rule taken back.
+  const undo = useCallback(async (key: string) => {
+    const { error } = await supabase.functions.invoke('coming-up', { body: { action: 'undo', key, surface } })
     await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     if (error) throw error
   }, [queryClient, surface])
@@ -43,5 +54,5 @@ export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' }
     await queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     if (error) throw error
   }, [queryClient, surface])
-  return { data: query.data ?? null, act, start, editIdea }
+  return { data: query.data ?? null, act, undo, start, editIdea }
 }

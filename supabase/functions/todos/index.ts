@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
 
     // list
     const [remindersRes, detailsRes, projectsRes, stepsRes, prepRes] = await Promise.all([
-      sb.from('events').select('id, title, status, has_due_date, start_time, created_at, deleted_at')
+      sb.from('events').select('id, title, status, has_due_date, start_time, created_at, deleted_at, description')
         .eq('event_type', 'reminder').eq('record_kind', 'single').is('deleted_at', null).neq('status', 'cancelled')
         .order('created_at').limit(500),
       sb.from('todo_details').select('event_id, shape, minutes, cost_cents, next_step, needs, snoozed_until, snooze_count, project_id, sorted_by, suggestion'),

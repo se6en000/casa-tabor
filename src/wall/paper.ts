@@ -192,7 +192,7 @@ export function briefFacts(input: {
   }
   const soon = [...new Map(items
     .filter((t) => (t.stage === 'due' || t.stage === 'heads_up') && t.due)
-    .map((t) => [t.id, `${t.title} (${when(t.due!)})`] as const)).values()]
+    .map((t) => [t.id, `${t.title} (${when(t.due!)})${t.notes ? ` — its notes: ${t.notes.replace(/\s+/g, ' ').slice(0, 220)}` : ''}`] as const)).values()]
     .slice(0, 6)
   return { people: members.map((m) => m.name), week, comingUp, projects, quiet, soon }
 }

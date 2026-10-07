@@ -19,6 +19,8 @@ export interface TodoItem {
   overdue: boolean
   snoozedUntil: string | null
   snoozeCount: number
+  /** Details kept with it (a reminder's notes: "three text ideas"). */
+  notes?: string | null
   /** Where it is in its time (todo-stage.mjs): from the server's list. */
   stage?: 'snoozed' | 'overdue' | 'due' | 'heads_up' | 'quiet' | 'undated'
   projectId: string | null

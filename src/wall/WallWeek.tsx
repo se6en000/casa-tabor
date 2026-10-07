@@ -78,7 +78,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
         {comingUp && (
           <button
             type="button"
-            aria-label={`Coming up: ${comingUp.count} to plan${comingUp.startNow ? `, ${comingUp.startNow} to start now` : ''}`}
+            aria-label={`Ahead: ${comingUp.count} ahead${comingUp.startNow ? `, ${comingUp.startNow} to start now` : ''}`}
             aria-pressed={comingUp.open}
             onClick={(event) => {
               event.stopPropagation()
@@ -87,7 +87,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
             className={`flex h-[124px] min-w-0 flex-[1.2] flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${comingUp.open ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-brass px-[20px] py-[14px]'}`}
           >
             <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">COMING UP</span>
-            <span className="font-display text-wall-heading font-bold leading-none">{comingUp.count} to plan</span>
+            <span className="font-display text-wall-heading font-bold leading-none">{comingUp.count} ahead</span>
             <span className={`truncate text-wall-label font-bold ${comingUp.startNow ? 'text-wall-rust' : 'text-wall-ink-2'}`}>
               {comingUp.startNow ? `${comingUp.startNow} to start now` : 'Nothing to start yet'}
             </span>

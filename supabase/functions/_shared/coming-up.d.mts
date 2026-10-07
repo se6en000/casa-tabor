@@ -11,3 +11,5 @@ export interface Season {
 export const SEASONS: Season[]
 export const COMING_UP_WEEKS: number
 export function buildComingUp(input: Record<string, unknown>): Array<Record<string, unknown>>
+export function fewerLikeMatch(item: { title?: string; kind?: string } | null | undefined, family?: Array<{ name: string; full_name?: string | null }>): string | null
+export function handledFromState(stateRows: unknown[], today: string): Array<{ key: string; title: string; date: string; text: string; eventId: string | null; by: string; at: string }>

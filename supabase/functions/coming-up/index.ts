@@ -7,7 +7,7 @@
 //   'send_pokes'               → morning push for items whose plan-by day is today, once each (cron coming-up-daily-pokes)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { memberNamed } from '../_shared/family-names.mjs'
-import { buildComingUp, SEASONS } from '../_shared/coming-up.mjs'
+import { buildComingUp, fewerLikeMatch, handledFromState, SEASONS } from '../_shared/coming-up.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -84,10 +84,39 @@ Deno.serve(async (req) => {
           return json({ ok: true, key, action })
         }
       }
-      const patch = action === 'done' ? { done_at: now.toISOString() }
-        : action === 'dismiss' ? { dismissed_at: now.toISOString() }
+      // On the Horizon (canvas 63–64): a ✓ keeps what was done ("Reminder: Thu Oct 8, 9 AM", its event to open), so the
+      // timeline shows it as done; a ✕ "not for us" can teach fewer like it — a "never flag" rule, undoable.
+      const b = body as { outcome?: Record<string, unknown>; fewer?: boolean; item?: { title?: string; kind?: string } }
+      const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : null)
+      const outcome = action === 'done' && b.outcome && typeof b.outcome === 'object'
+        ? { text: str(b.outcome.text, 160) ?? 'Marked handled', title: str(b.outcome.title, 160), date: str(b.outcome.date, 10), eventId: str(b.outcome.eventId, 64), by: b.outcome.by === 'alexa' ? 'alexa' : 'you' }
+        : null
+      let ruleId: string | null = null
+      let taught: string | null = null
+      if (action === 'dismiss' && b.fewer && b.item?.title) {
+        const { data: fam } = await sb.from('family_members').select('name, full_name')
+        taught = fewerLikeMatch(b.item, fam ?? [])
+        if (taught) {
+          const { data: rule, error: ruleError } = await sb.from('coming_up_rules').insert({ match: taught, off: true }).select('id').single()
+          if (ruleError) throw new Error(ruleError.message)
+          ruleId = (rule as { id: string }).id
+        }
+      }
+      const patch = action === 'done' ? { done_at: now.toISOString(), ...(outcome ? { outcome } : {}) }
+        : action === 'dismiss' ? { dismissed_at: now.toISOString(), ...(ruleId ? { rule_id: ruleId } : {}) }
         : { snoozed_until: plusDays(today, 7) }
       const { error } = await sb.from('coming_up_state').upsert({ item_key: key, ...patch, updated_at: now.toISOString() }, { onConflict: 'item_key' })
+      if (error) throw new Error(error.message)
+      return json({ ok: true, key, action, ...(taught ? { taught } : {}) })
+    }
+
+    // Undo (On the Horizon): the item back on the list as it was, and any "fewer like this" rule its ✕ made, gone.
+    if (action === 'undo') {
+      const key = String(body.key ?? '').slice(0, 80)
+      if (!key) return json({ error: 'key required' }, 400)
+      const { data: row } = await sb.from('coming_up_state').select('rule_id').eq('item_key', key).maybeSingle()
+      if (row?.rule_id) await sb.from('coming_up_rules').update({ removed_at: now.toISOString() }).eq('id', row.rule_id)
+      const { error } = await sb.from('coming_up_state').update({ done_at: null, dismissed_at: null, outcome: null, rule_id: null, updated_at: now.toISOString() }).eq('item_key', key)
       if (error) throw new Error(error.message)
       return json({ ok: true, key, action })
     }
@@ -100,7 +129,7 @@ Deno.serve(async (req) => {
         .lt('start_time', new Date(now.getTime() + 110 * 86400e3).toISOString())
         .order('start_time').limit(1000),
       sb.from('gift_ideas').select('id, for_name, for_member_id, idea, created_at').is('done_at', null).is('dismissed_at', null).order('created_at'),
-      sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on, custom_step, custom_lead_days'),
+      sb.from('coming_up_state').select('item_key, done_at, dismissed_at, snoozed_until, poked_on, custom_step, custom_lead_days, outcome'),
       // Newest first: when two rules fit, the newer one wins.
       sb.from('coming_up_rules').select('match, step, lead_days, off').is('removed_at', null).order('created_at', { ascending: false }),
       // Ideas saved under a full name ("Olivia") still belong on that person's birthday.
@@ -121,7 +150,7 @@ Deno.serve(async (req) => {
       const member = family.find((m) => m.id === g.for_member_id) ?? memberNamed(g.for_name, family)
       return { ...g, for_name: member?.name ?? g.for_name }
     })
-    if (action === 'list') return json({ items, rules, today, ideas })
+    if (action === 'list') return json({ items, rules, today, ideas, handled: handledFromState(stateRes.data ?? [], today) })
 
     const push = async (title: string, text: string, tag: string) => {
       const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body: text, url: '/', tag } })

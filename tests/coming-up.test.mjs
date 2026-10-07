@@ -326,3 +326,24 @@ test('the long school breaks come up six weeks ahead, from the district calendar
   assert.deepEqual(titles('2027-02-10T12:00:00-05:00'), [['Spring break', '2027-03-22', '2027-02-08']])
   assert.deepEqual(titles('2027-06-10T12:00:00-04:00'), [], 'past the published year: nothing made up')
 })
+
+import { fewerLikeMatch, handledFromState } from '../supabase/functions/_shared/coming-up.mjs'
+// On the Horizon (Jake, Oct 7): "✕ not for us" teaches fewer like it; handled ones stay on the timeline as done.
+test('a ✕ teaches the words that name it — a birthday stays that person’s alone', () => {
+  const family = [{ name: 'Liv', full_name: 'Olivia Tabor' }, { name: 'Emme' }]
+  assert.equal(fewerLikeMatch({ title: 'Bak Fall Festival', kind: 'event' }, family), 'fall festival')
+  assert.equal(fewerLikeMatch({ title: 'Science Experiments & PTO Spirit Day', kind: 'spirit' }, family), 'spirit day')
+  assert.equal(fewerLikeMatch({ title: 'Yearbook Picture Day! (wear uniforms)', kind: 'spirit' }, family), 'picture day')
+  assert.equal(fewerLikeMatch({ title: 'Heather’s Birthday', kind: 'birthday' }, family), 'heather birthday')
+  assert.equal(fewerLikeMatch({ title: 'Liv BAK Athletics Aktivate System Due', kind: 'deadline' }, family), 'system due')
+})
+
+test('handled ones, with what was done, for the timeline: this week past and ahead', () => {
+  const rows = [
+    { item_key: 'a', done_at: '2026-10-07T15:00:00Z', outcome: { title: 'Heather’s birthday', date: '2026-10-08', text: 'Reminder: Thu Oct 8, 9 AM', eventId: 'e1', by: 'alexa' } },
+    { item_key: 'b', done_at: '2026-09-01T15:00:00Z', outcome: { title: 'Old', date: '2026-09-02', text: 'x' } },
+    { item_key: 'c', done_at: '2026-10-07T15:00:00Z', outcome: null },
+    { item_key: 'd', dismissed_at: '2026-10-07T15:00:00Z', outcome: { title: 'Fair', date: '2026-10-30' } },
+  ]
+  assert.deepEqual(handledFromState(rows, '2026-10-07').map((h) => [h.key, h.text, h.by, h.eventId]), [['a', 'Reminder: Thu Oct 8, 9 AM', 'alexa', 'e1']])
+})

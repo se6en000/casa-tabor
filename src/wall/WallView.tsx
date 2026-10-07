@@ -32,7 +32,9 @@ import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
 import { quietStep, stepForEvent, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { WallNudge, WallQuietStep } from './WallNudge'
-import { comingUpTile, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
+import { comingUpTile, horizonDate, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import type { ActExtra } from './useComingUp'
+import { setHorizonTopic } from './horizonTopic'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
@@ -121,7 +123,7 @@ export interface WallViewProps {
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
-  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; act: (key: string, action: ComingUpAction) => Promise<void>; start?: (key: string) => Promise<string | null>; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
+  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; handled?: HandledItem[]; act: (key: string, action: ComingUpAction, extra?: ActExtra) => Promise<string | null | void>; start?: (key: string) => Promise<string | null>; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
   /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 27a/27c). */
@@ -577,7 +579,7 @@ export default function WallView(props: WallViewProps) {
       {tripActions && weekDecisions.length > 0 && <RailCount tone="brass" label={`${weekDecisions.length} to decide`} onOpen={() => setDecisionsOpen(true)} />}
       {onOpenEmail && emailCount > 0 && <RailCount tone="brass" label={`${emailCount} from email`} onOpen={onOpenEmail} />}
       {comingUpCount && (comingUpCount.count > 0 || on === 'plan') && (
-        <RailCount active={on === 'plan'} label={`${comingUpCount.count} to plan`} ariaLabel={`Coming up: ${comingUpCount.count} to plan${comingUpCount.startNow ? `, ${comingUpCount.startNow} to start now` : ''}`} onOpen={on === 'plan' ? () => setComingUpUntil(0) : () => { setTodoUntil(0); openComingUp() }} />
+        <RailCount active={on === 'plan'} label={`${comingUpCount.count} ahead`} ariaLabel={`Ahead: ${comingUpCount.count} ahead${comingUpCount.startNow ? `, ${comingUpCount.startNow} to start now` : ''}`} onOpen={on === 'plan' ? () => setComingUpUntil(0) : () => { setTodoUntil(0); openComingUp() }} />
       )}
       {todoCount && <RailCount active={on === 'todo'} label={todoCount.ready ? `${todoCount.ready} to do` : 'To do'} ariaLabel={`To do: ${todoCount.ready} ready now`} onOpen={on === 'todo' ? () => setTodoUntil(0) : () => { setComingUpUntil(0); openTodo() }} />}
     </>
@@ -635,10 +637,18 @@ export default function WallView(props: WallViewProps) {
         ideas={comingUp.ideas}
         onEditIdea={comingUp.editIdea}
         today={comingUp.today}
-        onAct={async (key, action) => {
+        handled={comingUp.handled ?? []}
+        onAct={async (key, action, extra) => {
           setComingUpUntil(Date.now() + PREVIEW_MS)
-          await comingUp.act(key, action)
+          return comingUp.act(key, action, extra)
         }}
+        // A tap on a line: Alexa, with that thing in hand (canvas 63B) — she marks it handled when it makes something.
+        onTalk={onAsk ? (item) => {
+          setComingUpUntil(Date.now() + PREVIEW_MS)
+          setHorizonTopic({ key: item.key, title: item.title, date: item.date })
+          onAsk(`Let’s talk about ${item.title} on ${horizonDate(item.date)} — it’s on Ahead${item.nextStep ? ` (${item.nextStep})` : ''}.`)
+        } : undefined}
+        onOpenEvent={(id) => { setComingUpUntil(0); setSelectedId(id) }}
         onBack={() => setComingUpUntil(0)}
         week={stageStrip}
         tabs={tabs('plan')}

@@ -12,6 +12,7 @@ import { answerEventId, latestExchange, pendingAction, withoutAsides } from './a
 import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
 import { conversationForReport, type ReportConversation } from './bugReport'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
+import { horizonTopic, outcomeText, setHorizonTopic } from './horizonTopic'
 
 // The last conversation with something in it, kept past its band or sheet closing, so a
 // report opened afterwards still carries it.
@@ -101,8 +102,18 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     void queryClient.invalidateQueries({ queryKey: ['todos'] })
     void queryClient.invalidateQueries({ queryKey: ['coming-up'] })
     if (action.tool === 'apply_plan') void queryClient.invalidateQueries({ queryKey: ['grocery'] })
+    // Talked through from Ahead (canvas 63B): what this made marks that line handled — it leaves the list and stays on
+    // the timeline as a ✓, linked to what was made (Jake, Oct 7: "alexa after talking about an item should auto mark
+    // soemthign as handled when we create and action for it").
+    const topic = horizonTopic()
+    const fromAhead = Boolean(topic) && ['create_event', 'add_todo', 'plan_project', 'apply_plan'].includes(action.tool)
+    if (topic && fromAhead) {
+      setHorizonTopic(null)
+      void supabase.functions.invoke('coming-up', { body: { action: 'done', key: topic.key, surface, outcome: { text: outcomeText(action.tool, args), title: topic.title, date: topic.date, eventId: result.eventId ?? null, by: 'alexa' } } })
+        .then(() => queryClient.invalidateQueries({ queryKey: ['coming-up'] }))
+    }
     // A plan says what it saved on its own card (board 12d), not in a note.
-    setNote(action.tool === 'apply_plan' ? null : 'Done.')
+    setNote(action.tool === 'apply_plan' ? null : fromAhead ? 'Done — off Ahead.' : 'Done.')
   }, [pending, working, events, session?.id, updateMessageToolStatus, queryClient, surface])
 
   // "Undo this plan" (board 12d): everything the plan made comes off, until the end of the next day.
