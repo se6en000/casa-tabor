@@ -18,8 +18,8 @@ import { coverageComingUp, tripCoverage } from './coverage'
 import type { TravelSettings, TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
-import { NIGHT_IDLE_MS, calmNextLine, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
-import { fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
+import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
+import { briefFacts, fallbackBrief, fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
 import WallPaper from './WallPaper'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
@@ -595,7 +595,7 @@ export default function WallView(props: WallViewProps) {
   let face
   // The night faces are dark; the corner mark takes their colours (its ink T would vanish on the dark ground).
   let darkFace = false
-  // Every face but To do, Coming up and the morning paper has the left panel (canvas 56A), its buttons at its top.
+  // Every face but To do and Coming up has the left panel (canvas 56A, 58), its buttons at its top.
   let railFace = true
   if (todoOpen && todos) {
     railFace = false
@@ -679,10 +679,14 @@ export default function WallView(props: WallViewProps) {
     )
   } else if (shown.posture === 'calm' && shownToday && paperShows({ posture: 'calm', now, dismissedOn: paperPutAway, previewing: paperPreview })) {
     const facts = paperFacts(shownToday, members, now, currentWeather)
-    railFace = false
+    const words = paper ?? fallbackWords(facts)
+    const nextView = describeNextMove(selectNextMove(shownToday, now), members, now)
     face = (
-      <WallPaper now={now} facts={facts} words={paper ?? fallbackWords(facts)}
-        next={calmNextLine(describeNextMove(selectNextMove(shownToday, now), members, now))}
+      <WallPaper now={now} facts={facts} words={words}
+        brief={words.brief ?? fallbackBrief(facts, briefFacts({ members, week, now, checklist, comingUp: comingUp?.items, todos: todos?.list }))}
+        next={nextView}
+        nextPigment={nextView?.driverId ? pigments.get(nextView.driverId) ?? null : null}
+        counts={counts}
         onAsk={onAsk ? () => onAsk('Tell me more about today') : undefined}
         onPutAway={() => {
           const day = paperDate(now)

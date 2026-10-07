@@ -4,8 +4,8 @@ import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
 import { describeNextMove, weatherLine } from './header'
 import { pigmentStyleFor } from './lanes'
-import { calmHeadline, nextInWords } from './posture'
-import { RailClock, RailLabel, RailRule, RailShell } from './WallRail'
+import { calmHeadline } from './posture'
+import { RailClock, RailNext, RailRule, RailShell } from './WallRail'
 import WallTomorrowNote, { type TomorrowNote } from './WallTomorrowNote'
 import { buildScore, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
@@ -48,7 +48,6 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
   const weather = weatherLine(currentWeather, plan, now)
   const lanes = score?.lanes ?? []
   const nextPigment = lanes.find((lane) => lane.member.id === next?.driverId)?.pigmentIndex ?? null
-  const inWords = nextInWords(next)
 
   return (
     <div className="relative h-full w-full bg-wall-ground-calm font-body text-wall-ink">
@@ -58,24 +57,7 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
           {weather && <div className="mt-[6px] text-wall-detail text-wall-ink-2">{weather}</div>}
         </RailClock>
         <RailRule />
-        {next ? (
-          <section aria-label="Next" className="flex shrink-0 flex-col">
-            <RailLabel tone="brass">NEXT{inWords ? ` · ${inWords.toUpperCase()}` : ''}</RailLabel>
-            {next.leaveTime && <span className="mt-[16px] font-display text-wall-headline font-semibold lining-nums">{next.leaveTime}</span>}
-            <div className="mt-[16px] flex min-w-0 items-center gap-[12px]">
-              <span
-                aria-hidden="true"
-                className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${nextPigment == null ? 'border-2 border-dashed border-wall-ink-2 text-wall-ink-2' : `text-wall-on-pigment ${pigmentStyleFor(nextPigment).solid}`}`}
-              >
-                {next.initial}
-              </span>
-              <span className="line-clamp-2 font-display text-wall-date font-semibold">{next.what ?? next.title}</span>
-            </div>
-            <div className="mt-[10px] line-clamp-2 text-wall-detail text-wall-ink-2">{next.how ?? next.detail}</div>
-          </section>
-        ) : (
-          <div className="font-display text-wall-date italic text-wall-ink-2">Nothing else on the road today.</div>
-        )}
+        <RailNext view={next} pigmentIndex={nextPigment} />
       </RailShell>
 
       <div className="absolute inset-y-0 left-[560px] right-0 flex flex-col px-[72px] pb-[56px] pt-[84px]">

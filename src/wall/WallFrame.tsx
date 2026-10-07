@@ -24,6 +24,7 @@ import { useCasaTalk } from './useCasaTalk'
 import WallQuickAsk from './WallQuickAsk'
 import { toImages } from './toImages'
 import { useMorningPaper } from './useMorningPaper'
+import { briefFacts } from './paper'
 import type { TypedImage } from './typeLine'
 
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
@@ -34,7 +35,6 @@ export default function WallFrame() {
   const { now, members, today, tomorrow, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, saveTravel, travel, chores } = useFamilyDay({ kind: 'wall' }, aroundDay)
   const choreDone = useChoreDone(now)
   const { data: currentWeather } = useHomeWeather()
-  const paper = useMorningPaper(today, members, now, currentWeather)
 
   // The assistant band: the mic button or the wake word (heard on the Pi) opens it and starts listening.
   const [bandOpen, setBandOpen] = useState(false)
@@ -115,6 +115,8 @@ export default function WallFrame() {
   const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   const review = emailOpen && email.data ? <WallEmailReview data={email.data} act={email.act} onClose={() => setEmailOpen(false)} computer={deviceKeyboardHere()} today={localDay} /> : null
   const todos = useTodos()
+  // The morning paper and its brief (canvas 48a, 58): the facts beyond today are gathered only when it's written.
+  const paper = useMorningPaper(today, members, now, currentWeather, () => (comingUp.data && todos.data ? briefFacts({ members, week, now, checklist, comingUp: comingUp.data.items, todos: todos.data }) : undefined))
   // Start typing (or paste) anywhere on a computer (canvas 22c).
   const pasteFiles = useCallback((files: File[]) => {
     void toImages(files).then((images) => {

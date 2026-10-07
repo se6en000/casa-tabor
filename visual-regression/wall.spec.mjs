@@ -2506,15 +2506,23 @@ test('wall assistant: "show me the grocery list" opens the Grocery page at once'
 // The header, balanced (canvas 42a B; Jake, Oct 5: "we cant have 3 different widths across the top").
 // The morning paper (canvas 48a; Jake, Oct 6: "i kinda like A. very creative, also add a seting in the menu so I can
 // preview this face as well").
-test('wall: a calm morning is the morning paper — the runs, the sky, the rest; Put it away until tomorrow', async ({ page }) => {
+// Canvas 58, the morning brief (Jake, Oct 6: "heres what to worry about today … the weekend/next week … a month out …
+// surprise me"): today, the weekend, next month, way out, one forgotten thing, the surprise, a line at the foot.
+test('wall: a calm morning is the morning brief — today, the weekend, next month, way out, forgotten, a surprise; Put it away until tomorrow', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
   const paper = page.getByRole('article', { name: 'The morning paper' })
-  await expect(paper.getByRole('heading', { name: 'Spirit Day, and Giselle has both pickups.' })).toBeVisible()
-  await expect(paper.getByText('Friday, September 25, 2026')).toBeVisible()
-  await expect(paper.getByRole('region', { name: 'The runs' })).toContainText('2:00')
-  await expect(paper.getByRole('region', { name: 'The runs' })).toContainText('Giselle picks up Emme & Owen at Palm Beach Public')
-  await expect(paper.getByRole('region', { name: 'Also today' })).toContainText('Emme & Owen · Spirit Day · wear school colors')
-  await expect(paper.getByRole('region', { name: 'The sky' })).toContainText('86° by two')
+  await expect(paper.getByRole('heading')).toHaveText('Spirit Day, and Giselle has both pickups. And a big Saturday coming.')
+  await expect(paper.getByText('THE MORNING · FRIDAY, SEPTEMBER 25')).toBeVisible()
+  await expect(paper.getByRole('region', { name: 'Today · watch for' })).toContainText('Nothing’s wrong')
+  await expect(paper.getByRole('region', { name: 'This weekend' })).toContainText('Pack tonight')
+  await expect(paper.getByRole('region', { name: 'Next month' })).toContainText('Halloween · 5 weeks')
+  await expect(paper.getByRole('region', { name: 'Way out' })).toContainText('Thanksgiving')
+  await expect(paper.getByRole('region', { name: 'You may have forgotten' })).toContainText('The treehouse')
+  await expect(paper.getByRole('region', { name: 'Worth a try · date night' })).toContainText('Ela Curry & Cocktails')
+  await expect(paper.getByText('the Taborville Classic')).toBeVisible()
+  // The sky and the next thing are in the left panel.
+  await expect(paper.getByRole('complementary', { name: 'Now' })).toContainText('86° by two')
+  await expect(paper.getByRole('complementary', { name: 'Now' }).getByRole('region', { name: 'Next' })).toContainText('Pick up Emme & Owen')
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper.png')
   await paper.getByRole('button', { name: 'Ask about it' }).click()

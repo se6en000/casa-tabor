@@ -41,7 +41,20 @@ const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROU
 
 const WEATHER = { temp: 84, condition: 'Partly cloudy' }
 // ?paper=1: the morning paper's words as the server writes them (canvas 48a); without it, the plain ones.
-const PAPER_WORDS = { headline: 'Spirit Day, and Giselle has both pickups.', deck: 'The rest is an ordinary Friday: Giselle collects Emme & Owen at 2:00 and Liv at 3:30.', sky: 'Warm and partly cloudy, 86° by two. A light jacket stays home.' }
+const PAPER_WORDS = {
+  headline: 'Spirit Day, and Giselle has both pickups.', deck: 'The rest is an ordinary Friday: Giselle collects Emme & Owen at 2:00 and Liv at 3:30.', sky: 'Warm and partly cloudy, 86° by two. A light jacket stays home.',
+  // The morning brief (canvas 58), as the server writes it.
+  brief: {
+    turn: 'And a big Saturday coming.',
+    today: [{ title: 'Nothing’s wrong', detail: 'Every run has a driver, and it stays dry until evening.' }, { title: 'Spirit Day', detail: 'Emme & Owen in school colors.' }],
+    weekend: [{ title: 'Pack tonight', detail: 'Glove, cleats and water bottles for Saturday’s games — 4 of 5 still to do.' }, { title: 'Grandma, Saturday', detail: 'She’s here all day; the guest room isn’t ready.' }, { title: 'Decide one car or two', detail: 'Softball and baseball are both at Ferrin Park at 12:30.' }],
+    month: [{ title: 'Halloween · 5 weeks', detail: 'Costumes for Emme & Owen take a few weekends — nothing started.' }],
+    wayOut: [{ title: 'Thanksgiving · 8 weeks', detail: 'Flights fill early; book by mid-October.' }],
+    forgot: { title: 'The treehouse — step 2 of 6', detail: 'Stalled since May. October is the best month to build: next, buy the lumber.' },
+    feature: { label: 'Worth a try · date night', title: 'Ela Curry & Cocktails, in the MICHELIN Guide', detail: 'Indian, with a tiki bar on the patio. Next Friday evening is free.' },
+    aside: 'Two games at 12:30 in one park: the Taborville Classic.',
+  },
+}
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 seedKnown(queryClient)

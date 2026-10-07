@@ -1,96 +1,112 @@
-import { formatWallClock } from './clock'
-import type { PaperFacts, PaperWords } from './paper'
+import type { ReactNode } from 'react'
+import type { NextMoveView } from './header'
+import type { BriefLine, PaperBrief, PaperFacts, PaperWords } from './paper'
+import { RailClock, RailNext, RailRule, RailShell } from './WallRail'
 
 export interface WallPaperProps {
   now: Date
   facts: PaperFacts
   words: PaperWords
-  /** The calm face's "NEXT" line. */
-  next: string | null
+  /** The brief beyond the three lines: the server's, or plain ones from the facts until it arrives. */
+  brief: PaperBrief
+  /** The calm faces' NEXT, in the left panel. */
+  next: NextMoveView | null
+  nextPigment: number | null
+  /** The counts at the foot of the left panel. */
+  counts?: ReactNode
   onPutAway: () => void
   onAsk?: () => void
 }
 
-/**
- * The morning paper (canvas 48a, Jake Oct 6: "i kinda like A. very creative"): on a calm morning, until 11 or until
- * it's put away, the calm face is the front page — the time in the masthead, a headline, the line under it, and three
- * columns: the runs, the sky, and the rest of the day. The +, mic and menu sit where they always do (WallView).
- */
-export default function WallPaper({ now, facts, words, next, onPutAway, onAsk }: WallPaperProps) {
-  const clock = formatWallClock(now)
-  const rest = [...facts.away, ...facts.also]
+const KICKER_DATE = { weekday: 'long', month: 'long', day: 'numeric' } as const
+
+function Column({ label, lines }: { label: string; lines: BriefLine[] }) {
   return (
-    <article aria-label="The morning paper" className="flex h-full w-full flex-col bg-wall-ground-calm px-[96px] pb-[56px] pt-[44px] font-body text-wall-ink">
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center">
-        <div className="flex items-baseline gap-[10px]">
-          <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>
-          <span className="text-wall-body font-semibold text-wall-ink-2">{clock.meridiem}</span>
+    <section aria-label={label} className="flex min-h-0 min-w-0 flex-col overflow-hidden border-0 border-t-2 border-solid border-wall-ink pt-[14px]">
+      <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
+      {lines.length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">Nothing to say.</span>}
+      {lines.map((line, i) => (
+        <div key={i} className="mt-[16px] flex flex-col gap-[4px]">
+          <span className="font-display text-wall-heading font-semibold">{line.title}</span>
+          <span className="line-clamp-3 text-wall-detail text-wall-ink-2">{line.detail}</span>
         </div>
-        <div className="flex flex-col items-center gap-[4px]">
-          <span className="font-display text-wall-title font-semibold">Tabor House</span>
-          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-ink-2">THIS MORNING</span>
+      ))}
+    </section>
+  )
+}
+
+/**
+ * The morning brief (canvas 58; Jake, Oct 6: "heres what to worry about today, heres what to prepare for the
+ * weekend/next week, heres something a month out … surprise me … you can adjust this every day without my
+ * permission"): on a calm morning, until 11 or until it's put away. The left panel keeps the clock and the next thing;
+ * the stage is the front page — the headline in two halves, the line under it, four columns (today, the weekend, next
+ * month, way out), one thing forgotten, the day's surprise, and a line at the foot. The words are the server's, written
+ * once a day (supabase/functions/morning-paper); until they come, plain ones from the facts.
+ */
+export default function WallPaper({ now, facts, words, brief, next, nextPigment, counts, onPutAway, onAsk }: WallPaperProps) {
+  const both = Boolean(brief.forgot && brief.feature)
+  return (
+    <article aria-label="The morning paper" className="relative h-full w-full bg-wall-ground-calm font-body text-wall-ink">
+      <RailShell foot={counts}>
+        <RailClock now={now} size="calm">
+          <div className="font-display text-wall-date font-semibold">{now.toLocaleDateString('en-US', KICKER_DATE)}</div>
+          <div className="mt-[8px] line-clamp-3 text-wall-detail text-wall-ink-2">{words.sky || facts.weatherNow}</div>
+        </RailClock>
+        <RailRule />
+        <RailNext view={next} pigmentIndex={nextPigment} />
+      </RailShell>
+
+      <div className="absolute inset-y-0 left-[560px] right-0 flex flex-col px-[72px] pb-[44px] pt-[48px]">
+        <div className="flex shrink-0 items-center gap-[18px]">
+          <span aria-hidden="true" className="h-[2px] w-[40px] bg-wall-brass" />
+          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE MORNING · {facts.day.replace(/, \d{4}$/, '').toUpperCase()}</span>
         </div>
-        <div />
-      </header>
+        <h1 className="m-0 mt-[16px] line-clamp-2 shrink-0 font-display text-wall-headline font-medium text-wall-ink">
+          {words.headline}
+          {brief.turn && <> <i className="text-wall-brass-ink">{brief.turn}</i></>}
+        </h1>
+        {words.deck && <p className="m-0 mt-[16px] line-clamp-2 shrink-0 font-display text-wall-answer italic text-wall-ink-2">{words.deck}</p>}
 
-      {/* The folio: a double rule, the date and the sky. */}
-      <div className="mt-[22px] border-0 border-b border-t-[3px] border-solid border-wall-ink pt-[3px]" />
-      <div className="flex items-center justify-between border-0 border-b border-solid border-wall-rule px-[4px] py-[12px] text-wall-detail text-wall-ink-2">
-        <span className="font-semibold text-wall-ink">{facts.day}</span>
-        {facts.weatherNow && <span>{facts.weatherNow}</span>}
-      </div>
-
-      <div className="flex max-w-[1500px] flex-col gap-[18px] pb-[34px] pt-[44px]">
-        <h1 className="m-0 font-display text-wall-headline font-semibold text-wall-ink">{words.headline}</h1>
-        {words.deck && <p className="m-0 font-display text-wall-deck italic text-wall-ink-2">{words.deck}</p>}
-      </div>
-
-      <div className="grid min-h-0 flex-1 grid-cols-[1.25fr_1fr_1fr] border-0 border-t border-solid border-wall-ink">
-        <section aria-label="The runs" className="flex min-h-0 flex-col gap-[16px] overflow-hidden pr-[40px] pt-[22px]">
-          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE RUNS</span>
-          {facts.runs.length === 0 && <span className="text-wall-heading text-wall-ink-2">Nothing on the road.</span>}
-          {facts.runs.slice(0, 5).map((run, i) => (
-            <div key={i} className="flex items-baseline gap-[14px]">
-              <span className="w-[74px] shrink-0 font-display text-wall-answer font-bold lining-nums">{run.at}</span>
-              <span className="text-wall-heading">
-                {run.text}
-                {run.alert && <> — <span className="font-semibold text-wall-rust">{run.alert}</span></>}
-              </span>
-            </div>
-          ))}
-        </section>
-        <section aria-label="The sky" className="flex flex-col gap-[16px] border-0 border-l border-solid border-wall-rule px-[40px] pt-[22px]">
-          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE SKY</span>
-          <span className="text-wall-heading">{words.sky || facts.weatherNow || 'No forecast this morning.'}</span>
-        </section>
-        <section aria-label="Also today" className="flex min-h-0 flex-col gap-[16px] overflow-hidden border-0 border-l border-solid border-wall-rule pl-[40px] pt-[22px]">
-          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">ALSO TODAY</span>
-          {rest.length === 0 && <span className="text-wall-heading text-wall-ink-2">Nothing else on the calendar.</span>}
-          {rest.slice(0, 5).map((line, i) => <span key={i} className="text-wall-heading">{line}</span>)}
-        </section>
-      </div>
-
-      <footer className="flex items-center justify-between border-0 border-t border-solid border-wall-rule pt-[18px]">
-        <div className="flex items-center gap-[12px] text-wall-body text-wall-ink-2">
-          {next && (
-            <>
-              <span className="inline-block h-[10px] w-[10px] rounded-full bg-wall-brass" />
-              <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">NEXT</span>
-              <span>{next}</span>
-            </>
-          )}
+        <div className="mt-[36px] grid min-h-0 flex-1 grid-cols-4 gap-x-[36px]">
+          <Column label="Today · watch for" lines={brief.today} />
+          <Column label="This weekend" lines={brief.weekend} />
+          <Column label="Next month" lines={brief.month} />
+          <Column label="Way out" lines={brief.wayOut} />
         </div>
-        <div className="flex gap-[16px]">
-          {onAsk && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onAsk() }} className="h-[56px] rounded-full border border-solid border-wall-rule bg-wall-paper px-[30px] text-wall-body font-semibold text-wall-ink">
-              Ask about it
+
+        {(brief.forgot || brief.feature) && (
+          <div className={`mt-[24px] grid shrink-0 gap-[28px] ${both ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {brief.forgot && (
+              <section aria-label="You may have forgotten" className="flex min-w-0 flex-col gap-[8px] rounded-[18px] border-[1.5px] border-solid border-wall-brass bg-wall-brass/10 px-[26px] py-[20px]">
+                <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">YOU MAY HAVE FORGOTTEN</span>
+                <span className="line-clamp-2 font-display text-wall-date font-semibold">{brief.forgot.title}</span>
+                <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{brief.forgot.detail}</span>
+              </section>
+            )}
+            {brief.feature && (
+              <section aria-label={brief.feature.label} className="flex min-w-0 flex-col gap-[8px] rounded-[18px] bg-wall-paper px-[26px] py-[20px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]">
+                <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{brief.feature.label.toUpperCase()}</span>
+                <span className="line-clamp-2 font-display text-wall-date font-semibold">{brief.feature.title}</span>
+                <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{brief.feature.detail}</span>
+              </section>
+            )}
+          </div>
+        )}
+
+        <footer className="mt-[24px] flex shrink-0 items-center justify-between gap-[24px]">
+          <span className="min-w-0 truncate font-display text-wall-date italic text-wall-ink-2">{brief.aside}</span>
+          <div className="flex shrink-0 gap-[16px]">
+            {onAsk && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); onAsk() }} className="h-[56px] rounded-full border border-solid border-wall-rule bg-wall-paper px-[30px] text-wall-body font-semibold text-wall-ink">
+                Ask about it
+              </button>
+            )}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onPutAway() }} className="h-[56px] rounded-full border-0 bg-wall-ink px-[30px] text-wall-body font-semibold text-wall-on-pigment">
+              Put it away
             </button>
-          )}
-          <button type="button" onClick={(e) => { e.stopPropagation(); onPutAway() }} className="h-[56px] rounded-full border-0 bg-wall-ink px-[30px] text-wall-body font-semibold text-wall-on-pigment">
-            Put it away
-          </button>
-        </div>
-      </footer>
+          </div>
+        </footer>
+      </div>
     </article>
   )
 }

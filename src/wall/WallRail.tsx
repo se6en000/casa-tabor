@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { formatWallClock } from './clock'
+import type { NextMoveView } from './header'
+import { pigmentStyleFor } from './lanes'
 import type { PackingGroup, WallChecklistItem } from './packing'
+import { nextInWords } from './posture'
 
 // The left panel (canvas 56A; Jake, Oct 6: "OK I love this!" → "yup, its a go"). Every face keeps the same panel down
 // the left in the same place: the buttons at its top, then now — the clock, the next move, what to take, what's
@@ -124,6 +127,28 @@ export function TakeWithYou({ groups, onToggleItem, onSeeAll, room = 4 }: {
           </button>
         )}
       </div>
+    </section>
+  )
+}
+
+/** NEXT on the calm faces (canvas 56A calm, 58): how long, the time big, who, and how — or a quiet line when nothing's left. */
+export function RailNext({ view, pigmentIndex }: { view: NextMoveView | null; pigmentIndex: number | null }) {
+  if (!view) return <div className="font-display text-wall-date italic text-wall-ink-2">Nothing else on the road today.</div>
+  const inWords = nextInWords(view)
+  return (
+    <section aria-label="Next" className="flex shrink-0 flex-col">
+      <RailLabel tone="brass">NEXT{inWords ? ` · ${inWords.toUpperCase()}` : ''}</RailLabel>
+      {view.leaveTime && <span className="mt-[16px] font-display text-wall-headline font-semibold lining-nums">{view.leaveTime}</span>}
+      <div className="mt-[16px] flex min-w-0 items-center gap-[12px]">
+        <span
+          aria-hidden="true"
+          className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${pigmentIndex == null ? 'border-2 border-dashed border-wall-ink-2 text-wall-ink-2' : `text-wall-on-pigment ${pigmentStyleFor(pigmentIndex).solid}`}`}
+        >
+          {view.initial}
+        </span>
+        <span className="line-clamp-2 font-display text-wall-date font-semibold">{view.what ?? view.title}</span>
+      </div>
+      <div className="mt-[10px] line-clamp-2 text-wall-detail text-wall-ink-2">{view.how ?? view.detail}</div>
     </section>
   )
 }
