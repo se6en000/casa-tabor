@@ -51,7 +51,8 @@ test('automatically resolved unconfirmed addresses stay out of every Google proj
 
 test('updates preserve Google-owned description text before replacing Casa details', () => {
   assert.match(pushGoogle, /getGoogleEvent/)
-  assert.match(pushGoogle, /existingDescription: current\.description/)
+  // …unless the notes were just edited in Tabor House (canvas 65): then ours go, or Google's copy would win them back.
+  assert.match(pushGoogle, /existingDescription: notes === true \? event\.description \?\? '' : current\.description/)
   assert.equal(
     (pushGoogle.match(/current\.eventType && current\.eventType !== 'default'/g) ?? []).length,
     2,

@@ -79,6 +79,8 @@ export const events = [
     id: 'softball', title: 'Softball: Huskies @ RPB Cascade', event_type: 'event', all_day: false,
     start_time: local(9, 26, 12, 30), end_time: local(9, 26, 14, 30), location_name: ferrinPark, address: ferrinPark,
     members: [{ family_member_id: 'jake-id', role: 'attendee' }],
+    // Made from the coach's email (canvas 65): its specifics in the notes, where they came from as a tag.
+    description: '• Arrive by 12:10 for warm-ups — Field 1 is behind the concession stand\n• Away game: white jerseys, black socks\n• $5 cash per adult at the gate (kids free)\nTabor House · from Coach Rivera’s email · Sep 22 · https://mail.google.com/mail/#all/fixture-coach',
     enrichment: { drive_time_mins: 29, departure_time: local(9, 26, 11, 56) },
     plan_override: { transportation_plan: { legs: [
       { purpose: 'appointment', timing: 'arrive_by', time: '12:30', driverId: 'jake-id', driverName: 'Jake' },

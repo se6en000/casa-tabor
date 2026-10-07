@@ -14,6 +14,7 @@ import { useMonthEvents } from '../hooks/useCalendarEvents'
 import { setChoreDone, useChoreDone } from '../wall/useChoreDone'
 import { useTodoProject, useTodoProjectsAhead, useTodos } from '../wall/useTodos'
 import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wall/useWallChecklist'
+import { saveEventNotes } from '../wall/saveNotes'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
 import type { FamilyMember } from '../types'
@@ -122,6 +123,7 @@ export default function PhoneFrame() {
       casaTalk={{ topic, snooze: (key, until) => talk.save({ snoozed: { [key]: until.toISOString() } }) }}
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
       onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
+      onSaveNotes={(event, notes) => saveEventNotes(queryClient, event, notes)}
       useEventItems={useEventChecklist}
       // An edit shows at once and the sheet closes; it saves behind (Jake, Oct 2: "experiential responsiveness"). A new
       // place reads "working out the drive…" until its drive is back; if the save fails, the edit undoes itself and says so.

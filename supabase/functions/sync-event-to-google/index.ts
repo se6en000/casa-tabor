@@ -22,6 +22,8 @@ Deno.serve(async (req) => {
     audit_history_id = null,
     enqueue_on_failure = true,
     title_only = false,
+    // The notes were edited here (canvas 65): Google takes ours, not its own copy.
+    notes = false,
   } = await req.json().catch(() => ({}))
 
   if (!event_id || typeof event_id !== 'string') {
@@ -75,7 +77,7 @@ Deno.serve(async (req) => {
 
   const targetFn = event.google_event_id ? 'push-to-google' : 'create-google-event'
   const syncRes = await sb.functions.invoke(targetFn, {
-    body: { event_id, title_only: title_only === true },
+    body: { event_id, title_only: title_only === true, notes: notes === true },
   }).catch((err: Error) => ({ data: null, error: err }))
 
   let syncError: string | null = null

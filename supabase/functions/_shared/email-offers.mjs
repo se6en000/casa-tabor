@@ -1,5 +1,6 @@
 // Casa reads the email, phase 2 (canvas row 14, approved 2026-09-30): what "What came in by email?" shows
 // and what "Add it" saves. Pure, so it's tested without the network.
+import { notesFromEmail } from './event-notes.mjs'
 
 /** A reader decision's status when it's written: fresh offers wait for him; the rest (and old mail) are shadows. */
 export function statusFor(decision, receivedAt, now = new Date()) {
@@ -37,8 +38,14 @@ const time = (hhmm) => (/^\d{2}:\d{2}$/.test(String(hhmm ?? '')) ? hhmm : null)
  * "Add it": the offer as the card Casa already saves (execute-ai-action), or null when it can't be one.
  * An event needs its date and start; a reminder its date; a to-do only its title; a get & pack line its event.
  */
-export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' } = {}) {
+export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer', source = null } = {}) {
   const o = offer ?? {}
+  // The email's specifics (canvas 65, Jake, Oct 7: "that email context should be added to the notes … specific enough,
+  // not summary generic"): a new item's notes with who sent it; an item already there gets the lines added under its own.
+  const noteLines = Array.isArray(o.notes) ? o.notes.map((n) => String(n ?? '').trim()).filter(Boolean) : []
+  const notes = noteLines.length ? notesFromEmail(noteLines, source) : null
+  const withNotes = (action) => (action && notes ? { ...action, args: { ...action.args, notes } } : action)
+  const addNotes = (args) => (noteLines.length ? { ...args, notes_add: noteLines } : args)
   const at = (date, hhmm) => `${date}T${hhmm}:00${utcOffset}`
   // What to wear or bring (Oct 1 bugs: Kim K.'s pink shirt and packed lunch were dropped): its event's get & pack lines,
   // added once the event is there — `bring` rides on the action; on its own it's a "bring" action.
@@ -53,7 +60,7 @@ export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' 
     if (o.date && time(c.start)) args.start = at(o.date, c.start)
     if (o.date && time(c.end)) args.end = at(o.date, c.end)
     if (typeof c.place === 'string' && c.place.trim()) args.location = c.place.trim()
-    if (Object.keys(args).length > 1) return withBring({ tool: 'update_event', args }, o.bring)
+    if (Object.keys(args).length > 1 || noteLines.length) return withBring({ tool: 'update_event', args: addNotes(args) }, o.bring)
     return lines(o.bring).length ? { tool: 'bring', args: { event_id: o.event_id }, bring: lines(o.bring) } : null
   }
   const title = typeof o.title === 'string' && o.title.trim() ? o.title.trim() : null
@@ -71,23 +78,23 @@ export function offerToAction(offer, { utcOffset = '-04:00', decision = 'offer' 
       args.end = at(o.date, time(adds.end) ?? `${String(Math.min(23, Number(adds.start.slice(0, 2)) + 1)).padStart(2, '0')}${adds.start.slice(2)}`)
       args.all_day = false
     }
-    if (Object.keys(args).length > 1) return withBring({ tool: 'update_event', args }, adds.bring)
+    if (Object.keys(args).length > 1 || noteLines.length) return withBring({ tool: 'update_event', args: addNotes(args) }, adds.bring)
     return lines(adds.bring).length ? { tool: 'bring', args: { event_id: o.existing.event_id }, bring: lines(adds.bring) } : 'already'
   }
   if (o.kind === 'event') {
     const start = time(o.start)
     if (!o.date) return null
     // A date and no time is a day-long thing (a spirit day, a holiday): all day. It made nothing before (Oct 3).
-    if (!start) return withBring({ tool: 'create_event', args: { title, start: at(o.date, '00:00'), end: at(o.date, '23:59'), all_day: true, event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }, o.bring)
+    if (!start) return withBring(withNotes({ tool: 'create_event', args: { title, start: at(o.date, '00:00'), end: at(o.date, '23:59'), all_day: true, event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }), o.bring)
     const end = time(o.end) ?? `${String(Math.min(23, Number(start.slice(0, 2)) + 1)).padStart(2, '0')}${start.slice(2)}`
-    return withBring({ tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, end), event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }, o.bring)
+    return withBring(withNotes({ tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, end), event_type: 'event', members: people, ...(o.place ? { location: o.place } : {}) } }), o.bring)
   }
   if (o.kind === 'reminder') {
-    if (!o.date) return { tool: 'add_todo', args: { title, due: null } }
+    if (!o.date) return withNotes({ tool: 'add_todo', args: { title, due: null } })
     const start = time(o.start) ?? '09:00'
-    return { tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, start), event_type: 'reminder', members: people } }
+    return withNotes({ tool: 'create_event', args: { title, start: at(o.date, start), end: at(o.date, start), event_type: 'reminder', members: people } })
   }
-  if (o.kind === 'todo') return { tool: 'add_todo', args: { title, due: o.date ?? null } }
+  if (o.kind === 'todo') return withNotes({ tool: 'add_todo', args: { title, due: o.date ?? null } })
   if (o.kind === 'prep') return o.event_id ? { tool: 'add_prep_item', args: { event_id: o.event_id, label: title } } : { tool: 'add_todo', args: { title, due: o.date ?? null } }
   if (o.kind === 'shopping') return { tool: 'add_grocery_items', args: { items: [{ name: title }] } }
   return null

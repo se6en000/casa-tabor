@@ -21,6 +21,8 @@ export interface WallTodosProps {
   onTalkAbout?: (say: string) => void
   list: TodoList
   onAct: (request: TodoAction) => Promise<void>
+  /** A to-do's notes (canvas 65), from its sheet. */
+  onSaveNotes?: (id: string, notes: string) => Promise<void>
   onOpen?: (id: string) => void
   canOpen?: (id: string) => boolean
   onBack: () => void
@@ -142,7 +144,7 @@ function PastStepRow({ step, today, onAct }: { step: PastStep; today: string; on
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onActivity, tabs, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onSaveNotes, onOpen, canOpen = () => false, onActivity, tabs, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
   // Opening To do asks for the list fresh (Jake, Oct 7: a change made minutes before still showed the old list on his
   // Mac — it's kept five minutes and refreshed every fifteen).
   const queryClient = useQueryClient()
@@ -303,7 +305,7 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
 
       </div>
 
-      {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onClose={() => setEditing(null)} />}
+      {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onSaveNotes={onSaveNotes} onClose={() => setEditing(null)} />}
       {/* A project opens full screen (canvas 10b), over the list. */}
       {projectId && project.data && (
         <WallProject

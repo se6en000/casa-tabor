@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-  const { event_id, title_only = false } = await req.json().catch(() => ({}))
+  const { event_id, title_only = false, notes = false } = await req.json().catch(() => ({}))
   if (!event_id) return new Response(JSON.stringify({ error: 'event_id required' }), { status: 400, headers: { ...CORS, 'content-type': 'application/json' } })
 
   try {
@@ -156,7 +156,8 @@ Deno.serve(async (req) => {
       ...projectionFields,
       description: buildGoogleEventDescription({
         bundle,
-        existingDescription: current.description ?? event.description ?? '',
+        // Notes edited in Tabor House (canvas 65) are ours to send; otherwise what's in Google stays (edited there).
+        existingDescription: notes === true ? event.description ?? '' : current.description ?? event.description ?? '',
         eventId: event.id,
       }),
     }

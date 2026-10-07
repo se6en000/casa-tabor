@@ -84,6 +84,42 @@ test('wall: tapping an item opens its details; Edit shows what changes before sa
   await expect(wall.getByRole('region', { name: /details$/ })).toHaveCount(0)
 })
 
+// Canvas 65 (Jake, Oct 7): notes on events and reminders — an email's specifics and where they came from; a tap edits.
+test('wall: an event’s notes — the email’s specifics and its sender; a tap edits them on the keyboard, return for a new line', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  const sheet = wall.getByRole('region', { name: 'Softball: Huskies @ RPB Cascade details' })
+  await expect(sheet.getByText('NOTES', { exact: true })).toBeVisible()
+  await expect(sheet.getByText(/Arrive by 12:10 for warm-ups/)).toBeVisible()
+  await expect(sheet.getByText('From Coach Rivera’s email · Sep 22')).toBeVisible()
+  await expect(sheet.getByText(/mail\.google|Tabor House ·/)).toHaveCount(0)
+  await expect(sheet).toHaveScreenshot('event-notes.png')
+
+  await sheet.getByRole('button', { name: /^Notes: / }).click()
+  await expect(sheet.getByText('THE TRIP')).toHaveCount(0)
+  const keys = wall.getByLabel('Keyboard')
+  await keys.getByRole('button', { name: 'New line' }).click()
+  for (const ch of 'Chairs') await keys.getByRole('button', { name: ch, exact: true }).first().click()
+  await expect(sheet.getByText(/kids free\)\nChairs/)).toBeVisible()
+  await expect(wall).toHaveScreenshot('event-notes-typing.png')
+  await keys.getByRole('button', { name: 'Done' }).click()
+  await expect(sheet.getByText('THE TRIP')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Notes: [\s\S]*Chairs$/ })).toBeVisible()
+  await expect(sheet.getByText('From Coach Rivera’s email · Sep 22')).toBeVisible()
+})
+
+test('wall: a reminder with no notes offers “Add a note”', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Pick up Photobook for Liv' }).first().click()
+  const sheet = wall.getByRole('region', { name: 'Pick up Photobook for Liv details' })
+  await sheet.getByRole('button', { name: 'Add a note' }).click()
+  for (const ch of 'Id') await wall.getByLabel('Keyboard').getByRole('button', { name: ch, exact: true }).first().click()
+  await wall.getByLabel('Keyboard').getByRole('button', { name: 'Done' }).click()
+  await expect(sheet.getByRole('button', { name: 'Notes: Id' })).toBeVisible()
+})
+
 test('wall: in the calm view, tapping a person opens what they are doing next', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
   const wall = page.getByTestId('wall-fixture')
@@ -1485,6 +1521,22 @@ test('wall: Project settings — the goal, who does what, the phone, every year,
   await expect(page.getByText('Brush bros')).toBeVisible()
   await page.getByRole('button', { name: 'Back to the plan' }).click()
   await expect(page.getByText('NOW · ON YOUR PHONE')).toBeVisible()
+})
+
+// Canvas 65: a to-do keeps notes too (Jake's bug report, Oct 7: the birthday texts on the reminder) — a tap edits them.
+test('wall: a to-do’s notes — add one on its sheet, return for a second line', async ({ page }) => {
+  await openTodo(page)
+  await page.getByRole('button', { name: /^Quick ones/ }).click()
+  await page.getByRole('button', { name: 'Edit Look for a cable to fix the pool' }).click()
+  const sheet = page.getByRole('region', { name: /Look for a cable to fix the pool — edit/ })
+  await sheet.getByRole('button', { name: 'Add a note' }).click()
+  const keys = page.getByLabel('Keyboard')
+  for (const ch of 'Pool') await keys.getByRole('button', { name: ch, exact: true }).first().click()
+  await keys.getByRole('button', { name: 'New line' }).click()
+  for (const ch of 'Ten') await keys.getByRole('button', { name: ch, exact: true }).first().click()
+  await keys.getByRole('button', { name: 'Done' }).click()
+  await expect(sheet.getByRole('button', { name: 'Notes: Pool Ten' })).toBeVisible()
+  await expect(sheet).toHaveScreenshot('todo-notes.png')
 })
 
 test('wall: a to-do — tap it to add a date and time, then delete it', async ({ page }) => {

@@ -118,6 +118,8 @@ export interface WallViewProps {
   deleteChore?: (id: string) => Promise<void>
   /** Add a line to an event's get & pack list (from its details). */
   addChecklist?: (eventId: string, label: string) => Promise<void>
+  /** An event's notes (canvas 65), as typed on its sheet. */
+  saveNotes?: (event: EditableEvent, notes: string) => Promise<void>
   /** One event's own list, loaded when its details open (a reminder's isn't in the week's list). */
   useEventItems?: (eventId: string) => WallChecklistItem[]
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
@@ -171,7 +173,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
@@ -612,6 +614,7 @@ export default function WallView(props: WallViewProps) {
       <WallTodos
         now={now}
         list={todos.list}
+        onSaveNotes={saveNotes ? (id, notes) => saveNotes({ id, event_type: 'reminder' } as EditableEvent, notes) : undefined}
         onAct={async (request) => {
           setTodoUntil(Date.now() + PREVIEW_MS)
           await todos.act(request)
@@ -817,6 +820,7 @@ export default function WallView(props: WallViewProps) {
           onPreview={setDraftPreview}
           onDelete={deleteEvent}
           onAddItem={addChecklist}
+          onSaveNotes={saveNotes}
           useItems={useEventItems}
           startOn={selectedForWho ? 'who' : undefined}
           projectStep={selectedStep}

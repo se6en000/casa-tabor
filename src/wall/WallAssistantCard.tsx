@@ -139,6 +139,13 @@ export default function WallAssistantCard({ card, members, pigmentOf, working, o
         </div>
       )}
 
+      {card.notes.length > 0 && (
+        <div className="min-w-0">
+          <div className={label}>{card.notesAdded ? 'ADDS TO ITS NOTES' : 'NOTES'}</div>
+          <div className="mt-[6px] line-clamp-2 text-wall-detail">{card.notes.join(' · ')}</div>
+        </div>
+      )}
+
       <div className="mt-auto flex items-center gap-[14px]">
         <button type="button" disabled={working} onClick={onYes} className="h-[60px] rounded-full border-0 bg-wall-ink px-[32px] text-wall-detail font-bold text-wall-on-pigment">
           {working ? 'Saving…' : card.kind === 'add' ? 'Yes, add it' : card.before ? 'Yes, move it' : 'Yes, change it'}

@@ -224,3 +224,16 @@ test('a place that is only words about a place ("the real address") is refused, 
   const ok = fullAiCard({ name: 'update_event', args: { id: 'e1', place: 'Dragon Elites batting cages' } }, { events: evs, utcOffset: '-04:00', now: new Date('2026-10-05T22:00:00Z') })
   assert.equal(ok.args.location, 'Dragon Elites batting cages')
 })
+
+// Canvas 65 (Jake, Oct 7): notes are context for Alexa — she reads them, adds to them, and keeps a to-do's.
+test('notes: Alexa sees each event’s notes, adds lines to them, and keeps a to-do’s', () => {
+  const withNotes = events.map((e, i) => (i === 0 ? { ...e, notes: '• Arrive by 12:10\n• $5 cash at the gate' } : e))
+  const system = buildFullAiSystem({ family, events: withNotes, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach' })
+  assert.match(system, /notes: • Arrive by 12:10 \/ • \$5 cash at the gate/)
+  const card = fullAiCard({ name: 'update_event', args: { id: 'e1', add_notes: ['Bring the folding chairs', ' '] } }, { events, utcOffset, now })
+  assert.deepEqual(card, { tool: 'update_event', args: { id: 'e1', notes_add: ['Bring the folding chairs'] } })
+  const todo = fullAiCard({ name: 'add_todo', args: { title: 'Order the photobook', notes: 'Walgreens order #48213' } }, { events, utcOffset, now, todos: [] })
+  assert.equal(todo.args.notes, 'Walgreens order #48213')
+  const tool = FULL_AI_TOOLS.find((t) => t.name === 'update_event')
+  assert.match(tool.parameters.properties.add_notes.description, /Never a summary/)
+})

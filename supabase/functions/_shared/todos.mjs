@@ -5,6 +5,7 @@
 // checked). The rest folds by kind: quick ones, fixes, nudges, dated (they live on Coming up), and
 // "Not sure" for anything Casa couldn't sort. Projects show as progress and their current step.
 
+import { notesOf } from './event-notes.mjs'
 import { leadDays, todoStage } from './todo-stage.mjs'
 
 const TZ = 'America/New_York'
@@ -61,7 +62,8 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         projectId: d.project_id ?? null,
         suggestion: d.suggestion ?? null,
         // Details kept with it (a reminder Alexa made with "three text ideas"), for the morning paper and its sheet.
-        notes: typeof r.description === 'string' && r.description.trim() ? r.description.trim().slice(0, 600) : null,
+        // What people wrote (canvas 65), never the house's tags or Google's details block.
+        notes: notesOf(r.description).slice(0, 1200) || null,
         score,
       }
     })

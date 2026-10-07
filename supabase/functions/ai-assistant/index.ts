@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { notesOf } from '../_shared/event-notes.mjs'
 import { placeOnCard } from '../_shared/ai-event-edit.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
 import { createSupabaseRouteEtaCache } from '../_shared/route-eta-cache.mjs'
@@ -159,13 +160,13 @@ async function geminiJson(sb: TurnDb, prompt: string, purpose: string, cid: stri
   }
 }
 
-type TurnReferent = { id: string; title: string; start_time: string; end_time: string; all_day: boolean; event_type: string | null; updated_at?: string; people: string[]; drivers: string[]; place: string | null; address: string | null; repeating: boolean }
+type TurnReferent = { id: string; title: string; start_time: string; end_time: string; all_day: boolean; event_type: string | null; updated_at?: string; people: string[]; drivers: string[]; place: string | null; address: string | null; repeating: boolean; notes: string | null }
 
 /** The calendar items a conversation is about, with who's on them and who drives. */
 async function loadReferents(sb: TurnDb, ids: string[], family: Array<{ id: string; name: string }>): Promise<TurnReferent[]> {
   if (ids.length === 0) return []
   const [events, members, plans] = await Promise.all([
-    sb.from('events').select('id, title, start_time, end_time, all_day, event_type, location_name, address, updated_at, series_id, recurrence_master_id, rrule, record_kind').in('id', ids),
+    sb.from('events').select('id, title, description, start_time, end_time, all_day, event_type, location_name, address, updated_at, series_id, recurrence_master_id, rrule, record_kind').in('id', ids),
     sb.from('event_members').select('event_id, family_member_id, role').in('event_id', ids),
     sb.from('event_plan_overrides').select('event_id, transportation_plan').in('event_id', ids),
   ])
@@ -189,6 +190,8 @@ async function loadReferents(sb: TurnDb, ids: string[], family: Array<{ id: stri
       place: String(e.location_name ?? e.address ?? '').split(',')[0].trim() || null,
       address: [e.location_name, e.address].filter((v, i, all) => v && all.indexOf(v) === i).join(' — ') || null,
       repeating: Boolean(e.series_id || e.recurrence_master_id || e.rrule || (e.record_kind && e.record_kind !== 'single')),
+      // What people wrote on it, or an email's specifics (canvas 65) — never the house's tags or Google's details block.
+      notes: notesOf(e.description as string | null).slice(0, 1200) || null,
     }]
   })
 }
@@ -413,7 +416,7 @@ async function answerFromCalendar(
     known = await loadReferents(sb, [...new Set([...events.map((e) => e.id), ...(await loadUpcomingIds(sb))])], family)
   }
   // An all-day item is on the date written on it, never the evening before (Heather's birthday read "8:00 PM", Oct 7).
-  const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${e.all_day ? `${allDayWords(e.start_time, e.end_time, 'long')} (all day)` : formatLocal(e.start_time, utcOffset)}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
+  const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${e.all_day ? `${allDayWords(e.start_time, e.end_time, 'long')} (all day)` : formatLocal(e.start_time, utcOffset)}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}${e.notes ? ` — notes: ${e.notes.replace(/\s*\n+\s*/g, ' / ')}` : ''}`
   const draft = openDraft(context?.pendingAction as { tool: string; args: Record<string, unknown> } | undefined)
   const prompt = buildAnswerPrompt({
     question,

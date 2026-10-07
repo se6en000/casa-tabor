@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
     if (!body.id) return json({ error: 'Which email?' }, 400)
     if (what === 'add') {
       // Every offer of that email, as the card Casa already saves (a yes from him, from the review card).
-      const { data: row } = await sb.from('email_offers').select('id, decision, offers, person, status').eq('id', body.id).maybeSingle()
+      const { data: row } = await sb.from('email_offers').select('id, decision, offers, person, status, from_email, received_at, gmail_message_id').eq('id', body.id).maybeSingle()
       if (!row) return json({ error: 'That email is gone' }, 404)
       // Added once is enough: a second screen with an older list (the wall, then the phone) added the
       // "Reply to" to-dos twice (2026-09-30).
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       // A posted line with nothing to add (news, an ad) has no Add it.
       // Checked against the calendar now: one already there is filled in with what the email adds, never added twice.
       const offers = withExisting(row.decision, row.offers ?? [], row.decision === 'offer' ? await calendarFor([row.offers ?? []]) : [])
-      const planned = row.decision === 'person' ? [personToAction(row.person)] : offers.map((o: Record<string, unknown>) => offerToAction(o, { decision: row.decision }))
+      const planned = row.decision === 'person' ? [personToAction(row.person)] : offers.map((o: Record<string, unknown>) => offerToAction(o, { decision: row.decision, source: { from: row.from_email, receivedAt: row.received_at, gmailId: row.gmail_message_id } }))
       const already = offers.filter((_o: Record<string, unknown>, i: number) => planned[i] === 'already').map((o: Record<string, unknown>) => String((o.existing as { title?: string } | undefined)?.title ?? o.title))
       const actions = planned.filter((a: unknown) => a && a !== 'already')
       const saved: string[] = []

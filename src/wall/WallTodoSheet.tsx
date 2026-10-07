@@ -22,9 +22,11 @@ export interface WallTodoSheetProps {
   now: Date
   onAct: (request: TodoAction) => Promise<void>
   onClose: () => void
+  /** Its notes (canvas 65), as typed here; absent = shown, not edited. */
+  onSaveNotes?: (id: string, notes: string) => Promise<void>
 }
 
-export default function WallTodoSheet({ item, now, onAct, onClose }: WallTodoSheetProps) {
+export default function WallTodoSheet({ item, now, onAct, onClose, onSaveNotes }: WallTodoSheetProps) {
   const [title, setTitle] = useState(item.title)
   const [due, setDue] = useState<string | null>(item.due)
   const [time, setTime] = useState<string | null>(timeOf(item))
@@ -32,6 +34,18 @@ export default function WallTodoSheet({ item, now, onAct, onClose }: WallTodoShe
   const [picking, setPicking] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Notes (canvas 65): what's typed, and what was saved until the list catches up.
+  const [notesTyping, setNotesTyping] = useState(false)
+  const [notesText, setNotesText] = useState('')
+  const [notesKept, setNotesKept] = useState<string | null>(null)
+  const notes = notesKept ?? item.notes ?? ''
+  const saveNotes = async () => {
+    const text = notesText.trim()
+    setNotesTyping(false)
+    if (!onSaveNotes || text === notes) return
+    setNotesKept(text)
+    try { await onSaveNotes(item.id, text) } catch { setNotesKept(null) }
+  }
   const changed = title.trim() !== item.title || due !== item.due || (due !== null && time !== timeOf(item))
 
   const run = async (request: TodoAction) => {
@@ -95,6 +109,28 @@ export default function WallTodoSheet({ item, now, onAct, onClose }: WallTodoShe
           )}
         </div>
 
+        {(notes || onSaveNotes) && (
+          <div className="flex min-h-0 shrink flex-col overflow-hidden">
+            <span className="mb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NOTES</span>
+            {notesTyping ? (
+              <div className="flex max-h-[300px] flex-col justify-end overflow-hidden rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-on-pigment px-[20px] py-[14px]">
+                <div className="whitespace-pre-wrap break-words text-wall-body leading-snug">
+                  {notesText}
+                  <span aria-hidden="true" className="ml-[2px] inline-block h-[28px] w-[3px] translate-y-[5px] bg-wall-ink" />
+                </div>
+              </div>
+            ) : (
+              <button type="button" aria-label={notes ? `Notes: ${notes}` : 'Add a note'} disabled={!onSaveNotes}
+                onClick={() => { setNotesText(notes); setNotesTyping(true); setTyping(false); setPicking(false) }}
+                className="min-h-[56px] min-w-0 border-0 border-t border-solid border-wall-rule bg-transparent p-0 pt-[12px] text-left">
+                {notes
+                  ? <span className="line-clamp-6 whitespace-pre-wrap break-words text-wall-body leading-snug text-wall-ink">{notes}</span>
+                  : <span className="text-wall-body font-semibold text-wall-brass-ink">+ Add a note</span>}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="mt-auto flex items-center gap-[12px]">
           <button type="button" disabled={busy || !changed || !title.trim()} onClick={() => void save()} className={`${pill(true)} disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
           <button type="button" disabled={busy} onClick={() => void run({ action: 'done', id: item.id })} className={pill(false)}>Done — tick it off</button>
@@ -111,6 +147,7 @@ export default function WallTodoSheet({ item, now, onAct, onClose }: WallTodoShe
         </div>
       </section>
       {typing && <WallKeyboard value={title} onChange={setTitle} onDone={() => setTyping(false)} />}
+      {notesTyping && <WallKeyboard value={notesText} onChange={setNotesText} onDone={() => void saveNotes()} showsValue multiline />}
     </div>
   )
 }

@@ -105,6 +105,27 @@ test('phone: after 7 PM, Me and Family look at tomorrow (like the wall\'s evenin
   await expect(phone.getByText('Saturday, September 26')).toBeVisible()
 })
 
+// Canvas 65d (Jake, Oct 7): the email's specifics in the notes, a link to the email, a tap edits them.
+test('phone: an event’s notes — from the coach’s email, Open email, edit and save', async ({ page }) => {
+  const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Today' }).click()
+  await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
+  const sheet = phone.getByRole('region', { name: /Softball: Huskies @ RPB Cascade on the phone/ })
+  await expect(sheet.getByText('From Coach Rivera’s email · Sep 22')).toBeVisible()
+  await expect(sheet.getByRole('link', { name: 'Open email ›' })).toHaveAttribute('href', 'https://mail.google.com/mail/#all/fixture-coach')
+  const notes = sheet.getByRole('button', { name: /^Notes: / })
+  await sheet.getByRole('link', { name: 'Open email ›' }).scrollIntoViewIfNeeded()
+  await expect(phone).toHaveScreenshot('phone-event-notes.png')
+  await notes.click()
+  const box = sheet.getByRole('textbox', { name: 'Notes' })
+  await box.press('End')
+  await box.evaluate((el) => el.setSelectionRange(el.value.length, el.value.length))
+  await box.pressSequentially('\nBring the folding chairs')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(sheet.getByRole('button', { name: /^Notes: [\s\S]*kids free\)\sBring the folding chairs$/ })).toBeVisible()
+  await expect(sheet.getByText('From Coach Rivera’s email · Sep 22')).toBeVisible()
+})
+
 test('phone: an event — details, the trip, get & pack; Edit a time and save; Delete after a yes', { tag: '@smoke' }, async ({ page }) => {
   const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
   await phone.getByRole('button', { name: 'Today' }).click()

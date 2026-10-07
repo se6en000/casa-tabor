@@ -104,6 +104,8 @@ export interface PhoneViewProps {
   onRefresh?: () => Promise<void>
   onToggleItem?: (item: WallChecklistItem) => void
   onAddItem?: (eventId: string, label: string) => Promise<void>
+  /** An event's notes (canvas 65), as typed on its sheet. */
+  onSaveNotes?: (event: EditableEvent, notes: string) => Promise<void>
   useEventItems?: (eventId: string) => WallChecklistItem[]
   /** People (More → People): saved contacts and places, for call / text / directions. */
   contacts?: SavedContact[]
@@ -200,7 +202,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, onSaveNotes, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -899,7 +901,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         )}
       </AnimatePresence>
       {monthOpen && <PhoneMonth now={now} members={members} pigments={pigments} useMonth={useMonthEvents ?? (() => shownEvents as WallEvent[])} onOpen={openDay} onClose={() => setMonthOpen(false)} />}
-      {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onClose={() => setEditingTodo(null)} />}
+      {todos && editingTodo && <PhoneTodoSheet item={editingTodo} onAct={todos.act} onSaveNotes={onSaveNotes ? (id, notes) => onSaveNotes({ id, event_type: 'reminder' } as EditableEvent, notes) : undefined} onClose={() => setEditingTodo(null)} />}
 
       <AnimatePresence>
       {opened && (
@@ -917,6 +919,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           onLeaving={tripActions ? (trip) => tripActions.leaving([trip.id]) : undefined}
           onToggleItem={onToggleItem}
           onAddItem={onAddItem}
+          onSaveNotes={onSaveNotes}
           useItems={useEventItems}
           saveEvent={saveEvent}
           deleteEvent={deleteEvent}

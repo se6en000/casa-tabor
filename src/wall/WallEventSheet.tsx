@@ -21,6 +21,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import { toggleChecklistItem } from './useWallChecklist'
 import WallKeyboard from './WallKeyboard'
 import { saveDraft } from './saveDraft'
+import { notesOf, notesSource } from '../../supabase/functions/_shared/event-notes.mjs'
 
 // The event sheet (boards 03a, 03d, 03e, 03f): details, then Edit turns the same
 // sheet into a form; the place picker and the wall keyboard live inside it.
@@ -30,7 +31,7 @@ const EDIT_IDLE_MS = 5 * 60_000
 const HOUR_CHIPS = Array.from({ length: 17 }, (_, i) => i + 6) // 6 AM – 10 PM
 
 type Mode = 'details' | 'edit' | 'place'
-type KeyboardTarget = 'title' | 'search' | 'keptName' | 'item' | null
+type KeyboardTarget = 'title' | 'search' | 'keptName' | 'item' | 'notes' | null
 
 export interface WallEventSheetProps {
   event: EditableEvent
@@ -59,6 +60,8 @@ export interface WallEventSheetProps {
   onAddItem?: (eventId: string, label: string) => Promise<void>
   /** This event's own list, loaded for it (a reminder's isn't in the wall's week list). */
   useItems?: (eventId: string) => WallChecklistItem[]
+  /** Save what people wrote in its notes (canvas 65); absent = the notes are shown but not edited here. */
+  onSaveNotes?: (event: EditableEvent, notes: string) => Promise<void>
 }
 
 const noItems = (): WallChecklistItem[] => []
@@ -96,7 +99,7 @@ function whenLabel(event: EditableEvent, now: Date): string {
 }
 
 export default function WallEventSheet(props: WallEventSheetProps) {
-  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview, projectStep = null, onStepDone, onOpenProject, onAddItem, useItems = noItems } = props
+  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview, projectStep = null, onStepDone, onOpenProject, onAddItem, useItems = noItems, onSaveNotes } = props
   const queryClient = useQueryClient()
   // Adding by touch: the same sheet, opening straight into editing with the keyboard on the title.
   const isNew = event.id === NEW_EVENT_ID
@@ -108,6 +111,10 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   // A line being typed for the get & pack list.
   const [itemText, setItemText] = useState('')
   const [itemError, setItemError] = useState<string | null>(null)
+  // Notes (canvas 65): what's typed, and what was saved until the calendar catches up.
+  const [notesText, setNotesText] = useState('')
+  const [notesKept, setNotesKept] = useState<string | null>(null)
+  const [notesError, setNotesError] = useState<string | null>(null)
   const [hourPicker, setHourPicker] = useState(false)
   const [otherDates, setOtherDates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -209,13 +216,14 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     }
   }
 
-  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'keptName' ? keptName : keyboard === 'item' ? itemText : ''
+  const keyboardValue = keyboard === 'title' ? draft.title : keyboard === 'search' ? placeQuery : keyboard === 'keptName' ? keptName : keyboard === 'item' ? itemText : keyboard === 'notes' ? notesText : ''
   const onKeyboardChange = (value: string) => {
     touch()
     if (keyboard === 'title') setDraft((d) => setTitle(d, value))
     if (keyboard === 'search') setPlaceQuery(value)
     if (keyboard === 'keptName') setKeptName(value)
     if (keyboard === 'item') setItemText(value)
+    if (keyboard === 'notes') setNotesText(value)
   }
 
 
@@ -328,6 +336,22 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     }
   }
   const reminder = isNew ? kind === 'reminder' : isReminder(event)
+  const notes = notesKept ?? notesOf(event.description)
+  const source = notesSource(event.description)
+  const typingNotes = keyboard === 'notes'
+  const saveNotes = async () => {
+    const text = notesText.trim()
+    setKeyboard(null)
+    if (!onSaveNotes || text === notes) return
+    setNotesKept(text)
+    try {
+      setNotesError(null)
+      await onSaveNotes(event, text)
+    } catch {
+      setNotesKept(null)
+      setNotesError('The notes didn’t save. Try again.')
+    }
+  }
 
   return (
     <div
@@ -361,7 +385,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
             <People event={event} trip={trip} nameOf={nameOf} pigmentOf={pigmentOf} />
 
-            {projectStep && (
+            {projectStep && !typingNotes && (
               <div className="flex flex-col gap-[12px] rounded-[22px] border-[1.5px] border-solid border-wall-brass px-[24px] py-[18px]">
                 <div className={`${eyebrow} text-wall-brass-ink`}>A PROJECT STEP</div>
                 <div className="text-wall-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
@@ -374,7 +398,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               </div>
             )}
 
-            {trip ? (
+            {typingNotes ? null : trip ? (
               <div className="flex flex-col gap-[12px]">
                 <div className={`${eyebrow} text-wall-ink-2`}>THE TRIP</div>
                 <div className="grid grid-cols-4 text-wall-detail text-wall-ink-2">
@@ -405,7 +429,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               )
             )}
 
-            {(own.length > 0 || onAddItem) && (
+            {(own.length > 0 || onAddItem) && !typingNotes && (
               <div className="flex flex-col">
                 <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>
                   {own.length ? `GET & PACK · ${own.filter((i) => i.checked).length} OF ${own.length}` : 'GET & PACK'}
@@ -437,6 +461,36 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                   </button>
                 ))}
                 {itemError && <div className="text-wall-detail font-semibold text-wall-rust">{itemError}</div>}
+              </div>
+            )}
+
+            {/* Notes (canvas 65, Jake, Oct 7): free-hand details kept with it — Alexa reads them too; one made from an
+                email has the email's specifics here, and where they came from underneath. A tap edits them in place. */}
+            {!isNew && (notes || onSaveNotes) && (
+              <div className="flex min-h-0 shrink flex-col overflow-hidden">
+                <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>NOTES</div>
+                {typingNotes ? (
+                  <div className="flex max-h-[330px] flex-col justify-end overflow-hidden rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px] py-[14px]">
+                    <div className="whitespace-pre-wrap break-words text-wall-body leading-snug text-wall-ink">
+                      {notesText}
+                      <span aria-hidden="true" className="ml-[2px] inline-block h-[28px] w-[3px] translate-y-[5px] bg-wall-ink" />
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={notes ? `Notes: ${notes}` : 'Add a note'}
+                    disabled={!onSaveNotes}
+                    onClick={() => { touch(); setNotesText(notes); setKeyboard('notes') }}
+                    className="min-h-[56px] min-w-0 border-0 border-t border-solid border-wall-rule bg-transparent p-0 pt-[12px] text-left"
+                  >
+                    {notes
+                      ? <span className="line-clamp-6 whitespace-pre-wrap break-words text-wall-body leading-snug text-wall-ink">{notes}</span>
+                      : <span className="flex items-center gap-[16px] text-wall-body font-semibold text-wall-brass-ink"><Plus size={22} aria-hidden="true" /> Add a note</span>}
+                  </button>
+                )}
+                {source && !typingNotes && <div className="mt-[10px] text-wall-detail text-wall-ink-2">{source.text}</div>}
+                {notesError && <div className="text-wall-detail font-semibold text-wall-rust">{notesError}</div>}
               </div>
             )}
 
@@ -834,8 +888,9 @@ export default function WallEventSheet(props: WallEventSheetProps) {
           key={keyboard}
           value={keyboardValue}
           onChange={onKeyboardChange}
-          onDone={keyboard === 'item' ? () => void addItem() : keyboard === 'keptName' ? () => void renameKept() : () => setKeyboard(null)}
-          showsValue={keyboard === 'item'}
+          onDone={keyboard === 'item' ? () => void addItem() : keyboard === 'keptName' ? () => void renameKept() : keyboard === 'notes' ? () => void saveNotes() : () => setKeyboard(null)}
+          showsValue={keyboard === 'item' || keyboard === 'notes'}
+          multiline={keyboard === 'notes'}
         />
       )}
     </div>

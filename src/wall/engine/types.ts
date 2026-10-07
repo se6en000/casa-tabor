@@ -49,6 +49,8 @@ export interface WallEvent {
   trip_id?: string | null
   location_name: string | null
   address: string | null
+  /** Its notes, with the house's tags and Google details block (read with event-notes.mjs notesOf). */
+  description?: string | null
   members?: Array<{ family_member_id?: string | null; family_member?: { id: string } | null; role?: string | null }> | null
   enrichment?: { drive_time_mins: number | null; departure_time: string | null; weather_at_event?: string | null } | null
   plan_override?: {

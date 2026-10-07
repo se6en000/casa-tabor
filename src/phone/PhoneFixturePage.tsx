@@ -1,5 +1,6 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the phone drawn from the Wall's fixed test
 // fixture at ?at=, as ?viewer= (a member id), for the Playwright guard at 390x844.
+import { withNotes } from '../../supabase/functions/_shared/event-notes.mjs'
 import { useMemo, useState } from 'react'
 import { ProfileSessionContext } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
@@ -269,6 +270,7 @@ function PhoneFixturePageInner() {
               }}
               onToggleItem={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))}
               onAddItem={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])}
+              onSaveNotes={async (event, notes) => setEvs((list) => list.map((e) => (e.id === event.id ? { ...e, description: withNotes(e.description, notes) } : e)))}
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
               createEvent={async (args) => {

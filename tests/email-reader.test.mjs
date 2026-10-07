@@ -120,3 +120,13 @@ test('a group the family is part of counts, even when it writes to everyone', ()
   assert.match(prompt, /WHAT THE FAMILY HAS GONE TO \(the last six months — the groups they're part of\):\n- Neighborhood Association Meeting/)
   assert.match(prompt, /unless it's from a group the family is part of/)
 })
+
+// Canvas 65: each offer's specifics, as short lines — kept clean, never a summary of the email.
+test('the reader keeps each offer’s notes: short lines, at most eight', () => {
+  const d = readReaderDecision({ decision: 'offer', offers: [{ kind: 'event', title: 'Softball', date: '2026-09-26', start: '12:30', notes: ['Arrive by 12:10', '', 7, 'x'.repeat(400), ...Array.from({ length: 10 }, (_, i) => `line ${i}`)] }] })
+  const notes = d.offers[0].notes
+  assert.equal(notes[0], 'Arrive by 12:10')
+  assert.ok(notes.every((n) => typeof n === 'string' && n.length <= 200))
+  assert.ok(notes.length <= 8)
+  assert.match(buildReaderPrompt({ email: { from_email: 'a@b.c', subject: 's', body: 'b', received_at: '2026-09-22T00:00:00Z' }, family: [], upcoming: [], past: [], today: '2026-09-22' }), /"notes"/)
+})

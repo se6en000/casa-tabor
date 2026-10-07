@@ -96,6 +96,12 @@ export function PhoneCard({ card, members, pigmentOf, working, onYes, onNo, onPi
           </div>
         )}
       </div>
+      {card.notes.length > 0 && (
+        <div className="text-phone-detail">
+          <div className={label}>{card.notesAdded ? 'ADDS TO ITS NOTES' : 'NOTES'}</div>
+          <div className="whitespace-pre-wrap">{card.notes.join('\n')}</div>
+        </div>
+      )}
       {card.touches.some((t) => t.startsWith('Clashes')) && (
         <div className="text-phone-detail font-semibold text-wall-rust">{card.touches.filter((t) => t.startsWith('Clashes')).join(' · ')}</div>
       )}

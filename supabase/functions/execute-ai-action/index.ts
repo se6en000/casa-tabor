@@ -25,6 +25,7 @@ import { normalizeLegacyCalendarActionArgs } from '../_shared/assistant-agent-wr
 import { validateCalendarTemporalProvenance } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 import { replayableResult } from '../_shared/action-replay.mjs'
+import { addNotes, notesFromEmail } from '../_shared/event-notes.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -188,9 +189,11 @@ async function finalizeEventSync(
   eventId: string,
   historyId: string | null | undefined,
   response: Record<string, unknown>,
+  notes = false,
 ) {
   const syncRes = await sb.functions.invoke('push-to-google', {
-    body: { event_id: eventId },
+    // Notes changed here (canvas 65): Google takes ours, not its own copy.
+    body: { event_id: eventId, notes },
   }).catch((err: Error) => ({ data: null, error: err }))
 
   const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
@@ -1090,6 +1093,15 @@ Deno.serve(async (req) => {
       }
 
       const { cleanArgs, membersPrimary, membersAttendees } = extractMemberRoleOverrides(args as Record<string, unknown>)
+      // Lines for its notes (canvas 65: what Alexa adds, an email's new specifics) go under what's written; the house's
+      // tags and Google's details block stay. Replaced as a whole description, so prep notes aren't touched.
+      const notesAdd = Array.isArray(cleanArgs.notes_add) ? (cleanArgs.notes_add as unknown[]).map((l) => String(l ?? '').trim()).filter(Boolean).slice(0, 12) : []
+      delete cleanArgs.notes_add
+      if (notesAdd.length) {
+        const { data: current } = await sb.from('events').select('description').eq('id', String(cleanArgs.id ?? cleanArgs.event_id ?? '')).maybeSingle()
+        const next = addNotes((current as { description?: string | null } | null)?.description ?? null, notesAdd)
+        if (next != null) cleanArgs.description = next
+      }
       const { errors, normalized } = buildValidatedUpdatePayload(cleanArgs)
       if (errors.length > 0) {
         throw new Error(errors.join('; '))
@@ -1352,7 +1364,7 @@ Deno.serve(async (req) => {
         event_updated_at: updatedEvent.updated_at,
         action_id: actionId ?? null,
       }
-      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse)
+      const responsePayload = await finalizeEventSync(sb, normalized.eventId, historyRow?.[0]?.id, baseResponse, notesAdd.length > 0)
 
       return new Response(JSON.stringify({ ...responsePayload, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -1731,6 +1743,9 @@ Deno.serve(async (req) => {
       const due = typeof args.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.due) ? args.due : null
       const { data, error } = await sb.rpc('todo_add', { p_title: title, p_due: due })
       if (error) throw new Error(error.message)
+      // Its notes (canvas 65): what Alexa kept with it, or an email's specifics.
+      const todoNotes = normalizeOptionalText(args.notes, 2000)
+      if (todoNotes && data) await sb.from('events').update({ description: todoNotes }).eq('id', String(data))
       return new Response(JSON.stringify({ success: true, todo_id: data, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })

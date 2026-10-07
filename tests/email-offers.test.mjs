@@ -55,7 +55,7 @@ test('"Add it" saves every offer of the email through the usual card path, then 
   const fs = await import('node:fs')
   const fn = fs.readFileSync(new URL('../supabase/functions/email-offers/index.ts', import.meta.url), 'utf8')
   assert.match(fn, /what === 'add'/)
-  assert.match(fn, /offerToAction\(o, \{ decision: row\.decision \}\)/)
+  assert.match(fn, /offerToAction\(o, \{ decision: row\.decision, source: \{ from: row\.from_email/)
   assert.match(fn, /personToAction\(row\.person\)/)
   assert.match(fn, /functions\.invoke\('execute-ai-action'/)
   assert.match(fn, /confirmed_by_user: true/)
@@ -162,4 +162,26 @@ test('already there, by more than the name: the same start, or the same place or
   assert.equal(alreadyThere({ ...kim, start: undefined }, [trip])?.event_id, 'ft')
   // One word in common and nothing else: no.
   assert.equal(alreadyThere({ kind: 'event', title: 'Trip to the dentist', date: '2026-10-01', start: '15:00' }, [trip]), null)
+})
+
+// Canvas 65 (Jake, Oct 7): "if a todo or reminder is created from an email, that email context should be added to the
+// notes. it should be specific enough, not summary generic" — the reader's specifics go in its notes, with the sender.
+test('Add it keeps the email’s specifics in the notes, with who sent it and a link back', async () => {
+  const { notesOf, notesSource } = await import('../supabase/functions/_shared/event-notes.mjs')
+  const source = { from: 'Coach Rivera <rivera@huskies.org>', receivedAt: '2026-09-22T14:03:00Z', gmailId: 'm1' }
+  const notes = ['Arrive by 12:10 for warm-ups', '$5 cash per adult at the gate']
+  const ev = offerToAction({ kind: 'event', title: 'Softball', date: '2026-09-26', start: '12:30', notes }, { source })
+  assert.equal(notesOf(ev.args.notes), '• Arrive by 12:10 for warm-ups\n• $5 cash per adult at the gate')
+  assert.deepEqual(notesSource(ev.args.notes), { text: 'From Coach Rivera’s email · Sep 22', url: 'https://mail.google.com/mail/#all/m1' })
+  const rem = offerToAction({ kind: 'reminder', title: 'Pick up photobook', date: '2026-09-25', notes: ['Order #48213-WPB, under Kelly’s name'] }, { source })
+  assert.match(rem.args.notes, /Order #48213-WPB/)
+  const todo = offerToAction({ kind: 'todo', title: 'Sign the waiver', notes: ['Link: https://forms.example/waiver'] }, { source })
+  assert.match(todo.args.notes, /forms\.example/)
+  // New details for something already on the calendar: lines added under its notes.
+  const upd = offerToAction({ kind: 'event', event_id: 'ev1', changes: { place: 'Field 2' }, notes: ['Gate opens 11:45'] }, { decision: 'details', source })
+  assert.deepEqual(upd.args.notes_add, ['Gate opens 11:45'])
+  const only = offerToAction({ kind: 'event', event_id: 'ev1', notes: ['Gate opens 11:45'] }, { decision: 'details', source })
+  assert.deepEqual(only, { tool: 'update_event', args: { id: 'ev1', notes_add: ['Gate opens 11:45'] } })
+  // No specifics: nothing extra.
+  assert.equal(offerToAction({ kind: 'todo', title: 'Sign it' }, { source }).args.notes, undefined)
 })

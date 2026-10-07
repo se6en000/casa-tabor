@@ -54,6 +54,9 @@ export interface AssistantCard {
   drivers: Array<{ memberId: string; name: string; note: string; chosen: boolean }> | null
   /** "Clashes with School (Liv)", or "Nothing else then for Emme and Owen". */
   touches: string[]
+  /** Its notes as they'd be saved (canvas 65), one line each — on a change, only the lines it adds. */
+  notes: string[]
+  notesAdded: boolean
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -136,6 +139,12 @@ function draftEvent(action: CardAction, ctx: CardContext): { event: EditableEven
   return null
 }
 
+/** The notes a card would save (canvas 65): an add's own, or the lines a change puts under what's there. */
+function noteLines(action: CardAction): string[] {
+  const raw = action.tool === 'update_event' ? (Array.isArray(action.args.notes_add) ? action.args.notes_add.map(String) : []) : str(action.args.notes).split('\n')
+  return raw.map((l) => l.trim()).filter(Boolean)
+}
+
 /** What the latest turn changed, against the card it replaced. */
 function whatChanged(previous: CardAction | null, action: CardAction, members: WallMember[]): string[] {
   if (!previous || previous.tool !== action.tool || (previous.args.id ?? null) !== (action.args.id ?? null)) return []
@@ -155,6 +164,7 @@ function whatChanged(previous: CardAction | null, action: CardAction, members: W
   }
   if (str(a.title) && str(p.title) && str(a.title) !== str(p.title)) out.push('renamed')
   if (str(a.driver_name) && str(a.driver_name) !== str(p.driver_name)) out.push(`${str(a.driver_name)} drives`)
+  if (noteLines(action).join('\n') !== noteLines({ tool: previous.tool, args: p }).join('\n')) out.push(noteLines({ tool: previous.tool, args: p }).length ? 'notes changed' : 'notes added')
   return out
 }
 
@@ -220,6 +230,8 @@ export function assistantCard(action: CardAction | null, previous: CardAction | 
     leavesFrom: chainedFrom ? chainedFrom.destination.name || null : null,
     drivers,
     touches,
+    notes: noteLines(action),
+    notesAdded: action.tool === 'update_event',
   }
 }
 

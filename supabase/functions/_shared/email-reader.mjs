@@ -72,9 +72,11 @@ Decide one:
 - "offer": something new to do — offers of kind "event" (with a date and times), "reminder" (a date, a time if given), "todo" (no time), "prep" (something to get ready for a listed item, with its "event_id"), or "shopping". A newsletter with several things: one offer each. What to wear or bring for an event goes in that event's "bring" — never an event or offer of its own ("Pack lunch for the field trip" is the field trip's "bring").
 - "person": a real person wrote and wants something (and it isn't one of the above) — who, and what they want in one line. Mail from the family themselves (a reply or forward of their own) is not "person".
 
+Each offer also gets "notes": the email's specifics someone would otherwise have to dig the email up for, one short line each, in the email's own facts — exact times beyond the start (arrive by, doors open, pickup at), where to go inside the place (field number, room, entrance, parking), costs and how to pay, order or confirmation numbers, whose name it's under, names and phone numbers to reach, links to sign or pay, what to wear or bring that isn't already in "bring", deadlines. Never a summary of the email ("Info about the game"), nothing already in its title, date, times or place, and [] when the email has nothing more.
+
 Always also write "gist": one line: what the email says, with any date, time or deadline (under 100 characters, plain, no "This email"), and "gist_tag": one of "event", "deadline", "todo", "news", "ad", "request", "receipt".
 
-Return only JSON: {"decision": "...", "reason": "one short line: why", "gist": "...", "gist_tag": "...", "posted": "..." or null, "quote": "the words in the email that matter", "offers": [{"kind": "...", "title": "...", "date": "YYYY-MM-DD" or null, "start": "HH:MM" or null, "end": "HH:MM" or null, "place": "..." or null, "people": [family names], "event_id": "..." or null, "changes": {...} or null, "bring": ["..."] or null}], "person": {"who": "...", "wants": "..."} or null}
+Return only JSON: {"decision": "...", "reason": "one short line: why", "gist": "...", "gist_tag": "...", "posted": "..." or null, "quote": "the words in the email that matter", "offers": [{"kind": "...", "title": "...", "date": "YYYY-MM-DD" or null, "start": "HH:MM" or null, "end": "HH:MM" or null, "place": "..." or null, "people": [family names], "event_id": "..." or null, "changes": {...} or null, "bring": ["..."] or null, "notes": ["..."]}], "person": {"who": "...", "wants": "..."} or null}
 
 THE EMAIL
 From: ${email.from_email ?? ''}
@@ -107,6 +109,12 @@ function foldPrep(offers) {
   }
   for (let i = offers.length - 1; i >= 0; i -= 1) if (folded.has(offers[i])) offers.splice(i, 1)
   for (const o of offers) if (Array.isArray(o.bring)) o.bring = o.bring.map((b) => String(b).trim()).filter(Boolean).slice(0, 8)
+  // Its notes (canvas 65): the email's specifics, short lines.
+  for (const o of offers) {
+    if (!Array.isArray(o.notes)) { delete o.notes; continue }
+    o.notes = o.notes.filter((n) => typeof n === 'string').map((n) => n.trim().replace(/^[•\-*]\s*/, '')).filter(Boolean).map((n) => (n.length > 200 ? `${n.slice(0, 199).trimEnd()}…` : n)).slice(0, 8)
+    if (!o.notes.length) delete o.notes
+  }
 }
 
 /** The reader's answer, read strictly: one of five outcomes; an offer needs a kind and a title. */

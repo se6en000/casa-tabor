@@ -25,6 +25,8 @@ export interface WallKeyboardProps {
   showsValue?: boolean
   /** Esc on a computer: let it go (where there's a Cancel); otherwise Esc keeps what's typed. */
   onCancel?: () => void
+  /** Several lines (an event's notes, canvas 65): a return key, and Enter starts a new line on a computer. */
+  multiline?: boolean
 }
 
 // The last thing pressed (a field, a step's title, "+ Add here"): on a computer the words are typed right there, in a
@@ -50,9 +52,11 @@ function fieldPressed(): InPlace | null {
   return { left: r.left, top: r.top, width, height: Math.max(r.height, 52 * scale), fontSize: parseFloat(cs.fontSize) * scale, fontFamily: cs.fontFamily, fontWeight: cs.fontWeight }
 }
 
-const joined = (base: string, said: string) => (base.trim() ? `${base.trimEnd()} ${said}` : said.charAt(0).toUpperCase() + said.slice(1))
+const capital = (said: string) => said.charAt(0).toUpperCase() + said.slice(1)
+// After a return (a new line in the notes), the words start that line.
+const joined = (base: string, said: string) => (/\n\s*$/.test(base) ? `${base}${capital(said)}` : base.trim() ? `${base.trimEnd()} ${said}` : capital(said))
 
-export default function WallKeyboard({ value, onChange, onDone, showsValue = false, onCancel }: WallKeyboardProps) {
+export default function WallKeyboard({ value, onChange, onDone, showsValue = false, onCancel, multiline = false }: WallKeyboardProps) {
   // Off the kiosk, the device's own keyboard types (Jake, 2026-09-29): a slim bar, not Casa's keys.
   const [device] = useState(deviceKeyboardHere)
   // Read once, when typing starts (the pressed field is still on screen then).
@@ -102,6 +106,24 @@ export default function WallKeyboard({ value, onChange, onDone, showsValue = fal
   const done = () => { if (listening) void speech.stop(); onDone() }
   // The box in place finishes once: Enter, then its leaving (a blur), would otherwise add a step twice.
   const doneOnce = () => { if (finished.current) return; finished.current = true; done() }
+
+  if (device && inPlace && multiline) {
+    // Notes on a computer: a box over them, Enter for a new line; a click elsewhere or Esc keeps it.
+    return createPortal(
+      <textarea
+        aria-label="Type here"
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); doneOnce() } }}
+        onBlur={doneOnce}
+        onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+        className="fixed z-50 box-border resize-none rounded-[10px] border-2 border-solid border-wall-brass-ink bg-wall-on-pigment px-[12px] py-[8px] leading-snug text-wall-ink shadow-[0_8px_24px] shadow-wall-ink/20 outline-none"
+        style={{ left: inPlace.left, top: inPlace.top, width: inPlace.width, height: Math.max(inPlace.height, inPlace.fontSize * 9), fontSize: inPlace.fontSize, fontFamily: inPlace.fontFamily, fontWeight: inPlace.fontWeight }}
+      />,
+      document.body,
+    )
+  }
 
   if (device && inPlace) {
     // Typed right where it was pressed: Enter or a click elsewhere keeps it, Esc too.
@@ -178,6 +200,11 @@ export default function WallKeyboard({ value, onChange, onDone, showsValue = fal
         <button type="button" className="flex h-[76px] w-[430px] shrink-0 items-center justify-center rounded-[12px] bg-wall-night-rule text-wall-body text-wall-night-ink-2" onClick={() => type(' ')}>
           space
         </button>
+        {multiline && (
+          <button type="button" aria-label="New line" className={WIDE_KEY} onClick={() => { onChange(`${value}\n`); setShift(true) }}>
+            return
+          </button>
+        )}
         <button type="button" aria-label={listening ? 'Stop listening' : 'Say it'} aria-pressed={listening} onClick={mic}
           className={`flex h-[76px] w-[182px] shrink-0 items-center justify-center gap-[10px] rounded-[12px] text-wall-body font-semibold ${listening ? 'bg-wall-night-brass text-wall-ink' : 'border-2 border-solid border-wall-night-brass bg-transparent text-wall-night-brass'}`}>
           <Mic size={26} aria-hidden="true" />

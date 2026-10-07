@@ -124,3 +124,16 @@ test('the card carries the address it found, or the places to pick from', () => 
   assert.deepEqual(unsure.placeChoices, choices)
   assert.deepEqual(assistantCard(add({ location: 'Amped Fitness', place_choices: null }), null, ctx()).placeChoices, [])
 })
+
+// Canvas 65: the card shows the notes before the yes — an add's own, or the lines a change adds.
+test('the card shows its notes: an add’s, or the lines a change adds; a new line is a change', () => {
+  const card = assistantCard(add({ notes: 'Ideas:\n1. Happy birthday!\n\n2. Hope it’s a great one' }), null, ctx())
+  assert.deepEqual(card.notes, ['Ideas:', '1. Happy birthday!', '2. Hope it’s a great one'])
+  assert.equal(card.notesAdded, false)
+  const change = assistantCard({ tool: 'update_event', args: { id: 'softball', notes_add: ['Bring chairs'] } }, null, ctx())
+  assert.deepEqual(change.notes, ['Bring chairs'])
+  assert.equal(change.notesAdded, true)
+  const again = assistantCard({ tool: 'update_event', args: { id: 'softball', notes_add: ['Bring chairs', 'Gate 11:45'] } }, { tool: 'update_event', args: { id: 'softball', notes_add: ['Bring chairs'] } }, ctx())
+  assert.ok(again.justChanged.includes('notes changed'))
+  assert.deepEqual(assistantCard(add({}), null, ctx()).notes, [])
+})

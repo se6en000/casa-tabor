@@ -6,6 +6,7 @@ import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
 import { createArgs, dayChips, draftChanges, draftFromEvent, NEW_EVENT_ID, setDay, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
 import type { EventView } from './lens'
+import { notesOf, notesSource } from '../../supabase/functions/_shared/event-notes.mjs'
 
 // Board 05d: one event on the phone — when and where, who's going, the trip, get &
 // pack; Edit for the everyday changes (title, day, times, who's going), saved through
@@ -49,11 +50,13 @@ export interface PhoneEventSheetProps {
   onAddItem?: (eventId: string, label: string) => Promise<void>
   /** This event's own list, loaded for it (a reminder's isn't in the week's list). */
   useItems?: (eventId: string) => WallChecklistItem[]
+  /** Save what people wrote in its notes (canvas 65); absent = shown, not edited. */
+  onSaveNotes?: (event: EditableEvent, notes: string) => Promise<void>
 }
 
 const noItems = (): WallChecklistItem[] => []
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, clashesFor, placeFromLastTime, placeOptions = [] }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, onSaveNotes, clashesFor, placeFromLastTime, placeOptions = [] }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -65,6 +68,25 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const prep = [...new Map([...view.prep, ...loadedItems.filter((item) => item.event_id === event.id)].map((item) => [item.id, item])).values()].sort((a, b) => a.sort_order - b.sort_order)
   const [itemText, setItemText] = useState('')
   const [itemError, setItemError] = useState<string | null>(null)
+  // Notes (canvas 65): null while reading them; what's typed while editing; what was saved until the calendar catches up.
+  const [notesText, setNotesText] = useState<string | null>(null)
+  const [notesKept, setNotesKept] = useState<string | null>(null)
+  const [notesError, setNotesError] = useState<string | null>(null)
+  const notes = notesKept ?? notesOf(event.description)
+  const source = notesSource(event.description)
+  const saveNotes = async () => {
+    const text = (notesText ?? '').trim()
+    setNotesText(null)
+    if (!onSaveNotes || text === notes) return
+    setNotesKept(text)
+    try {
+      setNotesError(null)
+      await onSaveNotes(event, text)
+    } catch {
+      setNotesKept(null)
+      setNotesError('The notes didn’t save. Try again.')
+    }
+  }
   const addItem = async () => {
     const text = itemText.trim()
     if (!text || !onAddItem) return
@@ -211,6 +233,37 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                 </form>
               )}
               {itemError && <div className="text-phone-detail font-semibold text-wall-rust">{itemError}</div>}
+            </div>
+          )}
+
+          {/* Notes (canvas 65d): what people wrote, or an email's specifics with where they came from; a tap edits. */}
+          {!isNew && (notes || onSaveNotes) && (
+            <div>
+              <div className={label}>NOTES</div>
+              {notesText != null ? (
+                <form className="flex flex-col gap-[8px] border-0 border-t border-solid border-wall-stone pt-[8px]" onSubmit={(e) => { e.preventDefault(); void saveNotes() }}>
+                  <textarea aria-label="Notes" autoFocus rows={6} value={notesText} onChange={(e) => setNotesText(e.target.value)}
+                    className="min-h-[132px] w-full resize-y rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment p-[12px] text-phone-body leading-snug text-wall-ink" />
+                  <div className="flex gap-[8px]">
+                    <button type="submit" className={dark}>Save</button>
+                    <button type="button" className={pill} onClick={() => setNotesText(null)}>Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" aria-label={notes ? `Notes: ${notes}` : 'Add a note'} disabled={!onSaveNotes} onClick={() => setNotesText(notes)}
+                  className="min-h-[44px] w-full border-0 border-t border-solid border-wall-stone bg-transparent p-0 pt-[8px] text-left">
+                  {notes
+                    ? <span className="block whitespace-pre-wrap break-words text-phone-body leading-snug text-wall-ink">{notes}</span>
+                    : <span className="flex items-center gap-[8px] text-phone-body font-semibold text-wall-ink-2"><Plus size={18} aria-hidden="true" /> Add a note</span>}
+                </button>
+              )}
+              {source && notesText == null && (
+                <div className="mt-[8px] flex flex-wrap items-baseline gap-x-[12px] text-phone-detail text-wall-ink-2">
+                  <span>{source.text}</span>
+                  {source.url && <a href={source.url} target="_blank" rel="noreferrer" className="flex min-h-[44px] items-center font-semibold text-wall-ink">Open email ›</a>}
+                </div>
+              )}
+              {notesError && <div className="text-phone-detail font-semibold text-wall-rust">{notesError}</div>}
             </div>
           )}
 

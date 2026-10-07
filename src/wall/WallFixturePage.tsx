@@ -1,6 +1,7 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
 import { useCallback, useMemo, useState } from 'react'
+import { withNotes } from '../../supabase/functions/_shared/event-notes.mjs'
 import { isLedNight, wallLedMode } from './led'
 import type { BandState } from './assistant'
 import { ProfileSessionContext } from '../contexts/useProfileSession'
@@ -313,7 +314,7 @@ export default function WallFixturePage() {
           start_time: String(args.start), end_time: String(args.end),
           location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
           members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
-        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} choreDone={choreDone} tickChore={async (id, date, done) => {
+        } as unknown as WallEvent])} travelTrips={buildTrips(evs, members as WallMember[], {}, travelSettings)} chores={CHORES} saveChore={async (chore) => setChores((list) => (chore.id ? list.map((c) => (c.id === chore.id ? chore : c)) : [...list, { ...chore, id: `new-${list.length}` }]))} deleteChore={async (id) => setChores((list) => list.filter((c) => c.id !== id))} saveTravel={async (key, change) => setTravelSettings((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...change } }))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} saveNotes={async (event, notes) => setEvs((list) => list.map((e) => (e.id === event.id ? { ...e, description: withNotes((e as { description?: string | null }).description, notes) } : e)))} addChecklist={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])} comingUp={comingUp} todos={todos} casaTalk={casaTalk} choreDone={choreDone} tickChore={async (id, date, done) => {
           const key = choreDoneKey(id, date)
           ;(window as unknown as { __choreTicks?: string[] }).__choreTicks = [...((window as unknown as { __choreTicks?: string[] }).__choreTicks ?? []), `${done ? '+' : '-'}${key}`]
           setChoreDone((was) => { const next = new Set(was); if (done) next.add(key); else next.delete(key); return next })

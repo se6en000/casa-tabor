@@ -49,6 +49,8 @@ function describeEvent(e, utcOffset) {
   if (e.drivers?.length) parts.push(`driver: ${e.drivers.join(', ')}`)
   if (e.address || e.place) parts.push(`at ${e.address || e.place}`)
   if (isRoutineCopy(e.title)) parts.push('SCHOOL-RUN COPY — never change it')
+  // Its notes (canvas 65): what people wrote, an email's specifics — what to answer from when asked about it.
+  if (e.notes) parts.push(`notes: ${String(e.notes).replace(/\s*\n+\s*/g, ' / ').slice(0, 400)}`)
   return parts.join(' · ')
 }
 
@@ -256,12 +258,12 @@ export const FULL_AI_TOOLS = [
   {
     name: 'create_event',
     description: 'Propose a new calendar event or reminder (the person confirms the card).',
-    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself — never prefixed with a person ("Dentist", not "Liv: Dentist"); who goes in people' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] }, notes: { type: 'STRING', description: 'Details to keep with it, shown when it is opened and in that morning’s paper — what to bring, the ideas he asked for (three birthday texts), a number to call' } }, required: ['title', 'start'] },
+    parameters: { type: 'OBJECT', properties: { title: { type: 'STRING', description: 'Short calendar name for the thing itself — never prefixed with a person ("Dentist", not "Liv: Dentist"); who goes in people' }, start: LOCAL, end: LOCAL, all_day: { type: 'BOOLEAN' }, people: { type: 'ARRAY', items: { type: 'STRING' } }, place: { type: 'STRING', description: 'Where, as they said it; a name is enough. The card finds the address, and asks which one when there are several (a chain, two branches), so never ask which location yourself.' }, kind: { type: 'STRING', enum: ['event', 'reminder'] }, notes: { type: 'STRING', description: 'Its notes, shown when it is opened, read by you later and in that morning’s paper. Specific details someone would otherwise have to dig up, one per line: exact times, where to go inside the place, what it costs and how to pay, order or confirmation numbers, names and phone numbers, links, what to say (three birthday texts). Never a summary (“Softball game info”), and nothing already in its name, time or place.' } }, required: ['title', 'start'] },
   },
   {
     name: 'update_event',
     description: 'Propose a change to one calendar item by its [id]: time, place, title, people or driver (the person confirms the card).',
-    parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, start: LOCAL, end: LOCAL, place: { type: 'STRING' }, add_people: { type: 'ARRAY', items: { type: 'STRING' } }, remove_people: { type: 'ARRAY', items: { type: 'STRING' } }, driver: { type: 'STRING', description: 'Family member who will drive' } }, required: ['id'] },
+    parameters: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, start: LOCAL, end: LOCAL, place: { type: 'STRING' }, add_people: { type: 'ARRAY', items: { type: 'STRING' } }, remove_people: { type: 'ARRAY', items: { type: 'STRING' } }, driver: { type: 'STRING', description: 'Family member who will drive' }, add_notes: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Lines to add under its notes (“add to the softball notes: bring chairs”, or new specifics he gave). Specific details someone would otherwise have to dig up, one per line: exact times, where to go inside the place, what it costs and how to pay, order or confirmation numbers, names and phone numbers, links, what to say (three birthday texts). Never a summary (“Softball game info”), and nothing already in its name, time or place.' } }, required: ['id'] },
   },
   {
     name: 'delete_event',
@@ -286,7 +288,7 @@ export const FULL_AI_TOOLS = [
   // Gift ideas (P3.19 step 2): kept for the planner, never shown to the person they're for.
   { name: 'add_gift_idea', description: 'Propose saving a gift idea for someone ("gift idea for Kelly: that ceramic class") — who it is for, and the idea in their words.', parameters: { type: 'OBJECT', properties: { for: { type: 'STRING', description: 'Who the gift is for (a name)' }, idea: { type: 'STRING' } }, required: ['for', 'idea'] } },
   // His to-do list (P3.22; Jake 2026-09-28): the "To Do" list on his phone and Casa's To do screen.
-  { name: 'add_todo', description: 'Propose adding something to his to-do list — anything he wants to get done, with or without a date ("add fix the gate to my to-dos", "remind me to paint the house"). Only a title is needed; a due date only if he gave one (YYYY-MM-DD; "in November" → the 1st of November).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD, only if he gave a date' } }, required: ['title'] } },
+  { name: 'add_todo', description: 'Propose adding something to his to-do list — anything he wants to get done, with or without a date ("add fix the gate to my to-dos", "remind me to paint the house"). Only a title is needed; a due date only if he gave one (YYYY-MM-DD; "in November" → the 1st of November).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, due: { type: 'STRING', description: 'YYYY-MM-DD, only if he gave a date' }, notes: { type: 'STRING', description: 'Its notes, when there are specifics to keep with it. Specific details someone would otherwise have to dig up, one per line: exact times, where to go inside the place, what it costs and how to pay, order or confirmation numbers, names and phone numbers, links, what to say (three birthday texts). Never a summary (“Softball game info”), and nothing already in its name, time or place.' } }, required: ['title'] } },
   { name: 'plan_project', description: 'Propose a big, multi-step home project as a plan: its steps in order (4–9, each a concrete action; the first small enough to do this week), with rough minutes and dollars per step, and an aim date if he gave one. If it is already on his list as a reminder, pass that [id] as from_id so it grows from it instead of a duplicate. Never ask him for the steps — propose them from how such jobs go; he changes them by talking, and nothing is saved until he says yes. Call it only when he asks for the project itself ("make it a project", "add the fence as a project", "set it up" after talking it through) — planning something together is a conversation first. When he does ask for a project, always call this — never write the steps out in words instead (only this card can save them).', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, minutes: { type: 'NUMBER' }, cost: { type: 'NUMBER', description: 'dollars' } }, required: ['title'] } }, aim_date: { type: 'STRING', description: 'YYYY-MM-DD' }, from_id: { type: 'STRING' } }, required: ['title', 'steps'] } },
   // The whole calendar, past and future, reminders included (Jake, 2026-09-28: "search my whole calendar").
   { name: 'find_events', description: 'Look up the calendar beyond the three weeks shown above, past or future: a day (from), a span (from and to), and/or words from the title or place. Reminders are included. Use it for any date not listed, or to check whether something is on the calendar. Asked about any or every time, the last time, or the past: words and no dates — that searches two years either way.', parameters: { type: 'OBJECT', properties: { from: { type: 'STRING', description: 'YYYY-MM-DD' }, to: { type: 'STRING', description: 'YYYY-MM-DD' }, query: { type: 'STRING', description: 'words to look for' } } } },
@@ -553,7 +555,7 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     const title = text(a.title)
     if (!title) return { error: 'I need to know what to add to the to-do list.' }
     const due = typeof a.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(a.due) ? a.due : null
-    return { tool: 'add_todo', args: { title, due } }
+    return { tool: 'add_todo', args: { title, due, ...(text(a.notes) ? { notes: String(a.notes).trim().slice(0, 2000) } : {}) } }
   }
   if (call?.name === 'plan_project') {
     const title = text(a.title)
@@ -632,6 +634,9 @@ export function fullAiCard(call, { events, utcOffset, now, groceries = [], famil
     if (names(a.add_people).length) args.members_add = names(a.add_people)
     if (names(a.remove_people).length) args.members_remove = names(a.remove_people)
     if (text(a.driver)) args.driver_name = text(a.driver)
+    // Canvas 65: lines under its notes, kept with what's there.
+    const lines = (Array.isArray(a.add_notes) ? a.add_notes : []).map((l) => String(l ?? '').trim()).filter(Boolean).slice(0, 12)
+    if (lines.length) args.notes_add = lines
     return { tool: 'update_event', args }
   }
   if (call?.name === 'finish_todo') {
