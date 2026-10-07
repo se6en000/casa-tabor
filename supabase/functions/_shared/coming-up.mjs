@@ -4,6 +4,7 @@
 // stays small: a handful of kinds, one step each, and a poke on the day it's worth doing.
 // Shared by the `coming-up` function (wall, phone, pushes) and its tests.
 import { memberNamed, namesOf } from './family-names.mjs'
+import { SCHOOL_YEARS, isLongBreak } from './school-calendar.mjs'
 
 const DAY = 86400e3
 const TZ = 'America/New_York'
@@ -111,6 +112,20 @@ export const SEASONS = [
   { id: 'christmas_cards', title: 'Christmas cards', date: (y) => `${y}-12-25`, poke: (y) => `${y}-11-15`, step: 'The photo and the card list' },
   { id: 'hurricane', title: 'Hurricane season', date: (y) => `${y}-06-01`, poke: (y) => `${y}-05-15`, step: 'Check the storm supplies' },
 ]
+
+// The kids' long school breaks (school-calendar.mjs; Jake, Oct 7: "potential long school vacation holidays like
+// thanksgiveing / xmas, spring break florida"): six weeks ahead, plans for the week off. Only years the district has
+// published; keyed by the year the break starts.
+for (const name of ['Thanksgiving break', 'Winter break', 'Spring break']) {
+  const breakIn = (y) => SCHOOL_YEARS.flatMap((s) => s.off).find((o) => o.name === name && o.from.startsWith(`${y}-`) && isLongBreak(o)) ?? null
+  SEASONS.push({
+    id: `school_${name.toLowerCase().replace(/\s+/g, '_')}`,
+    title: name,
+    date: (y) => breakIn(y)?.from ?? '0000-01-01',
+    poke: (y) => (breakIn(y) ? addDays(breakIn(y).from, -42) : '9999-12-31'),
+    step: 'Plans for the week off — a trip, camp, or who has the kids',
+  })
+}
 
 const localDate = (e) => {
   if (e.all_day) return String(e.start_time).slice(0, 10)

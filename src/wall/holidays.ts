@@ -1,6 +1,7 @@
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { DayOff } from './engine/dayPlan'
 import type { WallMember } from './engine/types'
+import { SCHOOL_CALENDAR_UNTIL, federalHolidays, rangeWords, schoolDaysOff, weekdaysBetween } from '../../supabase/functions/_shared/school-calendar.mjs'
 
 // School days off for US holidays, asked as one of Alexa's questions (Jake, Oct 7: "if there is a US holiday can there
 // be a suggestion to mark that holiday or school vacation on the kids routine … and also suggest, hey do you need to
@@ -11,38 +12,11 @@ import type { WallMember } from './engine/types'
 export const HOLIDAY_HORIZON_DAYS = 10
 
 const ymdOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const nth = (year: number, month: number, weekday: number, n: number) => {
-  const first = new Date(year, month, 1)
-  return new Date(year, month, 1 + ((weekday - first.getDay() + 7) % 7) + (n - 1) * 7)
-}
-const last = (year: number, month: number, weekday: number) => {
-  const end = new Date(year, month + 1, 0)
-  return new Date(year, month, end.getDate() - ((end.getDay() - weekday + 7) % 7))
-}
-/** A fixed-date holiday on a weekend is kept on the Friday before or the Monday after. */
-const observed = (d: Date) => (d.getDay() === 6 ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1) : d.getDay() === 0 ? new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) : d)
-
-/** The US federal holidays of a year (observed dates), plus the day after Thanksgiving, which schools take too. */
-export function usHolidays(year: number): Array<{ ymd: string; name: string }> {
-  const thanksgiving = nth(year, 10, 4, 4)
-  return [
-    ['New Year’s Day', observed(new Date(year, 0, 1))],
-    ['Martin Luther King Jr. Day', nth(year, 0, 1, 3)],
-    ['Presidents’ Day', nth(year, 1, 1, 3)],
-    ['Memorial Day', last(year, 4, 1)],
-    ['Juneteenth', observed(new Date(year, 5, 19))],
-    ['Independence Day', observed(new Date(year, 6, 4))],
-    ['Labor Day', nth(year, 8, 1, 1)],
-    ['Columbus Day', nth(year, 9, 1, 2)],
-    ['Veterans Day', observed(new Date(year, 10, 11))],
-    ['Thanksgiving', thanksgiving],
-    ['the day after Thanksgiving', new Date(year, 10, thanksgiving.getDate() + 1)],
-    ['Christmas Day', observed(new Date(year, 11, 25))],
-  ].map(([name, d]) => ({ name: name as string, ymd: ymdOf(d as Date) }))
-}
+/** The US federal holidays of a year (observed dates), plus the day after Thanksgiving (school-calendar.mjs). */
+export const usHolidays = (year: number) => federalHolidays(year)
 
 export type HolidayAction =
-  | { type: 'days_off'; ymd: string; memberIds: string[]; holiday: string }
+  | { type: 'days_off'; ymd: string; until?: string; memberIds: string[]; holiday: string }
   | { type: 'cover'; ymd: string; memberIds: string[]; holiday: string; name: string }
 
 export interface HolidayQuestion {
@@ -56,58 +30,81 @@ export interface HolidayQuestion {
   answers: Array<{ label: string; action: HolidayAction | { type: 'dismiss' } }>
 }
 
+/** A long break (a week or more) is asked about three weeks ahead — a trip, camp, or who has the kids. */
+export const BREAK_HORIZON_DAYS = 21
+
 const joinNames = (names: string[]) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)
 const offOn = (memberId: string, ymd: string, dayOffs: DayOff[]) => dayOffs.find((d) => d.member_id === memberId && d.override_type === 'day_off' && ymdOf(new Date(d.start_at)) <= ymd && ymd <= ymdOf(new Date(d.end_at)))
+const dateOf = (ymd: string) => { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, m - 1, d) }
+
+/** The days off ahead: the school calendar's while it lasts, then the federal holidays (single days). */
+export function daysOffAhead(fromYmd: string, toYmd: string): Array<{ from: string; to: string; name: string }> {
+  const school = schoolDaysOff(fromYmd, toYmd < SCHOOL_CALENDAR_UNTIL ? toYmd : SCHOOL_CALENDAR_UNTIL)
+  const years = [Number(fromYmd.slice(0, 4)), Number(toYmd.slice(0, 4))]
+  const federal = [...new Set(years)].flatMap(usHolidays)
+    .filter((h) => h.ymd > SCHOOL_CALENDAR_UNTIL && h.ymd >= fromYmd && h.ymd <= toYmd)
+    .map((h) => ({ from: h.ymd, to: h.ymd, name: h.name }))
+  return [...school, ...federal].sort((a, b) => a.from.localeCompare(b.from))
+}
 
 /**
- * The holiday questions due now: "Columbus Day is Monday — are Liv, Emme and Owen off school?" for a holiday in the
- * next ten days on a weekday someone has school and nobody's marked off; then, for those off with nobody named,
- * "Owen and Emme are home Monday — who has them?" (the person who usually has them first, then whoever else cares
- * for the kids). Answered or dismissed ones don't come back.
+ * The questions due now: "Columbus Day is Monday — are Liv, Emme and Owen off school?" ten days before a day off on a
+ * school day, "Winter break is Mon Dec 21 – Fri Jan 1 — are Liv, Emme and Owen off?" three weeks before a long one;
+ * then, for those off with nobody named, "… who has them?" (the person who usually has them first). Answered or
+ * waved off ones don't come back.
  */
 export function holidayQuestions({ now, routines, dayOffs, members, dismissed = new Set<string>() }: { now: Date; routines: FamilyRoutine[]; dayOffs: DayOff[]; members: WallMember[]; dismissed?: ReadonlySet<string> }): HolidayQuestion[] {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const until = new Date(today.getFullYear(), today.getMonth(), today.getDate() + HOLIDAY_HORIZON_DAYS)
+  const ymd = (d: Date) => ymdOf(d)
+  const tomorrow = ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1))
+  const far = ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() + BREAK_HORIZON_DAYS))
+  const near = ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() + HOLIDAY_HORIZON_DAYS))
   const found: HolidayQuestion[] = []
-  for (const { ymd, name } of [...usHolidays(today.getFullYear()), ...usHolidays(today.getFullYear() + 1)]) {
-    const [y, m, d] = ymd.split('-').map(Number)
-    const date = new Date(y, m - 1, d)
-    if (!(date > today && date <= until)) continue
-    const weekday = date.getDay()
-    const school = routines.filter((r) => r.enabled !== false && (r.routineType ?? 'school') === 'school' && r.daysOfWeek.includes(weekday)
-      && (!r.startDate || r.startDate <= ymd) && (!r.endDate || ymd <= r.endDate))
+  for (const off of daysOffAhead(tomorrow, far)) {
+    if (off.from < tomorrow) continue
+    const long = weekdaysBetween(off.from, off.to) >= 5
+    if (!long && off.from > near) continue
+    // Who has school on one of those days.
+    const weekdays = new Set<number>()
+    for (let t = dateOf(off.from); ymd(t) <= off.to; t = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1)) weekdays.add(t.getDay())
+    const school = routines.filter((r) => r.enabled !== false && (r.routineType ?? 'school') === 'school' && r.daysOfWeek.some((d) => weekdays.has(d))
+      && (!r.startDate || r.startDate <= off.to) && (!r.endDate || off.from <= r.endDate))
     const kids = [...new Set(school.map((r) => r.memberId))].filter((id) => members.some((m) => m.id === id))
     if (kids.length === 0) continue
-    const when = date.toLocaleDateString('en-US', { weekday: 'long' })
-    const at = new Date(y, m - 1, d, 7, 0)
-    const notOff = kids.filter((id) => !offOn(id, ymd, dayOffs))
+    const date = dateOf(off.from)
+    const when = off.from === off.to ? date.toLocaleDateString('en-US', { weekday: 'long' }) : rangeWords(off.from, off.to)
+    const at = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0)
+    const notOff = kids.filter((id) => !offOn(id, off.from, dayOffs))
     if (notOff.length === kids.length) {
-      const key = `holiday-off:${ymd}`
+      const key = `holiday-off:${off.from}`
       if (dismissed.has(key)) continue
       found.push({
-        key, kind: 'holiday_off', date, at, holiday: name, memberIds: kids,
-        text: `${name} is ${when} — ${kids.length === 1 ? 'is' : 'are'} ${joinNames(kids.map(nameOf))} off school?`,
+        key, kind: 'holiday_off', date, at, holiday: off.name, memberIds: kids,
+        text: `${off.name} is ${when} — ${kids.length === 1 ? 'is' : 'are'} ${joinNames(kids.map(nameOf))} off${long ? '' : ' school'}?`,
         answers: [
-          { label: kids.length === 1 ? 'Off that day' : 'They’re off', action: { type: 'days_off', ymd, memberIds: kids, holiday: name } },
+          { label: kids.length === 1 ? 'Off then' : 'They’re off', action: { type: 'days_off', ymd: off.from, ...(off.to !== off.from ? { until: off.to } : {}), memberIds: kids, holiday: off.name } },
           { label: 'School’s open', action: { type: 'dismiss' } },
         ],
       })
       continue
     }
-    // Off, and nobody named for them yet: who has them? (Only the ones someone usually has — a carer, or a pickup.)
-    const home = kids.filter((id) => { const off = offOn(id, ymd, dayOffs); return off && !/ has (him|her|them)| with /i.test(String((off as DayOff & { note?: string | null }).note ?? '')) })
+    // Off, and nobody named for them yet: who has them?
+    const home = kids.filter((id) => { const o = offOn(id, off.from, dayOffs); return o && !/ has (him|her|them)| with /i.test(String((o as DayOff & { note?: string | null }).note ?? '')) })
     if (home.length === 0) continue
-    const key = `holiday-cover:${ymd}`
+    const key = `holiday-cover:${off.from}`
     if (dismissed.has(key)) continue
     const usual = [...new Set(routines.filter((r) => home.includes(r.memberId) && (r.routineType === 'care' || r.routineType === 'school'))
       .map((r) => (r.routineType === 'care' ? r.pickupDriverName || r.dropoffDriverName : r.pickupDriverName)).filter(Boolean))]
     const carers = [...usual, ...members.filter((m) => m.role === 'caregiver').map((m) => m.name)].filter((n, i, all) => n && all.indexOf(n) === i)
+    const them = home.length === 1 ? nameOf(home[0]) : 'them'
     found.push({
-      key, kind: 'holiday_cover', date, at, holiday: name, memberIds: home,
-      text: `${joinNames(home.map(nameOf))} ${home.length === 1 ? 'is' : 'are'} home ${when} for ${name} — who has ${home.length === 1 ? nameOf(home[0]) : 'them'}?`,
+      key, kind: 'holiday_cover', date, at, holiday: off.name, memberIds: home,
+      text: long
+        ? `${joinNames(home.map(nameOf))} ${home.length === 1 ? 'is' : 'are'} off ${when} for ${off.name} — who has ${them}?`
+        : `${joinNames(home.map(nameOf))} ${home.length === 1 ? 'is' : 'are'} home ${when} for ${off.name} — who has ${them}?`,
       answers: [
-        ...carers.slice(0, 1).map((n) => ({ label: `${n} has ${home.length === 1 ? nameOf(home[0]) : 'them'}`, action: { type: 'cover' as const, ymd, memberIds: home, holiday: name, name: n } })),
+        ...carers.slice(0, 1).map((n) => ({ label: `${n} has ${them}`, action: { type: 'cover' as const, ymd: off.from, memberIds: home, holiday: off.name, name: n } })),
         { label: 'We’ve got it', action: { type: 'dismiss' } },
       ],
     })

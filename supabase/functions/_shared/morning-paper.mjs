@@ -3,6 +3,7 @@
 // a joke — "you can adjust this every day without my permission"). The wall sends the facts (src/wall/paper.ts); the
 // server looks up the surprise and this writes the words, once a day. Pure, so it's tested.
 
+import { holidaysSection } from './school-calendar.mjs'
 const hourLabel = (h) => (h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`)
 
 /** The day's sky from Open-Meteo's hourly forecast (local times "2026-10-07T15:00"), 6 AM to 9 PM, in plain facts. */
@@ -47,6 +48,8 @@ export function paperPrompt(facts, sky, more = null, found = null, voice = null)
       list('To-dos that have gone quiet', more.quiet, (q) => q),
     )
   }
+  // Holidays and the kids' school breaks ahead, for the weekend, month and way-out columns (Jake, Oct 7).
+  if (more) { const ahead = holidaysSection(facts.date, 4); if (ahead) lines.push(ahead.split('\nBe a step ahead')[0]) }
   if (found) lines.push(`Found on the web this morning (real places and events — use only these for the surprise): ${found}`)
   return `You write Tabor House's morning brief: the front page on the family's kitchen wall, read over coffee. You have creative freedom (Jake: "surprise me … make it what you think would be a great morning brief"), within the rules below.${voice ? `
 ${voice} Let the aside and the joke sound like her; the logistics stay plain.` : ''}

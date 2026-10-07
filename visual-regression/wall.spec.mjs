@@ -1991,19 +1991,15 @@ test('wall: a school holiday — are they off? then who has them? — asked as S
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'Something for you' }).click()
   const band = wall.getByRole('region', { name: 'Something for you' })
-  await expect(band.getByText('Thanksgiving is Thursday — are Liv, Emme and Owen off school?')).toBeVisible()
+  // The district's Thanksgiving break, the whole week as one (school-calendar.mjs).
+  await expect(band.getByText('Thanksgiving break is Mon Nov 23 – Fri Nov 27 — are Liv, Emme and Owen off?')).toBeVisible()
   await expect(band.getByText('It’s a school day for them otherwise.')).toBeVisible()
   await band.getByRole('button', { name: 'They’re off' }).click()
   await expect(band).toHaveCount(0)
   // Off now: who has them? (Giselle, who picks them up, first.)
   await wall.getByRole('button', { name: 'Something for you' }).click()
-  await expect(band.getByText('Liv, Emme and Owen are home Thursday for Thanksgiving — who has them?')).toBeVisible()
+  await expect(band.getByText('Liv, Emme and Owen are off Mon Nov 23 – Fri Nov 27 for Thanksgiving break — who has them?')).toBeVisible()
   await band.getByRole('button', { name: 'Giselle has them' }).click()
-  await expect(band).toHaveCount(0)
-  // Next up, the day after: are they off then too?
-  await wall.getByRole('button', { name: 'Something for you' }).click()
-  await expect(band.getByText('the day after Thanksgiving is Friday — are Liv, Emme and Owen off school?')).toBeVisible()
-  await band.getByRole('button', { name: 'School’s open' }).click()
   await expect(wall.getByRole('button', { name: 'Something for you' })).toHaveCount(0)
 })
 

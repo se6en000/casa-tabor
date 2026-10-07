@@ -46,7 +46,7 @@ export function useFamilyDay(audience: Audience = { kind: 'wall' }, around: Date
       },
       dismiss: (date: Date, key: string) => trips.save(withDismissed(trips.state, date, key)),
       // A school holiday (holidays.ts): the kids off that day, and who has them.
-      daysOff: async (memberIds: string[], ymd: string, note: string) => { for (const id of memberIds) await addDayOff(queryClient, id, ymd, note) },
+      daysOff: async (memberIds: string[], ymd: string, note: string, until?: string) => { for (const id of memberIds) await addDayOff(queryClient, id, ymd, note, until ?? ymd) },
       cover: (memberIds: string[], ymd: string, note: string) => setDayOffCover(queryClient, memberIds, ymd, note),
     }
   }, [today?.date, now, trips, allEvents, members, queryClient])

@@ -57,3 +57,22 @@ test('the quick answers are told Thursday Oct 8 too (the path that said “start
   assert.match(prompt, /\[heather\] Heather’s Birthday — Thursday Oct 8, all day/)
   assert.doesNotMatch(prompt, /Heather’s Birthday — Wednesday/)
 })
+
+import { holidaysSection } from '../supabase/functions/_shared/school-calendar.mjs'
+import { paperPrompt } from '../supabase/functions/_shared/morning-paper.mjs'
+
+// Jake, Oct 7: "I just alexa /AI to have knowledge of them and be proactive with them espcially gift and potential
+// long school vacation holidays like thanksgiveing / xmas, spring break florida".
+test('Alexa and the brief know the holidays and the school breaks ahead', () => {
+  const s = holidaysSection('2026-10-07')
+  assert.match(s, /- Mon Oct 12: Columbus Day\n- Mon Oct 12: no school — Columbus Day/)
+  assert.match(s, /- Mon Nov 23 – Fri Nov 27: no school — Thanksgiving break \(5 school days off\)/)
+  assert.match(s, /- Mon Dec 21 – Fri Jan 1: no school — Winter break \(10 school days off\)/)
+  assert.match(s, /- Mon Mar 22 – Fri Mar 26: no school — Spring break/)
+  assert.match(s, /Never make up a break/)
+  const system = buildFullAiSystem({ family: [], events: [], groceries: [], pending: null, onScreenIds: [], utcOffset: '-04:00', now: new Date('2026-10-07T15:40:00Z'), homeCity: 'West Palm Beach' })
+  assert.match(system, /HOLIDAYS AND SCHOOL DAYS OFF/)
+  const facts = { date: '2026-10-07', day: 'Wednesday, October 7, 2026', runs: [], away: [], also: [], weatherNow: null }
+  assert.match(paperPrompt(facts, null, { people: [], week: [], comingUp: [], projects: [], quiet: [] }), /Winter break/)
+  assert.match(holidaysSection('2027-08-01'), /school calendar for this year isn't in yet/)
+})

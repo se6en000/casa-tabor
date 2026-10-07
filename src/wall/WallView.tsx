@@ -90,7 +90,7 @@ export interface WallViewProps {
     /** Remembers a "keep it as it is" answer for that day. */
     dismiss: (date: Date, decisionKey: string) => Promise<void>
     /** A school holiday: the kids off that day (a day off each, named for it), and who has them (on those days off). */
-    daysOff?: (memberIds: string[], ymd: string, note: string) => Promise<void>
+    daysOff?: (memberIds: string[], ymd: string, note: string, until?: string) => Promise<void>
     cover?: (memberIds: string[], ymd: string, note: string) => Promise<void>
   }
   /** Today and the next six days (decisions look this far ahead). */
@@ -445,7 +445,7 @@ export default function WallView(props: WallViewProps) {
     ) as Record<string, string>
   const answer = async (decision: DatedDecision, action: DecisionAction) => {
     // A school holiday: the kids off that day (one day off each, named for it), or who has them.
-    if (action.type === 'days_off') return tripActions?.daysOff?.(action.memberIds, action.ymd, action.holiday)
+    if (action.type === 'days_off') return tripActions?.daysOff?.(action.memberIds, action.ymd, action.holiday, action.until)
     if (action.type === 'cover') return tripActions?.cover?.(action.memberIds, action.ymd, `${action.holiday} · ${action.name} has them`)
     if (!tripActions) return
     const plan = strip.find((p) => sameDay(p.date, decision.date)) ?? week.find((p) => sameDay(p.date, decision.date))

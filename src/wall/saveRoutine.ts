@@ -28,10 +28,12 @@ export async function removeRoutine(qc: QueryClient, routine: FamilyRoutine): Pr
 }
 
 /** A day off for the person (no school, no work): the whole day, in the family's time zone. */
-export async function addDayOff(qc: QueryClient, memberId: string, ymd: string, note = 'Day off'): Promise<void> {
+export async function addDayOff(qc: QueryClient, memberId: string, ymd: string, note = 'Day off', until = ymd): Promise<void> {
   const [y, m, d] = ymd.split('-').map(Number)
+  const [uy, um, ud] = until.split('-').map(Number)
   const start = new Date(y, m - 1, d, 0, 0, 0)
-  const end = new Date(y, m - 1, d, 23, 59, 0)
+  // A break is one day off from its first day to its last (isDayOff reads the range).
+  const end = new Date(uy, um - 1, ud, 23, 59, 0)
   const { error } = await supabase.from('member_availability_exceptions').insert({
     member_id: memberId, start_at: start.toISOString(), end_at: end.toISOString(), override_type: 'day_off', note,
   })

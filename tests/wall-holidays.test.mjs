@@ -34,3 +34,24 @@ test('once they’re off: who has them? — Giselle, who has Owen most afternoon
   assert.deepEqual(q.answers.map((a) => a.label), ['Giselle has them', 'We’ve got it'])
   assert.deepEqual(ask({ dayOffs: [off('liv', 'Columbus Day · Giselle has them'), off('emme', 'Columbus Day · Giselle has them'), off('owen', 'Columbus Day · Giselle has them')] }), [])
 })
+
+import { daysOffAhead } from '../src/wall/holidays.ts'
+
+// Jake, Oct 7: "potential long school vacation holidays like thanksgiveing / xmas, spring break florida" — from the
+// district's 2026–27 calendar: a long break asked three weeks ahead as one question; single days ten days ahead.
+test('the district calendar: Election Day and Veterans Day ten days out, Thanksgiving break as one week three weeks out', () => {
+  const qs = holidayQuestions({ now: new Date(2026, 10, 2, 9, 0), routines, dayOffs: [], members })
+  assert.deepEqual(qs.map((q) => q.text), [
+    'Election Day (no school) is Tuesday — are Liv, Emme and Owen off school?',
+    'Veterans Day is Wednesday — are Liv, Emme and Owen off school?',
+    'Thanksgiving break is Mon Nov 23 – Fri Nov 27 — are Liv, Emme and Owen off?',
+  ])
+  assert.deepEqual(qs[2].answers[0].action, { type: 'days_off', ymd: '2026-11-23', until: '2026-11-27', memberIds: ['liv', 'emme', 'owen'], holiday: 'Thanksgiving break' })
+  const spring = holidayQuestions({ now: new Date(2027, 2, 2), routines, dayOffs: [], members }).map((q) => q.holiday)
+  assert.deepEqual(spring, ['Spring Holiday', 'Spring break'])
+})
+
+test('past the published school year, the federal holidays stand in', () => {
+  assert.deepEqual(daysOffAhead('2027-08-28', '2027-09-10'), [{ from: '2027-09-06', to: '2027-09-06', name: 'Labor Day' }])
+  assert.deepEqual(daysOffAhead('2026-12-15', '2027-01-05').map((o) => o.name), ['Winter break', 'No school (teacher day)'])
+})

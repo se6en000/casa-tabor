@@ -196,9 +196,10 @@ export default function WallFixturePage() {
     },
     dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
     // A school holiday's answers, in memory (holidays.ts).
-    daysOff: async (ids: string[], ymd: string, note: string) => {
+    daysOff: async (ids: string[], ymd: string, note: string, until = ymd) => {
       const [y, m, d] = ymd.split('-').map(Number)
-      setDayOffs((list) => [...list, ...ids.map((id) => ({ id: `off-${id}-${ymd}`, member_id: id, override_type: 'day_off', start_at: new Date(y, m - 1, d, 0, 0).toISOString(), end_at: new Date(y, m - 1, d, 23, 59).toISOString(), note }))])
+      const [uy, um, ud] = until.split('-').map(Number)
+      setDayOffs((list) => [...list, ...ids.map((id) => ({ id: `off-${id}-${ymd}`, member_id: id, override_type: 'day_off', start_at: new Date(y, m - 1, d, 0, 0).toISOString(), end_at: new Date(uy, um - 1, ud, 23, 59).toISOString(), note }))])
     },
     cover: async (ids: string[], ymd: string, note: string) => setDayOffs((list) => list.map((o) => (ids.includes(o.member_id) && o.start_at.slice(0, 10) === ymd ? { ...o, note } : o))),
   }

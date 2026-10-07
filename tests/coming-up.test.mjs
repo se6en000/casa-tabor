@@ -317,3 +317,12 @@ test('once started, the season shows its project: progress, what’s Now, and Op
   // Its own target isn't listed a second time.
   assert.equal(items['target:hw'], undefined)
 })
+
+// Jake, Oct 7: "potential long school vacation holidays like thanksgiveing / xmas, spring break florida" — the
+// district's long breaks come up six weeks ahead: plans for the week off.
+test('the long school breaks come up six weeks ahead, from the district calendar', () => {
+  const titles = (iso) => buildComingUp({ now: new Date(iso), events: [], seasons: SEASONS }).filter((i) => i.kind === 'season' && /break/.test(i.title)).map((i) => [i.title, i.date, i.pokeOn])
+  assert.deepEqual(titles('2026-10-07T12:00:00-04:00'), [['Thanksgiving break', '2026-11-23', '2026-10-12'], ['Winter break', '2026-12-21', '2026-11-09']])
+  assert.deepEqual(titles('2027-02-10T12:00:00-05:00'), [['Spring break', '2027-03-22', '2027-02-08']])
+  assert.deepEqual(titles('2027-06-10T12:00:00-04:00'), [], 'past the published year: nothing made up')
+})

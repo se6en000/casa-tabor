@@ -76,7 +76,7 @@ export interface PhoneTripActions {
   handOff: (trip: Trip, driverId: string, date?: Date) => Promise<void>
   dismiss?: (date: Date, key: string) => Promise<void>
   /** A school holiday (holidays.ts): the kids off that day, and who has them. */
-  daysOff?: (memberIds: string[], ymd: string, note: string) => Promise<void>
+  daysOff?: (memberIds: string[], ymd: string, note: string, until?: string) => Promise<void>
   cover?: (memberIds: string[], ymd: string, note: string) => Promise<void>
 }
 
@@ -286,7 +286,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
     if (action.type === 'snooze') return casaTalk?.snooze(talkTopic.key, snoozeUntil(talkTopic.at, now))
     if (action.type === 'dismiss') return tripActions?.dismiss?.(d.date, d.key)
     // A school holiday (holidays.ts): the kids off that day, or who has them.
-    if (action.type === 'days_off') return tripActions?.daysOff?.(action.memberIds, action.ymd, action.holiday)
+    if (action.type === 'days_off') return tripActions?.daysOff?.(action.memberIds, action.ymd, action.holiday, action.until)
     if (action.type === 'cover') return tripActions?.cover?.(action.memberIds, action.ymd, `${action.holiday} · ${action.name} has them`)
     const plan = week.find((p) => p.date.toDateString() === d.date.toDateString())
     if (!plan) return
