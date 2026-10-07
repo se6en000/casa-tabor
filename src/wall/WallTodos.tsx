@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatWallDate } from './clock'
 import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion, type PastStep } from './todos'
@@ -142,6 +143,10 @@ const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
 export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onActivity, tabs, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
+  // Opening To do asks for the list fresh (Jake, Oct 7: a change made minutes before still showed the old list on his
+  // Mac — it's kept five minutes and refreshed every fifteen).
+  const queryClient = useQueryClient()
+  useEffect(() => { void queryClient.invalidateQueries({ queryKey: ['todos'] }) }, [queryClient])
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)

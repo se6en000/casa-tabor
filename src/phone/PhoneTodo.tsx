@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { GROUPS, sizeChips, type TodoAction, type TodoItem, type TodoList } from '../wall/todos'
 import { haptic } from './haptic'
 
@@ -27,6 +28,10 @@ export function Answer({ label, primary = false, onClick }: { label: string; pri
 }
 
 export default function PhoneTodo({ list, onAct, onEdit }: PhoneTodoProps) {
+  // Opening To do asks for the list fresh (Jake, Oct 7: a change made minutes before still showed the old list on his
+  // Mac — it's kept five minutes and refreshed every fifteen).
+  const queryClient = useQueryClient()
+  useEffect(() => { void queryClient.invalidateQueries({ queryKey: ['todos'] }) }, [queryClient])
   const [open, setOpen] = useState<string | null>(null)
   const [foldOpen, setFoldOpen] = useState(false)
   // A card swiped left shows Tomorrow and Later (34c); one at a time.
