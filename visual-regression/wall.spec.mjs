@@ -168,7 +168,7 @@ test('wall: the week strip shows another day, in the day-ahead layout, and comes
   await expect(week.getByRole('button', { name: /^Today/ })).toHaveAttribute('aria-pressed', 'true')
 
   await week.getByRole('button', { name: /^Saturday, September 26/ }).click()
-  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
   await expect(wall.getByRole('banner').getByText('TOMORROW', { exact: true })).toBeVisible()
   await expect(wall.getByRole('region', { name: 'First departure' }).getByText('Jake → Ferrin Park Field 1')).toBeVisible()
   await expect(week.getByRole('button', { name: /^Saturday, September 26/ })).toHaveAttribute('aria-pressed', 'true')
@@ -191,7 +191,7 @@ test('wall: from 1 PM tomorrow speaks up on the full day, and a tap opens it', a
   await expect(note).not.toContainText('Birthday') // a celebration's prep never reaches the wall
   await expect(wall).toHaveScreenshot('tomorrow-note.png')
   await note.click()
-  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
 })
 
 test('wall: nothing runs off the stage, even late in the day, and the header keeps its weather line', async ({ page }) => {
@@ -2274,7 +2274,7 @@ test('wall: STILL TONIGHT — from 7 PM the wall is tomorrow’s, and what’s l
   await expect(card.getByRole('button', { name: 'Kelly at the gym, until 9:30' })).toBeVisible()
   await expect(wall.getByRole('button', { name: /^Today:/ }).getByText('2 left tonight')).toBeVisible()
   // The rest of the face is tomorrow's, as before.
-  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
   await expect(wall).toHaveScreenshot('still-tonight.png')
 
   // A second tap in the moment takes the tick back: nothing is saved.
@@ -2410,7 +2410,7 @@ test('wall: the evening settles to a night Calm after 10 untouched minutes; a to
   const wall = page.getByTestId('wall-fixture')
   await expect(wall).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
   await page.clock.fastForward('09:00')
   await expect(wall.getByLabel('Night', { exact: true })).toHaveCount(0)
   await page.clock.fastForward('01:30')
@@ -2421,7 +2421,7 @@ test('wall: the evening settles to a night Calm after 10 untouched minutes; a to
   await expect(wall).toHaveScreenshot('night-calm.png')
   await night.click()
   await expect(wall.getByLabel('Night', { exact: true })).toHaveCount(0)
-  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
 })
 
 test('wall: after midnight the night Calm is dimmer, with no buttons until a touch', async ({ page }) => {

@@ -122,6 +122,8 @@ export interface WallScoreProps {
   compact?: boolean
   /** Take the height it's given (the stage beside the left panel, canvas 56A): the lanes share it. */
   fill?: boolean
+  /** The words over the names, when shorter than its name ("WHO'S WHERE" under the evening's big date; the name keeps the day). */
+  shownHeading?: string
   /** The face shows "Hide routines" itself (the evening, beside its date), so the Score doesn't. */
   routinesElsewhere?: boolean
   interaction?: ScoreInteraction
@@ -162,7 +164,7 @@ export function HideRoutinesPill({ hidden, onToggle, className = '' }: { hidden:
   )
 }
 
-export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, fill = false, routinesElsewhere = false, interaction }: WallScoreProps) {
+export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, fill = false, routinesElsewhere = false, shownHeading, interaction }: WallScoreProps) {
   const highlight = interaction?.highlight
   const ringFor = (sourceId: string) =>
     highlight?.sourceId === sourceId
@@ -194,7 +196,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
       )}
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[256px] shrink-0 truncate pb-[6px] text-wall-label font-bold tracking-[0.12em] text-wall-ink-2">
-          {heading}
+          {shownHeading ?? heading}
         </div>
         <div className="relative h-full w-[976px] text-wall-label text-wall-ink-2">
           {marks.map((mark) => (

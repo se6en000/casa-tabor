@@ -136,7 +136,7 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
           </section>
         )}
 
-        <WallScore score={score} now={asOf} heading={`${asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()} · WHO'S WHERE`} fill compact={packing.total > 0 || decisions.length > 0} routinesElsewhere interaction={interaction} />
+        <WallScore score={score} now={asOf} heading={`${asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()} · WHO'S WHERE`} shownHeading="WHO'S WHERE" fill compact={packing.total > 0 || decisions.length > 0} routinesElsewhere interaction={interaction} />
 
         {week}
       </div>
