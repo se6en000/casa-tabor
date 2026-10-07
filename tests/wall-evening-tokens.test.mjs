@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 // listed here with why.
 const SAME_AT_NIGHT = {
   'wall-ground-calm': 'the day calm face only; the night calm face draws on the evening ground',
+  'wall-rail': 'the left panel (canvas 56A) carries .wall-evening itself, so it can’t be remapped; at night it draws on wall-night-rail',
   'wall-band': 'the assistant band is dark by day too; over the night face it raises itself (.wall-band-over-night)',
 }
 

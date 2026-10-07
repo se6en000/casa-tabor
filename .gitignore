@@ -36,3 +36,7 @@ dist-ssr
 /test-results
 pi/__pycache__/
 .env*
+
+# Scratch scripts (screenshots, probes) — never committed
+.*tmp.mjs
+*.tmp.mjs

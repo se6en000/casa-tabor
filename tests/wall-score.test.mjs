@@ -81,16 +81,20 @@ test('a game with no driver shows its road time as unassigned in the players\' l
   assert.ok(owen.blocks.some((b) => b.kind === 'activity' && b.sourceId === 'baseball'))
 })
 
-test('labels that would overlap the one before are dropped, never stacked', () => {
+test('a label that would overlap the one before takes the line under the bars; a third crowded one is dropped', () => {
   const crowded = [
     ...events,
     { id: 'a', title: 'Call the plumber about the kitchen', all_day: false, start_time: at(25, 13, 0).toISOString(), end_time: at(25, 13, 15).toISOString(), location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
     { id: 'b', title: 'Order flowers', all_day: false, start_time: at(25, 13, 10).toISOString(), end_time: at(25, 13, 20).toISOString(), location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
+    { id: 'c', title: 'Text Grandma', all_day: false, start_time: at(25, 13, 20).toISOString(), end_time: at(25, 13, 25).toISOString(), location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }] },
   ]
   const score = buildScore(buildDayPlan({ date: FRIDAY, members, routines, events: crowded }), members, at(25, 10, 8))
   const jake = lane(score, 'jake-id')
   assert.equal(jake.blocks.find((b) => b.sourceId === 'a').label, 'Call the plumber about the kitchen')
-  assert.equal(jake.blocks.find((b) => b.sourceId === 'b').label, null)
+  const b = jake.blocks.find((x) => x.sourceId === 'b')
+  assert.equal(b.label, 'Order flowers')
+  assert.equal(b.labelLow, true)
+  assert.equal(jake.blocks.find((x) => x.sourceId === 'c').label, null)
 })
 
 test('each lane says where the person is now, or when they next leave', () => {

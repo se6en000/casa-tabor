@@ -23,6 +23,8 @@ export interface ScoreBlock {
   label: string | null
   /** How wide a label above the block may run before the next one starts (truncated past it); null = no limit. */
   labelMaxWidth: number | null
+  /** Crowded out of the line above the bars: its label goes under the bar where the lane is tall enough (canvas 56A), else it isn't shown. */
+  labelLow?: boolean
   /** Whose color: the lane's person, or the driver for a driving leg. */
   pigmentIndex: number
   placeStatus: PlaceStatus
@@ -252,14 +254,24 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
     })
 
     // Labels above blocks read left to right: each runs up to the next one (truncated
-    // there), and a label starting too close to the previous one is dropped.
+    // there). A label starting too close to the previous one takes a second line under the
+    // bars — shown where the lanes are tall (the stage beside the left panel, whose timeline
+    // is narrower) — and is dropped when that line is crowded too.
     let previous: ScoreBlock | null = null
+    let previousLow: ScoreBlock | null = null
     for (const block of [...blocks].sort((a, b) => a.x - b.x)) {
       if (LABEL_INSIDE.has(block.kind) || !block.label) continue
       if (previous) {
         const room = block.x - previous.x - LABEL_GAP
         if (room < MIN_LABEL_WIDTH) {
-          block.label = null
+          const lowRoom = previousLow ? block.x - previousLow.x - LABEL_GAP : Infinity
+          if (lowRoom < MIN_LABEL_WIDTH) {
+            block.label = null
+            continue
+          }
+          if (previousLow) previousLow.labelMaxWidth = lowRoom
+          block.labelLow = true
+          previousLow = block
           continue
         }
         previous.labelMaxWidth = room

@@ -7,8 +7,8 @@ import { LABEL_INSIDE, type Score, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
 
 // Stage geometry (px on the fixed 1920x1080 stage).
-const LANE_HEADER_WIDTH = 300
-const LANE_GUTTER = 20
+const LANE_HEADER_WIDTH = 240
+const LANE_GUTTER = 16
 const TRACK_LEFT = LANE_HEADER_WIDTH + LANE_GUTTER
 // The stage has 24px to the right of the timeline (padding included); labels may use 16 of it.
 const LABEL_OVERHANG = 16
@@ -42,9 +42,10 @@ function useLabelFit(score: Score | null) {
           const key = el.dataset.blockLabel ?? ''
           const block = byKey.get(key)
           // scrollWidth rounds; on the kiosk's scaled stage a 219.4px label reads 219 and would be cut to "…", so allow 1px.
-          return block ? [{ key, x: block.x, width: el.scrollWidth + 1, maxWidth: block.labelMaxWidth }] : []
+          return block ? [{ key, x: block.x, width: el.scrollWidth + 1, maxWidth: block.labelMaxWidth, low: Boolean(block.labelLow) }] : []
         })
-        Object.assign(next, fitLabels(labels, LABEL_LIMIT))
+        // The line above the bars and the one under them are fitted on their own.
+        Object.assign(next, fitLabels(labels.filter((l) => !l.low), LABEL_LIMIT), fitLabels(labels.filter((l) => l.low), LABEL_LIMIT))
       }
       setFit((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next))
     }
@@ -119,6 +120,10 @@ export interface WallScoreProps {
   heading?: string
   /** Shorter lanes, for the evening posture. */
   compact?: boolean
+  /** Take the height it's given (the stage beside the left panel, canvas 56A): the lanes share it. */
+  fill?: boolean
+  /** The face shows "Hide routines" itself (the evening, beside its date), so the Score doesn't. */
+  routinesElsewhere?: boolean
   interaction?: ScoreInteraction
 }
 
@@ -128,8 +133,10 @@ const MIN_HIT_WIDTH = 56
 // about 58px, so everything moves up and the bars get thinner rather than spilling onto the
 // next lane's line (seen on the kiosk 2026-09-25). Written out in full for Tailwind.
 const LANE_GEOMETRY = {
-  full: { label: 'top-[6px]', bar: 'top-[36px] h-[28px]', monogram: 'top-[34px] h-[32px] w-[32px]', note: 'top-[38px]', mark: 'top-[17px]' },
-  compact: { label: 'top-[2px]', bar: 'top-[28px] h-[22px]', monogram: 'top-[26px] h-[26px] w-[26px]', note: 'top-[28px]', mark: 'top-[7px]' },
+  full: { label: 'top-[6px]', low: null, bar: 'top-[36px] h-[28px]', monogram: 'top-[34px] h-[32px] w-[32px]', note: 'top-[38px]', mark: 'top-[17px]' },
+  compact: { label: 'top-[2px]', low: null, bar: 'top-[28px] h-[22px]', monogram: 'top-[26px] h-[26px] w-[26px]', note: 'top-[28px]', mark: 'top-[7px]' },
+  // Lanes with room to spare (canvas 56A): the label and bar sit together in the middle of the lane.
+  tall: { label: 'top-[calc(50%-27px)]', low: 'top-[calc(50%+35px)]', bar: 'top-[calc(50%+3px)] h-[28px]', monogram: 'top-[calc(50%+1px)] h-[32px] w-[32px]', note: 'top-[calc(50%+5px)]', mark: 'top-[calc(50%-16px)]' },
 } as const
 
 /**
@@ -155,7 +162,7 @@ export function HideRoutinesPill({ hidden, onToggle, className = '' }: { hidden:
   )
 }
 
-export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, interaction }: WallScoreProps) {
+export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, fill = false, routinesElsewhere = false, interaction }: WallScoreProps) {
   const highlight = interaction?.highlight
   const ringFor = (sourceId: string) =>
     highlight?.sourceId === sourceId
@@ -170,27 +177,31 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
   const marks = showNow ? HOUR_MARKS.filter((mark) => mark.x < nowX - 20 || mark.x > nowX + 70) : HOUR_MARKS
   const lanes = score?.lanes ?? []
   const labels = useLabelFit(score)
-  const at = LANE_GEOMETRY[compact ? 'compact' : 'full']
+  const at = LANE_GEOMETRY[compact ? 'compact' : fill ? 'tall' : 'full']
   // The "No one yet" row (board 08a) adds its own height rather than squeezing the lanes.
   const hasNobody = Boolean(score && score.nobody.length > 0)
+  // The lines through the lanes stop where the lanes do (above the Hide routines row, when there is one).
+  const routinesRow = Boolean(interaction?.routines && fill && !routinesElsewhere)
+  const linesEnd = routinesRow ? 'bottom-[48px]' : 'bottom-0'
 
   return (
-    <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}>
-      {interaction?.routines && (
+    <section ref={labels.ref} aria-label={heading} className={`relative flex flex-col ${fill ? 'min-h-0 flex-1' : `shrink-0 ${compact ? (hasNobody ? 'h-[430px]' : 'h-[382px]') : (hasNobody ? 'h-[566px]' : 'h-[500px]')}`}`}>
+      {interaction?.routines && !fill && (
         // One home on every face (canvas 37b/c; Jake, Oct 3: "on the bottom right of the score, as long as it doesnt add
         // height … floats on top of the prep rail"): just under the lanes at the right, taking no room — level with the
         // rail's headings when there's a rail (GET & PACK's See all steps left of it; the evening's FIRST DEPARTURE ends short).
         <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} className="absolute right-0 top-full z-10 mt-[21px]" />
       )}
       <div className="flex h-[32px] shrink-0 items-end">
-        <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
+        <div className="w-[256px] shrink-0 truncate pb-[6px] text-wall-label font-bold tracking-[0.12em] text-wall-ink-2">
           {heading}
         </div>
-        <div className="relative h-full w-[1512px] text-wall-label text-wall-ink-2">
+        <div className="relative h-full w-[976px] text-wall-label text-wall-ink-2">
           {marks.map((mark) => (
             <span
               key={mark.hour}
-              className="absolute bottom-[6px] -translate-x-1/2 whitespace-nowrap"
+              // The first hour starts at the track's edge rather than reaching back into the heading.
+              className={`absolute bottom-[6px] whitespace-nowrap ${mark.x === 0 ? '' : '-translate-x-1/2'}`}
               style={{ left: Math.min(mark.x, TIMELINE_WIDTH - 12) }}
             >
               {mark.label}
@@ -204,8 +215,8 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
           // All day: context for the day, not a place in time — one quiet row under the hours.
           // Above the "already past" shading: an all-day item isn't over at 7 AM.
           <div data-all-day className={`relative z-10 flex shrink-0 items-center ${compact ? 'h-[36px]' : 'h-[42px]'}`}>
-            <div className="w-[320px] shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">ALL DAY</div>
-            <div className="flex min-w-0 flex-1 gap-[10px] overflow-hidden pl-[20px]">
+            <div className="w-[256px] shrink-0 text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">ALL DAY</div>
+            <div className="flex min-w-0 flex-1 gap-[10px] overflow-hidden">
               {score.allDay.map((item) => {
                 const open = interaction && interaction.selectable(item.sourceId)
                 return (
@@ -235,7 +246,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
         {lanes.map((lane, laneIndex) => (
           <div key={lane.member.id} className="flex min-h-0 flex-1 border-t border-wall-rule">
             <div
-              className={`flex w-[300px] shrink-0 items-center gap-[14px] ${interaction?.onOpenPerson ? 'cursor-pointer' : ''}`}
+              className={`flex w-[240px] shrink-0 items-center gap-[14px] ${interaction?.onOpenPerson ? 'cursor-pointer' : ''}`}
               {...(interaction?.onOpenPerson ? {
                 role: 'button',
                 tabIndex: 0,
@@ -255,11 +266,14 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
               {/* Compact lanes are 52px: a smaller name and a tight status line keep both clear of the rules. */}
               <div className="min-w-0">
                 <div className={`font-display font-bold ${compact ? 'text-wall-heading leading-[1.1]' : 'text-wall-name'}`}>{lane.member.name}</div>
-                {lane.status && <LaneStatus text={lane.status} tight={compact} />}
+                {lane.status && (fill && !compact
+                  // Room for two lines: "Leaves at 7:42 with Kelly" whole rather than cut.
+                  ? <div className="mt-[4px] line-clamp-2 text-wall-detail text-wall-ink-2">{lane.status}</div>
+                  : <LaneStatus text={lane.status} tight={compact} />)}
               </div>
             </div>
-            <div className="w-[20px] shrink-0" />
-            <div data-lane-track={lane.member.id} className="relative w-[1512px]">
+            <div className="w-[16px] shrink-0" />
+            <div data-lane-track={lane.member.id} className="relative w-[976px]">
               {score?.everyoneHomeBy?.laneIndex === laneIndex && (
                 // In the lane score.ts chose (where it covers no block); late in the day it reads to the left of its line.
                 <div
@@ -283,10 +297,10 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
               )}
               {lane.blocks.map((block) => (
                 <div key={block.key}>
-                  {block.label && !LABEL_INSIDE.has(block.kind) && (
+                  {block.label && !LABEL_INSIDE.has(block.kind) && (!block.labelLow || at.low) && (
                     <div
                       data-block-label={laneKey(lane.member.id, block)}
-                      className={`absolute ${at.label} truncate whitespace-nowrap text-wall-detail font-semibold`}
+                      className={`absolute ${block.labelLow ? at.low : at.label} truncate whitespace-nowrap text-wall-detail font-semibold`}
                       style={labelPlacement(laneKey(lane.member.id, block), block, labels.fit)}
                     >
                       {block.label}
@@ -384,15 +398,15 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
           // Board 08a: an event with nobody on it has no lane, so it waits here — a gap to fill,
           // drawn like the other gaps (dashed, brass-ink), not an alarm. Only when there is one.
           <div data-nobody className={`flex shrink-0 border-0 border-t border-dashed border-wall-brass bg-wall-brass/5 ${compact ? 'h-[48px]' : 'h-[66px]'}`}>
-            <div className="flex w-[300px] shrink-0 items-center gap-[14px]">
+            <div className="flex w-[240px] shrink-0 items-center gap-[14px]">
               <span aria-hidden="true" className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-wall-brass-ink font-display text-wall-heading font-bold text-wall-brass-ink">?</span>
               <div className="min-w-0">
                 <div className="font-display text-wall-name font-bold italic text-wall-ink-2">No one yet</div>
                 {!compact && <div className="text-wall-label text-wall-ink-2">Tap one to say who</div>}
               </div>
             </div>
-            <div className="w-[20px] shrink-0" />
-            <div className="relative w-[1512px]">
+            <div className="w-[16px] shrink-0" />
+            <div className="relative w-[976px]">
               {score.nobody.map((item) => (
                 <div key={item.sourceId}>
                   <div className={`absolute ${at.label} truncate whitespace-nowrap text-wall-detail font-semibold`} style={{ left: item.x, maxWidth: TIMELINE_WIDTH - item.x }}>
@@ -416,11 +430,18 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
         )}
       </div>
 
+      {interaction?.routines && routinesRow && (
+        // Beside the left panel the lanes take the height they're given, so the link has its own short row under them.
+        <div className="flex h-[48px] shrink-0 items-end justify-end">
+          <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} />
+        </div>
+      )}
+
       {score?.everyoneHomeBy && (
         <>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 top-[32px] border-l border-dashed border-wall-brass"
+            className={`pointer-events-none absolute ${linesEnd} top-[32px] border-l border-dashed border-wall-brass`}
             style={{ left: TRACK_LEFT + score.everyoneHomeBy.x }}
           />
         </>
@@ -430,12 +451,12 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
         <>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 top-[32px] bg-wall-ground/60"
+            className={`pointer-events-none absolute ${linesEnd} top-[32px] bg-wall-ground/60`}
             style={{ left: TRACK_LEFT, width: nowX }}
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 top-[26px] w-[2px] bg-wall-brass-ink"
+            className={`pointer-events-none absolute ${linesEnd} top-[26px] w-[2px] bg-wall-brass-ink`}
             style={{ left: TRACK_LEFT + nowX - 1 }}
           />
           <div

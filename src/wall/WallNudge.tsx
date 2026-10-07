@@ -20,8 +20,20 @@ function Button({ label, primary = false, onClick }: { label: string; primary?: 
   )
 }
 
-/** Tonight's nudge, in the evening header. */
-export function WallNudge({ item, onDone, onLater }: { item: TodoItem; onDone: () => void; onLater: () => void }) {
+/** Tonight's nudge, in the evening header — or, stacked, in the left panel (canvas 56A). */
+export function WallNudge({ item, onDone, onLater, rail = false }: { item: TodoItem; onDone: () => void; onLater: () => void; rail?: boolean }) {
+  if (rail) {
+    return (
+      <section aria-label="Tonight’s reminder" className="flex shrink-0 flex-col gap-[14px] rounded-[18px] border border-solid border-wall-brass/50 bg-wall-brass/10 px-[24px] py-[20px]">
+        <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">TONIGHT{item.dueAt ? ` · ${clockOf(item.dueAt)}` : ''}</div>
+        <div className="line-clamp-2 font-display text-wall-quote font-semibold">{item.title}</div>
+        <div className="flex gap-[12px]">
+          <Button label="Later tonight" onClick={onLater} />
+          <Button label="Done" primary onClick={onDone} />
+        </div>
+      </section>
+    )
+  }
   return (
     <section aria-label="Tonight’s reminder" className="flex min-w-0 flex-1 items-center justify-between gap-[28px] rounded-[24px] border border-solid border-wall-brass/50 bg-wall-brass/10 px-[32px] py-[18px]">
       <div className="flex min-w-0 flex-col gap-[6px]">

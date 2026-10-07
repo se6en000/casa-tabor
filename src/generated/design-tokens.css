@@ -68,6 +68,7 @@
   --color-wall-on-pigment: #F6F1E8;
   --color-wall-paper: #EBE4D7;
   --color-wall-band: #26221D;
+  --color-wall-rail: #26221D;
   --color-wall-pigment-1: #4A4640;
   --color-wall-pigment-2: #5F7382;
   --color-wall-pigment-3: #6E4556;
@@ -84,6 +85,7 @@
   --color-wall-night-rust: #D07A56;
   --color-wall-night-on-pigment: #221E1A;
   --color-wall-night-paper: #2E2924;
+  --color-wall-night-rail: #171411;
   --color-wall-night-band: #3A3128;
   --color-wall-night-pigment-1: #BDB3A5;
   --color-wall-night-pigment-2: #93A7B5;
@@ -116,6 +118,10 @@
   --text-caption--line-height: 1.4;
   --text-wall-clock: 104px;
   --text-wall-clock--line-height: 0.92;
+  --text-wall-clock-rail: 136px;
+  --text-wall-clock-rail--line-height: 0.82;
+  --text-wall-rail-title: 40px;
+  --text-wall-rail-title--line-height: 1.02;
   --text-wall-title: 72px;
   --text-wall-title--line-height: 1;
   --text-wall-clock-calm: 250px;

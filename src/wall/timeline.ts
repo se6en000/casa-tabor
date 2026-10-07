@@ -1,6 +1,7 @@
 export const DAY_START_HOUR = 7
 export const DAY_END_HOUR = 21
-export const TIMELINE_WIDTH = 1512
+// The stage beside the left panel (canvas 56A): 1248 px, less the names (240) and gutter (16) and the labels' 16 px overhang.
+export const TIMELINE_WIDTH = 976
 
 function localHours(date: Date): number {
   return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600

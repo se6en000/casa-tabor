@@ -36,6 +36,7 @@ import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
 import WallMenu, { AddButton, MenuButton, MicButton } from './WallMenu'
+import { RailCount } from './WallRail'
 import WallWeek from './WallWeek'
 import { weekDays } from './week'
 import { dayHeading, mergeEvents, needsAroundFetch, stripDates } from './dayFocus'
@@ -536,7 +537,7 @@ export default function WallView(props: WallViewProps) {
   const tonightShown = tonightJobs.slice(0, TONIGHT_ROOM)
   const leftTonight = tonightJobs.filter((item) => item.kind !== 'out').length
   const stillTonightCard = tonightJobs.length > 0
-    ? <StillTonight items={tonightShown} more={tonightJobs.length - tonightShown.length} {...rowProps} />
+    ? <StillTonight rail items={tonightShown} more={tonightJobs.length - tonightShown.length} {...rowProps} />
     : null
 
   const tomorrowDate = tomorrow?.date ?? null
@@ -551,6 +552,29 @@ export default function WallView(props: WallViewProps) {
       todo={todos ? { ...todoTile(todos.list), open: todoOpen, onOpen: openTodo } : null}
     />
   ) : null
+  // Beside the left panel (canvas 56A) the strip is the seven days; Coming up and To do are counts at the panel's foot.
+  const stageStrip = strip.length > 1 ? (
+    <WallWeek
+      narrow
+      days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden }).map((day) => (day.isToday && leftTonight > 0 ? { ...day, leftTonight } : day))}
+      members={members}
+      pigmentOf={(id) => pigments.get(id) ?? null}
+      shownKey={dayOnShow.toDateString()}
+      onSelect={showDay}
+    />
+  ) : null
+  const comingUpCount = comingUp ? comingUpTile(comingUpItems, comingUp.today) : null
+  const todoCount = todos ? todoTile(todos.list) : null
+  const counts = (
+    <>
+      {tripActions && weekDecisions.length > 0 && <RailCount tone="brass" label={`${weekDecisions.length} to decide`} onOpen={() => setDecisionsOpen(true)} />}
+      {onOpenEmail && emailCount > 0 && <RailCount tone="brass" label={`${emailCount} from email`} onOpen={onOpenEmail} />}
+      {comingUpCount && comingUpCount.count > 0 && (
+        <RailCount label={`${comingUpCount.count} to plan`} ariaLabel={`Coming up: ${comingUpCount.count} to plan${comingUpCount.startNow ? `, ${comingUpCount.startNow} to start now` : ''}`} onOpen={openComingUp} />
+      )}
+      {todoCount && <RailCount label={todoCount.ready ? `${todoCount.ready} to do` : 'To do'} ariaLabel={`To do: ${todoCount.ready} ready now`} onOpen={openTodo} />}
+    </>
+  )
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
   const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
 
@@ -559,6 +583,7 @@ export default function WallView(props: WallViewProps) {
   const nudge = nudgeItem && !(nudgeLater?.id === nudgeItem.id && Date.now() < nudgeLater.until) ? nudgeItem : null
   const tonight = stillTonightCard ? null : (nudge && todos ? (
     <WallNudge
+      rail
       item={nudge}
       onDone={() => void todos.act({ action: 'done', id: nudge.id })}
       onLater={() => setNudgeLater({ id: nudge.id, until: Date.now() + 45 * 60_000 })}
@@ -570,7 +595,10 @@ export default function WallView(props: WallViewProps) {
   let face
   // The night faces are dark; the corner mark takes their colours (its ink T would vanish on the dark ground).
   let darkFace = false
+  // Every face but To do, Coming up and the morning paper has the left panel (canvas 56A), its buttons at its top.
+  let railFace = true
   if (todoOpen && todos) {
+    railFace = false
     face = (
       <WallTodos
         now={now}
@@ -592,6 +620,7 @@ export default function WallView(props: WallViewProps) {
       />
     )
   } else if (comingUpOpen && comingUp) {
+    railFace = false
     face = (
       <WallComingUp
         now={now}
@@ -613,7 +642,9 @@ export default function WallView(props: WallViewProps) {
   } else if (nightSettled) {
     // The night Calm (canvas 36a/36b): nobody at the wall for a while in the evening.
     darkFace = true
-    face = <WallNightCalm now={now} members={members} plan={planFor(dayOnShow)} stillTonight={tonightByClock(now) ? stillTonightCard : null} />
+    const plan = planFor(dayOnShow)
+    const lists = plan ? packingGroups(plan, checklist) : null
+    face = <WallNightCalm now={now} members={members} plan={plan} stillTonight={tonightByClock(now) ? stillTonightCard : null} ready={lists ? { packed: lists.packed, total: lists.total, headings: lists.groups.map((g) => g.heading.split(' · ')[0]) } : null} />
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
     // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
     const plan = planFor(dayOnShow)
@@ -639,14 +670,16 @@ export default function WallView(props: WallViewProps) {
         onToggleItem={toggleChecklist}
         onOpenEvent={(id) => eventsById.has(id) && setSelectedId(id)}
         onSeeAllPacking={() => setPackingOpen(true)}
-        week={weekStrip}
+        week={stageStrip}
         onBack={picked ? () => setDayPreview(null) : undefined}
         tonight={evening && !picked ? tonight : null}
         stillTonight={evening && !picked ? stillTonightCard : null}
+        counts={counts}
       />
     )
   } else if (shown.posture === 'calm' && shownToday && paperShows({ posture: 'calm', now, dismissedOn: paperPutAway, previewing: paperPreview })) {
     const facts = paperFacts(shownToday, members, now, currentWeather)
+    railFace = false
     face = (
       <WallPaper now={now} facts={facts} words={paper ?? fallbackWords(facts)}
         next={calmNextLine(describeNextMove(selectNextMove(shownToday, now), members, now))}
@@ -660,7 +693,7 @@ export default function WallView(props: WallViewProps) {
         }} />
     )
   } else if (shown.posture === 'calm') {
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} tomorrow={tomorrowNote} meanwhile={meanwhile} />
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} counts={counts} tomorrow={tomorrowNote} meanwhile={meanwhile} />
   } else {
     // The full day (also Today tapped in the evening).
     face = (
@@ -669,19 +702,12 @@ export default function WallView(props: WallViewProps) {
         members={members}
         plan={shownToday}
         currentWeather={currentWeather}
-        onOpenMenu={openMenu}
-        onAsk={onAsk}
-        calling={calling}
-        onAdd={createEvent ? () => setAdding(blankEvent(dayOnShow, now, 'event')) : undefined}
         interaction={{ ...interaction, marks: marksFor(shownToday?.date) }}
         moveActions={moveActions}
-        decisionCount={weekDecisions.length}
-        onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined}
-        emailCount={emailCount}
-        onOpenEmail={onOpenEmail}
+        counts={counts}
         onOpenItem={(id) => eventsById.has(id) && setSelectedId(id)}
         tomorrow={tomorrowNote}
-        week={weekStrip}
+        week={stageStrip}
         prep={shownToday && toggleChecklist ? {
           packing: packingGroups(shownToday, checklist, { from: now }),
           decisions: decisionsOn(shownToday.date),
@@ -696,7 +722,6 @@ export default function WallView(props: WallViewProps) {
   }
   // The dark evening face is on show (the day-ahead layout in the evening).
   const nightFace = !comingUpOpen && !todoOpen && evening && (!sameDay(dayOnShow, now) || !picked)
-  const onLaunchFace = !comingUpOpen && !todoOpen && sameDay(dayOnShow, now) && !(evening && !picked) && shown.posture !== 'calm'
 
   return (
     <div
@@ -712,10 +737,25 @@ export default function WallView(props: WallViewProps) {
     >
       {face}
       {/* After midnight the settled night shows no buttons until a touch (canvas 36b). */}
-      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
-      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
-      {!onLaunchFace && calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
-      {!onLaunchFace && !(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className={`absolute right-[184px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
+      {railFace ? (
+        // One place on every face (Jake, Oct 6: "the three icons … all in the same place … plus they also vary in
+        // size"): the top of the left panel, T · mic · +, the mic always full size. Dimmed on the settled night.
+        !(nightSettled && now.getHours() < 6) && (
+          <div className={`wall-evening absolute left-[52px] top-[40px] z-10 flex items-center gap-[14px] ${nightSettled ? 'opacity-60' : ''}`}>
+            <MenuButton onOpen={openMenu} />
+            {onAsk && <MicButton onDark onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} />}
+            {createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} />}
+            {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="ml-[4px]" />}
+          </div>
+        )
+      ) : (
+        <>
+          {!(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
+          {!(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
+          {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
+          {!(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className={`absolute right-[184px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
+        </>
+      )}
       {!selected && overlay && (
         // Over the night face the band is raised and the calendar steps back a little, so the
         // conversation reads as a layer of its own (Jake, 2026-09-27).
@@ -837,7 +877,7 @@ export default function WallView(props: WallViewProps) {
       )}
       {menuOpen && (
         <WallMenu
-          side={onLaunchFace ? 'left' : 'right'}
+          side={railFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
           onPreview={(face) => {
             setDayPreview(null)

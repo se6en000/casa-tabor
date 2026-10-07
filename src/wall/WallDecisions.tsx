@@ -16,26 +16,31 @@ const dayWord = (date: Date, now: Date) => {
   return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-export function DecisionRow({ decision, now, onAnswer, compact = false, showDay = true }: {
+export function DecisionRow({ decision, now, onAnswer, compact = false, showDay = true, inline = false }: {
   decision: DatedDecision
   now: Date
   onAnswer: (decision: DatedDecision, action: DecisionAction) => Promise<void>
   compact?: boolean
   /** "Today ·" / "Tomorrow ·" — left off where the face already says which day it is. */
   showDay?: boolean
+  /** One line, the answers at its end (the evening stage's TO DECIDE banner, canvas 56A). */
+  inline?: boolean
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   return (
     // Compact (under the lanes): its first line level with the get & pack headings beside it (measured), and tight
     // enough that its buttons keep the usual room above the week strip.
-    <div className={`flex flex-col border-t border-wall-rule ${compact ? 'gap-[6px] pt-[10px]' : 'gap-[8px] py-[14px]'}`}>
+    <div className={inline ? 'flex min-w-0 flex-1 items-center gap-[24px]' : `flex flex-col border-t border-wall-rule ${compact ? 'gap-[6px] pt-[10px]' : 'gap-[8px] py-[14px]'}`}>
       {/* Balanced lines: never a lone "12:30." on a line of its own. */}
-      <div className="text-balance font-display text-wall-heading font-bold">
-        {showDay ? `${dayWord(decision.date, now)} · ` : ''}{decision.text}
+      <div className={inline ? 'flex min-w-0 flex-1 flex-col' : 'contents'}>
+        <div className={`text-balance font-display text-wall-heading font-bold ${inline ? 'line-clamp-2' : ''}`}>
+          {showDay ? `${dayWord(decision.date, now)} · ` : ''}{decision.text}
+        </div>
+        {decision.detail && <div className={`text-wall-detail text-wall-ink-2 ${inline ? 'truncate' : ''}`}>{decision.detail}</div>}
+        {inline && error && <div className="text-wall-detail font-semibold text-wall-rust">{error}</div>}
       </div>
-      {decision.detail && <div className="text-wall-detail text-wall-ink-2">{decision.detail}</div>}
-      <div className={`${compact ? '' : 'mt-[4px] '}flex flex-wrap gap-[10px]`}>
+      <div className={`${compact || inline ? '' : 'mt-[4px] '}flex ${inline ? 'shrink-0' : 'flex-wrap'} gap-[10px]`}>
         {decision.answers.map((answer, i) => (
           <button
             key={answer.label}
@@ -58,7 +63,7 @@ export function DecisionRow({ decision, now, onAnswer, compact = false, showDay 
           </button>
         ))}
       </div>
-      {error && <div className="text-wall-detail font-semibold text-wall-rust">{error}</div>}
+      {!inline && error && <div className="text-wall-detail font-semibold text-wall-rust">{error}</div>}
     </div>
   )
 }

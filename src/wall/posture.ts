@@ -69,13 +69,14 @@ export function calmHeadline(plan: DayPlan | null, now: Date): string {
 
 export function calmNextLine(view: NextMoveView | null): string | null {
   if (!view) return null
-  const parts = [view.leaveTime, view.title, view.summary]
-  if (view.ring) {
-    // Words in a sentence: "in 2 hr 10 min" (the ring itself says 2:10).
-    const [h, m] = view.ring.value.split(':').map(Number)
-    parts.push(view.ring.unit === 'HRS' ? `in ${h} hr${m ? ` ${m} min` : ''}` : `in ${view.ring.value} ${view.ring.unit.toLowerCase()}`)
-  }
-  return parts.filter(Boolean).join(' · ')
+  return [view.leaveTime, view.title, view.summary, nextInWords(view)].filter(Boolean).join(' · ')
+}
+
+/** How long until the next move, in words: "in 2 hr 10 min" (the ring itself says 2:10). */
+export function nextInWords(view: NextMoveView | null): string | null {
+  if (!view?.ring) return null
+  const [h, m] = view.ring.value.split(':').map(Number)
+  return view.ring.unit === 'HRS' ? `in ${h} hr${m ? ` ${m} min` : ''}` : `in ${view.ring.value} ${view.ring.unit.toLowerCase()}`
 }
 
 /** "Overcast, 86° at 12:30 · Ferrin Park Field 1" for the day's first outing with a stored forecast. */

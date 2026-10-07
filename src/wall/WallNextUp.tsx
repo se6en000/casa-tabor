@@ -112,14 +112,16 @@ export function NextUpSection({ items, more, columns, onSeeAll, ...rest }: NextU
 export const TONIGHT_ROOM = 3
 
 /** STILL TONIGHT (canvas 28c): a small column beside tomorrow's date — what's left of today, and who's still out. */
-export function StillTonight({ items, more, ...rest }: NextUpRowsProps & { more: number }) {
+export function StillTonight({ items, more, rail = false, ...rest }: NextUpRowsProps & { more: number; rail?: boolean }) {
+  // In the left panel (canvas 56A): a late one turns the heading rust, and the lines sit in a soft box.
+  const late = items.some((item) => item.state === 'late' && item.kind !== 'out')
   return (
-    <section aria-label="Still tonight" className="flex w-[440px] min-w-[320px] shrink flex-col justify-center">
+    <section aria-label="Still tonight" className={rail ? 'flex shrink-0 flex-col gap-[10px]' : 'flex w-[440px] min-w-[320px] shrink flex-col justify-center'}>
       <div className="flex items-baseline justify-between gap-[16px]">
-        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-ink-2">STILL TONIGHT</span>
+        <span className={`text-wall-label font-bold tracking-[0.22em] ${rail && late ? 'text-wall-rust' : 'text-wall-ink-2'}`}>STILL TONIGHT</span>
         {more > 0 && <span className="text-wall-detail text-wall-ink-2">+{more} later</span>}
       </div>
-      <div className="flex flex-col">
+      <div className={rail ? 'flex flex-col rounded-[14px] bg-wall-paper px-[18px] py-[4px]' : 'flex flex-col'}>
         {items.map((item) => <Row key={item.key} item={item} small {...rest} ticked={rest.ticked.has(item.key)} />)}
       </div>
     </section>

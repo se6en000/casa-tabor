@@ -46,14 +46,14 @@ function HouseMark() {
 
 /** The mic: dark, beside the MT monogram on every face (board 03b). */
 /** `small` sits in a 44px row beside the MT monogram (the launch header), where the full size would squeeze the clock column. */
-export function MicButton({ onAsk, className = '', small = false, calling = false }: { onAsk: () => void; className?: string; small?: boolean; calling?: boolean }) {
+export function MicButton({ onAsk, className = '', small = false, calling = false, onDark = false }: { onAsk: () => void; className?: string; small?: boolean; calling?: boolean; onDark?: boolean }) {
   // Casa has something to say (canvas 21a): a slow brass glow around the mic, fading only, so the Pi runs it smoothly.
   if (calling) {
     return (
       <span className={`relative inline-flex shrink-0 ${className}`}>
         <span aria-hidden="true" className="pointer-events-none absolute -inset-[24px] animate-[wall-edge-breathe_3.2s_ease-in-out_infinite] rounded-full bg-wall-brass/15" />
         <span aria-hidden="true" className="pointer-events-none absolute -inset-[12px] animate-[wall-edge-breathe_3.2s_ease-in-out_infinite] rounded-full bg-wall-brass/35" />
-        <MicButton onAsk={onAsk} small={small} className="relative" />
+        <MicButton onAsk={onAsk} small={small} onDark={onDark} className="relative" />
       </span>
     )
   }
@@ -65,7 +65,8 @@ export function MicButton({ onAsk, className = '', small = false, calling = fals
         event.stopPropagation()
         onAsk()
       }}
-      className={`flex shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-night-brass ${small ? 'h-[44px] w-[44px] ring-[4px]' : 'h-[56px] w-[56px] ring-[6px]'} ring-wall-brass/35 ${className}`}
+      // On the dark left panel (canvas 56A) it turns brass with an ink mic, so it still reads as the one to press.
+      className={`flex shrink-0 items-center justify-center rounded-full border-0 p-0 ${onDark ? 'bg-wall-night-brass text-wall-band ring-wall-night-brass/25' : 'bg-wall-ink text-wall-night-brass ring-wall-brass/35'} ${small ? 'h-[44px] w-[44px] ring-[4px]' : 'h-[56px] w-[56px] ring-[6px]'} ${className}`}
     >
       <Mic size={small ? 20 : 24} strokeWidth={1.8} />
     </button>
@@ -114,7 +115,7 @@ export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClo
       }}
     >
       <nav
-        className={`absolute ${side === 'left' ? 'left-[44px]' : 'right-[44px]'} top-[100px] flex w-[520px] flex-col rounded-[18px] bg-wall-ground px-[32px] py-[28px] font-body text-wall-ink`}
+        className={`absolute ${side === 'left' ? 'left-[52px]' : 'right-[44px]'} top-[100px] flex w-[520px] flex-col rounded-[18px] bg-wall-ground px-[32px] py-[28px] font-body text-wall-ink`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-[12px] text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">TABOR HOUSE</div>

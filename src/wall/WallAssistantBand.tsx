@@ -550,7 +550,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const haloNote = haloState === 'fuse' ? 'Waiting for the rest —\ntap the mic to send'
       // No "It's loud in here" (Jake, Oct 5: it showed "when it's pretty quiet" — a fan or the room is enough to set it off).
         : haloState === 'deaf' ? 'Can’t hear the mic —\ntap to try again'
-          : ''
+          // Nothing for the halo to say: the usual line under the mic ("Keep talking, or …", "Go ahead").
+          : null
   const answerText = useMemo(() => (answer?.content ? bandAnswer(answer.content, 1500) : ''), [answer?.content])
   // A list in the answer shows as tiles under a short lead (canvas 25a).
   const shape = useMemo(() => (answer?.content ? answerShape(answer.content) : null), [answer?.content])

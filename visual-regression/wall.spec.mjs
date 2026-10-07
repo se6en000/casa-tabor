@@ -139,7 +139,8 @@ test('wall: needs a decision — the count opens the questions, and answers sett
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
   // Evening: tomorrow's questions are listed with their answers, and marked on the Score.
-  await expect(wall.getByText('NEEDS A DECISION · 1')).toBeVisible()
+  // The evening stage's TO DECIDE banner (canvas 56A).
+  await expect(wall.getByRole('region', { name: 'Needs a decision' }).getByText('TO DECIDE')).toBeVisible()
   // The face says it's tomorrow, so the decision doesn't repeat it (polish, 2026-10-01).
   await expect(wall.getByText('Baseball and Softball are both at Ferrin Park Field 1 at 12:30.', { exact: true })).toBeVisible()
   await expect(wall.getByRole('button', { name: 'Needs a decision' }).first()).toBeVisible()
@@ -208,8 +209,8 @@ test('wall: nothing runs off the stage, even late in the day, and the header kee
       .map((el) => el.textContent.trim())
   })
   expect(outside).toEqual([])
-  // The header column is a fixed height: nothing in it may be squeezed so its text gets cut.
-  const squeezed = await wall.locator('header').first().evaluate((header) =>
+  // The left panel (canvas 56A) is a fixed height: nothing in it may be squeezed so its text gets cut.
+  const squeezed = await wall.getByRole('complementary', { name: 'Now' }).evaluate((header) =>
     [...header.querySelectorAll('*')]
       .filter((el) => {
         const style = getComputedStyle(el)
@@ -235,7 +236,8 @@ test('wall: nothing runs off the stage, even late in the day, and the header kee
   // Labels start at their block; one moves left only as far as it must to stay on the stage,
   // and never into the label before it.
   const placement = await wall.evaluate((stage) => {
-    const edge = stage.getBoundingClientRect().right
+    // The Score's own right edge (beside the left panel it ends 56 px in from the wall's).
+    const edge = stage.querySelector('section[aria-label*="WHO"]').getBoundingClientRect().right
     const problems = []
     const labels = [...stage.querySelectorAll('[data-block-label]')].map((el) => {
       const bar = stage.querySelector(`[data-block-bar="${CSS.escape(el.dataset.blockLabel)}"]`)
@@ -302,14 +304,15 @@ test('wall: Edit with nothing changed shows Done, and one tap closes the whole s
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
 
-test('wall: pack tonight — a tap checks a line off (it folds away), "N packed" opens everything, a heading opens its event', async ({ page }) => {
+test('wall: get ready tonight — a tap checks a line off (it folds away), "N packed" opens everything, a heading opens its event', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
-  const pack = wall.getByRole('region', { name: 'Pack tonight' })
-  await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
+  // GET READY (canvas 56A): one card an event across the evening's stage.
+  const pack = wall.getByRole('region', { name: 'Get ready' })
+  await expect(pack.getByText('GET READY · 1 OF 5 DONE')).toBeVisible()
 
   await pack.getByRole('button', { name: 'Water bottle' }).click()
-  await expect(pack.getByText('GET & PACK · 2 OF 5 DONE')).toBeVisible()
+  await expect(pack.getByText('GET READY · 2 OF 5 DONE')).toBeVisible()
   await expect(pack.getByRole('button', { name: 'Water bottle' })).toHaveCount(0) // folded into "2 packed"
   await expect(wall.getByText(/Previewing/)).toHaveCount(0) // a tap on a line isn't a tap on the wall
   await expect(wall).toHaveScreenshot('pack-tonight.png')
@@ -319,7 +322,7 @@ test('wall: pack tonight — a tap checks a line off (it folds away), "N packed"
   await pack.getByRole('button', { name: '2 packed — see what was checked' }).click()
   const sheet = wall.getByRole('region', { name: 'Everything to pack' })
   await sheet.getByRole('button', { name: 'Water bottle' }).click() // untick it again
-  await expect(sheet.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
+  await expect(sheet.getByText(/1 OF 5 DONE/)).toBeVisible()
   await sheet.getByRole('button', { name: 'Close' }).click()
 
   await pack.getByRole('button', { name: /^Baseball/ }).click()
@@ -375,28 +378,24 @@ test('wall: + adds an event by touch — blank on the day on show, the Score pre
   await expect(wall.getByText(/^jaida$/i).first()).toBeVisible() // on Owen's lane, Saturday 9 AM
 })
 
-test('wall: the brand row (MT, mic, +, name, to decide) stays on one line', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  const wall = page.getByTestId('wall-fixture')
-  await page.evaluate(() => document.fonts.ready)
-  const wrapped = await wall.getByRole('banner').evaluate((header) => {
-    const row = header.querySelector('button[aria-label="Open menu"]').parentElement
-    // Count the lines each piece of text is laid out on.
-    const lines = (el) => {
-      const range = document.createRange()
-      range.selectNodeContents(el)
-      // Boxes that overlap vertically share a line (a badge and its text sit at different heights).
-      let count = 0
-      let bottom = -Infinity
-      for (const r of [...range.getClientRects()].filter((r) => r.width > 0).sort((a, b) => a.top - b.top)) {
-        if (r.top >= bottom - 2) count += 1
-        bottom = Math.max(bottom, r.bottom)
-      }
-      return count
+// Jake, Oct 6: "the three icons for + Mic and TH all in the same place on all the landing pages? … they also vary in
+// size from page to page" → canvas 56A: pinned at the top of the left panel, the same size, on the day, calm and evening.
+test('wall: the menu, mic and + sit in the same place at the same size on the full day, calm and the evening', async ({ page }) => {
+  const boxes = []
+  for (const at of ['2026-09-25T07:12:00', '2026-09-25T11:40:00', '2026-09-25T20:15:00']) {
+    await page.goto(`/__wall-fixture?at=${at}`)
+    const wall = page.getByTestId('wall-fixture')
+    await page.evaluate(() => document.fonts.ready)
+    const box = async (name) => {
+      const b = await wall.getByRole('button', { name, exact: true }).boundingBox()
+      return b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]
     }
-    return [...row.children].filter((el) => el.textContent.trim() && lines(el) > 1).map((el) => el.textContent.trim())
-  })
-  expect(wrapped).toEqual([])
+    boxes.push({ at, menu: await box('Open menu'), mic: await box('Ask'), add: await box('Add something') })
+  }
+  for (const b of boxes) expect({ ...b, at: '' }).toEqual({ ...boxes[0], at: '' })
+  // On the left, full size: the mic is the 56 px one everywhere.
+  expect(boxes[0].menu[0]).toBeLessThan(100)
+  expect(boxes[0].mic[2]).toBe(56)
 })
 
 test('wall: surprise-safe — the wall shows "Kelly\'s Birthday" and nothing more (no card, no gift, not even a count)', async ({ page }) => {
@@ -1595,8 +1594,8 @@ test('wall: the new listener is the only one — no switch in the menu, no Music
   await expect(wall.getByRole('switch', { name: 'Try the new listener' })).toHaveCount(0)
   await expect(wall.getByText('Try the new listener')).toHaveCount(0)
   await expect(wall.getByRole('link', { name: 'Music' })).toHaveCount(0)
-  // It opens under the mark that opened it (Jake, Oct 6: "can settings menu show up near the MT button?"): top left
-  // on the launch face, top right on the others.
+  // It opens under the mark that opened it (Jake, Oct 6: "can settings menu show up near the MT button?"): top left,
+  // where the buttons now sit on every face with the left panel (canvas 56A).
   const under = async () => {
     const menu = await wall.getByRole('navigation').boundingBox()
     const button = await wall.getByRole('button', { name: 'Open menu' }).boundingBox()
@@ -1609,7 +1608,7 @@ test('wall: the new listener is the only one — no switch in the menu, no Music
   await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
   await wall.getByRole('button', { name: 'Open menu' }).click()
   gap = await under()
-  expect(gap.right).toBeLessThan(2)
+  expect(gap.left).toBeLessThan(2)
   expect(gap.below).toBeLessThan(20)
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=listen')
   await expect(page.getByRole('region', { name: 'Assistant' }).locator('[data-listener]')).toBeVisible()
@@ -1617,31 +1616,31 @@ test('wall: the new listener is the only one — no switch in the menu, no Music
 
 // Jake, 2026-10-01: "today should show the get and pack section … able to see what was checked off" — the evening's
 // layout with the Next Move kept up top — and "like the strip to be in the same place across all dates".
-test('wall: today with a list to get ready: Next Move up top, compact lanes, decisions and get & pack; "N packed" opens every tick', async ({ page }) => {
+test('wall: today with a list to get ready: what goes with the Next Move is in the panel, the rest under compact lanes with the decision', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-26T11:30:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
   await expect(wall.getByRole('region', { name: 'Next move' })).toBeVisible()
+  // TAKE WITH YOU (canvas 56A with prep): softball's list, under the move that goes to it; what's ready stays, faded.
+  const take = wall.getByRole('region', { name: 'Take with you' })
+  await expect(take.getByText('1 of 3 ready')).toBeVisible()
+  for (const name of ['Water bottle', 'Cleats', 'Glove']) await expect(take.getByRole('button', { name })).toBeVisible()
+  await expect(take.getByRole('button', { name: 'Glove' })).toHaveAttribute('aria-pressed', 'true')
+  await take.getByRole('button', { name: 'Water bottle' }).click()
+  await expect(take.getByText('2 of 3 ready')).toBeVisible()
+  // The rest of today's lists stay on the stage: baseball, beside the decision, on three of the four boxes.
   const pack = wall.getByRole('region', { name: 'Get & pack today' })
-  // As many rows as reach the week (Jake, 2026-10-01: "only use 'see all' when the things truly won't fit"): here the
-  // lanes leave three, so everything still to pack shows and only softball's "1 packed" line is cut, and See all
-  // stands in for it.
-  await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
-  for (const name of ['Water bottle', 'Cleats']) await expect(pack.getByRole('button', { name }).first()).toBeVisible()
-  await expect(pack.getByRole('button', { name: 'See all' })).toBeVisible()
-  // Three of the rail's four boxes beside a decision (Jake: "can't you fit 3 or 4 columns instead of 2?").
+  await expect(pack.getByText('GET & PACK · 0 OF 2 DONE')).toBeVisible()
+  for (const name of ['Glove', 'Cleats']) await expect(pack.getByRole('button', { name })).toBeVisible()
   await expect(pack.locator('.grid-cols-3')).toHaveCount(1)
   await expect(wall.getByRole('region', { name: 'Needs a decision today' })).toBeVisible()
   await expect(wall.getByRole('region', { name: 'Next seven days' })).toBeVisible()
   await expect(wall).toHaveScreenshot('today-get-and-pack.png')
-  await pack.getByRole('button', { name: 'See all' }).click()
-  const all = wall.getByRole('region', { name: 'Everything to pack' })
-  await expect(all.getByRole('button', { name: 'Glove' }).last()).toHaveAttribute('aria-pressed', 'true')
 })
 
 // Jake, 2026-10-01: "use that area to show as much as possible on the screen … only use 'see all' when the things truly
 // won't fit". Get & pack takes the room down to the week: no line is ever cut in half by it.
-for (const at of ['2026-09-26T11:30:00', '2026-09-25T20:15:00']) {
+for (const at of ['2026-09-26T11:30:00']) {
   test(`wall: get & pack fills its room and never cuts a line (${at})`, async ({ page }) => {
     await page.goto(`/__wall-fixture?at=${at}`)
     await page.getByRole('region', { name: 'Next seven days' }).waitFor()
@@ -1658,43 +1657,29 @@ for (const at of ['2026-09-26T11:30:00', '2026-09-25T20:15:00']) {
 // Jake, 2026-10-01: "when I swipe between the days it shifts … could we standardize the placement, width, height of
 // those placeholders so when I swipe there isn't a lot of shifting", then approved: four fixed boxes, filled left to
 // right (decision, then get & pack), First departure always in the last box on the days ahead.
-test('wall: the Prep rail — every section starts on one of four fixed boxes, First departure always in the last', async ({ page }) => {
-  const rail = async () => (await page.getByRole('group', { name: 'Prep rail' }).waitFor(), page.evaluate(() => {
+test('wall: today’s Prep rail sections start on its four fixed boxes; the days ahead keep their get-ready cards in one place', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-26T11:30:00') // today, a list and a decision
+  await page.getByRole('group', { name: 'Prep rail' }).waitFor()
+  await page.evaluate(() => document.fonts.ready)
+  const today = await page.evaluate(() => {
     const group = document.querySelector('[aria-label="Prep rail"]')
     const r = group.getBoundingClientRect()
-    const sections = [...group.querySelectorAll('section')].filter((x) => x.parentElement === group || x.parentElement.parentElement === group)
-    // Get & pack's own columns sit on the boxes too.
-    const columns = [...group.querySelectorAll('section[aria-label^="Get & pack"] .grid > div, section[aria-label="Pack tonight"] .grid > div')]
-    return {
-      left: r.left, width: r.width,
-      starts: [...sections, ...columns].map((x) => [x.getAttribute('aria-label') ?? 'column', Math.round(x.getBoundingClientRect().left), Math.round(x.getBoundingClientRect().width)]),
-      departure: Math.round(group.querySelector('section[aria-label="First departure"]')?.getBoundingClientRect().left ?? -1),
-    }
-  }))
-  const faces = []
-  await page.goto('/__wall-fixture?at=2026-09-26T11:30:00') // today, a list and a decision
-  await page.evaluate(() => document.fonts.ready)
-  faces.push(['today', await rail()])
-  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00') // the evening: tomorrow's decision, list, departure
-  await page.evaluate(() => document.fonts.ready)
-  faces.push(['evening', await rail()])
-  await page.getByTestId('wall-fixture').getByRole('button', { name: 'One trip · Jake' }).click() // no decision left
-  await page.getByRole('region', { name: 'Needs a decision' }).waitFor({ state: 'detached' })
-  faces.push(['evening, decided', await rail()])
+    const sections = [...group.querySelectorAll('section')].filter((x) => x.parentElement === group)
+    const columns = [...group.querySelectorAll('section[aria-label^="Get & pack"] .grid > div')]
+    return { left: r.left, width: r.width, starts: [...sections, ...columns].map((x) => Math.round(x.getBoundingClientRect().left)) }
+  })
+  const box = (today.width - 3 * 40) / 4
+  const edges = [0, 1, 2, 3].map((i) => Math.round(today.left + i * (box + 40)))
+  for (const x of today.starts) expect(edges.some((e) => Math.abs(e - x) <= 1), `${x} on ${edges}`).toBe(true)
+  // The evening and a day tapped ahead: the cards start at the same place.
+  const cards = async () => page.evaluate(() => [...document.querySelectorAll('section[aria-label="Get ready"] .grid > div')].map((c) => Math.round(c.getBoundingClientRect().left)))
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  await page.getByRole('region', { name: 'Get ready' }).waitFor()
+  const evening = await cards()
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
-  await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).getByRole('button', { name: /^Monday/ }).click() // a day ahead
-  await page.getByRole('region', { name: 'First departure' }).waitFor()
-  faces.push(['monday', await rail()])
-
-  const first = faces[0][1]
-  const box = (first.width - 3 * 40) / 4
-  const edges = [0, 1, 2, 3].map((i) => Math.round(first.left + i * (box + 40)))
-  for (const [name, f] of faces) {
-    expect(Math.round(f.left), name).toBe(Math.round(first.left))
-    expect(Math.round(f.width), name).toBe(Math.round(first.width))
-    for (const [label, x] of f.starts) expect(edges.some((e) => Math.abs(e - x) <= 1), `${name}: ${label} at ${x}, boxes at ${edges}`).toBe(true)
-    if (name !== 'today') expect(f.departure, name).toBe(edges[3])
-  }
+  await page.getByTestId('wall-fixture').getByRole('region', { name: 'Next seven days' }).getByRole('button', { name: /^Saturday/ }).click()
+  await page.getByRole('region', { name: 'Get ready' }).waitFor()
+  expect(await cards()).toEqual(evening)
 })
 
 test('wall: the week strip sits in the same place on every face — today, today with a list, the evening, another day', { tag: '@smoke' }, async ({ page }) => {
@@ -1716,7 +1701,7 @@ test('wall: the week strip sits in the same place on every face — today, today
 // Jake, 2026-10-01: "you are usually a lot more detail oriented than this. can you please align the thin bars for
 // Needs a decision and Get & Pack?" — measured, then held here: on today's face and the evening's, the sections under
 // the lanes share their heading height, their rule and their first line; the lists start flush with their headings.
-for (const [name, at] of [['today', '2026-09-26T11:30:00'], ['the evening', '2026-09-25T20:15:00']]) {
+for (const [name, at] of [['today', '2026-09-26T11:30:00']]) {
   test(`wall: ${name} — the sections under the lanes line up: headings, rules, first lines; lists flush; room above the week`, async ({ page }) => {
     await page.goto(`/__wall-fixture?at=${at}`)
     await page.getByRole('region', { name: 'Next seven days' }).waitFor()
@@ -1872,24 +1857,6 @@ test('wall: chores on the Score — trash night on Jake’s lane, Liv’s meds o
 
 // Designer polish, approved Oct 1: today's header is one height whether or not there's a list (the screen doesn't jump
 // when the list is done), and "Hide routines" sits on the Next Move's action line instead of floating above the hours.
-test('wall: today’s header keeps its height, with Hide routines in it or with the hours', async ({ page }) => {
-  const measure = async (at) => {
-    await page.goto(`/__wall-fixture?at=${at}`)
-    await page.getByRole('region', { name: 'Next move' }).waitFor()
-    await page.evaluate(() => document.fonts.ready)
-    return page.evaluate(() => {
-      const header = document.querySelector('[data-testid="wall-fixture"] header').getBoundingClientRect()
-      const pill = [...document.querySelectorAll('button')].find((b) => /Hide routines|Routines hidden/.test(b.textContent)).getBoundingClientRect()
-      return { header: Math.round(header.height), pillBottom: Math.round(pill.bottom), headerBottom: Math.round(header.bottom) }
-    })
-  }
-  const plain = await measure('2026-09-25T07:12:00')
-  const withList = await measure('2026-09-26T11:30:00')
-  expect(plain.header).toBe(withList.header)
-  // With no Leaving now line any more (Oct 3), the pill sits on the Next Move's last line or with the hours below it.
-  expect(plain.pillBottom).toBeGreaterThan(0)
-})
-
 // Canvas 37a-3 (Jake, Oct 3: "a 'tab' on it so it makes sense that you can close it by dragging" — "more of a pull down vs
 // pull up"; "37a-3 for me. doesnt compete with the mic"): a tab hanging from the band's brass edge, a chevron pointing
 // down. The band follows the pull and springs back if let go early; pulled far enough, it closes; a tap on the tab too.
@@ -1927,9 +1894,10 @@ test('wall: Casa’s band has a grabber (43a) — it follows a pull, springs bac
   await expect(page.getByRole('region', { name: 'Assistant' })).toHaveCount(0)
 })
 
-// Canvas 37b/c (Jake, Oct 3: "hide routines is ok on the bottom right of the score, as long as it doesnt add height to
-// the screen … floats on top of the prep rail"): one home on every face — under the lanes at the right — taking no room.
-test('wall: Hide routines floats just under the lanes at the right, on every face, adding no height', async ({ page }) => {
+// Canvas 37b/c (Jake, Oct 3: "hide routines is ok on the bottom right of the score … floats on top of the prep rail"),
+// then canvas 56A: one home a face — on the full day a short row just under the lanes at the right; on the evening
+// beside tomorrow's date, so its lanes keep their room. Always clear of everything else, at the stage's right edge.
+test('wall: Hide routines sits at the stage’s right — under the lanes on the full day, beside the date in the evening', async ({ page }) => {
   test.setTimeout(120_000)
   for (const at of ['2026-09-25T07:12:00', '2026-09-25T13:40:00', '2026-09-25T16:30:00', '2026-09-26T11:30:00', '2026-09-25T20:30:00']) {
     await page.goto(`/__wall-fixture?at=${at}`)
@@ -1939,25 +1907,23 @@ test('wall: Hide routines floats just under the lanes at the right, on every fac
       const pills = [...document.querySelectorAll('button')].filter((b) => /Hide routines/.test(b.textContent))
       const pill = pills[0].getBoundingClientRect()
       const score = document.querySelector('[data-testid="wall-fixture"] section[aria-label*="WHO’S WHERE"], [data-testid="wall-fixture"] section[aria-label*="WHO\'S WHERE"]')
-      const s = score.getBoundingClientRect()
-      // The first thing under the lanes, the pill aside — the same with the pill gone, so it takes no room.
-      const firstBelow = () => [...document.querySelectorAll('[data-testid="wall-fixture"] *')].filter((e) => !pills[0].contains(e)).map((e) => e.getBoundingClientRect().top).filter((t) => t > s.bottom + 1).sort((a, b) => a - b)[0] ?? null
-      const below = firstBelow()
+      const laneRows = [...score.querySelectorAll('[data-lane-track], [data-nobody]')].map((t) => (t.matches('[data-nobody]') ? t : t.parentElement).getBoundingClientRect().bottom)
       // Air around it (Jake: "kinda too close to other elements"): no other words within 12 px of its words.
       const words = (root) => { const out = []; const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); while (walk.nextNode()) { const n = walk.currentNode; if (!n.textContent.trim()) continue; const r = document.createRange(); r.selectNodeContents(n); for (const q of r.getClientRects()) if (q.width && q.height) out.push({ q, text: n.textContent.trim() }) } return out }
       const mine = words(pills[0]).map((w) => w.q)
       const box = { l: Math.min(...mine.map((q) => q.left)) - 12, r: Math.max(...mine.map((q) => q.right)) + 12, t: Math.min(...mine.map((q) => q.top)) - 12, b: Math.max(...mine.map((q) => q.bottom)) + 12 }
       const near = words(document.querySelector('[data-testid="wall-fixture"]')).filter((w) => !mine.some((q) => q.left === w.q.left && q.top === w.q.top) && w.q.left < box.r && w.q.right > box.l && w.q.top < box.b && w.q.bottom > box.t).map((w) => w.text)
-      pills[0].style.display = 'none'
-      const belowWithout = firstBelow()
-      return { near, count: pills.length, top: Math.round(pill.top), right: Math.round(pill.right), scoreBottom: Math.round(s.bottom), scoreRight: Math.round(s.right), below, belowWithout }
+      return { near, count: pills.length, top: Math.round(pill.top), right: Math.round(pill.right), inHeader: Boolean(pills[0].closest('header')), scoreTop: Math.round(score.getBoundingClientRect().top), lanesBottom: Math.round(Math.max(...laneRows)) }
     })
     expect(m.count, at).toBe(1)
     expect(m.near, at).toEqual([])
-    expect(m.top, at).toBeGreaterThanOrEqual(m.scoreBottom)
-    expect(m.top, at).toBeLessThanOrEqual(m.scoreBottom + 30)
-    expect(Math.abs(m.right - m.scoreRight), at).toBeLessThanOrEqual(4)
-    expect(m.below, at).toBe(m.belowWithout)
+    expect(Math.abs(m.right - 1864), at).toBeLessThanOrEqual(6)
+    if (at.endsWith('20:30:00')) {
+      expect(m.inHeader, at).toBe(true)
+      expect(m.top, at).toBeLessThan(m.scoreTop)
+    } else {
+      expect(m.top, at).toBeGreaterThanOrEqual(m.lanesBottom)
+    }
   }
 })
 
@@ -2095,7 +2061,7 @@ test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc l
   await page.goto('/__wall-fixture?quick=1&keyboard=device&at=2026-09-30T20:42:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'First departure' })).toBeVisible()
   await page.keyboard.press('x')
   const quick = wall.getByRole('textbox', { name: 'Ask', exact: true })
   await expect(quick).toHaveValue('x')
@@ -2111,7 +2077,7 @@ test('wall on a computer: start typing anywhere, Enter sends it into Casa; Esc l
 
   await page.reload()
   await page.evaluate(() => document.fonts.ready)
-  await expect(wall.getByText('FIRST DEPARTURE')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'First departure' })).toBeVisible()
   await pastePictures(page, null, 1)
   await expect(wall.getByRole('img', { name: 'picture-1.png' })).toBeVisible()
   await expect(wall.getByRole('textbox', { name: 'Type to ask' })).toBeFocused()
@@ -2538,17 +2504,6 @@ test('wall assistant: "show me the grocery list" opens the Grocery page at once'
 })
 
 // The header, balanced (canvas 42a B; Jake, Oct 5: "we cant have 3 different widths across the top").
-test('wall: the header’s two ends are the same width, the Next Move wider between them', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T13:15:00&home=1')
-  const wall = page.getByTestId('wall-fixture')
-  await expect(wall).toBeVisible()
-  const left = await wall.locator('header > div').first().boundingBox()
-  const then = await wall.getByRole('region', { name: 'Then' }).boundingBox()
-  const move = await wall.getByRole('region', { name: 'Next move' }).boundingBox()
-  expect(Math.round(left.width)).toBe(Math.round(then.width))
-  expect(move.width).toBeGreaterThan(left.width)
-})
-
 // The morning paper (canvas 48a; Jake, Oct 6: "i kinda like A. very creative, also add a seting in the menu so I can
 // preview this face as well").
 test('wall: a calm morning is the morning paper — the runs, the sky, the rest; Put it away until tomorrow', async ({ page }) => {

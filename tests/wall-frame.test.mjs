@@ -48,8 +48,8 @@ test('timeline maps 7 AM to 9 PM across the lane width', () => {
   assert.equal(xForTime(new Date(2026, 8, 25, 7, 0)), 0)
   assert.equal(xForTime(new Date(2026, 8, 25, 21, 0)), TIMELINE_WIDTH)
   assert.equal(xForTime(new Date(2026, 8, 25, 14, 0)), TIMELINE_WIDTH / 2)
-  // design mock: now line at 10:08 sits ~338px in
-  assert.ok(Math.abs(xForTime(new Date(2026, 8, 25, 10, 8)) - 338.4) < 0.5)
+  // 10:08 is 3 h 8 min into the 14-hour day: ~218 px across the 976 px track beside the left panel (canvas 56A)
+  assert.ok(Math.abs(xForTime(new Date(2026, 8, 25, 10, 8)) - 218.4) < 0.5)
 })
 
 test('timeline clamps and reports times outside the visible day', () => {

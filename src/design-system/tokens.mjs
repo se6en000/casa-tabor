@@ -164,6 +164,9 @@ export const DESIGN_TOKENS = {
     'wall-paper': '#EBE4D7',
     // The assistant band's surface: the wall's ink by day; raised and warmer over the night face.
     'wall-band': '#26221D',
+    // The panel down the left of every face (canvas 56A; Jake, Oct 6: "OK I love this!"): it holds now — the clock,
+    // the next move, what to take, then — on the wall's ink; at night a step darker than the night ground.
+    'wall-rail': '#26221D',
     'wall-pigment-1': '#4A4640',
     'wall-pigment-2': '#5F7382',
     'wall-pigment-3': '#6E4556',
@@ -182,6 +185,7 @@ export const DESIGN_TOKENS = {
     'wall-night-on-pigment': '#221E1A',
     // Paper at night: a step up from the night ground, as the tan paper is a step up from the linen.
     'wall-night-paper': '#2E2924',
+    'wall-night-rail': '#171411',
     'wall-night-band': '#3A3128',
     'wall-night-pigment-1': '#BDB3A5',
     'wall-night-pigment-2': '#93A7B5',
@@ -201,6 +205,9 @@ export const DESIGN_TOKENS = {
   // (16-22px). Nothing on the Wall goes below 16px.
   wallType: {
     'wall-clock': { size: '104px', lineHeight: '0.92' },
+    // The clock at the top of the left panel (canvas 56A), and the next move's title beside its ring.
+    'wall-clock-rail': { size: '136px', lineHeight: '0.82' },
+    'wall-rail-title': { size: '40px', lineHeight: '1.02' },
     // A page's own title on the Wall ("Groceries", canvas 35a).
     'wall-title': { size: '72px', lineHeight: '1' },
     'wall-clock-calm': { size: '250px', lineHeight: '0.82' },

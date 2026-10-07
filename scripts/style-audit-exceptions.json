@@ -318,6 +318,10 @@
       {
         "path": "src/phone/PhoneTodo.tsx",
         "reason": "The phone's To do (canvas 34c): a card follows the finger as it's swiped left for Tomorrow / Later — its translateX is computed while dragging."
+      },
+      {
+        "path": "src/wall/WallNightCalm.tsx",
+        "reason": "Family Wall night calm (canvas 56A): the get-ready bar's width is the share of tomorrow's lists done, computed at runtime."
       }
     ],
     "nativeControlRecreations": [
@@ -572,6 +576,10 @@
       {
         "path": "src/wall/WallGroceries.tsx",
         "reason": "Family Wall: the Grocery page v2 (canvas 35a–d) is part of the Wall's own component set (CLAUDE.md Wall exception): list rows that tick and lift, aisle targets, the hold-to-say mic, usual-item chips; wall-* tokens, finger-sized targets."
+      },
+      {
+        "path": "src/wall/WallRail.tsx",
+        "reason": "Family Wall left panel (canvas 56A): each count opens its page, each TAKE WITH YOU line ticks, \"N more\" opens every list — part of the Wall's own component set."
       }
     ]
   }

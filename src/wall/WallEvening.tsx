@@ -1,15 +1,17 @@
 import { useMemo, type ReactNode } from 'react'
-import { formatWallClock, formatWallDate } from './clock'
+import { formatWallDate } from './clock'
 import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
 import { describeNextMove } from './header'
 import { packingGroups, type WallChecklistItem } from './packing'
 import { forecastLine } from './posture'
-import type { DatedDecision } from './WallDecisions'
+import { DecisionRow, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
-import { PrepRail, SectionHeading } from './WallPrep'
+import { GetReady } from './WallPrep'
+import { pigmentStyleFor } from './lanes'
+import { RailClock, RailLabel, RailRule, RailShell } from './WallRail'
 import { buildScore } from './score'
-import WallScore, { type ScoreInteraction } from './WallScore'
+import WallScore, { HideRoutinesPill, type ScoreInteraction } from './WallScore'
 
 export interface WallEveningProps {
   now: Date
@@ -37,18 +39,20 @@ export interface WallEveningProps {
   week?: ReactNode
   /** Shown when a day was tapped (not the day the wall picked by itself). */
   onBack?: () => void
-  /** Tonight's nudge (P3.22, board 09a): takes the header's right side from the big date. */
+  /** Tonight's nudge (P3.22, board 09a), in the left panel. */
   tonight?: ReactNode
-  /** STILL TONIGHT (canvas 28c): what's left of today, a small column beside tomorrow's date. */
+  /** STILL TONIGHT (canvas 28c): what's left of today, in the left panel under the clock. */
   stillTonight?: ReactNode
+  /** The counts at the foot of the left panel. */
+  counts?: ReactNode
 }
 
 /**
- * The day-ahead face (boards 02c and 04b): a day's Score from its start, what needs
- * deciding, what to get and pack, and the first departure. In the evening it is
- * tomorrow, dark; by day it is whichever day was tapped in the week strip.
+ * The day-ahead face (boards 02c and 04b, canvas 56A): the left panel keeps tonight — the clock, what's still due, and
+ * tomorrow's first one out — and the stage is the day ahead: what to get ready, what needs deciding, and its Score.
+ * In the evening it is tomorrow, dark; by day it is whichever day was tapped in the week strip.
  */
-export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack, tonight = null, stillTonight = null }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, heading, dark = false, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking, week, onBack, tonight = null, stillTonight = null, counts }: WallEveningProps) {
   // A day that hasn't started reads as plans ("Leaves at 11:56"): its Score is drawn from its start.
   const asOf = useMemo(() => {
     if (!plan || plan.date.toDateString() === now.toDateString()) return now
@@ -61,37 +65,51 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
   const first = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, asOf), members, asOf) : null), [plan, members, asOf])
   const packing = useMemo(() => (plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }), [plan, checklist])
   const forecast = forecastLine(plan)
-  const clock = formatWallClock(now)
-  const weekday = asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
+  const driverPigment = score?.lanes.find((lane) => lane.member.id === first?.driverId)?.pigmentIndex ?? null
 
   return (
-    <div className={`${dark ? 'wall-evening ' : ''}flex h-full w-full flex-col gap-[22px] bg-wall-ground p-[44px] font-body text-wall-ink`}>
-      <header className="flex h-[170px] shrink-0 items-stretch gap-[48px]">
-        <div className="flex w-[420px] shrink-0 flex-col justify-center gap-[6px]">
-          <div className="flex items-baseline gap-[10px]">
-            <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>
-            <span className="text-wall-heading font-semibold text-wall-ink-2">{clock.meridiem}</span>
-          </div>
+    <div className={`${dark ? 'wall-evening ' : ''}relative h-full w-full bg-wall-ground font-body text-wall-ink`}>
+      <RailShell night={dark} foot={counts}>
+        <RailClock now={now}>
           <div className="font-display text-wall-date italic text-wall-ink-2">{label}</div>
-        </div>
-        <div className="w-px shrink-0 bg-wall-rule" />
-        {tonight ? (
-          // Clear of the +, mic and MT buttons in the top right.
-          <div className="flex min-w-0 flex-1 items-center pr-[220px]">{tonight}</div>
-        ) : (
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
-          <div className={`flex min-w-0 flex-col gap-[8px] ${stillTonight ? 'shrink-0' : ''}`}>
-            <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">{heading}</div>
-            <div className={`font-display text-wall-move font-semibold ${stillTonight ? 'whitespace-nowrap' : ''}`}>{plan ? formatWallDate(plan.date) : ''}</div>
-            {forecast && <div className="truncate text-wall-body text-wall-ink-2">{forecast}</div>}
-          </div>
-          {stillTonight && (
-            // Clear of the +, mic and MT buttons in the top right.
-            <div className="mr-[220px] flex min-w-0 shrink items-center gap-[40px] self-stretch py-[14px]">
-              <div className="w-px self-stretch bg-wall-rule" />
-              {stillTonight}
-            </div>
+        </RailClock>
+        <RailRule />
+        {stillTonight ?? tonight}
+        <section aria-label="First departure" className={`flex shrink-0 flex-col ${stillTonight || tonight ? 'mt-[34px]' : ''}`}>
+          <RailLabel>FIRST OUT{heading === 'TOMORROW' ? ' TOMORROW' : ''}</RailLabel>
+          {first ? (
+            <>
+              {first.leaveTime && (
+                <div className="mt-[12px] flex items-baseline gap-[14px]">
+                  <span className="font-display text-wall-move font-semibold lining-nums">{first.leaveTime}</span>
+                  <span className="text-wall-detail text-wall-ink-2">leave</span>
+                </div>
+              )}
+              <div className="mt-[10px] flex min-w-0 items-center gap-[12px]">
+                <span
+                  aria-hidden="true"
+                  className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${driverPigment == null ? 'border-2 border-dashed border-wall-ink-2 text-wall-ink-2' : `text-wall-on-pigment ${pigmentStyleFor(driverPigment).solid}`}`}
+                >
+                  {first.initial}
+                </span>
+                <span className="truncate font-display text-wall-date font-semibold">{first.title}</span>
+              </div>
+              <div className="mt-[8px] text-wall-detail text-wall-ink-2">{first.timing}</div>
+            </>
+          ) : (
+            <div className="mt-[12px] font-display text-wall-date italic text-wall-ink-2">No departures.</div>
           )}
+          {forecast && <div className="mt-[18px] text-wall-detail text-wall-ink-2">{forecast}</div>}
+        </section>
+      </RailShell>
+
+      <div className="absolute inset-y-0 left-[560px] right-0 flex flex-col gap-[20px] px-[56px] pb-[44px] pt-[36px]">
+        <header className="flex h-[64px] shrink-0 items-center justify-between gap-[24px]">
+          <div className="flex min-w-0 items-baseline gap-[24px]">
+            <span className="shrink-0 text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">{heading}</span>
+            <span className="truncate font-display text-wall-move font-semibold">{plan ? formatWallDate(plan.date) : ''}</span>
+          </div>
+          {interaction?.routines && !onBack && <HideRoutinesPill hidden={interaction.routines.hidden} onToggle={interaction.routines.onToggle} />}
           {onBack && (
             <button
               type="button"
@@ -104,41 +122,24 @@ export default function WallEvening({ now, members, plan, label, heading, dark =
               Back to today
             </button>
           )}
-        </div>
-        )}
-      </header>
+        </header>
 
-      <WallScore score={score} now={asOf} heading={`${weekday} · WHO'S WHERE`} compact interaction={interaction} />
+        {/* Two lines a card when a decision needs the room too, so the lanes keep theirs. */}
+        {packing.total > 0 && <GetReady packing={packing} lines={decisions.length > 0 ? 2 : 3} onToggleItem={onToggleItem} onOpenEvent={onOpenEvent} onSeeAll={onSeeAllPacking} />}
 
-      <PrepRail
-        decisions={decisions}
-        decisionLabel="Needs a decision"
-        now={now}
-        onAnswer={onAnswer}
-        packing={packing}
-        packLabel="Pack tonight"
-        onToggleItem={onToggleItem}
-        onOpenEvent={onOpenEvent}
-        onSeeAll={onSeeAllPacking}
-        departure={
-          // An open section like the others (heading, rule, first line level with theirs), not a boxed card.
-          <section aria-label="First departure" className="flex min-w-0 flex-col">
-            <SectionHeading>FIRST DEPARTURE</SectionHeading>
-            <div className="flex flex-col gap-[6px] border-0 border-t border-solid border-wall-rule pt-[12px]">
-              {first ? (
-                <>
-                  <div className="truncate font-display text-wall-date font-semibold">{first.title}</div>
-                  <div className="text-wall-body">{first.leaveTime ? `Leave ${first.leaveTime} · ${first.timing}` : first.timing}</div>
-                </>
-              ) : (
-                <div className="font-display text-wall-date font-semibold italic">No departures.</div>
-              )}
-            </div>
+        {decisions.length > 0 && (
+          <section aria-label="Needs a decision" className="flex shrink-0 items-center gap-[24px] rounded-[16px] border border-solid border-wall-brass px-[24px] py-[12px]">
+            <span className="shrink-0 text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">TO DECIDE{decisions.length > 1 ? ` · ${decisions.length}` : ''}</span>
+            {onAnswer
+              ? <DecisionRow decision={decisions[0]} now={now} onAnswer={onAnswer} inline showDay={false} />
+              : <span className="min-w-0 flex-1 truncate font-display text-wall-date font-bold">{decisions[0].text}</span>}
           </section>
-        }
-      />
+        )}
 
-      {week}
+        <WallScore score={score} now={asOf} heading={`${asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()} · WHO'S WHERE`} fill compact={packing.total > 0 || decisions.length > 0} routinesElsewhere interaction={interaction} />
+
+        {week}
+      </div>
     </div>
   )
 }

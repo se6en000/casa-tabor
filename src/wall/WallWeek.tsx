@@ -18,15 +18,17 @@ export interface WallWeekProps {
   comingUp?: { count: number; startNow: number; open: boolean; onOpen: () => void } | null
   /** The To do tile (board 09a/09b): how many are ready now; opens the list. */
   todo?: { ready: number; line: string; open: boolean; onOpen: () => void } | null
+  /** On the stage beside the left panel (canvas 56A): seven tiles in 1248 px, so tighter padding and letter-spacing. */
+  narrow?: boolean
 }
 
-export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null, todo = null }: WallWeekProps) {
+export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect, comingUp = null, todo = null, narrow = false }: WallWeekProps) {
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ''
   return (
     // Pinned to the bottom of every face, so it never moves as the days are swiped (Jake, 2026-10-01: "like the strip
     // to be in the same place across all dates").
     <section aria-label="Next seven days" className="mt-auto flex shrink-0 flex-col">
-      <div className="flex gap-[12px]">
+      <div className={`flex ${narrow ? 'gap-[10px]' : 'gap-[12px]'}`}>
         {days.map((day) => {
           const selected = day.key === shownKey
           return (
@@ -39,10 +41,10 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                 event.stopPropagation()
                 onSelect(day.date)
               }}
-              className={`flex h-[124px] min-w-0 flex-1 flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${selected ? 'border-[3px] border-solid border-wall-ink px-[18px] py-[12px]' : 'border border-solid border-wall-rule px-[20px] py-[14px]'}`}
+              className={`flex h-[124px] min-w-0 flex-1 flex-col justify-between rounded-[18px] bg-wall-paper shadow-[0_1px_0_rgba(38,34,29,0.06),0_6px_18px_rgba(38,34,29,0.06)] text-left text-wall-ink ${selected ? `border-[3px] border-solid border-wall-ink py-[12px] ${narrow ? 'px-[14px]' : 'px-[18px]'}` : `border border-solid border-wall-rule py-[14px] ${narrow ? 'px-[16px]' : 'px-[20px]'}`}`}
             >
-              <div className="flex items-baseline gap-[10px]">
-                <span className={`text-wall-label font-bold tracking-[0.15em] ${selected ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{day.weekday.toUpperCase()}</span>
+              <div className={`flex items-baseline ${narrow ? 'gap-[8px]' : 'gap-[10px]'}`}>
+                <span className={`text-wall-label font-bold ${narrow ? 'tracking-[0.06em]' : 'tracking-[0.15em]'} ${selected ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{day.weekday.toUpperCase()}</span>
                 <span className="font-display text-wall-heading font-bold lining-nums">{day.dayNumber}</span>
               </div>
               {/* The "?" sits with the dots: with nine tiles, "TOMORROW 26" leaves no room beside it. */}
@@ -67,7 +69,7 @@ export default function WallWeek({ days, members, pigmentOf, shownKey, onSelect,
                 {/* With "2 to do" beside it, "First out 7:25" became "First ou…": "Out 7:25" fits whole. */}
                 {day.leftTonight
                   ? <span className="truncate text-wall-detail font-bold text-wall-brass-ink">{day.leftTonight} left tonight</span>
-                  : <span className={`truncate text-wall-detail ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.toDo > 0 ? day.firstOut.replace(/^First out /, 'Out ') : day.firstOut}</span>}
+                  : <span className={`truncate ${narrow ? 'text-wall-label' : 'text-wall-detail'} ${selected ? 'font-semibold text-wall-ink' : 'text-wall-ink-2'}`}>{day.toDo > 0 ? day.firstOut.replace(/^First out /, 'Out ') : day.firstOut}</span>}
                 {day.toDo > 0 && <span className="shrink-0 text-wall-label font-bold text-wall-brass-ink">{day.toDo} to do</span>}
               </div>
             </button>

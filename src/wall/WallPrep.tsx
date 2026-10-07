@@ -154,6 +154,8 @@ export interface PrepRailProps {
   onSeeAll?: () => void
   /** NEXT UP (canvas 27a), the first box on today's face: the day's chores and timed to-dos, and how many boxes it takes. */
   nextUp?: { node: ReactNode; columns: 1 | 2 } | null
+  /** Beside the left panel (canvas 56A): a set height under lanes that take the rest, rather than sharing it. */
+  fixed?: boolean
 }
 
 /**
@@ -164,11 +166,11 @@ export interface PrepRailProps {
  * by place; on today's face the Next Move says it, so get & pack may take that box too. On today's face NEXT UP comes first
  * (Jake, 2026-10-01: "make it the first slot where drivers sometimes goes … we usually figure that out fast").
  */
-export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, packLabel, departure, onToggleItem, onOpenEvent, onSeeAll, nextUp = null }: PrepRailProps) {
+export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, packLabel, departure, onToggleItem, onOpenEvent, onSeeAll, nextUp = null, fixed = false }: PrepRailProps) {
   const deciding = decisions.length > 0
   const packBoxes = Math.max(1, 4 - (nextUp?.columns ?? 0) - (deciding ? 1 : 0) - (departure !== null ? 1 : 0)) as 1 | 2 | 3 | 4
   return (
-    <div aria-label="Prep rail" role="group" className="grid min-h-0 flex-1 grid-cols-4 gap-x-[40px]">
+    <div aria-label="Prep rail" role="group" className={`grid grid-cols-4 gap-x-[40px] ${fixed ? 'h-[300px] shrink-0' : 'min-h-0 flex-1'}`}>
       {nextUp?.node}
       {deciding && (
         <section aria-label={decisionLabel} className="flex min-w-0 flex-col">
@@ -185,5 +187,87 @@ export function PrepRail({ decisions, decisionLabel, now, onAnswer, packing, pac
       )}
       {departure !== null && <div className="col-start-4 flex min-w-0 flex-col">{departure}</div>}
     </div>
+  )
+}
+
+/**
+ * GET READY (canvas 56A, the evening): tomorrow's lists as cards across the stage, one event each — the evening's main
+ * job (Jake, Oct 6: "show me tomorrows prep screen … OK I love this!"). What's left to do shows; a tick folds a line
+ * into the card's "N packed", which opens the whole list with every tick (row 18: "able to see what was checked off").
+ * More than fits waits under See all (its "N more" says how many — no line in the card for it).
+ */
+export function GetReady({ packing, onToggleItem, onOpenEvent, onSeeAll, cards = 3, lines = 3 }: {
+  packing: { groups: PackingGroup[]; packed: number; total: number }
+  onToggleItem?: (item: WallChecklistItem) => void
+  onOpenEvent?: (eventId: string) => void
+  onSeeAll?: () => void
+  cards?: number
+  lines?: number
+}) {
+  const shown = packing.groups.slice(0, cards).map((group) => {
+    const open = group.items.filter((i) => !i.checked)
+    const packed = group.items.length - open.length
+    // The "N packed" line takes a line of the card's room.
+    const room = packed > 0 ? lines - 1 : lines
+    return { group, items: open.slice(0, room), hidden: Math.max(0, open.length - room), packed }
+  })
+  const hidden = shown.reduce((n, c) => n + c.hidden, 0) + packing.groups.slice(cards).reduce((n, g) => n + g.items.filter((i) => !i.checked).length, 0)
+  return (
+    <section aria-label="Get ready" className="flex shrink-0 flex-col">
+      <SectionHeading
+        action={onSeeAll && hidden > 0 && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onSeeAll()
+            }}
+            className="flex h-[44px] shrink-0 items-center gap-[4px] border-0 bg-transparent px-[4px] text-wall-detail text-wall-ink-2"
+          >
+            See all · {hidden} more
+            <ChevronRight size={20} aria-hidden="true" />
+          </button>
+        )}
+      >
+        GET READY · {packing.packed} OF {packing.total} DONE
+      </SectionHeading>
+      <div className="grid grid-cols-3 gap-x-[24px]">
+        {shown.map(({ group, items, packed }) => (
+          <div key={group.eventId} className="flex min-w-0 flex-col rounded-[18px] bg-wall-paper px-[24px] pb-[8px] pt-[8px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]">
+            <button
+              type="button"
+              disabled={!onOpenEvent}
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenEvent?.(group.eventId)
+              }}
+              className="h-[48px] w-full truncate whitespace-nowrap border-0 bg-transparent p-0 text-left font-display text-wall-heading font-bold text-wall-ink"
+            >
+              {group.heading}
+            </button>
+            {items.map((item) => (
+              <div key={item.id} className="border-0 border-t border-solid border-wall-rule">
+                <PackingItem item={item} onToggle={onToggleItem} />
+              </div>
+            ))}
+            {packed > 0 && (
+              <button
+                type="button"
+                disabled={!onSeeAll}
+                aria-label={`${packed} packed — see what was checked`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onSeeAll?.()
+                }}
+                className="flex h-[44px] items-center gap-[14px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left text-wall-detail text-wall-ink-2"
+              >
+                <span aria-hidden="true" className="flex w-[22px] shrink-0 justify-center"><Check size={18} strokeWidth={2.5} /></span>
+                {packed} packed
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
