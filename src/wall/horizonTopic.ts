@@ -29,5 +29,7 @@ export function outcomeText(tool: string, args: Record<string, unknown>): string
   if (tool === 'add_todo') return `To-do: ${title}${when ? ` · ${when}` : ''}`
   if (tool === 'plan_project' || tool === 'apply_plan') return `Plan: ${title}`
   if (tool === 'update_event') return `Changed: ${title || 'the event'}`
+  // Get & pack lines for it (bug report 011679e8: Yearbook Picture Day's shirts and hair).
+  if (tool === 'add_prep_item') return `Get & pack: ${Array.isArray(args.labels) ? args.labels.join(' · ') : String(args.label ?? '')}`
   return 'Handled'
 }

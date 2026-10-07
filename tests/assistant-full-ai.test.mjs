@@ -237,3 +237,20 @@ test('notes: Alexa sees each event’s notes, adds lines to them, and keeps a to
   const tool = FULL_AI_TOOLS.find((t) => t.name === 'update_event')
   assert.match(tool.parameters.properties.add_notes.description, /Never a summary/)
 })
+
+// Bug report 011679e8 (Oct 7, Yearbook Picture Day): two get & pack lines for one event came back as a batch the wall
+// can't show ("I found 2 events to add. Review below:") — they're one card, saved with one yes.
+test('several get & pack lines for one event are one card', async () => {
+  const { mergePrepCards } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  const cards = [
+    { tool: 'add_prep_item', args: { event_id: 'yb', event_title: 'Yearbook Picture Day', label: 'Pick good shirts' } },
+    { tool: 'add_prep_item', args: { event_id: 'yb', event_title: 'Yearbook Picture Day', label: 'Kelly up early to do hair' } },
+    { tool: 'add_prep_item', args: { event_id: 'other', label: 'Water' } },
+  ]
+  const merged = mergePrepCards(cards)
+  assert.equal(merged.length, 2)
+  assert.deepEqual(merged[0].args.labels, ['Pick good shirts', 'Kelly up early to do hair'])
+  assert.equal(merged[0].args.label, 'Pick good shirts · Kelly up early to do hair')
+  assert.deepEqual(merged[1], cards[2])
+  assert.deepEqual(mergePrepCards([cards[0]]), [cards[0]])
+})

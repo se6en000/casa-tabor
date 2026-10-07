@@ -49,7 +49,7 @@ import { PERSONA_KEY } from '../_shared/house-persona.mjs'
 import { allDayWords } from '../_shared/all-day.mjs'
 import { overdueToRaise } from '../_shared/todo-stage.mjs'
 import { routinesSection } from '../_shared/routines-for-assistant.mjs'
-import { READ_TOOLS, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
+import { READ_TOOLS, mergePrepCards, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
 // the full profile's main call). Tested 2026-09-26 on lifelike conversations: medium thinking
@@ -1392,6 +1392,7 @@ Deno.serve(async (req) => {
           if (!cards.length) return { status: 200, payload: { type: 'text', text: `${alreadyNote} Nothing to change.`, semantic_intent: 'full_ai.trip_already_there', correlation_id: cid } }
         }
       }
+      cards = mergePrepCards(cards)
       if (cards.length > 1) {
         // Several changes at once (a flyer with three dates): one batch, each still needing a yes.
         const filled = await Promise.all(cards.map(async (c) => ({ tool: c.tool, args: await fillCard(c.tool, c.args) })))

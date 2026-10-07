@@ -1808,15 +1808,17 @@ Deno.serve(async (req) => {
     if (tool === 'add_prep_item') {
       // Get & pack by voice (2026-09-30): a line on the event's list, like one typed on its sheet.
       const eventId = normalizeOptionalText(args.event_id, 80)
-      const label = normalizeOptionalText(args.label, 160)
-      if (!eventId || !label) throw new Error('A get & pack line needs its event and what to get ready')
+      // Several lines with one yes (bug report 011679e8): `labels`; one line: `label`.
+      const labels = (Array.isArray(args.labels) ? args.labels : [args.label]).map((l) => normalizeOptionalText(l, 160)).filter((l): l is string => Boolean(l)).slice(0, 12)
+      if (!eventId || !labels.length) throw new Error('A get & pack line needs its event and what to get ready')
       const { data: last } = await sb.from('event_checklist_items').select('sort_order').eq('event_id', eventId).order('sort_order', { ascending: false }).limit(1).maybeSingle()
-      const { data, error } = await sb.from('event_checklist_items')
-        .insert({ event_id: eventId, label, sort_order: Number(last?.sort_order ?? -1) + 1 })
+      const first = Number(last?.sort_order ?? -1) + 1
+      const { data: rows, error } = await sb.from('event_checklist_items')
+        .insert(labels.map((label, i) => ({ event_id: eventId, label, sort_order: first + i })))
         .select('id, event_id, label')
-        .single()
       if (error) throw new Error(error.message)
-      return new Response(JSON.stringify({ success: true, item: data, event_id: eventId, correlation_id: cid }), {
+      const data = rows?.[0] ?? null
+      return new Response(JSON.stringify({ success: true, item: data, items: rows ?? [], event_id: eventId, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

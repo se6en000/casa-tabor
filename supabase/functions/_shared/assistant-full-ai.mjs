@@ -217,7 +217,7 @@ Once today, at the end of this answer (not if this answer is a card, a confirmat
   }
   // A line tapped on Ahead (canvas 63B; Jake, Oct 7: "she will guess at a todo/ or maybe just say, hey I see you want to
   // talk about xyz, heres what I know about it, what do you want to do").
-  sections.push(`TALKING SOMETHING THROUGH FROM AHEAD: when he opens with "Let's talk about <it> on <day> — it's on Ahead (…)", say in two or three short sentences what you know about it (from the calendar, what you know of the family, routines, gift ideas, holidays and school days off), then ask what he'd like to do, with one or two likely ways (a reminder on the day with what he needs in its notes — say, three text ideas —, a to-do, a plan, who covers). No card until he says. When he says, make the one card; its notes carry the details. Once he says yes to it, it comes off Ahead by itself — say so in a few words if it fits.`)
+  sections.push(`TALKING SOMETHING THROUGH FROM AHEAD: when he opens with "Let's talk about <it> on <day> — it's on Ahead (…)", say in two or three short sentences what you know about it — first, when it's on the CALENDAR above, that it already is (who it's for, where), so he never has to ask; then (from the calendar, what you know of the family, routines, gift ideas, holidays and school days off), then ask what he'd like to do, with one or two likely ways (a reminder on the day with what he needs in its notes — say, three text ideas —, a to-do, a plan, who covers). No card until he says. When he says, make the one card; its notes carry the details. Once he says yes to it, it comes off Ahead by itself — say so in a few words if it fits.`)
   // Ticked off lately: "I did X" about one of these is already done — say so, no card (Oct 6).
   if (finished.length) sections.push(`FINISHED LATELY (to-dos already ticked off in the last two days; if he says he did one of these, tell him it's already ticked off — no card, and it's not the grocery list):\n${finished.map((t) => `- ${t}`).join('\n')}`)
   // The household's chores (Jake's bug report, Oct 1: "nothing on todos or reminders?" never mentioned the trash or
@@ -1018,4 +1018,19 @@ export function writtenCall(text, toolNames) {
     args[a[1]] = a[2] ?? a[3] ?? (a[4] === 'true' ? true : a[4] === 'false' ? false : Number(a[4]))
   }
   return { name: m[1], args }
+}
+
+/**
+ * Several get & pack lines for the same event are one card, saved with one yes (bug report 011679e8, Oct 7: two
+ * lines for Yearbook Picture Day came back as a batch the wall can't show). `labels` saves each; `label` reads them.
+ */
+export function mergePrepCards(cards) {
+  const out = []
+  for (const c of cards ?? []) {
+    const host = c?.tool === 'add_prep_item' ? out.find((o) => o.tool === 'add_prep_item' && o.args.event_id === c.args.event_id) : null
+    if (!host) { out.push(c?.tool === 'add_prep_item' ? { ...c, args: { ...c.args } } : c); continue }
+    const labels = [...(host.args.labels ?? [host.args.label]), c.args.label].map((l) => String(l ?? '').trim()).filter(Boolean)
+    host.args = { ...host.args, labels: [...new Set(labels)], label: [...new Set(labels)].join(' · ') }
+  }
+  return out
 }

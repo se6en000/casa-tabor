@@ -649,7 +649,9 @@ export default function WallView(props: WallViewProps) {
         onTalk={onAsk ? (item) => {
           setComingUpUntil(Date.now() + PREVIEW_MS)
           setHorizonTopic({ key: item.key, title: item.title, date: item.date })
-          onAsk(`Let’s talk about ${item.title} on ${horizonDate(item.date)} — it’s on Ahead${item.nextStep ? ` (${item.nextStep})` : ''}.`)
+          // A calendar item says so (bug report 011679e8: "she just didnt tell me up front this is already an event").
+          const onCalendar = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.key)
+          onAsk(`Let’s talk about ${item.title} on ${horizonDate(item.date)} — it’s on Ahead${item.nextStep ? ` (${item.nextStep})` : ''}${onCalendar ? ', and on the calendar' : ''}.`)
         } : undefined}
         onOpenEvent={(id) => { setComingUpUntil(0); setSelectedId(id) }}
         onBack={() => setComingUpUntil(0)}

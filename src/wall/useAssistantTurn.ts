@@ -106,7 +106,7 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     // the timeline as a ✓, linked to what was made (Jake, Oct 7: "alexa after talking about an item should auto mark
     // soemthign as handled when we create and action for it").
     const topic = horizonTopic()
-    const fromAhead = Boolean(topic) && ['create_event', 'add_todo', 'plan_project', 'apply_plan'].includes(action.tool)
+    const fromAhead = Boolean(topic) && ['create_event', 'add_todo', 'plan_project', 'apply_plan', 'add_prep_item', 'update_event'].includes(action.tool)
     if (topic && fromAhead) {
       setHorizonTopic(null)
       void supabase.functions.invoke('coming-up', { body: { action: 'done', key: topic.key, surface, outcome: { text: outcomeText(action.tool, args), title: topic.title, date: topic.date, eventId: result.eventId ?? null, by: 'alexa' } } })
