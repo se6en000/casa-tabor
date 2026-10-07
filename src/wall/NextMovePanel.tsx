@@ -1,4 +1,4 @@
-import type { NextMoveView } from './header'
+import { minutesAway, type NextMoveView } from './header'
 import { pigmentStyleFor } from './lanes'
 
 // The ring and title come down a size when THEN sits beside them (canvas 29e), so the title stays whole.
@@ -135,7 +135,11 @@ function Ring({ view, ring, className }: { view: NextMoveView; ring: { size: num
   )
 }
 
-/** The next move in the left panel (canvas 56A): eyebrow, then the ring beside the what (two lines may wrap) and how. */
+/**
+ * The next move in the left panel (canvas 56A). Within the hour it's the eyebrow, then the ring beside the what and
+ * how. Further off (Jake, Oct 7: "can that show up when the move is under 60 mins? otherwise show the next move like
+ * the morning paper does"): how long in the eyebrow, the leave time big, then who, what and how — the calm faces' NEXT.
+ */
 function RailMove({ view, actions, onDetails, accent, ring }: {
   view: NextMoveView
   actions?: NextMoveActions
@@ -143,9 +147,19 @@ function RailMove({ view, actions, onDetails, accent, ring }: {
   accent: string
   ring: { size: number; radius: number }
 }) {
+  const away = minutesAway(view)
+  const far = away != null && away >= 60 && Boolean(view.leaveTime)
+  const inWords = (m: number) => (m >= 60 ? `in ${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}` : `in ${m} min`)
   return (
     <section aria-label="Next move" className="flex shrink-0 flex-col gap-[16px]">
-      <div className={`text-wall-label font-bold tracking-[0.22em] ${view.urgent ? accent : 'text-wall-brass'}`}>{view.eyebrow}</div>
+      <div className={`text-wall-label font-bold tracking-[0.22em] ${view.urgent ? accent : 'text-wall-brass'}`}>{far ? `NEXT MOVE · ${inWords(away).toUpperCase()}` : view.eyebrow}</div>
+      {far ? (
+        <div className="flex min-w-0 flex-col gap-[10px]">
+          <span className="font-display text-wall-headline font-semibold lining-nums">{view.leaveTime}</span>
+          <span className="line-clamp-2 text-balance font-display text-wall-date font-semibold">{view.what ?? view.title}</span>
+          <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{[view.how ?? view.detail, view.drive].filter(Boolean).join(' · ')}</span>
+        </div>
+      ) : (
       <div className="flex min-w-0 items-center gap-[24px]">
         <Ring view={view} ring={ring} className="h-[124px] w-[124px]" />
         <div className="flex min-w-0 flex-1 flex-col gap-[8px]">
@@ -155,6 +169,7 @@ function RailMove({ view, actions, onDetails, accent, ring }: {
           {view.drive && <span className="truncate text-wall-detail text-wall-ink-2">{view.drive}</span>}
         </div>
       </div>
+      )}
       {!actions && onDetails && (
         <button type="button" className="h-[48px] self-start rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); onDetails() }}>
           Details

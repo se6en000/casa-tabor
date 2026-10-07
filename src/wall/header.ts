@@ -68,6 +68,14 @@ function arrivalPhrase(trip: Trip): string {
   return `starts ${time}`
 }
 
+/** Minutes until the move, read back from its countdown ("45" MIN, "5:07" HRS); null when it has none. */
+export function minutesAway(view: Pick<NextMoveView, 'ring'>): number | null {
+  if (!view.ring) return null
+  if (view.ring.unit === 'MIN') return Number(view.ring.value)
+  const [h, m] = view.ring.value.split(':').map(Number)
+  return h * 60 + m
+}
+
 export function countdown(minutes: number): { value: string; unit: string } {
   if (minutes < MINUTES_LIMIT) return { value: String(minutes), unit: 'MIN' }
   // "1:35", never rounded: 95 minutes read as "2 HRS" looked like two hours away (Jake, 2026-09-26).

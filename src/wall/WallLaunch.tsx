@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { formatWallDate } from './clock'
-import { describeNextMove, weatherLine, type NextMoveView } from './header'
+import { describeNextMove, minutesAway, weatherLine, type NextMoveView } from './header'
 import { describeHomeLead, selectHeaderLead, thenItems } from './headerLead'
 import WallThen from './WallThen'
 import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
@@ -67,6 +67,9 @@ export default function WallLaunch({ now, members, plan, currentWeather, interac
     return { eyebrow: home.eyebrow, urgent: false, driverId: home.whoId, initial: home.initial, title: home.title, detail: home.detail, summary: home.title, what: home.title, how: home.detail, timing: '', leaveTime: null, also: null, ring: home.ring, tripIds: [], departed: false, status: 'upcoming' }
   }, [lead, members, now])
   const driverPigment = score?.lanes.find((lane) => lane.member.id === nextMove?.driverId)?.pigmentIndex ?? null
+  // More than an hour off, the move shows its leave time big (no ring) and takes more of the panel: a line less below.
+  const away = nextMove ? minutesAway(nextMove) : null
+  const far = away != null && away >= 60 && Boolean(nextMove?.leaveTime)
   const weather = weatherLine(currentWeather, plan, now)
   const onDetails = homeLead && onOpenItem ? () => onOpenItem(homeLead.item.id) : undefined
 
@@ -100,12 +103,12 @@ export default function WallLaunch({ now, members, plan, currentWeather, interac
         <NextMovePanel rail view={nextMove} pigmentIndex={driverPigment} actions={homeLead ? undefined : moveActions} onDetails={onDetails} />
         {take.length > 0 && (
           <div className="mt-[26px]">
-            <TakeWithYou groups={take} onToggleItem={prep?.onToggleItem} onSeeAll={prep?.onSeeAll} room={then.length > 0 ? 3 : 5} />
+            <TakeWithYou groups={take} onToggleItem={prep?.onToggleItem} onSeeAll={prep?.onSeeAll} room={then.length > 0 ? (far ? 2 : 3) : 5} />
           </div>
         )}
         {then.length > 0 && (
           <div className="mt-[30px]">
-            <WallThen rail items={then} members={members} pigmentOf={(id) => score?.lanes.find((lane) => lane.member.id === id)?.pigmentIndex ?? null} onOpen={onOpenItem} />
+            <WallThen rail items={far && take.length > 0 ? then.slice(0, 2) : then} members={members} pigmentOf={(id) => score?.lanes.find((lane) => lane.member.id === id)?.pigmentIndex ?? null} onOpen={onOpenItem} />
           </div>
         )}
       </RailShell>

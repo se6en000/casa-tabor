@@ -125,3 +125,14 @@ test('a road trip’s drive stays one thing on its own line', async () => {
   assert.deepEqual(splitDrive(['Giselle → Palm Beach Public', 'pickup at 2:00 · 10 min drive']), { how: 'Giselle → Palm Beach Public · pickup at 2:00', drive: '10 min drive' })
   assert.deepEqual(splitDrive(['Jake → Dentist', 'starts 9:00']), { how: 'Jake → Dentist · starts 9:00' })
 })
+
+// Jake, Oct 7: "the next move ring, can that show up when the move is under 60 mins? otherwise show the next move like
+// the morning paper does" — the panel reads the minutes back from the countdown to choose.
+test('minutes until the move, read back from its countdown', async () => {
+  const { minutesAway, countdown } = await import('../src/wall/header.ts')
+  assert.equal(minutesAway({ ring: { ...countdown(13), fraction: 0.2 } }), 13)
+  assert.equal(minutesAway({ ring: { ...countdown(59), fraction: 0 } }), 59)
+  assert.equal(minutesAway({ ring: { ...countdown(116), fraction: 0 } }), 116)
+  assert.equal(minutesAway({ ring: { ...countdown(307), fraction: 0 } }), 307)
+  assert.equal(minutesAway({ ring: null }), null)
+})
