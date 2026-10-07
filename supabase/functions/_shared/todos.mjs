@@ -85,7 +85,11 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
   const shown = new Set(nextUp.map((i) => i.id))
   const rest = items.filter((i) => !shown.has(i.id))
   // Further off (or a small one before its day): folded under Later, by date, until it's time.
-  const later = (i) => i.stage === 'quiet' || (i.stage === 'heads_up' && todoStageLead(i) < 3)
+  // By its date, snoozed or not (Jake, Oct 7: Hello Fresh, snoozed and due Oct 27, sat in Quick ones).
+  const later = (i) => {
+    const byDate = todoStage({ ...i, snoozedUntil: null }, today).stage
+    return byDate === 'quiet' || (byDate === 'heads_up' && todoStageLead(i) < 3)
+  }
   const groups = {
     quick: rest.filter((i) => i.shape === 'quick' && !later(i)),
     fix: rest.filter((i) => i.shape === 'fix' && !later(i)),

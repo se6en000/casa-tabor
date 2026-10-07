@@ -166,3 +166,12 @@ test('late leads Next up, a dated one too — the dedication page four days past
   assert.deepEqual(ids(l.nextUp), ['page', 'call'])
   assert.equal(l.nextUp[0].stage, 'overdue')
 })
+
+test('snoozed and far off: under Later by its date, still marked snoozed (Hello Fresh, Oct 7)', () => {
+  const rs = [r('hello', 'Re-up Hello Fresh dinners', { has_due_date: true, start_time: '2026-10-27T04:00:00Z' }), r('tesla', 'Look up the windshield', { has_due_date: true, start_time: '2026-09-17T21:00:00Z' })]
+  const ds = { hello: d('quick', { minutes: 10, snoozed_until: '2026-10-21' }), tesla: d('quick', { minutes: 20, snoozed_until: '2026-10-13' }) }
+  const l = buildTodoList({ reminders: rs, details: ds, today: '2026-10-07' })
+  assert.deepEqual(ids(l.groups.later), ['hello'])
+  assert.equal(l.groups.later[0].stage, 'snoozed')
+  assert.deepEqual(ids(l.groups.quick), ['tesla'], 'late and snoozed: stays with its kind, marked snoozed')
+})
