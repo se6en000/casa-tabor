@@ -66,7 +66,7 @@ test('Alexa: snoozed and far-off to-dos are named so she leaves them be; the lat
 
 import { offerFor } from '../supabase/functions/_shared/todo-stage.mjs'
 test('the offer fits the job: local handymen or a post, a part, a look-up, a call, a first step, or time — no pros for a big project', () => {
-  assert.match(offerFor({ needs: ['Call', 'Needs a pro'] }), /three well-reviewed local handymen near home.*TaskRabbit or Nextdoor post/)
+  assert.match(offerFor({ needs: ['Call', 'Needs a pro'] }), /three well-reviewed local handymen near home.*short TaskRabbit post/)
   assert.match(offerFor({ needs: ['Safety', 'Buy'] }), /exact part/)
   assert.match(offerFor({ needs: ['Look-up'] }), /look it up/)
   assert.match(offerFor({ shape: 'fix' }), /local handymen/)

@@ -56,7 +56,7 @@ export function overdueToRaise(items, today, raised = null) {
  * lets keep it local … im looking for mostly DYI guys, handimen, for a big project I wont use alexa"). Only what she
  * can do: look up, find, a calendar card, a draft — never "open" or "start" something outside the app.
  */
-const HANDYMEN = 'find three well-reviewed local handymen near home, with their numbers — or write a short TaskRabbit or Nextdoor post he can send'
+const HANDYMEN = 'find three well-reviewed local handymen near home, with their numbers — or write a short TaskRabbit post he can send (Nextdoor if he would rather ask the neighbours)'
 export function offerFor(item) {
   const n = (item.needs ?? []).map((x) => String(x).toLowerCase())
   // A big project is his to run: time for it, never pros or a post.
