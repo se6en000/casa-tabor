@@ -541,17 +541,6 @@ export default function WallView(props: WallViewProps) {
     : null
 
   const tomorrowDate = tomorrow?.date ?? null
-  const weekStrip = strip.length > 1 ? (
-    <WallWeek
-      days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden }).map((day) => (day.isToday && leftTonight > 0 ? { ...day, leftTonight } : day))}
-      members={members}
-      pigmentOf={(id) => pigments.get(id) ?? null}
-      shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
-      onSelect={showDay}
-      comingUp={comingUp ? { ...comingUpTile(comingUpItems, comingUp.today), open: comingUpOpen, onOpen: openComingUp } : null}
-      todo={todos ? { ...todoTile(todos.list), open: todoOpen, onOpen: openTodo } : null}
-    />
-  ) : null
   // Beside the left panel (canvas 56A) the strip is the seven days; Coming up and To do are counts at the panel's foot.
   const stageStrip = strip.length > 1 ? (
     <WallWeek
@@ -559,22 +548,26 @@ export default function WallView(props: WallViewProps) {
       days={weekDays(strip, members, stripDecisions, now, checklist, { hideRoutines: routinesHidden }).map((day) => (day.isToday && leftTonight > 0 ? { ...day, leftTonight } : day))}
       members={members}
       pigmentOf={(id) => pigments.get(id) ?? null}
-      shownKey={dayOnShow.toDateString()}
+      shownKey={comingUpOpen || todoOpen ? '' : dayOnShow.toDateString()}
       onSelect={showDay}
     />
   ) : null
   const comingUpCount = comingUp ? comingUpTile(comingUpItems, comingUp.today) : null
   const todoCount = todos ? todoTile(todos.list) : null
-  const counts = (
+  // The counts at the panel's foot; on To do and Coming up they're the way around (canvas 59): ‹ Today first, the
+  // page you're on filled in (a tap on it goes back to today).
+  const tabs = (on: 'plan' | 'todo' | null) => (
     <>
+      {on && <RailCount label="‹ Today" ariaLabel="Back to today" onOpen={() => { setComingUpUntil(0); setTodoUntil(0); setTodoProject(null) }} />}
       {tripActions && weekDecisions.length > 0 && <RailCount tone="brass" label={`${weekDecisions.length} to decide`} onOpen={() => setDecisionsOpen(true)} />}
       {onOpenEmail && emailCount > 0 && <RailCount tone="brass" label={`${emailCount} from email`} onOpen={onOpenEmail} />}
-      {comingUpCount && comingUpCount.count > 0 && (
-        <RailCount label={`${comingUpCount.count} to plan`} ariaLabel={`Coming up: ${comingUpCount.count} to plan${comingUpCount.startNow ? `, ${comingUpCount.startNow} to start now` : ''}`} onOpen={openComingUp} />
+      {comingUpCount && (comingUpCount.count > 0 || on === 'plan') && (
+        <RailCount active={on === 'plan'} label={`${comingUpCount.count} to plan`} ariaLabel={`Coming up: ${comingUpCount.count} to plan${comingUpCount.startNow ? `, ${comingUpCount.startNow} to start now` : ''}`} onOpen={on === 'plan' ? () => setComingUpUntil(0) : () => { setTodoUntil(0); openComingUp() }} />
       )}
-      {todoCount && <RailCount label={todoCount.ready ? `${todoCount.ready} to do` : 'To do'} ariaLabel={`To do: ${todoCount.ready} ready now`} onOpen={openTodo} />}
+      {todoCount && <RailCount active={on === 'todo'} label={todoCount.ready ? `${todoCount.ready} to do` : 'To do'} ariaLabel={`To do: ${todoCount.ready} ready now`} onOpen={on === 'todo' ? () => setTodoUntil(0) : () => { setComingUpUntil(0); openTodo() }} />}
     </>
   )
+  const counts = tabs(null)
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
   const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
 
@@ -598,7 +591,6 @@ export default function WallView(props: WallViewProps) {
   // Every face but To do and Coming up has the left panel (canvas 56A, 58), its buttons at its top.
   let railFace = true
   if (todoOpen && todos) {
-    railFace = false
     face = (
       <WallTodos
         now={now}
@@ -611,7 +603,8 @@ export default function WallView(props: WallViewProps) {
         onOpen={(id) => setSelectedId(id)}
         onBack={() => { setTodoUntil(0); setTodoProject(null) }}
         onActivity={() => setTodoUntil(Date.now() + PREVIEW_MS)}
-        week={weekStrip}
+        week={stageStrip}
+        tabs={tabs('todo')}
         initialProject={todoProject}
         onTalkAbout={onAsk ? (say) => onAsk(say) : undefined}
         upcoming={comingUp?.items ?? []}
@@ -620,7 +613,6 @@ export default function WallView(props: WallViewProps) {
       />
     )
   } else if (comingUpOpen && comingUp) {
-    railFace = false
     face = (
       <WallComingUp
         now={now}
@@ -633,7 +625,8 @@ export default function WallView(props: WallViewProps) {
           await comingUp.act(key, action)
         }}
         onBack={() => setComingUpUntil(0)}
-        week={weekStrip}
+        week={stageStrip}
+        tabs={tabs('plan')}
         onOpenProject={todos ? (id) => { openTodo(); setTodoProject(id) } : undefined}
         onOpenTrip={saveTravel ? (key) => setTripKey(key) : undefined}
         onStart={todos && comingUp.start ? (key) => void comingUp.start!(key).then((id) => { if (id) { openTodo(); setTodoProject(id) } }) : undefined}

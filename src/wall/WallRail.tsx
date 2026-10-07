@@ -19,7 +19,7 @@ export function RailShell({ night = false, children, foot }: { night?: boolean; 
       className={`wall-evening absolute inset-y-0 left-0 flex w-[560px] flex-col px-[52px] pb-[44px] pt-[128px] font-body text-wall-ink ${night ? 'bg-wall-night-rail' : 'bg-wall-rail'}`}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-      {foot && <div className="flex shrink-0 flex-wrap gap-[10px] pt-[20px]">{foot}</div>}
+      {foot && <div className="flex shrink-0 flex-wrap gap-[8px] pt-[20px]">{foot}</div>}
     </aside>
   )
 }
@@ -54,20 +54,49 @@ export function RailLabel({ children, tone = 'quiet', aside }: { children: React
   )
 }
 
-/** A count at the panel's foot: "1 to decide", "6 to plan", "3 to do". Brass when it asks for something. */
-export function RailCount({ label, onOpen, tone = 'quiet', ariaLabel }: { label: string; onOpen: () => void; tone?: 'quiet' | 'brass'; ariaLabel?: string }) {
+/**
+ * A count at the panel's foot: "1 to decide", "6 to plan", "3 to do". Brass when it asks for something. On To do and
+ * Coming up the counts are the way around (canvas 59): "‹ Today" first, and the page you're on filled in.
+ */
+export function RailCount({ label, onOpen, tone = 'quiet', ariaLabel, active = false }: { label: string; onOpen: () => void; tone?: 'quiet' | 'brass'; ariaLabel?: string; active?: boolean }) {
   return (
     <button
       type="button"
       aria-label={ariaLabel ?? label}
+      aria-current={active ? 'page' : undefined}
       onClick={(event) => {
         event.stopPropagation()
         onOpen()
       }}
-      className={`flex h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-solid bg-transparent px-[18px] text-wall-detail font-semibold ${tone === 'brass' ? 'border-wall-brass text-wall-brass' : 'border-wall-rule text-wall-ink'}`}
+      className={`flex h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-solid px-[15px] text-wall-detail font-semibold ${active ? 'border-wall-ink bg-wall-ink text-wall-band' : tone === 'brass' ? 'border-wall-brass bg-transparent text-wall-brass' : 'border-wall-rule bg-transparent text-wall-ink'}`}
     >
       {label}
     </button>
+  )
+}
+
+/** A part of the page, listed in the panel (To do's folded groups, Coming up's sections): a tap opens or goes to it. */
+export function RailNav({ items }: { items: Array<{ key: string; label: string; aside: string; open?: boolean; onOpen?: () => void; ariaLabel?: string }> }) {
+  return (
+    <nav aria-label="This page" className="flex shrink-0 flex-col">
+      {items.map((item, i) => (
+        <button
+          key={item.key}
+          type="button"
+          disabled={!item.onOpen}
+          aria-label={item.ariaLabel ?? `Show ${item.label}`}
+          aria-expanded={item.open}
+          onClick={(event) => {
+            event.stopPropagation()
+            item.onOpen?.()
+          }}
+          className={`flex h-[52px] items-center justify-between gap-[16px] border-0 bg-transparent p-0 text-left text-wall-body ${i ? 'border-t border-solid border-wall-rule' : ''} ${item.open ? 'font-semibold text-wall-brass' : 'text-wall-ink'}`}
+        >
+          <span className="truncate">{item.label}</span>
+          <span className="shrink-0 text-wall-detail text-wall-ink-2">{item.aside}{item.onOpen ? ' ›' : ''}</span>
+        </button>
+      ))}
+    </nav>
   )
 }
 

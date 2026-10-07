@@ -1,6 +1,6 @@
-import { BACK_SPOT } from './backSpot'
 import { useState, type ReactNode } from 'react'
-import { formatWallClock, formatWallDate } from './clock'
+import { formatWallDate } from './clock'
+import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 import { GROUPS, nextUpRoom, sizeChips, sizeLine, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail, type TodoSuggestion, type PastStep } from './todos'
 import { useTodoProject } from './useTodos'
 import WallProject from './WallProject'
@@ -23,6 +23,8 @@ export interface WallTodosProps {
   onOpen?: (id: string) => void
   canOpen?: (id: string) => boolean
   onBack: () => void
+  /** The way around, at the left panel's foot (canvas 59): ‹ Today and the counts, this page filled in. */
+  tabs?: ReactNode
   /** Any touch on the screen: keeps it up. */
   onActivity?: () => void
   /** Not shown here any more (canvas 10a has no week strip; Back and a swipe still leave). */
@@ -139,7 +141,7 @@ function PastStepRow({ step, today, onAct }: { step: PastStep; today: string; on
 const suggestionLine = (s: TodoSuggestion) =>
   s.kind === 'merge' ? `Same as “${s.withTitle ?? 'another one'}” — merge?` : s.kind === 'done' ? 'Looks over — close it?' : 'Just a buy — move it to Shopping?'
 
-export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onBack, onActivity, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
+export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => false, onActivity, tabs, upcoming = [], onStart, initialProject = null, useProject = useTodoProject, onTalkAbout }: WallTodosProps) {
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -148,7 +150,6 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
   const [projectId, setProjectId] = useState<string | null>(initialProject)
   const project = useProject(projectId)
   const openItem = (item: TodoItem) => (item.projectId ? setProjectId(item.projectId) : setEditing(item))
-  const clock = formatWallClock(now)
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   // The shelf steps aside while a folded group is open, so the group has the room.
   // Dated steps whose day has passed come first in Next up, two at most.
@@ -210,31 +211,31 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
     ))
   }
 
+  const ready = Math.min(list.nextUp.length, nextUpRoom(list))
   return (
-    <div className="relative flex h-full w-full flex-col gap-[18px] bg-wall-ground p-[44px] font-body text-wall-ink" onPointerDown={onActivity}>
-      <header className="flex h-[130px] shrink-0 items-center gap-[48px]">
-        <div className="flex w-[420px] shrink-0 flex-col justify-center gap-[6px]">
-          <div className="flex items-baseline gap-[10px]">
-            <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>
-            <span className="text-wall-heading font-semibold text-wall-ink-2">{clock.meridiem}</span>
+    // Canvas 59 (Jake, Oct 6: "a little jarring going from them and back to the homepage … make it feel like a
+    // natural experience"): the left panel stays — the clock, the buttons, what this page is and its parts, and the
+    // way back at its foot — and the page itself is the stage.
+    <section aria-label="To do" className="relative h-full w-full bg-wall-ground font-body text-wall-ink" onPointerDown={onActivity}>
+      <RailShell foot={tabs}>
+        <RailClock now={now}>
+          <div className="font-display text-wall-date font-semibold">{formatWallDate(now)}</div>
+        </RailClock>
+        <RailRule />
+        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass">TO DO</span>
+        <h1 className="m-0 mt-[12px] font-display text-wall-move font-semibold text-wall-ink">{list.nextUp.length ? `${ready} ready now` : 'All clear for now'}</h1>
+        <span className="mt-[8px] text-wall-detail text-wall-ink-2">
+          {list.sorting ? 'Sorting what’s new from your Reminders. ' : ''}
+          {list.projects.length ? `${list.projects.length === 1 ? 'One project' : `${list.projects.length} projects`} going` : 'The rest stays folded'}
+        </span>
+        {groups.length > 0 && (
+          <div className="mt-[28px]">
+            <RailNav items={groups.map((g) => ({ key: g.key, label: g.label, aside: g.key === 'noticed' ? g.summary : String(g.count), open: openGroup === g.key, onOpen: () => toggle(g.key) }))} />
           </div>
-          <div className="font-display text-wall-date italic text-wall-ink-2">{formatWallDate(now)}</div>
-        </div>
-        <div className="h-[110px] w-px shrink-0 bg-wall-rule" />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
-          <div className="flex min-w-0 flex-col gap-[8px]">
-            <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">TO DO · WHAT NEEDS DOING</div>
-            <div className="font-display text-wall-move font-semibold">{list.nextUp.length ? `${Math.min(list.nextUp.length, nextUpRoom(list))} ready now` : 'All clear for now'}</div>
-            <div className="truncate text-wall-body text-wall-ink-2">
-              {list.sorting ? 'Sorting what’s new from your Reminders. ' : ''}
-              {showShelf ? `${list.projects.length === 1 ? 'One project' : `${list.projects.length} projects`} going. One step from each is all you need to look at.` : 'The rest stays folded — open a group to see it.'}
-            </div>
-          </div>
-        </div>
-      </header>
-      {/* Where a far day has it: under the +, mic and MT buttons, right edges in line (Jake, Oct 6: it rode up into the mic). */}
-      <div className={BACK_SPOT}><Pill label="Back to today" onClick={onBack} /></div>
+        )}
+      </RailShell>
 
+      <div className="absolute inset-y-0 left-[560px] right-0 flex animate-[wall-stage-in_180ms_ease-out] flex-col gap-[18px] px-[56px] py-[44px]">
       {showShelf && <WallProjectShelf projects={list.projects} today={today} onOpen={setProjectId} upcoming={seasons} onStart={(key) => void onStart?.(key).then((id) => { if (id) setProjectId(id) })} />}
 
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
@@ -295,6 +296,8 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
         </div>
       </div>
 
+      </div>
+
       {editing && <WallTodoSheet item={editing} now={now} onAct={onAct} onClose={() => setEditing(null)} />}
       {/* A project opens full screen (canvas 10b), over the list. */}
       {projectId && project.data && (
@@ -307,6 +310,6 @@ export default function WallTodos({ now, list, onAct, onOpen, canOpen = () => fa
           onTalk={onTalkAbout}
         />
       )}
-    </div>
+    </section>
   )
 }

@@ -656,7 +656,7 @@ test('wall: Coming up — the eighth tile opens it; an answer takes an item off;
   const tile = page.getByRole('button', { name: /^Coming up: 6 to plan, 2 to start now/ })
   await expect(tile).toBeVisible()
   await tile.click()
-  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
   await expect(page.getByText('START NOW', { exact: true })).toBeVisible()
   await expect(page.getByText('Plan by Sep 21 · late · in 3 days')).toBeVisible()
   await expect(page.getByText('Gift ideas: A fly-fishing reel')).toBeVisible()
@@ -665,12 +665,12 @@ test('wall: Coming up — the eighth tile opens it; an answer takes an item off;
   const ac = page.locator('div').filter({ hasText: /^.*EDS Air Conditioning appointment/ }).getByRole('button', { name: 'Done' }).first()
   await ac.click()
   await expect(page.getByText('EDS Air Conditioning appointment')).toHaveCount(0)
-  await expect(page.getByText('5 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '5 to plan' })).toBeVisible()
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   await expect(page.getByRole('region', { name: 'Gift ideas' }).getByText('A soccer-team sweatshirt and T-shirt')).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
   await page.getByRole('button', { name: 'Back to today' }).click()
-  await expect(page.getByText('5 things to plan')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '5 to plan' })).toHaveCount(0)
 })
 
 // Jake, 2026-09-29: "on gift ideas, allow me to edit them, some brands don't get translated well and I
@@ -713,7 +713,7 @@ test('wall: on a desktop, the computer’s keyboard types — in place, not Casa
 test('wall: Coming up with a long list — nothing runs under the week strip; "N more" shows the rest (board 07a)', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00&comingUp=live')
   await page.getByRole('button', { name: /^Coming up: 9 to plan/ }).click()
-  await expect(page.getByText('9 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '9 to plan' })).toBeVisible()
   const fits = () => page.evaluate(() => {
     const strip = document.querySelector('section[aria-label="Next seven days"]').getBoundingClientRect().top
     return [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Not needed').every((b) => b.getBoundingClientRect().bottom <= strip - 8)
@@ -721,7 +721,7 @@ test('wall: Coming up with a long list — nothing runs under the week strip; "N
   expect(await fits()).toBe(true)
   await expect(page).toHaveScreenshot('wall-coming-up-long.png')
   const more = page.getByRole('button', { name: /^\d+ more$/ })
-  const left = Number((await more.textContent()).split(' ')[0])
+  const left = Number((await more.getAttribute('aria-label')).split(' ')[0])
   await more.click()
   await expect(page.getByText('Veterans Day')).toBeVisible()
   expect(await page.getByRole('button', { name: 'Not needed' }).count()).toBe(left)
@@ -826,10 +826,10 @@ test('wall: swiping moves across the days and on to Coming up; a nudge or a tap 
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Today/)
   // Seven swipes left: through Thursday, then Coming up; the eighth, To do; one more does nothing.
   for (let i = 0; i < 7; i++) await touchSwipe(page, [1500, 600], [1100, 600])
-  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
   await touchSwipe(page, [1500, 600], [1100, 600])
-  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
   await touchSwipe(page, [1100, 600], [1500, 600])
   await touchSwipe(page, [1100, 600], [1500, 600])
   await expect(shownTile(page)).toHaveAttribute('aria-label', /^Thursday, October 1/)
@@ -1161,13 +1161,13 @@ test('wall: To do — the tile opens Next up; Done and "Not now" answer an item;
 test('wall: swiping past Coming up reaches To do', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   await page.getByRole('button', { name: /^Coming up:/ }).click()
-  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
-  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
   await touchSwipe(page, [1500, 600], [1100, 600])
-  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
   await touchSwipe(page, [1100, 600], [1500, 600])
-  await expect(page.getByText('6 things to plan')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '6 to plan' })).toBeVisible()
 })
 
 // The surface of To do (board 09a): tonight's nudge on the evening face; one small job in a quiet stretch.
@@ -1206,7 +1206,7 @@ test('wall: in a quiet stretch, one small job with Done', async ({ page }) => {
 const openTodo = async (page) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00')
   await page.getByRole('button', { name: /^To do:/ }).click()
-  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
 }
 
 // Projects, your way (P3.23, canvas 10b–10d, approved by Jake 2026-09-29): the project page is where
@@ -1307,7 +1307,7 @@ test('wall: Coming up — a project’s dated step, named for its project, opens
   await page.getByRole('button', { name: 'Open project' }).click()
   await expect(page.getByRole('region', { name: 'Paint the house — project' })).toBeVisible()
   await page.getByRole('button', { name: 'Back to the list' }).click()
-  await expect(page.getByText('TO DO · WHAT NEEDS DOING')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()
 })
 
 // The seasons arrive as projects (P3.23, canvas 11c): Start it opens this year's, from the plan.

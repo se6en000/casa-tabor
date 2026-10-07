@@ -72,7 +72,8 @@ export function ideasByPerson(ideas: GiftIdea[]) {
  * gift-ideas line, and the space between the header and the week strip, less a little slack for
  * the kiosk's 1.333× scale.
  */
-export const COMING_UP_SIZES = { row: 129, heading: 39, ideas: 29, area: 676 }
+// Measured on the stage beside the left panel (canvas 59): a row with its answers under the words; the room above the strip.
+export const COMING_UP_SIZES = { row: 188, heading: 39, ideas: 29, area: 848 }
 
 export interface ComingUpEntry { item: ComingUpItem; heading: string | null }
 

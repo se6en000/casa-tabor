@@ -197,6 +197,11 @@
   0%   { transform: translateX(-480px); }
   100% { transform: translateX(1920px); }
 }
+/* The stage beside the left panel (canvas 59): when a page changes, only the stage fades in; the panel stays put. */
+@keyframes wall-stage-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 
 @keyframes ai-glow-border {
   0%   { box-shadow: 0 0 0 1.5px rgba(201,169,110,0.5),  0 0 12px  4px rgba(201,169,110,0.15); }

@@ -1,9 +1,9 @@
-import { BACK_SPOT } from './backSpot'
 import { useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import WallKeyboard from './WallKeyboard'
-import { formatWallClock, formatWallDate } from './clock'
-import { comingUpPages, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
+import { formatWallDate } from './clock'
+import { comingUpPages, comingUpSections, ideasByPerson, planByLine, type ComingUpAction, type ComingUpItem, type GiftIdea } from './comingUp'
+import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 
 // Coming up (board 07a, approved by Jake 2026-09-27): only what needs planning — each item's next
 // step, its plan-by date, the gift ideas for it, and three answers. The wall and the desktop show the
@@ -18,6 +18,8 @@ export interface WallComingUpProps {
   onAct: (key: string, action: ComingUpAction) => Promise<void>
   onBack: () => void
   week: ReactNode
+  /** The way around, at the left panel's foot (canvas 59): ‹ Today and the counts, this page filled in. */
+  tabs?: ReactNode
   /** A project's step or target opens its project (P3.23, canvas 10e). */
   onOpenProject?: (id: string) => void
   /** A trip away (coverage.ts): opens its sheet, where its runs are covered. */
@@ -36,7 +38,7 @@ function Answer({ label, primary = false, onClick }: { label: string; primary?: 
         event.stopPropagation()
         onClick()
       }}
-      className={`h-[52px] shrink-0 whitespace-nowrap rounded-full px-[20px] text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
+      className={`h-[48px] shrink-0 whitespace-nowrap rounded-full px-[20px] text-wall-detail font-semibold ${primary ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-ink-2 bg-wall-paper text-wall-ink'}`}
     >
       {label}
     </button>
@@ -47,8 +49,9 @@ function Row({ item, today, onAct, onOpenProject, onStart, onOpenTrip }: { item:
   const day = new Date(`${item.date}T12:00:00Z`)
   const part = (options: Intl.DateTimeFormatOptions) => day.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' }).toUpperCase()
   return (
-    <div className="flex items-center gap-[20px] border-0 border-t border-solid border-wall-rule py-[14px]">
-      <div className="flex w-[64px] shrink-0 flex-col items-center">
+    // Beside the left panel (canvas 59) the columns are narrower: the answers sit under the words, so the title stays whole.
+    <div className="flex items-start gap-[20px] border-0 border-t border-solid border-wall-rule py-[14px]">
+      <div className="flex w-[64px] shrink-0 flex-col items-center pt-[4px]">
         <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{part({ weekday: 'short' })}</span>
         <span className="font-display text-wall-heading font-bold lining-nums">{day.getUTCDate()}</span>
         <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{part({ month: 'short' })}</span>
@@ -59,14 +62,13 @@ function Row({ item, today, onAct, onOpenProject, onStart, onOpenTrip }: { item:
         <span className="truncate text-wall-body font-bold text-wall-brass-ink">{item.nextStep}</span>
         <span className={`text-wall-detail ${item.late ? 'font-semibold text-wall-rust' : 'text-wall-ink-2'}`}>{planByLine(item, today)}</span>
         {item.ideas && item.ideas.length > 0 && <span className="truncate text-wall-detail text-wall-ink-2">Gift ideas: {item.ideas.join('; ')}</span>}
-      </div>
       {item.tripKey ? (
         // A trip away: its coverage is set in the trip sheet (Done / Snooze have nothing to mean here).
-        <div className="flex shrink-0 gap-[8px]">
+        <div className="mt-[8px] flex shrink-0 gap-[8px]">
           {onOpenTrip && <Answer label="Open trip" primary onClick={() => onOpenTrip(item.tripKey!)} />}
         </div>
       ) : (
-      <div className="flex shrink-0 gap-[8px]">
+      <div className="mt-[8px] flex shrink-0 gap-[8px]">
         <Answer label="Done" primary onClick={() => void onAct(item.key, 'done')} />
         {item.projectId && onOpenProject
           ? <Answer label="Open project" onClick={() => onOpenProject(item.projectId!)} />
@@ -76,6 +78,7 @@ function Row({ item, today, onAct, onOpenProject, onStart, onOpenTrip }: { item:
         <Answer label="Not needed" onClick={() => void onAct(item.key, 'dismiss')} />
       </div>
       )}
+      </div>
     </div>
   )
 }
@@ -125,7 +128,7 @@ function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: ()
   )
 }
 
-export default function WallComingUp({ now, items, ideas, today, onAct, onBack, week, onOpenProject, onStart, onEditIdea, onOpenTrip }: WallComingUpProps) {
+export default function WallComingUp({ now, items, ideas, today, onAct, week, tabs, onOpenProject, onStart, onEditIdea, onOpenTrip }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const startNow = items.filter((i) => i.late || i.pokeOn <= today).length
@@ -135,37 +138,33 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
   const columns = pages[page] ?? []
   const shownBefore = pages.slice(0, page + 1).flat(2).length
   const more = items.length - shownBefore
-  const clock = formatWallClock(now)
+  const sections = comingUpSections(items, today)
+  // Which page each section starts on, so a tap on it in the panel goes there.
+  const pageOf = (heading: string) => Math.max(0, pages.findIndex((p) => p.flat().some((e) => sections.find((x) => x.heading === heading)?.items.includes(e.item))))
 
   return (
-    <div className="relative flex h-full w-full flex-col gap-[18px] bg-wall-ground p-[44px] font-body text-wall-ink">
-      <header className="flex h-[150px] shrink-0 items-stretch gap-[48px]">
-        <div className="flex w-[420px] shrink-0 flex-col justify-center gap-[6px]">
-          <div className="flex items-baseline gap-[10px]">
-            <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>
-            <span className="text-wall-heading font-semibold text-wall-ink-2">{clock.meridiem}</span>
-          </div>
-          <div className="font-display text-wall-date italic text-wall-ink-2">{formatWallDate(now)}</div>
+    // Canvas 59: the left panel stays — the clock, the buttons, what this page is and its sections, Gift ideas, the
+    // way back at its foot — and the list is the stage, with the week strip where it is on Today.
+    <section aria-label="Coming up" className="relative h-full w-full bg-wall-ground font-body text-wall-ink">
+      <RailShell foot={tabs}>
+        <RailClock now={now}>
+          <div className="font-display text-wall-date font-semibold">{formatWallDate(now)}</div>
+        </RailClock>
+        <RailRule />
+        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass">COMING UP</span>
+        <h1 className="m-0 mt-[12px] font-display text-wall-move font-semibold text-wall-ink">{items.length === 0 ? 'Nothing to plan' : `${items.length} to plan`}</h1>
+        <span className="mt-[8px] text-wall-detail text-wall-ink-2">{startNow > 0 ? `${startNow === 1 ? 'One' : startNow === 2 ? 'Two' : startNow} to start now` : 'Nothing to start yet'}</span>
+        <div className="mt-[28px]">
+          <RailNav items={[
+            ...sections.map((x) => ({ key: x.heading, label: x.heading.charAt(0) + x.heading.slice(1).toLowerCase(), aside: String(x.items.length), onOpen: pages.length > 1 ? () => setPageIndex(pageOf(x.heading)) : undefined })),
+            { key: 'ideas', label: 'Gift ideas', aside: String(ideas.length), onOpen: () => setIdeasOpen(true), ariaLabel: `Gift ideas · ${ideas.length}` },
+            ...(more > 0 ? [{ key: 'more', label: 'Next page', aside: `${more} more`, onOpen: () => setPageIndex(page + 1), ariaLabel: `${more} more` }] : more === 0 && page > 0 ? [{ key: 'first', label: 'First page', aside: '', onOpen: () => setPageIndex(0), ariaLabel: 'First page' }] : []),
+          ]} />
         </div>
-        <div className="w-px shrink-0 bg-wall-rule" />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-[32px]">
-          <div className="flex min-w-0 flex-col gap-[8px]">
-            <div className="text-wall-label font-bold tracking-[0.25em] text-wall-brass-ink">COMING UP · WHAT NEEDS PLANNING</div>
-            <div className="font-display text-wall-move font-semibold">{items.length === 0 ? 'Nothing to plan' : `${items.length} thing${items.length === 1 ? '' : 's'} to plan`}</div>
-            <div className="truncate text-wall-body text-wall-ink-2">
-              {startNow > 0 ? `${startNow === 1 ? 'One' : startNow === 2 ? 'Two' : startNow} to start now. ` : ''}Games, school runs and chores are left off — they’re on the days.
-            </div>
-          </div>
-        </div>
-      </header>
-      {/* Where a far day has its Back to today: under the +, mic and MT buttons (Jake, Oct 6: it rode up into them). */}
-      <div className={`${BACK_SPOT} flex gap-[12px]`}>
-        {more > 0 && <Answer label={`${more} more`} onClick={() => setPageIndex(page + 1)} />}
-        {more === 0 && page > 0 && <Answer label="First page" onClick={() => setPageIndex(0)} />}
-        <Answer label={`Gift ideas · ${ideas.length}`} onClick={() => setIdeasOpen(true)} />
-        <Answer label="Back to today" onClick={onBack} />
-      </div>
+        <p className="m-0 mt-[20px] text-wall-detail text-wall-ink-2">Games, school runs and chores are left off — they’re on the days.</p>
+      </RailShell>
 
+      <div className="absolute inset-y-0 left-[560px] right-0 flex animate-[wall-stage-in_180ms_ease-out] flex-col gap-[18px] px-[56px] py-[44px]">
       <div className="flex min-h-0 flex-1 gap-[44px] overflow-hidden">
         {items.length === 0 && (
           <div className="font-display text-wall-date italic text-wall-ink-2">Nothing needs getting ready for now. Say “any spirit day, give me 5 days” to teach it what to watch for.</div>
@@ -185,7 +184,8 @@ export default function WallComingUp({ now, items, ideas, today, onAct, onBack, 
       </div>
 
       {week}
+      </div>
       {ideasOpen && <IdeasSheet ideas={ideas} onEdit={onEditIdea} onClose={() => setIdeasOpen(false)} />}
-    </div>
+    </section>
   )
 }
