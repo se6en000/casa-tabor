@@ -128,18 +128,17 @@ export default function PhoneGroceries({ data, onBack, adding, setAdding, corner
         )}
         {done.length > 0 && (
           <div className="mt-[18px] flex flex-col">
-            <button type="button" aria-expanded={showDone} onClick={() => setShowDone((s) => !s)} className="flex min-h-[48px] items-center justify-between rounded-[16px] border-0 bg-phone-card px-[14px] text-left text-phone-body font-semibold text-wall-ink">
-              <span>Got · {done.length}</span>
-              <span className="text-phone-detail font-medium text-wall-ink-2">{showDone ? 'Hide' : 'Show'}</span>
-            </button>
-            {showDone && (
-              <>
-                {done.map((i) => row(i, true))}
-                <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[10px] flex h-[44px] items-center justify-center self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[18px] text-phone-detail font-semibold text-wall-ink">
-                  Clear them
-                </button>
-              </>
-            )}
+            {/* Clear on the bar itself, one tap without opening the list (Jake, Oct 7). */}
+            <div className="flex min-h-[48px] items-center rounded-[16px] bg-phone-card pl-[14px] pr-[6px]">
+              <button type="button" aria-expanded={showDone} onClick={() => setShowDone((s) => !s)} className="flex min-h-[48px] min-w-0 flex-1 items-center justify-between gap-[10px] border-0 bg-transparent p-0 pr-[12px] text-left text-phone-body font-semibold text-wall-ink">
+                <span>Got · {done.length}</span>
+                <span className="text-phone-detail font-medium text-wall-ink-2">{showDone ? 'Hide' : 'Show'}</span>
+              </button>
+              <button type="button" aria-label={`Clear the ${done.length} got`} onClick={() => { void data.clearDone(); setShowDone(false) }} className="flex h-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[16px] text-phone-detail font-semibold text-wall-ink">
+                Clear
+              </button>
+            </div>
+            {showDone && done.map((i) => row(i, true))}
           </div>
         )}
       </div>

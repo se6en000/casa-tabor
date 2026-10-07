@@ -21,10 +21,14 @@ export interface FamilyRoutine {
   key?: string
   memberId: string
   title: string
-  routineType?: 'school' | 'work' | 'camp' | 'custom'
+  /** care: someone has them for a while ("With Giselle", 2–5 after school) — where they are, no drop-off or pickup runs. */
+  routineType?: 'school' | 'work' | 'camp' | 'custom' | 'care'
   venueName: string
   shortVenueName?: string | null
   venueAddress: string
+  /** Where they're picked up when it isn't the venue (Liv: dropped at Bak, picked up at the Tri-Rail station; Oct 7). */
+  pickupVenueName?: string | null
+  pickupVenueAddress?: string | null
   daysOfWeek: number[] // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun
   startLocal: string // e.g. "08:00"
   endLocal: string // e.g. "14:00"
@@ -54,11 +58,13 @@ export interface AmbientRoutineStatus {
 export interface RoutinePayload {
   type: 'family_routine' | 'school_routine'
   key?: string
-  routineType?: 'school' | 'work' | 'camp' | 'custom'
+  routineType?: 'school' | 'work' | 'camp' | 'custom' | 'care'
   title: string
   venueName: string
   shortVenueName?: string | null
   venueAddress: string
+  pickupVenueName?: string | null
+  pickupVenueAddress?: string | null
   startLocal?: string
   endLocal?: string
   dayOverrides?: DayScheduleOverride[]
@@ -703,6 +709,7 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
     venueName: routine.venueName,
     shortVenueName: routine.shortVenueName || null,
     venueAddress: routine.venueAddress,
+    ...(routine.pickupVenueName ? { pickupVenueName: routine.pickupVenueName, pickupVenueAddress: routine.pickupVenueAddress || null } : {}),
     startLocal: routine.startLocal,
     endLocal: routine.endLocal,
     dayOverrides: routine.dayOverrides || [],
@@ -802,7 +809,8 @@ function routineFromRules(memberId: string, routineRules: MemberAvailabilityRule
   )
   const baseStart = payload.startLocal || nonOverriddenRule?.start_local || first.start_local
   const baseEnd = payload.endLocal || nonOverriddenRule?.end_local || first.end_local
-  const work = payload.routineType === 'work'
+  // Work and care have no drop-off or pickup; the old defaults (Jake, Kelly) are only for school-like routines.
+  const work = payload.routineType === 'work' || payload.routineType === 'care'
 
   return {
     key: payload.key || MAIN_ROUTINE_KEY,
@@ -812,6 +820,7 @@ function routineFromRules(memberId: string, routineRules: MemberAvailabilityRule
     venueName: payload.venueName ?? '',
     shortVenueName: payload.shortVenueName ?? null,
     venueAddress: payload.venueAddress ?? '',
+    ...(payload.pickupVenueName ? { pickupVenueName: payload.pickupVenueName, pickupVenueAddress: payload.pickupVenueAddress ?? null } : {}),
     dayOverrides: overrides,
     startDate: payload.startDate || null,
     endDate: payload.endDate || null,

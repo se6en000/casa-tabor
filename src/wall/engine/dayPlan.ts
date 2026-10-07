@@ -213,6 +213,8 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const sourceId = routine.id ?? (routine.key && routine.key !== 'main' ? `routine:${routine.memberId}:${routine.key}` : `routine:${routine.memberId}`)
     const driveMinutes = getEstimatedDriveMinutes(routine.venueName, routine.venueAddress)
     const work = routine.routineType === 'work'
+    // Someone has them for a while ("With Giselle"): where they are, nothing to drive (Jake, Oct 7: Owen 2–5).
+    const care = routine.routineType === 'care'
     // Away on a trip: no school or work while gone (the part of the day before they leave stays).
     const gone = awayDuring(routine.memberId, day.start, day.end)
     if (gone && gone.start <= day.start) continue
@@ -221,27 +223,30 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       kind: 'at_place',
       start: day.start,
       end: day.end,
-      label: formatDisplayVenueName(routine.venueName, routine.shortVenueName) || routine.title,
+      label: care ? routine.title : formatDisplayVenueName(routine.venueName, routine.shortVenueName) || routine.title,
       // Work with no place recorded may well be at home; it's still their busy time.
       placeStatus: work && !routine.venueAddress ? 'home' : 'away',
       sourceId,
       fromRoutine: true,
       work,
     })
-    // Work is where they are, not a drop-off and pickup.
-    if (work) continue
+    // Work (and someone having them) is where they are, not a drop-off and pickup.
+    if (work || care) continue
     for (const kind of ['dropoff', 'pickup'] as const) {
       const arriveAt = kind === 'dropoff' ? day.start : day.end
       const driver = kind === 'dropoff' ? day.dropoff : day.pickup
+      // Picked up somewhere else (Liv at the Tri-Rail station): the pickup goes there.
+      const elsewhere = kind === 'pickup' && routine.pickupVenueName ? { name: routine.pickupVenueName, address: routine.pickupVenueAddress || null } : null
+      const venueName = elsewhere?.name ?? routine.venueName
+      const venueAddress = elsewhere ? elsewhere.address : routine.venueAddress || null
       // Routines name drivers by id, by name, or both; group siblings by the resolved person.
       const driverId = findMember(members, driver.id, driver.name)?.id ?? null
-      const key = [kind, normalizePlace(routine.venueName), arriveAt.getTime(), driverId ?? driver.name.toLowerCase()].join('|')
+      const key = [kind, normalizePlace(venueName), arriveAt.getTime(), driverId ?? driver.name.toLowerCase()].join('|')
       const run = runs.get(key)
       if (run) run.travelerIds.push(routine.memberId)
       else runs.set(key, {
-        kind, arriveAt, driveMinutes, sourceId, driverId,
-        venueName: routine.venueName,
-        venueAddress: routine.venueAddress || null,
+        kind, arriveAt, sourceId, driverId, venueName, venueAddress,
+        driveMinutes: elsewhere ? getEstimatedDriveMinutes(venueName, venueAddress ?? '') : driveMinutes,
         travelerIds: [routine.memberId],
       })
     }

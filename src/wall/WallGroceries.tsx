@@ -110,18 +110,17 @@ export default function WallGroceries({ data, syncStale = false }: { data: Phone
             )}
             {done.length > 0 && (
               <section className="break-inside-avoid">
-                <button type="button" aria-expanded={showDone} onClick={() => setShowDone((s) => !s)} className="flex h-[64px] w-full items-center justify-between rounded-[18px] border-0 bg-wall-on-pigment/60 px-[22px] text-left text-wall-heading font-semibold text-wall-ink">
-                  <span>Got · {done.length}</span>
-                  <span className="font-medium text-wall-ink-2">{showDone ? 'Hide' : 'Show'}</span>
-                </button>
-                {showDone && (
-                  <>
-                    {done.map((i) => row(i, true))}
-                    <button type="button" onClick={() => { void data.clearDone(); setShowDone(false) }} className="mt-[12px] flex h-[56px] items-center rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-wall-paper px-[24px] text-wall-body font-semibold text-wall-ink">
-                      Clear them
-                    </button>
-                  </>
-                )}
+                {/* Clear on the bar itself, one tap without opening the list (Jake, Oct 7: "Clear button the the Got bar"). */}
+                <div className="flex h-[64px] w-full items-center rounded-[18px] bg-wall-on-pigment/60 pl-[22px] pr-[8px]">
+                  <button type="button" aria-expanded={showDone} onClick={() => setShowDone((s) => !s)} className="flex h-full min-w-0 flex-1 items-center justify-between gap-[12px] border-0 bg-transparent p-0 pr-[16px] text-left text-wall-heading font-semibold text-wall-ink">
+                    <span>Got · {done.length}</span>
+                    <span className="font-medium text-wall-ink-2">{showDone ? 'Hide' : 'Show'}</span>
+                  </button>
+                  <button type="button" aria-label={`Clear the ${done.length} got`} onClick={() => { void data.clearDone(); setShowDone(false) }} className="flex h-[48px] shrink-0 items-center rounded-full border-[1.5px] border-solid border-wall-ink-2 bg-wall-paper px-[20px] text-wall-body font-semibold text-wall-ink">
+                    Clear
+                  </button>
+                </div>
+                {showDone && done.map((i) => row(i, true))}
               </section>
             )}
           </div>

@@ -2362,6 +2362,9 @@ test('wall grocery: by aisle in three columns; a tick waits, then the ticked lea
   await expect(list.getByText('2 ticked · they’ll clear in a moment')).toBeVisible()
   await expect(list.getByRole('button', { name: /Got · 5/ })).toBeVisible({ timeout: 5000 })
   await expect(list.getByText('15 to get')).toBeVisible()
+  // Clear right on the Got bar, one tap, without opening it (Oct 7).
+  await list.getByRole('button', { name: 'Clear the 5 got' }).click()
+  await expect(list.getByRole('button', { name: /Got · / })).toHaveCount(0)
   // A usual item: straight on the list, marked NEW.
   await list.getByRole('button', { name: '+ Coffee creamer' }).click()
   await expect(list.getByRole('status', { name: 'What was added' })).toHaveText('Added coffee creamer')

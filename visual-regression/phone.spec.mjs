@@ -939,6 +939,8 @@ test('phone: Groceries — by aisle with the amount by the name; ticks wait, the
   await expect(list.getByRole('status').getByText('2 ticked')).toBeVisible()
   await expect(list.getByRole('heading', { name: 'PRODUCE' })).toBeHidden({ timeout: 5000 })
   await expect(list.getByRole('button', { name: /Got · 3/ })).toBeVisible()
+  // Clear right on the Got bar, without opening it (Oct 7).
+  await expect(list.getByRole('button', { name: 'Clear the 3 got' })).toBeVisible()
   // Adding from the bottom: "eggs, milk" — eggs is new (dairy), milk was on already.
   // On Groceries the round button is + (33d).
   await phone.getByRole('button', { name: 'Add to groceries', exact: true }).click()

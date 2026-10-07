@@ -16,7 +16,7 @@ export interface FamilyRoutine {
   id?: string
   memberId: string
   title: string
-  routineType?: 'school' | 'work' | 'camp' | 'custom'
+  routineType?: 'school' | 'work' | 'camp' | 'custom' | 'care'
   venueName: string
   shortVenueName?: string | null
   venueAddress: string
