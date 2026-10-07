@@ -279,8 +279,9 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date, opti
       previous = block
     }
 
-    // A pickup note is dropped when something else starts right after it; the initial still shows who.
-    const clearNotes = notes.filter((note) => !blocks.some((b) => b.kind !== 'place' && b.x >= note.x - 8 && b.x < note.x + NOTE_WIDTH))
+    // A pickup note is dropped when something else starts right after it — another place too (Owen's school ends at 2
+    // and "With Giselle" starts there; the two read on top of each other, Oct 7); the initial still shows who.
+    const clearNotes = notes.filter((note) => !blocks.some((b) => (b.kind !== 'place' ? b.x >= note.x - 8 : b.x >= note.x - 2) && b.x < note.x + NOTE_WIDTH))
 
     // Places lie under what happens there (a drive in the middle of work hours).
     blocks.sort((a, b) => Number(b.kind === 'place') - Number(a.kind === 'place'))

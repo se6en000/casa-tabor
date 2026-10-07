@@ -194,3 +194,16 @@ test('the "No one yet" row: each one-less event at its time, and none when there
   assert.ok(row.x > 0 && row.width > 0)
   assert.equal(buildScore(fridayPlan(), members, at(25, 8, 9)).nobody.length, 0)
 })
+
+// Oct 7 (Jake's screenshot): Owen's school ends at 2 and "With Giselle" starts there — "Giselle · 2:00" and the care
+// bar's words printed on top of each other. The pickup's words step aside for the next place; its initial stays.
+test('a place starting where school ends: no pickup words on top of it, the G still shows who', () => {
+  const care = { id: 'owen-giselle', key: 'care-giselle', memberId: 'owen', title: 'With Giselle', routineType: 'care', venueName: '', venueAddress: '', daysOfWeek: [1, 2, 3, 4, 5], startLocal: '14:00', endLocal: '17:00', dropoffDriverName: '', pickupDriverName: 'Giselle', enabled: true }
+  const plan = buildDayPlan({ date: FRIDAY, members, routines: [...routines, care], events: [] })
+  const owen = buildScore(plan, members, at(25, 15, 15)).lanes.find((l) => l.member.id === 'owen')
+  assert.deepEqual(owen.notes, [])
+  assert.ok(owen.monograms.some((m) => m.initial === 'G'))
+  assert.ok(owen.blocks.some((b) => b.label === 'With Giselle'))
+  const emme = buildScore(plan, members, at(25, 15, 15)).lanes.find((l) => l.member.id === 'emme')
+  assert.deepEqual(emme.notes.map((n) => n.text), ['Giselle · 2:00'], 'nothing after school: the words stay')
+})
