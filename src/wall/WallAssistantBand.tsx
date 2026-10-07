@@ -24,6 +24,8 @@ import { useAssistantTurn } from './useAssistantTurn'
 import { createAssistantTraceContext, emitAssistantTrace } from '../lib/assistantTelemetry'
 import { routeEta, useDriveMinutes, type DriveLookup } from './useDriveMinutes'
 import WallAssistantCard from './WallAssistantCard'
+import WallAddsCard from './WallAddsCard'
+import { addsCard } from './addsCard'
 import { WallPlanAgree, WallPlanDraft, WallPlanSaved } from './WallPlan'
 import { withDependents, type PlanArgs, type PlanOpen } from './plan'
 import { pigmentStyleFor } from './lanes'
@@ -149,11 +151,13 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
 
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
   const action = pending?.toolAction ?? null
+  // Adding to something already there (get & pack, its notes): each line spelled out (Jake, Oct 7).
+  const adds = useMemo(() => (action ? addsCard({ tool: action.tool, args: action.args }, events as unknown as WallEvent[]) : null), [action, events])
   // A new place (an add's, or a change's) needs its drive looked up for leave-by.
   const driveMinutes = useDriveMinutes(action, events, lookupDrive)
   const card = useMemo(
-    () => (action ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
-    [action, messages, pending, events, members, planDay, driveMinutes],
+    () => (action && !adds ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
+    [action, adds, messages, pending, events, members, planDay, driveMinutes],
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   // Reported when the draft itself changes, not each time the card is rebuilt.
@@ -794,6 +798,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
             {loading && <div className="text-wall-night-ink-2">{status ?? 'Thinking…'}</div>}
             {plan ? (
               <WallPlanDraft plan={plan} previous={previousPlan} working={working} onSetUp={openAgree} onKeepTalking={talkOrType} />
+            ) : adds ? (
+              <WallAddsCard card={adds} working={working} onYes={() => void confirm()} onChange={talkOrType} onNo={cancel} />
             ) : card ? (
               <WallAssistantCard
                 card={card}
@@ -1070,7 +1076,12 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           </div>
         )}
 
-        {pending?.toolAction && (
+        {pending?.toolAction && adds && (
+          <div className="flex max-w-[1180px]">
+            <WallAddsCard card={adds} working={working} onYes={() => void confirm()} onChange={talkOrType} onNo={cancel} />
+          </div>
+        )}
+        {pending?.toolAction && !adds && (
           <div className="flex flex-col gap-[16px] rounded-[22px] bg-wall-on-pigment px-[32px] py-[24px] text-wall-ink">
             <div className="flex items-baseline justify-between gap-[24px]">
               <div className="whitespace-pre-line font-display text-wall-date font-semibold">{cardText(pending.toolAction.displayText)}</div>

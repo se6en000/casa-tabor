@@ -704,6 +704,19 @@ function _subscribeRealtimeChannel() {
   }
 }
 
+/**
+ * Told when the calendar changes (the shared realtime channel's debounced signal, or a change made here). Rides the one
+ * channel: it subscribes nothing itself, so it only hears while a calendar hook keeps the channel open (the wall's do).
+ */
+export function onCalendarChange(cb: () => void): () => void {
+  _invalidateCallbacks.add(cb)
+  window.addEventListener('casa-event-mutated', cb)
+  return () => {
+    _invalidateCallbacks.delete(cb)
+    window.removeEventListener('casa-event-mutated', cb)
+  }
+}
+
 function useRealtimeEventInvalidation() {
   const qc = useQueryClient()
   useEffect(() => {

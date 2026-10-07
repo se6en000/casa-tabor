@@ -1,6 +1,7 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { onCalendarChange } from '../hooks/useCalendarEvents'
 import type { ComingUpAction, ComingUpItem, GiftIdea, HandledItem } from './comingUp'
 
 export interface ComingUpData { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; handled: HandledItem[] }
@@ -25,6 +26,16 @@ export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' }
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
   })
+  // What's already set on each line (canvas 66) follows the calendar (Jake, Oct 7: "will that get updated or refreshed
+  // in realtime as things change?"): a change anywhere refreshes it, at most once in 20 seconds for a burst of them.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = onCalendarChange(() => {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; void queryClient.invalidateQueries({ queryKey: ['coming-up'] }) }, 20_000)
+    })
+    return () => { off(); if (timer) clearTimeout(timer) }
+  }, [queryClient])
   const act = useCallback(async (key: string, action: ComingUpAction, extra: ActExtra = {}): Promise<string | null> => {
     // Gone from the list straight away; the refresh confirms it.
     queryClient.setQueryData<ComingUpData>(['coming-up'], (old) => (old ? { ...old, items: old.items.filter((i) => i.key !== key) } : old))

@@ -1,4 +1,5 @@
 import { PhonePlanAgree, PhonePlanCard, PhonePlanSaved } from './PhonePlan'
+import { addsCard } from '../wall/addsCard'
 import PhoneEmailReview from './PhoneEmailReview'
 import { useEmailOffers } from '../wall/useEmailOffers'
 import type { PlanArgs, PlanOpen } from '../wall/plan'
@@ -90,9 +91,10 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
   // The same card as the wall's band (boards 06e/06f).
   const action = pending?.toolAction ?? null
   const driveMinutes = useDriveMinutes(action, events, lookupDrive)
+  const adds = useMemo(() => (action ? addsCard({ tool: action.tool, args: action.args }, events as unknown as WallEvent[]) : null), [action, events])
   const card = useMemo(
-    () => (action ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
-    [action, messages, pending, events, members, planDay, driveMinutes],
+    () => (action && !adds ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
+    [action, adds, messages, pending, events, members, planDay, driveMinutes],
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const which = pending || loading ? null : whichOne(answer, events as never)
@@ -222,6 +224,7 @@ export default function PhoneAssistant({ events, family, members, planDay, onClo
         onClose()
       }}
       card={card}
+      adds={adds}
       which={which}
       offer={offer}
       members={members}

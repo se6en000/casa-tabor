@@ -286,3 +286,35 @@ export function handledFromState(stateRows, today) {
     .map((s) => ({ key: s.item_key, title: String(s.outcome.title ?? ''), date: String(s.outcome.date), text: String(s.outcome.text ?? 'Marked handled'), eventId: s.outcome.eventId ?? null, by: s.outcome.by ?? 'you', at: s.done_at }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
+
+// ── What's already set (canvas 66; Jake, Oct 7: "mark on ahead, calendar and reminders … so alexa will know when i
+// invoke her. or if ive handled it and can see its laready there then I can dismiss it") ─────────────────────────
+const GENERIC = new Set([...STOP, 'birthday', 'anniversary', 'appointment', 'appt', 'due', 'event', 'meeting', 'reminder', 'text', 'call', 'pick', 'get', 'happy', 'message', 'send', 'order', 'buy', 'gift', 'make', 'sure', 'from', 'her', 'his', 'their'])
+const markWords = (t) => String(t ?? '').toLowerCase().replace(/['’]s\b/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !GENERIC.has(w))
+
+/** Whether an event or reminder is about this line: a birthday's or anniversary's person by name; else a word in common. */
+function about(item, title) {
+  const theirs = new Set(markWords(title))
+  if (item.kind === 'birthday' || item.kind === 'anniversary') {
+    const who = markWords(item.title)[0]
+    return Boolean(who && theirs.has(who))
+  }
+  return markWords(item.title).some((w) => theirs.has(w))
+}
+
+/**
+ * Each line with what's already set: `onCalendar` (it is a calendar event, or one under its name is on that day) and
+ * `reminder` (the nearest reminder about it, up to a month before the day): { id, title, at, allDay } or null.
+ */
+export function aheadMarks(items, events) {
+  const evs = events ?? []
+  return (items ?? []).map((item) => {
+    const own = evs.find((e) => e.id === item.key && e.event_type !== 'reminder')
+    const onCalendar = Boolean(own) || evs.some((e) => e.event_type !== 'reminder' && localDate(e) === item.date && about(item, e.title))
+    const from = addDays(item.date, -30)
+    const reminder = evs
+      .filter((e) => e.event_type === 'reminder' && e.has_due_date !== false && localDate(e) >= from && localDate(e) <= item.date && about(item, e.title))
+      .sort((a, b) => String(b.start_time).localeCompare(String(a.start_time)))[0]
+    return { ...item, onCalendar, reminder: reminder ? { id: reminder.id, title: String(reminder.title), at: String(reminder.start_time), allDay: reminder.all_day === true } : null }
+  })
+}

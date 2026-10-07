@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { AddsCard } from '../wall/addsCard'
 import { ArrowUp, Bug, Camera, ChevronLeft, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
@@ -42,6 +43,8 @@ export interface PhoneAssistantViewProps {
   onClose: () => void
   /** The draft told from the family's day (board 06e); without it, `pending` is shown as words. */
   card?: AssistantCard | null
+  /** Adding to something already there (get & pack, its notes): each line spelled out (Jake, Oct 7). */
+  adds?: AddsCard | null
   /** "Which one?" as tiles (board 06f); a tap sends the name. */
   which?: WhichOne | null
   /** A one-tap yes when the answer offers to do something. */
@@ -65,7 +68,7 @@ export interface PhoneAssistantViewProps {
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, onPickPlace, planSlot = null, onForm, onScan, glance, showList = 0 }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, status = null, pending, working, note, mic, onOpenEvent, openDay = null, directions = null, onSend, onConfirm, onCancel, onReport, onClose, card = null, adds = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver, onPickPlace, planSlot = null, onForm, onScan, glance, showList = 0 }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -193,6 +196,8 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
           {planSlot}
           {card ? (
             <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} onPickPlace={onPickPlace} />
+          ) : adds ? (
+            <PhoneAdds card={adds} working={working} onYes={onConfirm} onNo={onCancel} />
           ) : pending && (
             <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
               <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
@@ -305,6 +310,8 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
             )}
             {planSlot ? planSlot : card ? (
               <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} onPickPlace={onPickPlace} />
+            ) : adds ? (
+              <PhoneAdds card={adds} working={working} onYes={onConfirm} onNo={onCancel} />
             ) : pending && (
               <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
                 <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
@@ -403,5 +410,35 @@ export default function PhoneAssistantView({ lines, thinking, status = null, pen
         </>
       )}
     </section>
+  )
+}
+
+/** What a card adds to something already there, line by line (the wall's WallAddsCard). */
+function PhoneAdds({ card, working, onYes, onNo }: { card: AddsCard; working: boolean; onYes: () => void; onNo: () => void }) {
+  const label = 'text-phone-label font-bold tracking-[0.16em] text-wall-ink-2'
+  return (
+    <div className="flex flex-col gap-[10px] rounded-[18px] bg-wall-on-pigment p-[16px] text-wall-ink">
+      <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">{card.kind === 'prep' ? 'GET & PACK' : 'NOTES'} · NOT SAVED YET</div>
+      <div>
+        <div className="font-display text-phone-heading font-semibold leading-tight">{card.title}</div>
+        {card.when && <div className="text-phone-detail text-wall-ink-2">{card.when}</div>}
+      </div>
+      {card.existing.length > 0 && (
+        <div>
+          <div className={label}>IN ITS NOTES NOW</div>
+          <div className="line-clamp-3 whitespace-pre-line text-phone-detail text-wall-ink-2">{card.existing.join('\n')}</div>
+        </div>
+      )}
+      <div>
+        <div className={label}>{card.kind === 'prep' ? `ADDS TO GET & PACK · ${card.adding.length}` : 'ADDS TO ITS NOTES'}</div>
+        <ul className="m-0 mt-[4px] flex list-none flex-col gap-[4px] p-0">
+          {card.adding.map((line) => <li key={line} className="text-phone-body font-semibold"><span className="text-wall-brass-ink">+ </span>{line}</li>)}
+        </ul>
+      </div>
+      <div className="flex gap-[8px]">
+        <button type="button" onClick={onYes} disabled={working} className="flex h-[48px] flex-1 items-center justify-center rounded-full border-0 bg-wall-ink text-phone-body font-semibold text-wall-on-pigment">{working ? 'Saving…' : card.yes}</button>
+        <button type="button" onClick={onNo} disabled={working} className="flex h-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[20px] text-phone-body font-semibold text-wall-ink">No</button>
+      </div>
+    </div>
   )
 }

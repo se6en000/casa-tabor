@@ -7,7 +7,7 @@
 //   'send_pokes'               → morning push for items whose plan-by day is today, once each (cron coming-up-daily-pokes)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { memberNamed } from '../_shared/family-names.mjs'
-import { buildComingUp, fewerLikeMatch, handledFromState, SEASONS } from '../_shared/coming-up.mjs'
+import { aheadMarks, buildComingUp, fewerLikeMatch, handledFromState, SEASONS } from '../_shared/coming-up.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
 
     // Two months for birthdays plus the six-week window: look ~110 days out.
     const [eventsRes, giftsRes, stateRes, rulesRes, familyRes, projectsRes, stepsRes] = await Promise.all([
-      sb.from('events').select('id, title, start_time, end_time, all_day, event_type, description')
+      sb.from('events').select('id, title, start_time, end_time, all_day, event_type, description, has_due_date')
         .is('deleted_at', null).neq('status', 'cancelled').neq('record_kind', 'series_template')
         .gte('start_time', new Date(now.getTime() - 86400e3).toISOString())
         .lt('start_time', new Date(now.getTime() + 110 * 86400e3).toISOString())
@@ -150,7 +150,8 @@ Deno.serve(async (req) => {
       const member = family.find((m) => m.id === g.for_member_id) ?? memberNamed(g.for_name, family)
       return { ...g, for_name: member?.name ?? g.for_name }
     })
-    if (action === 'list') return json({ items, rules, today, ideas, handled: handledFromState(stateRes.data ?? [], today) })
+    // What's already set on each line (canvas 66): on the calendar, a reminder for it.
+    if (action === 'list') return json({ items: aheadMarks(items, eventsRes.data ?? []), rules, today, ideas, handled: handledFromState(stateRes.data ?? [], today) })
 
     const push = async (title: string, text: string, tag: string) => {
       const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body: text, url: '/', tag } })

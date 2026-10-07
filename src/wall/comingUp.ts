@@ -24,6 +24,19 @@ export interface ComingUpItem {
   plan?: { steps: number; minutes: number; first: string }
   /** A trip away (coverage.ts): opens the trip sheet, where its runs are covered. */
   tripKey?: string
+  /** What's already set (canvas 66): it's on the calendar; a reminder for it. */
+  onCalendar?: boolean
+  reminder?: { id: string; title: string; at: string; allDay: boolean } | null
+}
+
+/** "Reminder Sun 7 PM", "Reminder Fri Oct 9" (no time when it has none) — within a week, the weekday is enough. */
+export function reminderMark(reminder: { at: string; allDay: boolean }, now = new Date()): string {
+  const d = new Date(reminder.at)
+  const days = (d.getTime() - now.getTime()) / 86_400_000
+  const day = days >= 0 && days < 6 ? d.toLocaleDateString('en-US', { weekday: 'short' }) : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '')
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0
+  const time = reminder.allDay || midnight ? '' : ` ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00 ', ' ')}`
+  return `Reminder ${day}${time}`
 }
 export interface GiftIdea { id?: string; for_name: string; for_member_id?: string | null; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'
@@ -173,7 +186,9 @@ export function horizonPages(groups: HorizonGroup[], rowsPerColumn = 9): Horizon
   for (const g of groups) {
     g.items.forEach((item, i) => {
       lastHeading = g.heading
-      place({ item, heading: i === 0 ? g.heading : null, tone: g.tone }, i === 0 ? 1.5 : 1)
+      // A line with its marks (canvas 66) takes a little more room.
+      const marks = item.onCalendar || item.reminder ? 0.3 : 0
+      place({ item, heading: i === 0 ? g.heading : null, tone: g.tone }, (i === 0 ? 1.5 : 1) + marks)
     })
   }
   return pages

@@ -77,11 +77,12 @@ const CHECKLIST = [
 
 // Coming up (board 07a), shaped like the live list on 2026-09-27, dated from the fixture day.
 const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { inDays: number; pokeIn: number }> = [
-  { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning appointment', nextStep: 'Make sure it works with work', inDays: 3, pokeIn: -4, late: true },
+  // What's already set (canvas 66): on the calendar, a reminder for it.
+  { key: 'cu-ac', kind: 'appointment', title: 'EDS Air Conditioning appointment', nextStep: 'Make sure it works with work', inDays: 3, pokeIn: -4, late: true, onCalendar: true, reminder: { id: 'r-ac', title: 'Clear the closet for the AC tech', at: '2026-09-27T23:00:00.000Z', allDay: false } },
   { key: 'cu-columbus', kind: 'no_school', title: 'Columbus Day', nextStep: 'No school? Who’s with the kids', inDays: 15, pokeIn: 0, late: false },
-  { key: 'cu-dentist', kind: 'appointment', title: 'Dentist (Dr. Ledakis)', nextStep: 'Make sure it works with work', inDays: 12, pokeIn: 5, late: false },
-  { key: 'cu-forms', kind: 'deadline', title: 'Liv’s athletics forms due', nextStep: 'Get it done', inDays: 15, pokeIn: 6, late: false },
-  { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 68, pokeIn: 8, late: false, ideas: ['A fly-fishing reel'] },
+  { key: 'cu-dentist', kind: 'appointment', title: 'Dentist (Dr. Ledakis)', nextStep: 'Make sure it works with work', inDays: 12, pokeIn: 5, late: false, onCalendar: true },
+  { key: 'cu-forms', kind: 'deadline', title: 'Liv’s athletics forms due', nextStep: 'Get it done', inDays: 15, pokeIn: 6, late: false, onCalendar: true, reminder: { id: 'r-forms', title: 'Liv’s athletics forms', at: '2026-10-09T04:00:00.000Z', allDay: false } },
+  { key: 'cu-carl', kind: 'birthday', title: 'Carl’s birthday', nextStep: 'Pick a gift', inDays: 68, pokeIn: 8, late: false, ideas: ['A fly-fishing reel'], reminder: { id: 'r-carl', title: 'Order Carl’s gift', at: '2026-12-01T14:00:00.000Z', allDay: false } },
   { key: 'cu-thanks', kind: 'hosting', title: 'Thanksgiving', nextStep: 'Hosting or going?', inDays: 60, pokeIn: 30, late: false },
 ]
 // `?comingUp=projects` (P3.23, canvas 10e): a project's dated step on the list, with Open project.

@@ -698,6 +698,10 @@ test('wall: Ahead — the eighth tile opens it; ✕ and ✓ clear a line after a
   const ahead = page.getByRole('region', { name: 'Ahead' })
   await expect(ahead.getByRole('heading', { name: '6 things' })).toBeVisible()
   await expect(ahead.getByText('THIS WEEK', { exact: true })).toBeVisible()
+  // What's already set (canvas 66).
+  await expect(ahead.getByRole('button', { name: 'Talk about EDS Air Conditioning appointment with Alexa' }).getByText('On the calendar')).toBeVisible()
+  await expect(ahead.getByText('Reminder Sun 7 PM')).toBeVisible()
+  await expect(ahead.getByText('Reminder Tue Dec 1 9 AM')).toBeVisible()
   await expect(page).toHaveScreenshot('wall-coming-up.png')
   // ✕: it says so with an Undo; Undo keeps it.
   await ahead.getByRole('button', { name: 'Not for us: EDS Air Conditioning appointment' }).click()
@@ -716,7 +720,7 @@ test('wall: Ahead — the eighth tile opens it; ✕ and ✓ clear a line after a
   await expect(ahead.getByRole('button', { name: /^Week of Oct 9/ })).toHaveAttribute('aria-pressed', 'true')
   // A tap on a line: Alexa, with it in hand.
   await ahead.getByRole('button', { name: /^Talk about Carl’s birthday with Alexa$/ }).click()
-  await expect.poll(() => page.evaluate(() => window.__asked)).toMatch(/^Let’s talk about Carl’s birthday on Wed Dec 2 — it’s on Ahead \(Pick a gift\)\.$/)
+  await expect.poll(() => page.evaluate(() => window.__asked)).toMatch(/^Let’s talk about Carl’s birthday on Wed Dec 2 — it’s on Ahead \(Pick a gift\), with a reminder set: “Order Carl’s gift”, Tue Dec 1 9 AM\.$/)
   await page.getByRole('button', { name: 'Gift ideas · 2' }).click()
   await expect(page.getByRole('region', { name: 'Gift ideas' }).getByText('A soccer-team sweatshirt and T-shirt')).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
@@ -2656,4 +2660,21 @@ test('wall: the morning paper — plain words until the server’s arrive; gone 
   await wall.getByRole('button', { name: 'Morning paper' }).click()
   await expect(page.getByRole('article', { name: 'The morning paper' })).toBeVisible()
   await expect(page.getByText(/Previewing/)).toBeVisible()
+})
+
+// Jake, Oct 7: "i need to see on the card, what will actually be added for the get and prep, or notes … its a
+// confidence thing" — each line it adds, with a +; notes with what's there now.
+test('wall: adding to an event — the card lists each get & pack line, and new notes under the ones there', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=prep')
+  const wall = page.getByTestId('wall-fixture')
+  await expect(wall.getByText('ADDS TO GET & PACK · 3')).toBeVisible()
+  for (const line of ['Sunscreen', 'The folding chairs', 'A cooler with ice']) await expect(wall.getByText(line, { exact: true })).toBeVisible()
+  await expect(wall.getByRole('button', { name: 'Yes, add 3' })).toBeVisible()
+  await expect(wall).toHaveScreenshot('band-adds-prep.png')
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00&band=notes-add')
+  await expect(wall.getByText('IN ITS NOTES NOW')).toBeVisible()
+  await expect(wall.getByText(/Arrive by 12:10/)).toBeVisible()
+  await expect(wall.getByText('Gate opens at 11:45', { exact: true })).toBeVisible()
+  await expect(wall.getByRole('button', { name: 'Yes, add to the notes' })).toBeVisible()
+  await expect(wall).toHaveScreenshot('band-adds-notes.png')
 })

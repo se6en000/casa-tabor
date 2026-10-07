@@ -142,7 +142,7 @@ export default function WallAssistantCard({ card, members, pigmentOf, working, o
       {card.notes.length > 0 && (
         <div className="min-w-0">
           <div className={label}>{card.notesAdded ? 'ADDS TO ITS NOTES' : 'NOTES'}</div>
-          <div className="mt-[6px] line-clamp-2 text-wall-detail">{card.notes.join(' · ')}</div>
+          <div className="mt-[6px] line-clamp-2 text-wall-detail">{card.notesAdded ? card.notes.map((n) => `+ ${n}`).join('  ') : card.notes.join(' · ')}</div>
         </div>
       )}
 

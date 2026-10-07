@@ -32,7 +32,7 @@ import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
 import { quietStep, stepForEvent, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { WallNudge, WallQuietStep } from './WallNudge'
-import { comingUpTile, horizonDate, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import { comingUpTile, horizonDate, reminderMark, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
 import type { ActExtra } from './useComingUp'
 import { setHorizonTopic } from './horizonTopic'
 import WallEvening from './WallEvening'
@@ -649,9 +649,10 @@ export default function WallView(props: WallViewProps) {
         onTalk={onAsk ? (item) => {
           setComingUpUntil(Date.now() + PREVIEW_MS)
           setHorizonTopic({ key: item.key, title: item.title, date: item.date })
-          // A calendar item says so (bug report 011679e8: "she just didnt tell me up front this is already an event").
-          const onCalendar = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.key)
-          onAsk(`Let’s talk about ${item.title} on ${horizonDate(item.date)} — it’s on Ahead${item.nextStep ? ` (${item.nextStep})` : ''}${onCalendar ? ', and on the calendar' : ''}.`)
+          // What's already set says so (bug report 011679e8: "she just didnt tell me up front this is already an event";
+          // canvas 66): on the calendar, and a reminder for it — so she starts from what's done.
+          const set = [item.onCalendar ? 'on the calendar' : null, item.reminder ? `with a reminder set: “${item.reminder.title}”, ${reminderMark(item.reminder, now).replace(/^Reminder /, '')}` : null].filter(Boolean).join(', ')
+          onAsk(`Let’s talk about ${item.title} on ${horizonDate(item.date)} — it’s on Ahead${item.nextStep ? ` (${item.nextStep})` : ''}${set ? `, ${set}` : ''}.`)
         } : undefined}
         onOpenEvent={(id) => { setComingUpUntil(0); setSelectedId(id) }}
         onBack={() => setComingUpUntil(0)}

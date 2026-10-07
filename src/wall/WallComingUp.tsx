@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, Mic, X } from 'lucide-react'
+import { Bell, CalendarDays, Check, Mic, X } from 'lucide-react'
 import WallKeyboard from './WallKeyboard'
 import { formatWallDate } from './clock'
-import { horizonDate, horizonGroups, horizonPages, horizonTone, ideasByPerson, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import { horizonDate, horizonGroups, horizonPages, horizonTone, ideasByPerson, reminderMark, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
 import type { ActExtra } from './useComingUp'
 import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 
@@ -66,7 +66,7 @@ const without = <T,>(o: Record<string, T>, key: string): Record<string, T> => Ob
 
 const DOT = { rust: 'bg-wall-rust', brass: 'bg-wall-brass', stone: 'bg-wall-stone' } as const
 
-function HorizonRow({ item, leaving, dim, onTalk, onHandle, onDismiss, onUndo }: { item: ComingUpItem; leaving: Leaving | null; dim: boolean; onTalk: () => void; onHandle: () => void; onDismiss: () => void; onUndo: () => void }) {
+function HorizonRow({ item, now, leaving, dim, onTalk, onHandle, onDismiss, onUndo }: { item: ComingUpItem; now: Date; leaving: Leaving | null; dim: boolean; onTalk: () => void; onHandle: () => void; onDismiss: () => void; onUndo: () => void }) {
   const tone = horizonTone(item)
   const gone = leaving?.phase === 'fade'
   return (
@@ -82,7 +82,16 @@ function HorizonRow({ item, leaving, dim, onTalk, onHandle, onDismiss, onUndo }:
               {leaving ? (
                 <span className="text-wall-detail text-wall-brass-ink">{leaving.kind === 'handled' ? '✓ Handled' : 'Not for us — fewer like this'}</span>
               ) : (
-                <span className="truncate text-wall-detail text-wall-ink-2">{item.nextStep}</span>
+                <>
+                  <span className="truncate text-wall-detail text-wall-ink-2">{item.nextStep}</span>
+                  {/* What's already set (canvas 66): so a glance — or Alexa — knows it's in hand. */}
+                  {(item.onCalendar || item.reminder) && (
+                    <span className="mt-[2px] flex items-center gap-[18px] whitespace-nowrap text-wall-label font-semibold text-wall-brass-ink">
+                      {item.onCalendar && <span className="flex items-center gap-[6px]"><CalendarDays size={17} aria-hidden="true" />On the calendar</span>}
+                      {item.reminder && <span className="flex items-center gap-[6px]"><Bell size={17} aria-hidden="true" />{reminderMark(item.reminder, now)}</span>}
+                    </span>
+                  )}
+                </>
               )}
             </span>
             <span className="shrink-0 whitespace-nowrap text-wall-label font-semibold text-wall-ink-2">{horizonDate(item.date)}</span>
@@ -293,7 +302,7 @@ export default function WallComingUp({ now, items, ideas, handled = [], today, o
                   {heading && (
                     <div className={`pb-[4px] pt-[12px] text-wall-label font-bold tracking-[0.22em] ${tone === 'near' ? 'text-wall-rust' : tone === 'soon' ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{heading.toUpperCase()}</div>
                   )}
-                  <HorizonRow item={item} leaving={leaving[item.key] ?? null} dim={focus != null && Math.floor(dayOf(item.date) / 7) !== focus}
+                  <HorizonRow now={now} item={item} leaving={leaving[item.key] ?? null} dim={focus != null && Math.floor(dayOf(item.date) / 7) !== focus}
                     onTalk={() => open(item)} onHandle={() => clear(item, 'handled')} onDismiss={() => clear(item, 'dismissed')} onUndo={() => undo(item.key)} />
                 </div>
               ))}

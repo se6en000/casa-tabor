@@ -9,7 +9,7 @@ const sql = readFileSync(new URL('../supabase/migrations/20260927230000_coming_u
 test('list, done / not needed / snooze a week, the Sunday digest and the daily pokes', () => {
   for (const a of ["'list'", "'done'", "'dismiss'", "'snooze'", "'send_digest'", "'send_pokes'"]) assert.ok(fn.includes(a), a)
   assert.match(fn, /snoozed_until: plusDays\(today, 7\)/)
-  assert.match(fn, /import \{ buildComingUp,[^}]*SEASONS \} from '\.\.\/_shared\/coming-up\.mjs'/)
+  assert.match(fn, /import \{ [^}]*buildComingUp,[^}]*SEASONS \} from '\.\.\/_shared\/coming-up\.mjs'/)
   assert.match(fn, /seasons: SEASONS/, 'the seasons come round on the list')
 })
 

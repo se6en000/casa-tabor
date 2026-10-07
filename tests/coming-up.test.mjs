@@ -347,3 +347,35 @@ test('handled ones, with what was done, for the timeline: this week past and ahe
   ]
   assert.deepEqual(handledFromState(rows, '2026-10-07').map((h) => [h.key, h.text, h.by, h.eventId]), [['a', 'Reminder: Thu Oct 8, 9 AM', 'alexa', 'e1']])
 })
+
+// Canvas 66 (Jake, Oct 7: "mark on ahead, calendar and reminders … so alexa will know when i invoke her. or if ive
+// handled it and can see its laready there then I can dismiss it"): what's already set, for each line.
+test('Ahead marks what is already set: on the calendar, and a reminder for it', async () => {
+  const { aheadMarks } = await import('../supabase/functions/_shared/coming-up.mjs')
+  const events = [
+    { id: 'hb', title: 'Heather’s Birthday', start_time: '2026-10-08T00:00:00Z', end_time: '2026-10-09T00:00:00Z', all_day: true, event_type: 'event' },
+    { id: 'r1', title: 'Text Heather a happy birthday message', start_time: '2026-10-08T11:00:00Z', end_time: '2026-10-08T11:15:00Z', all_day: false, event_type: 'reminder', has_due_date: true },
+    { id: 'r2', title: 'Order Carl a birthday gift', start_time: '2026-11-25T14:00:00Z', end_time: '2026-11-25T14:15:00Z', all_day: false, event_type: 'reminder', has_due_date: true },
+    { id: 'tg', title: 'Thanksgiving at Mom’s', start_time: '2026-11-26T21:00:00Z', end_time: '2026-11-26T23:00:00Z', all_day: false, event_type: 'event' },
+    { id: 'r3', title: 'Liv forms', start_time: '2026-08-01T14:00:00Z', end_time: '2026-08-01T14:15:00Z', all_day: false, event_type: 'reminder', has_due_date: true },
+  ]
+  const items = [
+    { key: 'hb', kind: 'birthday', title: 'Heather’s Birthday', date: '2026-10-08' },
+    { key: 'carl', kind: 'birthday', title: 'Carl’s birthday', date: '2026-12-02' },
+    { key: 'season:thanksgiving:2026', kind: 'season', title: 'Thanksgiving', date: '2026-11-26' },
+    { key: 'season:halloween:2026', kind: 'season', title: 'Halloween', date: '2026-10-31' },
+    { key: 'liv', kind: 'deadline', title: 'Liv’s athletics forms due', date: '2026-10-10' },
+  ]
+  const [hb, carl, tg, hw, liv] = aheadMarks(items, events)
+  assert.equal(hb.onCalendar, true)
+  assert.deepEqual(hb.reminder, { id: 'r1', title: 'Text Heather a happy birthday message', at: '2026-10-08T11:00:00Z', allDay: false })
+  // Carl's reminder names him; Heather's never counts for Carl.
+  assert.equal(carl.onCalendar, false)
+  assert.equal(carl.reminder.id, 'r2')
+  // A season with a calendar event under its name that day.
+  assert.equal(tg.onCalendar, true)
+  assert.equal(hw.onCalendar, false)
+  assert.equal(hw.reminder, null)
+  // A reminder long before (two months) isn't for this one.
+  assert.equal(liv.reminder, null)
+})

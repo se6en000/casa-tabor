@@ -74,6 +74,15 @@ export const BAND_SCENES: Record<string, () => AIMessage[]> = {
     user('Push the softball back half an hour'),
     said('Moving softball to 1:00.', draft('update_event', { id: 'softball', start: local(26, 13, 0), end: local(26, 15, 0) }, 'Softball → 1:00 PM')),
   ],
+  // Adding to something already there, line by line (Jake, Oct 7: "what will actually be added … a confidence thing").
+  prep: () => [
+    user('For softball tomorrow, add sunscreen, the folding chairs and a cooler with ice'),
+    said('Adding three to its get & pack.', draft('add_prep_item', { event_id: 'softball', event_title: 'Softball: Huskies @ RPB Cascade', labels: ['Sunscreen', 'The folding chairs', 'A cooler with ice'], label: 'Sunscreen · The folding chairs · A cooler with ice' }, 'Add to Softball · get & pack: Sunscreen · The folding chairs · A cooler with ice')),
+  ],
+  'notes-add': () => [
+    user('Add to the softball notes: gate opens at 11:45, and park on the grass lot by Field 1'),
+    said('Adding that under its notes.', draft('update_event', { id: 'softball', notes_add: ['Gate opens at 11:45', 'Park on the grass lot by Field 1'] }, 'Update Softball')),
+  ],
   // 06c: which one?, with the change kept.
   which: () => [
     user('Move the game on Saturday to 5'),
