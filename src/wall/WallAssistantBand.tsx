@@ -364,8 +364,15 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       heldWhileSaving.current = null
       if (held) { holdRef.current(); void send(held) }
       // The answer landed: a fresh follow-up window, at once (the mic never disconnected).
-      else if (speech.listening || speech.connecting) { speech.rearm?.(); window.setTimeout(() => setWindowFrom(Date.now()), 0) }
-      else window.setTimeout(() => setRelisten((n) => n + 1), 0)
+      // Traced with the mic's phase (Oct 7: "a listening pause between her last question and capturing my response"),
+      // so the next real conversation shows which way it went and how long until it listens again.
+      else if (speech.listening || speech.connecting) {
+        emitAssistantTrace('band_answer_landed', voiceTrace.current, { payload: { phase: speech.phase, path: 'rearm' } })
+        speech.rearm?.(); window.setTimeout(() => setWindowFrom(Date.now()), 0)
+      } else {
+        emitAssistantTrace('band_answer_landed', voiceTrace.current, { payload: { phase: speech.phase, path: 'restart' } })
+        window.setTimeout(() => setRelisten((n) => n + 1), 0)
+      }
     }
     wasBusy.current = busy
   }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,6 +455,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // really hears and Casa isn't thinking; connecting says "One moment…".
   const live = speech.listening && !thinking
   const state = bandState({ listening: live, loading, answer, pending })
+  // Every change of what the band shows, with the mic's phase — to see a gap between an answer and LISTENING.
+  useEffect(() => {
+    emitAssistantTrace('band_state', voiceTrace.current, { payload: { state, phase: speech.phase } })
+  }, [state, speech.phase]) // eslint-disable-line react-hooks/exhaustive-deps
   // Tips while Casa thinks (board 07e): one per question, steady while it thinks; each question
   // asked is counted so a tip retires once that ability is known. "What can I say?" lists them all.
   const [sayOpen, setSayOpen] = useState(false)

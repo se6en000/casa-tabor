@@ -1,5 +1,6 @@
 import { supabaseAnonKey, supabaseUrl } from './supabase'
 import type { VoiceRuntimeConfig } from './voiceRuntimeConfig'
+import { traceIdentity } from './voiceTraceIdentity'
 
 type RemoteVoiceTraceEntry = {
   at: string
@@ -217,14 +218,7 @@ function shouldSkipRemote(entryEvent: string, config: VoiceRuntimeConfig): boole
 }
 
 function buildEntryFingerprint(entry: RemoteVoiceTraceEntry): string {
-  return [
-    entry.channel,
-    entry.sessionId ?? '',
-    entry.turnId ?? '',
-    String(entry.seq ?? ''),
-    entry.event,
-    entry.detail ?? '',
-  ].join('|')
+  return traceIdentity(entry)
 }
 
 function shouldDropRecentDuplicate(entry: RemoteVoiceTraceEntry): boolean {
@@ -294,15 +288,7 @@ export function enqueueRemoteVoiceTrace(
   }
   if (shouldSkipRemote(withChannel.event, config)) return
   if (shouldDropRecentDuplicate(withChannel)) return
-  const dedupeSource = [
-    getVoiceDeviceId(),
-    channel,
-    withChannel.sessionId ?? '',
-    withChannel.turnId ?? '',
-    String(withChannel.seq ?? ''),
-    withChannel.event,
-    withChannel.detail ?? '',
-  ].join('|')
+  const dedupeSource = `${getVoiceDeviceId()}|${traceIdentity(withChannel)}`
   withChannel.dedupeKey = dedupeSource.slice(0, 800)
   queue.push({ entry: withChannel, attempts: 0 })
   if (queue.length > MAX_QUEUE_SIZE) {
