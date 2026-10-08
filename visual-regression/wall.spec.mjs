@@ -2343,7 +2343,7 @@ test('wall assistant: an answer with a list is tiles — in the band, and in the
 test('wall on a computer: text is typed in place — a step’s title, a new step, an event’s title — never the bar', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects&keyboard=device')
   await page.getByRole('button', { name: /^Ahead:/ }).click()
-  await page.getByRole('button', { name: 'Open project' }).click()
+  await page.getByRole('button', { name: 'Open project: Paint the house' }).click()
   const project = page.getByRole('region', { name: 'Paint the house — project' })
   await expect(project).toBeVisible()
   // A step's title: typed over it.

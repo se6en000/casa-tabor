@@ -231,7 +231,7 @@ function Gate({ unlock }: { unlock: Unlock }) {
   return (
     <section aria-label="Advanced is Jake’s" className="mt-[18px] rounded-[22px] bg-wall-ink px-[22px] py-[24px] text-center text-wall-on-pigment">
       <ScanFace size={40} aria-hidden="true" className="mx-auto text-wall-night-brass" />
-      <h2 className={`m-0 mt-[10px] font-display font-semibold ${t.heading}`}>Advanced is Jake’s</h2>
+      <h2 className={`m-0 mt-[10px] font-display font-semibold text-wall-on-pigment ${t.heading}`}>Advanced is Jake’s</h2>
       <p className={`m-0 mt-[6px] text-wall-night-ink-2 ${t.detail}`}>Usage and cost, the AI’s limits, the nightly checks and the tools. Sign in as Jake to open it.</p>
       {viewer.signOut && <div className="mt-[12px] flex justify-center"><Action onClick={viewer.signOut}><span className="text-wall-night-brass">Sign in as Jake</span></Action></div>}
     </section>
@@ -263,7 +263,7 @@ function WallPin({ unlock }: { unlock: NonNullable<Unlock> }) {
   }
   return (
     <section aria-label="Advanced is Jake’s" className="mt-[18px] rounded-[22px] bg-wall-ink px-[22px] py-[24px] text-center text-wall-on-pigment">
-      <h2 className={`m-0 font-display font-semibold ${t.heading}`}>Advanced is Jake’s</h2>
+      <h2 className={`m-0 font-display font-semibold text-wall-on-pigment ${t.heading}`}>Advanced is Jake’s</h2>
       <p className={`m-0 mt-[6px] text-wall-night-ink-2 ${t.detail}`}>{wrong ? 'That PIN isn’t right.' : checking ? 'Checking…' : 'Jake’s PIN opens it for now.'}</p>
       <div className="mt-[14px] flex justify-center gap-[12px]" aria-label={`${pin.length} of ${PIN_LENGTH} numbers`} role="img">
         {Array.from({ length: PIN_LENGTH }, (_, i) => <span key={i} className={`h-[16px] w-[16px] rounded-full border-2 border-solid border-wall-night-brass ${i < pin.length ? 'bg-wall-night-brass' : ''}`} />)}
