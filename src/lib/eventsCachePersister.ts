@@ -66,3 +66,17 @@ export function shouldPersistQuery(query: Pick<Query, 'queryKey'>): boolean {
   const head = query.queryKey[0]
   return head === 'events' || (typeof head === 'string' && DAY_KEYS.has(head))
 }
+
+/**
+ * A list kept across reloads that must catch up as soon as it's on screen (Jake, Oct 8: the Mac's To do stuck hours
+ * behind the wall — "icognito mode works … theres something in the cache thats not updating on refresh"). A reload
+ * restores the last copy and marks it stale before the wall mounts; the app-wide defaults never fetch on mount or on
+ * coming back to the tab, so the stale copy stayed until a quarter-hour timer fired with the tab in view. These lists
+ * fetch when they come on screen with a stale copy, and when the tab comes back.
+ */
+export const LIVE_LIST = { refetchOnMount: true, refetchOnWindowFocus: true } as const
+
+/** Every restored list but the calendar's ranges (those have the live feed) catches up on screen (above). */
+export function liveRestoredLists(client: { setQueryDefaults: (key: readonly unknown[], options: typeof LIVE_LIST) => void }) {
+  for (const key of DAY_KEYS) client.setQueryDefaults([key], LIVE_LIST)
+}

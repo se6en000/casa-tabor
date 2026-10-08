@@ -9,8 +9,7 @@ import {
   eventsCachePersister,
   EVENTS_CACHE_BUSTER,
   EVENTS_CACHE_MAX_AGE_MS,
-  shouldPersistQuery,
-} from './lib/eventsCachePersister'
+  shouldPersistQuery, liveRestoredLists } from './lib/eventsCachePersister'
 import { shouldRetryQuery } from './lib/queryRetryPolicy'
 import { reportClientError } from './lib/clientErrorReporter'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
@@ -99,6 +98,9 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// A restored list catches up as soon as it's on screen (Oct 8: the Mac's To do and chores stuck behind the wall).
+liveRestoredLists(queryClient)
 
 function AppShell() {
   const queryClient = useQueryClient()

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { LIVE_LIST } from '../lib/eventsCachePersister'
 import { outingLink, outingWhen, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 import type { OutingDetails } from './outingCard'
 
@@ -34,6 +35,8 @@ export function useScout(): ScoutPaper | null {
     },
     staleTime: 30 * 60_000,
     refetchInterval: 60 * 60_000,
+    // On screen with a stale copy (a reload's restored one), or back to the tab: read again (Oct 8, the Mac's stuck To do).
+    ...LIVE_LIST,
   })
   const answer = useCallback((id: string, status: OutingAnswer) => {
     qc.setQueryData<ScoutPaper>(KEY, (d) => d && {

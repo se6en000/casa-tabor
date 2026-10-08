@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { LIVE_LIST } from '../lib/eventsCachePersister'
 import type { TodoAction, TodoList, TodoProjectDetail } from './todos'
 import { refreshAfter } from './todoRefresh'
 
@@ -21,6 +22,8 @@ export function useTodos({ enabled = true, surface = 'wall' }: { enabled?: boole
     },
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
+    // On screen with a stale copy (a reload's restored one), or back to the tab: read again (Oct 8, the Mac's stuck To do).
+    ...LIVE_LIST,
   })
   const act = useCallback(async (request: TodoAction) => {
     queryClient.setQueryData<TodoList>(['todos'], (old) => {

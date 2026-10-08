@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { LIVE_LIST } from '../lib/eventsCachePersister'
 
 export interface TidyChoice { key: string; label: string }
 /** One thing Alexa would clean up (canvas 75): what she found, what she'd do, and the answers. */
@@ -29,6 +30,8 @@ export function useTidy(): TidyData | null {
     },
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
+    // On screen with a stale copy (a reload's restored one), or back to the tab: read again (Oct 8, the Mac's stuck To do).
+    ...LIVE_LIST,
   })
   const call = useCallback(async (body: Record<string, unknown>) => {
     const { data: reply, error } = await supabase.functions.invoke('tidy', { body })
