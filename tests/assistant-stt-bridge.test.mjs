@@ -80,3 +80,18 @@ test('Flux is the recognizer by default: its turns in the wall\'s own messages, 
   assert.match(wake, /type: 'accept_wake', wake_id: msg\.wake_id, stt_provider: sttProvider\(\)/)
   assert.match(bridge, /if cmd == 'accept_wake':[\s\S]{0,400}_stt_provider = msg\['stt_provider'\]/)
 })
+
+// Oct 8 (Jake: "i find her triggering all the time"): at 0.12 she woke 50–90 times a day, 4 in 5 with nobody talking.
+// The threshold is stricter, and the one set from Settings is kept across restarts (it fell back on every restart).
+test('the wake threshold is strict by default and survives a restart', async () => {
+  assert.match(bridge, /^WAKE_SCORE\s+= 0\.6\b/m)
+  assert.match(bridge, /^WAKE_SCORE = _load_wake_score\(WAKE_SCORE\)/m)
+  assert.match(bridge, /WAKE_SCORE = score\n\s+_save_wake_score\(score\)/)
+  const { execFileSync } = await import('node:child_process')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/wake-`)
+  const fns = bridge.slice(bridge.indexOf('def _load_wake_score'), bridge.indexOf('WAKE_SCORE = _load_wake_score'))
+  const py = `import json, os, logging\nlog = logging.getLogger('t')\nWAKE_SCORE_MIN, WAKE_SCORE_MAX = 0.08, 0.90\nWAKE_SCORE_FILE = ${JSON.stringify(`${dir}/casa/wake-threshold.json`)}\n${fns}\nprint(_load_wake_score(0.6))\n_save_wake_score(0.45)\nprint(_load_wake_score(0.6))\n_save_wake_score(5)\nprint(_load_wake_score(0.6))\n`
+  assert.deepEqual(execFileSync('python3', ['-c', py], { encoding: 'utf8' }).trim().split('\n'), ['0.6', '0.45', '0.9'])
+})

@@ -45,7 +45,10 @@ FLUX_URL = (
 )
 
 WAKE_MODEL    = 'alexa'
-WAKE_SCORE    = 0.12           # Reliable trigger without excessive false positives
+WAKE_SCORE    = 0.6            # Oct 8: at 0.12 she woke 50–90 times a day, 4 in 5 with nobody talking; real wakes score 0.9+
+# The threshold set from Settings, kept across restarts (it fell back to the default on every restart and the wall
+# stopped re-sending it on Oct 6).
+WAKE_SCORE_FILE = os.path.expanduser('~/.config/casa/wake-threshold.json')
 WAKE_COOLDOWN = 2.0
 WAKE_MISFIRE_COOLDOWN = 6.0
 WAKE_WATCHDOG_SECS = 90
@@ -300,6 +303,23 @@ def _run_ws_server():
             log.error(f'[WS server] error: {e} — retrying in 2s')
             time.sleep(2)
 
+def _load_wake_score(default: float) -> float:
+    try:
+        with open(WAKE_SCORE_FILE) as f:
+            return max(WAKE_SCORE_MIN, min(WAKE_SCORE_MAX, float(json.load(f)['score'])))
+    except (OSError, ValueError, KeyError, TypeError):
+        return default
+
+def _save_wake_score(score: float):
+    try:
+        os.makedirs(os.path.dirname(WAKE_SCORE_FILE), exist_ok=True)
+        with open(WAKE_SCORE_FILE, 'w') as f:
+            json.dump({'score': score}, f)
+    except OSError as e:
+        log.warning(f'[wake] could not save the threshold: {e}')
+
+WAKE_SCORE = _load_wake_score(WAKE_SCORE)
+
 # ── Wake word state ──────────────────────────────────────────────────────────
 _wake_triggered      = False
 _wake_ts             = 0.0
@@ -530,6 +550,7 @@ def _wake_word_loop():
         try:
             high_score_streak = 0
             last_hit_ts = 0.0
+            streak_peak = 0.0
             # Drain warmup chunks to skip startup pop/noise
             for _ in range(WARMUP_CHUNKS):
                 proc.stdout.read(CHUNK_BYTES)
@@ -576,13 +597,15 @@ def _wake_word_loop():
                         continue
                     if now - last_hit_ts <= WAKE_HIT_MAX_GAP_SECS:
                         high_score_streak += 1
+                        streak_peak = max(streak_peak, score)
                     else:
                         high_score_streak = 1
+                        streak_peak = score
                     last_hit_ts = now
                     if high_score_streak < WAKE_CONSECUTIVE_HITS_REQUIRED:
                         continue
                     if now - _wake_ts >= WAKE_COOLDOWN:
-                        log.info(f'[wake] triggered! score={score:.2f}')
+                        log.info(f'[wake] triggered! score={score:.2f} peak={streak_peak:.2f} threshold={WAKE_SCORE:.2f}')
                         _display_on()
                         _wake_disarmed_until = max(_wake_disarmed_until, now + 0.8)
                         high_score_streak = 0
@@ -1145,6 +1168,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             score = max(WAKE_SCORE_MIN, min(WAKE_SCORE_MAX, score))
             WAKE_SCORE = score
+            _save_wake_score(score)
             log.info(f'[wake] sensitivity updated: {WAKE_SCORE:.2f}')
             self.send_response(200); self._cors()
             self.send_header('Content-Type', 'application/json'); self.end_headers()
