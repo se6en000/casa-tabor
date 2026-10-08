@@ -200,8 +200,8 @@ export default function WallProject({ detail: incoming, now, onEdit, onBack, onO
                 <span className={`truncate text-wall-label ${dark ? 'text-wall-night-ink-2' : 'text-wall-ink-2'}`}>{s.child.done} of {s.child.total}{s.child.next ? ` · next: ${s.child.next}` : ''}</span>
               </span>
             </div>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-wall-paper px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Open</button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); edit('take_out', { step_id: s.id }) }} className={`h-[44px] shrink-0 rounded-full border border-solid bg-wall-paper px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-ink-2 text-wall-ink'}`}>Take it out</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenProject(s.child!.id) }} className={`h-[44px] shrink-0 rounded-full border border-solid px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 bg-transparent text-wall-night-ink' : 'border-wall-ink-2 bg-wall-paper text-wall-ink'}`}>Open</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); edit('take_out', { step_id: s.id }) }} className={`h-[44px] shrink-0 rounded-full border border-solid px-[14px] text-wall-label font-semibold ${dark ? 'border-wall-night-ink-2 bg-transparent text-wall-night-ink' : 'border-wall-ink-2 bg-wall-paper text-wall-ink'}`}>Take it out</button>
           </div>
         </div>
       )

@@ -280,7 +280,7 @@ export default function WallFixturePage() {
   // `?comingUp=projects` (canvas 68–69B): the projects as the server groups them — one card each above the timeline.
   const projects: AheadProject[] = new URLSearchParams(window.location.search).get('comingUp') === 'projects' ? [
     { key: 'project:pr-paint', projectId: 'pr-paint', title: 'Paint the house', done: 1, total: 5, left: 4, next: { title: 'Choose the painter and book dates', date: ymd(15) }, target: null, from: ymd(15), to: ymd(29), date: ymd(29) },
-    { key: 'project:pr-xmas', projectId: 'pr-xmas', title: 'Halloween costumes', done: 3, total: 8, left: 5, next: { title: 'Red yarn wig', date: ymd(20) }, target: ymd(36), from: ymd(20), to: ymd(34), date: ymd(36) },
+    { key: 'project:pr-xmas', projectId: 'pr-xmas', title: 'Replace the master bathroom floor and the shower glass', done: 3, total: 8, left: 5, next: { title: 'Red yarn wig', date: ymd(20) }, target: ymd(36), from: ymd(20), to: ymd(34), date: ymd(36) },
   ] : []
   const comingUp = { items: comingUpItems, projects, ideas, today: ymd(0), handled,
     act: async (key: string, action: string, extra?: { outcome?: { text: string; title: string; date: string } }) => {

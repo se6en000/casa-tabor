@@ -243,7 +243,7 @@ export default function PhoneProject({ detail: incoming, today, onEdit, onBack, 
         <span className="text-phone-body font-bold">{s.child.title}</span>
         <span className={`text-phone-label ${dark ? 'text-wall-night-ink-2' : 'text-wall-ink-2'}`}>A project inside · {s.child.done} of {s.child.total}{s.child.next ? ` · next: ${s.child.next}` : ''}</span>
       </span>
-      <button type="button" onClick={() => onOpenProject(s.child!.id)} className={`h-[40px] shrink-0 rounded-full border border-solid bg-wall-paper px-[12px] text-phone-detail font-semibold ${dark ? 'border-wall-night-ink-2 text-wall-night-ink' : 'border-wall-stone text-wall-ink'}`}>Open</button>
+      <button type="button" onClick={() => onOpenProject(s.child!.id)} className={`h-[40px] shrink-0 rounded-full border border-solid px-[12px] text-phone-detail font-semibold ${dark ? 'border-wall-night-ink-2 bg-transparent text-wall-night-ink' : 'bg-wall-paper border-wall-stone text-wall-ink'}`}>Open</button>
     </div>
   ) : (
     <div key={s.id} className={`flex min-h-[52px] items-center gap-[8px] border-0 border-t border-solid ${dark ? 'border-wall-night-rule text-wall-night-ink' : 'border-wall-stone text-wall-ink'}`}>

@@ -250,28 +250,31 @@ const PIP = 'inline-block h-[13px] w-[13px] shrink-0 rounded-full'
 function ProjectStrip({ projects, onOpen }: { projects: AheadProject[]; onOpen?: (id: string) => void }) {
   const shown = projects.slice(0, 3)
   return (
-    <section aria-label="Projects" className="flex h-[130px] shrink-0 items-stretch gap-[16px]">
-      <div className="flex w-[150px] shrink-0 flex-col gap-[8px] pt-[14px]">
-        <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">PROJECTS</span>
-        <span className="text-wall-label text-wall-ink-2">{projects.length} going{projects.length > shown.length ? ` · ${projects.length - shown.length} more on To do` : ' · steps on To do'}</span>
+    <section aria-label="Projects" className="flex shrink-0 flex-col gap-[10px]">
+      <div className="flex items-baseline justify-between">
+        <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">PROJECTS · {projects.length} GOING</span>
+        <span className="text-wall-label text-wall-ink-2">{projects.length > shown.length ? `${projects.length - shown.length} more on To do` : 'their steps are on To do'}</span>
       </div>
-      {shown.map((p) => (
-        <button key={p.key} type="button" aria-label={`Open project: ${p.title}`} disabled={!onOpen} onClick={(e) => { e.stopPropagation(); onOpen?.(p.projectId) }}
-          className="flex min-w-0 flex-1 flex-col justify-between rounded-[20px] border-[1.5px] border-solid border-wall-brass/40 bg-wall-on-pigment/60 px-[22px] py-[14px] text-left text-wall-ink">
-          <span className="flex items-baseline justify-between gap-[10px]">
-            <span className="truncate font-display text-wall-date font-semibold">{p.title}</span>
-            <span className="shrink-0 whitespace-nowrap text-wall-label font-semibold text-wall-ink-2">{projectWhen(p)}</span>
-          </span>
-          <span className="flex items-center gap-[6px]" aria-label={`${p.done} of ${p.total} steps done`}>
-            {Array.from({ length: Math.min(p.total, 12) }, (_, i) => <span key={i} aria-hidden="true" className={`${PIP} ${i < p.done ? 'bg-wall-brass-ink' : 'border-2 border-solid border-wall-brass-ink'}`} />)}
-            <span className="ml-[6px] text-wall-label font-semibold text-wall-brass-ink">{p.done} of {p.total} steps</span>
-          </span>
-          <span className="flex items-baseline justify-between gap-[12px]">
-            <span className="truncate text-wall-label text-wall-ink-2">{p.next ? `Next: ${p.next.title}${p.next.date ? ` · ${horizonDate(p.next.date)}` : ''}` : 'Every step done'}</span>
-            <span className="shrink-0 text-wall-label font-semibold text-wall-brass-ink">Open ›</span>
-          </span>
-        </button>
-      ))}
+      <div className="flex items-stretch gap-[16px]">
+        {shown.map((p) => (
+          // The whole name (Jake, Oct 7: "I want to see the full project title"): its own line, two if it needs them.
+          <button key={p.key} type="button" aria-label={`Open project: ${p.title}`} disabled={!onOpen} onClick={(e) => { e.stopPropagation(); onOpen?.(p.projectId) }}
+            className="flex min-w-0 flex-1 flex-col gap-[8px] rounded-[20px] border-[1.5px] border-solid border-wall-brass/40 bg-wall-on-pigment/60 px-[22px] py-[14px] text-left text-wall-ink">
+            <span className="line-clamp-2 font-display text-wall-date font-semibold leading-tight">{p.title}</span>
+            <span className="mt-auto flex items-center justify-between gap-[10px]">
+              <span className="flex items-center gap-[6px]" aria-label={`${p.done} of ${p.total} steps done`}>
+                {Array.from({ length: Math.min(p.total, 12) }, (_, i) => <span key={i} aria-hidden="true" className={`${PIP} ${i < p.done ? 'bg-wall-brass-ink' : 'border-2 border-solid border-wall-brass-ink'}`} />)}
+                <span className="ml-[6px] whitespace-nowrap text-wall-label font-semibold text-wall-brass-ink">{p.done} of {p.total}</span>
+              </span>
+              <span className="shrink-0 whitespace-nowrap text-wall-label font-semibold text-wall-ink-2">{projectWhen(p)}</span>
+            </span>
+            <span className="flex items-baseline justify-between gap-[12px]">
+              <span className="truncate text-wall-label text-wall-ink-2">{p.next ? `Next: ${p.next.title}${p.next.date ? ` · ${horizonDate(p.next.date)}` : ''}` : 'Every step done'}</span>
+              <span className="shrink-0 text-wall-label font-semibold text-wall-brass-ink">Open ›</span>
+            </span>
+          </button>
+        ))}
+      </div>
     </section>
   )
 }
@@ -285,8 +288,8 @@ export default function WallComingUp({ now, items, projects = [], ideas, handled
   const [timers] = useState(() => new Map<string, number[]>())
   useEffect(() => () => { for (const list of timers.values()) list.forEach((t) => window.clearTimeout(t)) }, [timers])
   const groups = useMemo(() => horizonGroups(items, today), [items, today])
-  // The projects' strip takes two lines' room from the list (canvas 69B).
-  const pages = useMemo(() => horizonPages(groups, projects.length ? 7 : 9), [groups, projects.length])
+  // The projects' strip takes three lines' room from the list (canvas 69B).
+  const pages = useMemo(() => horizonPages(groups, projects.length ? 6 : 9), [groups, projects.length])
   const page = Math.min(pageIndex, Math.max(0, pages.length - 1))
   const columns = pages[page] ?? [[], []]
   const shownBefore = pages.slice(0, page + 1).flat(2).length
