@@ -254,3 +254,12 @@ test('several get & pack lines for one event are one card', async () => {
   assert.deepEqual(merged[1], cards[2])
   assert.deepEqual(mergePrepCards([cards[0]]), [cards[0]])
 })
+
+// Jake, Oct 8: "is the days paper part of alexas context for that day?" → "yes add it".
+test('the morning paper and its news are in Alexa’s context when there is one', async () => {
+  const { paperSection } = await import('../supabase/functions/_shared/morning-paper.mjs')
+  const paper = paperSection({ paper: { headline: 'An easy Friday.', deck: '', brief: { today: [], weekend: [], month: [], wayOut: [], forgot: { title: 'Replace tire sensor', detail: 'Overdue.' } } }, outings: [], news: [], today: '2026-09-25' })
+  const withIt = buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', paper })
+  assert.match(withIt, /TODAY’S MORNING PAPER[\s\S]*You may have forgotten: Replace tire sensor/)
+  assert.doesNotMatch(buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach' }), /MORNING PAPER/)
+})

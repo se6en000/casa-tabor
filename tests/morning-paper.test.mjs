@@ -97,3 +97,38 @@ test('the surprise comes from the Scout’s checked list, named by its id', asyn
   assert.equal(words.brief.feature.outingId, '0b5e3c1a-0000-4000-8000-000000000001')
   assert.equal(parsePaperWords(JSON.stringify({ headline: 'x', deck: '', sky: '', today: [], feature: { id: 'not-an-id', label: 'x', title: 'y', detail: 'z' } })).brief.feature.outingId, null)
 })
+
+// Jake, Oct 8: "is the days paper part of alexas context for that day?" — it wasn't; "yes add it … its ok that she gets
+// her new context when the actual papers release new news". What the wall showed this morning, so "what was the thing
+// I forgot?", "tell me about the weekend pick" and Ask about it on Around town have something to answer from.
+test('Alexa reads the morning paper as the wall shows it: the brief, the forgotten thing, the weekend pick, the news', async () => {
+  const { paperSection } = await import('../supabase/functions/_shared/morning-paper.mjs')
+  const paper = {
+    headline: 'Happy Birthday, Grandma,', deck: 'Giselle has a full schedule.',
+    brief: {
+      turn: 'and a busy day of pickups.',
+      today: [{ title: 'Giselle’s busy afternoon', detail: 'Owen at 2:00, Emme at 3:00.' }],
+      weekend: [{ title: 'Kelly’s Pilates', detail: 'Saturday at 9:30.' }], month: [], wayOut: [{ title: 'Christmas gifts', detail: 'In 78 days.' }],
+      forgot: { title: 'Replace tire sensor', detail: 'Overdue since September 16.' },
+      feature: { label: 'This weekend · outing', title: 'SummerFest', detail: 'At Mounts.' },
+      aside: 'Jake’s day job.',
+    },
+  }
+  const outings = [{ kind: 'couple', title: 'Art After Dark', recurring: 'every Friday 5–8 PM', place: 'Norton Museum of Art', status: 'new' }]
+  const news = [{ section: 'schools', headline: 'Free flu clinic', line: 'October 28 at Palm Beach Public.', source: 'Palm Beach Public', source_date: '2026-10-06', rank: 0 }]
+  const s = paperSection({ paper, outings, news, today: '2026-10-08' })
+  assert.match(s, /^TODAY’S MORNING PAPER/)
+  assert.match(s, /Happy Birthday, Grandma, and a busy day of pickups\./)
+  assert.match(s, /Today · watch for: Giselle’s busy afternoon — Owen at 2:00/)
+  assert.match(s, /Way out: Christmas gifts — In 78 days\./)
+  assert.match(s, /You may have forgotten: Replace tire sensor — Overdue since September 16\./)
+  // The wall's weekend pick is the Scout's best for two (the writer's own pick only without one).
+  assert.match(s, /This weekend · for two: Art After Dark \(every Friday 5–8 PM · Norton Museum of Art\)/)
+  assert.doesNotMatch(s, /SummerFest/)
+  assert.match(s, /AROUND TOWN[^\n]*\n- schools: Free flu clinic — October 28 at Palm Beach Public\. \(Palm Beach Public, 2026-10-06\)/)
+  // No paper yet (before the morning's is written) and no news: nothing.
+  assert.equal(paperSection({ paper: null, outings: [], news: [], today: '2026-10-08' }), null)
+  // The news alone still comes through.
+  assert.match(paperSection({ paper: null, outings, news, today: '2026-10-08' }), /^AROUND TOWN/)
+  assert.match(paperSection({ paper: { ...paper, brief: { ...paper.brief } }, outings: [], news: [], today: '2026-10-08' }), /This weekend · outing: SummerFest — At Mounts\./)
+})

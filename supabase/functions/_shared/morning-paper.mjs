@@ -4,6 +4,7 @@
 // server looks up the surprise and this writes the words, once a day. Pure, so it's tested.
 
 import { holidaysSection } from './school-calendar.mjs'
+import { NEWS_SECTIONS, outingWhen, weekendHighlight } from './scout.mjs'
 const hourLabel = (h) => (h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`)
 
 /** The day's sky from Open-Meteo's hourly forecast (local times "2026-10-07T15:00"), 6 AM to 9 PM, in plain facts. */
@@ -144,4 +145,37 @@ export function cleanBriefFacts(more) {
     quiet: list(more.quiet, 8, (q) => str(q, 140)),
     soon: list(more.soon, 6, (q) => str(q, 360)),
   }
+}
+
+/**
+ * Alexa's copy of the morning paper (Jake, Oct 8: "is the days paper part of alexas context for that day?" → "yes add
+ * it"): what the wall showed this morning — the headline, the four columns, the forgotten thing, this weekend's pick for
+ * two (the Scout's, as the wall shows it; the writer's own without one) — and Around town, the latest news. Null with
+ * neither (before the morning's paper is written and with no news).
+ */
+export function paperSection({ paper, outings = [], news = [], today }) {
+  const parts = []
+  const b = paper?.brief ?? null
+  if (paper?.headline) {
+    const line = (l) => `${l.title}${l.detail ? ` — ${l.detail}` : ''}`
+    const col = (label, list) => (Array.isArray(list) && list.length ? list.map((l) => `${label}: ${line(l)}`) : [])
+    const pick = weekendHighlight(outings, { today })
+    const feature = pick
+      ? `${pick.label} · for two: ${pick.outing.title} (${[outingWhen(pick.outing), pick.outing.place].filter(Boolean).join(' · ')})${pick.outing.why ? ` — ${pick.outing.why}` : ''}`
+      : b?.feature ? `${b.feature.label}: ${line(b.feature)}` : null
+    parts.push([
+      'TODAY’S MORNING PAPER (on the wall this morning — what they’ve likely read; when they ask about "the paper", "the thing I forgot", "the weekend pick" or anything in it, this is it):',
+      `Headline: ${[paper.headline, b?.turn].filter(Boolean).join(' ')}`,
+      ...(paper.deck ? [`Under it: ${paper.deck}`] : []),
+      ...col('Today · watch for', b?.today), ...col('This weekend', b?.weekend), ...col('Next month', b?.month), ...col('Way out', b?.wayOut),
+      ...(b?.forgot ? [`You may have forgotten: ${line(b.forgot)}`] : []),
+      ...(feature ? [feature] : []),
+      ...(b?.aside ? [`At the foot: ${b.aside}`] : []),
+    ].join('\n'))
+  }
+  if (news.length) {
+    const sorted = [...news].sort((x, y) => NEWS_SECTIONS.indexOf(x.section) - NEWS_SECTIONS.indexOf(y.section) || (x.rank ?? 0) - (y.rank ?? 0))
+    parts.push(`AROUND TOWN (the paper's news page, from the schools', city's and local papers' emails — each with its source and date):\n${sorted.map((n) => `- ${n.section}: ${n.headline}${n.line ? ` — ${n.line}` : ''} (${[n.source, n.source_date].filter(Boolean).join(', ')})`).join('\n')}`)
+  }
+  return parts.length ? parts.join('\n\n') : null
 }
