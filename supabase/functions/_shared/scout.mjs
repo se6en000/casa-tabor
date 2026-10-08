@@ -356,9 +356,9 @@ export function townNewsPrompt(emails, { today, family }) {
 ${String(e.body ?? '').replace(/\s+/g, ' ').slice(0, 4000)}`).join('\n\n')
   return `You write the "Around town" page of a family's morning paper, on the kitchen wall. Today is ${today}. The family: ${family}. They live in West Palm Beach, Florida.
 Below are the last week's emails from the kids' schools, the city and county, and the local papers they subscribe to. Pick only the news that reaches this family and is still ahead or still true (anything dated before today is over — leave it out): a change at their school, a date to know, something the kids can do, a city or county decision that touches them, what's on in town. Skip fundraising asks and sales, things already past, other schools' and grades' news unless it matters to them, account and payment notices, and anything private (grades, health, money).
-Sections: "schools" (their schools and the school district), "city" (the city and county), "papers" (the local papers and magazines). Up to four in each, most useful first; fewer is fine.
-Each: "headline" — eight words at most, plain; "line" — one sentence, under 30 words, why it matters to them, with the date if there is one; "source" — the sender in plain words ("Palm Beach Public", "City of West Palm Beach", "Palm Beach Post"); "ref" — the email's id exactly as in the brackets.
-Answer with only a JSON array: [{"section": "schools" | "city" | "papers", "headline": "...", "line": "...", "source": "...", "ref": "..."}]
+Sections: "schools" (their schools and the school district), "city" (the city and county), "papers" (the local papers and magazines). Up to eight in each, most useful first; fewer is fine.
+Each: "headline" — eight words at most, plain; "line" — one sentence, under 30 words, why it matters to them, with the date if there is one; "source" — the sender in plain words ("Palm Beach Public", "City of West Palm Beach", "Palm Beach Post"); "ref" — the email's id exactly as in the brackets; "date" — the day it happens or is due (YYYY-MM-DD), or null.
+Answer with only a JSON array: [{"section": "schools" | "city" | "papers", "headline": "...", "line": "...", "source": "...", "ref": "...", "date": "YYYY-MM-DD" or null}]
 
 ${list}`
 }
@@ -384,18 +384,20 @@ export function parseTownNews(text, { refs, today }) {
     if (!headline || !ref || seen.has(headline.toLowerCase()) || allPast(`${headline} ${line}`, today)) continue
     // Who sent it decides where it goes (a school's note on a concert is the school's news); the writer's word otherwise.
     const section = senderSection(ref.from) ?? o.section
-    if ((count[section] ?? 0) >= 4) continue
+    if ((count[section] ?? 0) >= 8) continue
     seen.add(headline.toLowerCase())
-    out.push({ news_date: today, section, headline, line, source: str(o.source, 60) ?? ref.from, source_date: ref.received, source_ref: String(o.ref), rank: count[section] ?? 0 })
+    const onDate = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : null
+    out.push({ news_date: today, section, headline, line, source: str(o.source, 60) ?? ref.from, source_date: ref.received, source_ref: String(o.ref), rank: count[section] ?? 0, on_date: onDate })
     count[section] = (count[section] ?? 0) + 1
   }
   return out
 }
 
-/** The page: each section's lines in the writer's order. */
-export function townNewsPage(rows) {
+/** The page: each section's lines in the writer's order, and the dates to know (today on, soonest first). */
+export function townNewsPage(rows, today = null) {
   const page = Object.fromEntries(NEWS_SECTIONS.map((k) => [k, []]))
   for (const r of [...(rows ?? [])].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))) page[r.section]?.push(r)
+  page.dates = (rows ?? []).filter((r) => r.on_date && (!today || r.on_date >= today)).sort((a, b) => a.on_date.localeCompare(b.on_date))
   return page
 }
 
@@ -677,4 +679,66 @@ export function tonightSection(rows, today) {
     ...(week.length ? ['The next week:', ...week.map((o) => `- ${kind(o)}${day(o.when)} · ${at(o)}`)] : []),
     ...(weekly.length ? ['Every week:', ...weekly.map((o) => `- ${kind(o)}${o.recurring} · ${at(o)}`)] : []),
   ].join('\n')
+}
+
+const BUSY_NIGHT = 5
+const LATER_DAYS = 42
+
+/**
+ * Out & about by when (Jake, Oct 8: "fit up all the available spots even have a scroll … things that look cool a couple
+ * weeks out are good to know too for planning"): tonight and the weekend day by day (in time order, the bands after; on a
+ * busy night the first few bands and how many more), next week, further out (six weeks), every week
+ * (by its first day), and places. Never one said no to, never a past one.
+ */
+export function outAndAboutPlan(rows, { today, nowTime = null }) {
+  // Tonight's that started over an hour ago are over.
+  const [nh, nm] = nowTime ? nowTime.split(':').map(Number) : [0, 0]
+  const cutoff = nowTime ? `${today} ${String(Math.max(0, nh - 1)).padStart(2, '0')}:${String(nm).padStart(2, '0')}` : null
+  const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && (!o.when || o.when.slice(0, 10) >= today)
+    && !(cutoff && o.when?.length > 10 && o.when.slice(0, 10) === today && o.when < cutoff))
+  const dated = live.filter((o) => o.when).sort((a, b) => a.when.localeCompare(b.when))
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay()
+  const sunday = addDays(today, (7 - dow) % 7)
+  const weekendDays = []
+  for (let d = today; d <= sunday; d = addDays(d, 1)) {
+    const wd = new Date(`${d}T12:00:00Z`).getUTCDay()
+    if (d === today || wd === 5 || wd === 6 || wd === 0) weekendDays.push(d)
+  }
+  const byDay = (day) => {
+    // In time order; the bands after what's for the two of you or the family (a busy night's bands are many).
+    const all = dated.filter((o) => o.when.slice(0, 10) === day)
+    const lead = all.filter((o) => o.kind !== 'music')
+    const bands = all.filter((o) => o.kind === 'music')
+    const room = Math.max(0, BUSY_NIGHT - lead.length)
+    return { day, label: day === today ? 'Tonight' : DAYS[new Date(`${day}T12:00:00Z`).getUTCDay()].replace(/^./, (c) => c.toUpperCase()), items: [...lead, ...bands.slice(0, room)], more: Math.max(0, bands.length - room) }
+  }
+  const weekend = weekendDays.map(byDay)
+  const nextSunday = addDays(sunday, 7)
+  const nextWeek = dated.filter((o) => o.when.slice(0, 10) > sunday && o.when.slice(0, 10) <= nextSunday)
+  const later = dated.filter((o) => o.when.slice(0, 10) > nextSunday && o.when.slice(0, 10) <= addDays(today, LATER_DAYS))
+  const firstDay = (o) => { const d = weekdaysOf(o.recurring); return d.length ? (d[0] + 6) % 7 : 7 }
+  const weekly = live.filter((o) => !o.when && o.kind !== 'restaurant' && o.recurring).sort((a, b) => firstDay(a) - firstDay(b))
+  const places = live.filter((o) => o.kind === 'restaurant').sort((a, b) => Number(b.status === 'saved') - Number(a.status === 'saved') || Number(Boolean(b.gem)) - Number(Boolean(a.gem)) || (b.rating ?? 0) - (a.rating ?? 0))
+  const count = weekend.reduce((n, d) => n + d.items.length + d.more, 0) + nextWeek.length + later.length + weekly.length + places.length
+  return { weekend, nextWeek, later, weekly, places, count }
+}
+
+/**
+ * Kept twice before the fold (Clematis by Night as both the couple's and the family's, Oct 8): the ids to put away — of
+ * each pair the one the family hasn't said anything about, else the later.
+ */
+export function keptTwice(rows) {
+  const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new'))
+  const away = new Set()
+  for (let i = 0; i < live.length; i++) {
+    for (let j = i + 1; j < live.length; j++) {
+      const a = live[i]
+      const b = live[j]
+      if (away.has(a.id) || away.has(b.id) || !sameOuting(a, b)) continue
+      const said = (o) => (o.status === 'saved' ? 2 : o.status === 'offered' ? 1 : 0)
+      const go = said(a) !== said(b) ? (said(a) < said(b) ? a : b) : String(a.created_at) > String(b.created_at) ? a : b
+      away.add(go.id)
+    }
+  }
+  return [...away]
 }

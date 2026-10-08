@@ -292,8 +292,10 @@ export default function WallFixturePage() {
     address: null, url: `https://example.org/${o.id}`, drive_min: null, rating: null, rating_count: null, gem: false, status: 'new' as const, ...o,
     when: inDays == null ? null : `${ymd(inDays)} ${at}`,
   } as Outing)))
+  // A script can set window.__scoutList (the Scout's real list) to show a real day (design mocks).
+  const realList = (window as unknown as { __scoutList?: { outings: Outing[]; news: TownNews[]; today: string } }).__scoutList
   const scout: ScoutPaper | null = PAPER ? {
-    outings, news: TOWN_NEWS as unknown as TownNews[], today: ymd(0),
+    outings: realList?.outings ?? outings, news: realList?.news ?? (TOWN_NEWS as unknown as TownNews[]), today: realList?.today ?? ymd(0),
     answer: (id, status) => setOutings((list) => (status === 'not_for_us' ? list.filter((o) => o.id !== id) : list.map((o) => (o.id === id ? { ...o, status } : o)))),
   } : null
   const [tidyOpen, setTidyOpen] = useState<TidySuggestion[]>(TIDY_OPEN)

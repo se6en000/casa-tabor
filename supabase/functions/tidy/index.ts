@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
       const alive = new Set((rows ?? []).filter((r: Row) => !r.deleted_at && r.status !== 'cancelled').map((r: Row) => r.id))
       // One whose rows have gone since (done by hand, deleted) is no longer for them.
       const gone = (open ?? []).filter((s: Row) => (s.items as string[]).some((id) => !alive.has(id)))
-      if (gone.length) await sb.from('tidy_suggestions').update({ status: 'expired' }).in('id', gone.map((s: Row) => s.id))
+      // Only one still open (an answer in flight between the read and this write is done, not gone — Oct 8's box merge).
+      if (gone.length) await sb.from('tidy_suggestions').update({ status: 'expired' }).in('id', gone.map((s: Row) => s.id)).eq('status', 'open')
       return json({ suggestions: (open ?? []).filter((s: Row) => !gone.includes(s)), today })
     }
 

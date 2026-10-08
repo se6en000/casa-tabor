@@ -207,11 +207,12 @@ test('Around town: only items from a real email, in a known section, four a sect
     ...Array.from({ length: 6 }, (_, i) => ({ section: 'schools', headline: `School item ${i}`, line: 'x', source: 'Palm Beach Public', ref: 'm1' })),
   ])
   const items = parseTownNews(text, { refs, today })
-  assert.equal(items.filter((i) => i.section === 'schools').length, 4)
+  // Eight a section now (Oct 8, Jake: "fit up all the available spots"): the one said twice is left out.
+  assert.equal(items.filter((i) => i.section === 'schools').length, 7)
   assert.equal(items.find((i) => i.headline === 'Made up'), undefined)
   assert.equal(items.find((i) => i.headline === 'Wrong section'), undefined)
   const flu = items.find((i) => /flu/i.test(i.headline))
-  assert.deepEqual([flu.source_date, flu.source_ref, flu.rank], ['2026-10-06', 'm1', 0])
+  assert.deepEqual([flu.source_date, flu.source_ref, flu.rank, flu.on_date], ['2026-10-06', 'm1', 0, null])
   const page = townNewsPage([...items].reverse())
   assert.equal(page.schools[0].headline, 'Free flu shots at school, Oct 28')
   assert.equal(page.city.length, 1)
@@ -399,4 +400,75 @@ test('Out & about: For the two of you mixes the best evening out with the best g
   assert.deepEqual(outAndAbout(rows.filter((r) => r.kind !== 'couple'), { today }).couple.map((x) => x.id), ['m1', 't1'])
   // No gigs: two evenings out, as before.
   assert.deepEqual(outAndAbout(rows.filter((r) => r.kind === 'couple'), { today }).couple.map((x) => x.id), ['c1', 'c2'])
+})
+
+// Jake, Oct 8: "im not seeing much.... can you rethink how you organize out and about … fit up all the available spots
+// even have a scroll … its not just about today, things that look cool a couple weeks out are good to know too for
+// planning". Out & about by when: tonight and the weekend by day, next week, further out, every week, and places.
+test('Out & about by when: tonight & the weekend by day, next week, further out, every week by day, places', async () => {
+  const { outAndAboutPlan } = await import('../supabase/functions/_shared/scout.mjs')
+  const g = (id, kind, when, extra = {}) => ({ id, kind, title: id, when, recurring: null, status: 'new', ...extra })
+  const rows = [
+    g('tonight-band', 'music', '2026-10-08 20:00'), g('open-mic', 'comedy', '2026-10-08 20:00'),
+    ...Array.from({ length: 8 }, (_, i) => g(`fri-band-${i}`, 'music', `2026-10-09 ${String(17 + (i % 5)).padStart(2, '0')}:00`)),
+    g('pumpkin', 'family', '2026-10-10 11:00'), g('jazz', 'couple', '2026-10-10 19:00'),
+    g('tue-wine', 'couple', '2026-10-13 19:00'), g('harbourfest', 'family', '2026-10-16 16:00'),
+    g('seagulls', 'music', '2026-11-06 19:30', { free: false }), g('fright', 'family', '2026-10-29 18:00'),
+    g('way-off', 'music', '2027-01-20 20:00'),
+    g('trivia-mon', 'trivia', null, { recurring: 'Mondays 7–9 PM' }), g('yoga', 'fitness', null, { recurring: 'every Thursday 6:30 PM' }),
+    g('art', 'couple', null, { recurring: 'every Friday 5–8 PM' }), g('market', 'family', null, { recurring: 'every Sunday 8 AM–1 PM' }),
+    g('celona', 'restaurant', null, { gem: true, rating: 4.8 }), g('andino', 'restaurant', null, { rating: 5 }),
+    g('gone', 'couple', '2026-10-12 19:00', { status: 'not_for_us' }), g('past', 'music', '2026-10-07 20:00'),
+  ]
+  const p = outAndAboutPlan(rows, { today })
+  // Thursday: tonight, Fri, Sat, Sun.
+  assert.deepEqual(p.weekend.map((d) => d.label), ['Tonight', 'Friday', 'Saturday', 'Sunday'])
+  assert.deepEqual(p.weekend[0].items.map((o) => o.id), ['open-mic', 'tonight-band'])
+  // A busy night's bands: the first few, and how many more.
+  assert.equal(p.weekend[1].items.length, 5)
+  assert.equal(p.weekend[1].more, 3)
+  // What's for the two of you or the family leads its day.
+  assert.deepEqual(p.weekend[2].items.map((o) => o.id), ['pumpkin', 'jazz'])
+  assert.deepEqual(p.weekend[3].items, [])
+  assert.deepEqual(p.nextWeek.map((o) => o.id), ['tue-wine', 'harbourfest'])
+  // Further out: a few weeks, worth planning for (not next year).
+  assert.deepEqual(p.later.map((o) => o.id), ['fright', 'seagulls'])
+  // Every week, by its first day.
+  assert.deepEqual(p.weekly.map((o) => o.id), ['trivia-mon', 'yoga', 'art', 'market'])
+  assert.deepEqual(p.places.map((o) => o.id), ['celona', 'andino'])
+  assert.equal(p.count, 2 + 8 + 2 + 2 + 2 + 4 + 2)
+})
+
+// The first run (Oct 8): Clematis by Night came back from two searches as two rows (an evening for two, and the family's).
+test('what was kept twice before the fold is found and the later one put away', async () => {
+  const { keptTwice } = await import('../supabase/functions/_shared/scout.mjs')
+  const rows = [
+    { id: 'a', kind: 'couple', title: 'Clematis by Night: The Goodnicks', when: '2026-10-08 18:00', place: 'Waterfront Commons', status: 'new', created_at: '2026-10-08T01:00:00Z' },
+    { id: 'b', kind: 'family', title: 'Clematis by Night: The Goodnicks', when: '2026-10-08 18:00', place: 'Centennial Square & Great Lawn', status: 'saved', created_at: '2026-10-08T01:05:00Z' },
+    { id: 'c', kind: 'music', title: 'Spider Cherry', when: '2026-10-08 19:00', place: 'The Bungalow', status: 'new', created_at: '2026-10-08T01:06:00Z' },
+  ]
+  // The saved one stays (what the family said of it), the other goes.
+  assert.deepEqual(keptTwice(rows), ['a'])
+})
+
+// Jake, Oct 8 (Around town too): "fit up all the available spots … things a couple weeks out are good to know too for
+// planning" — eight a section, and each line's own date, so the page can lead with the dates to know.
+test('Around town: up to eight a section, each with its own date; the dates to know, soonest first', async () => {
+  const { parseTownNews, townNewsPage } = await import('../supabase/functions/_shared/scout.mjs')
+  const refs = new Map([['m1', { received: '2026-10-06', from: 'news@palmbeachschools.org' }]])
+  const items = parseTownNews(JSON.stringify([
+    ...Array.from({ length: 10 }, (_, i) => ({ section: 'schools', headline: `Item ${i}`, line: 'x', source: 'Palm Beach Public', ref: 'm1', date: i === 2 ? '2026-10-28' : i === 5 ? '2026-10-16' : null })),
+    { section: 'schools', headline: 'Bad date', line: 'x', source: 'PBP', ref: 'm1', date: 'soon' },
+  ]), { refs, today })
+  assert.equal(items.filter((i) => i.section === 'schools').length, 8)
+  assert.equal(items.find((i) => i.headline === 'Item 2').on_date, '2026-10-28')
+  assert.equal(items.find((i) => i.headline === 'Item 0').on_date, null)
+  const page = townNewsPage(items, today)
+  assert.deepEqual(page.dates.map((i) => i.headline), ['Item 5', 'Item 2'])
+})
+
+test('tonight drops what has already started (an hour in)', async () => {
+  const { outAndAboutPlan } = await import('../supabase/functions/_shared/scout.mjs')
+  const rows = [{ id: 'early', kind: 'music', title: 'early', when: '2026-10-08 17:00', status: 'new' }, { id: 'late', kind: 'music', title: 'late', when: '2026-10-08 21:00', status: 'new' }, { id: 'open', kind: 'music', title: 'open', when: '2026-10-08', status: 'new' }]
+  assert.deepEqual(outAndAboutPlan(rows, { today, nowTime: '19:30' }).weekend[0].items.map((o) => o.id), ['open', 'late'])
 })

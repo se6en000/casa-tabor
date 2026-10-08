@@ -213,6 +213,9 @@ export function parseTidyAi(text, { events, steps = [], projects = [], today, ta
         key: 'yes', label: st ? 'Make it the step' : 'Make it one',
         ops: [
           ...(needsTime ? [{ op: 'retime', id: keep.id, start: new Date(drop.start_time).toISOString(), end: new Date(drop.end_time ?? drop.start_time).toISOString() }] : []),
+          // A step moved to a time takes its calendar day along — its all-day entry off, its day the new one (the Halloween
+          // step, Oct 8: moved to Friday at 12, still all day Thursday).
+          ...(needsTime && st?.cal_event_id && byId.has(st.cal_event_id) ? [{ op: 'remove', id: st.cal_event_id }, { op: 'step_day', step_id: st.id, cal_start: ymdOf(drop.start_time) }] : []),
           ...(notes.length ? [{ op: 'notes', id: keep.id, add: notes }] : []),
           { op: 'remove', id: drop.id },
         ],

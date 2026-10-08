@@ -142,3 +142,18 @@ test('a step and its own calendar day aren’t a pair; a step is never the one d
   assert.equal(stuck.length, 2)
   assert.notEqual(stuck[0].choices[0].label, stuck[1].choices[0].label)
 })
+
+// Jake, Oct 8: "I thought i merged or consolidated the halloween apt to friday at 12, why is it still showing up as an all
+// day apt on today?" — the step's reminder moved, but its calendar day (all day today) stayed. Its day goes with it now.
+test('a step kept at the other one’s time takes its calendar day along (no all-day left behind)', () => {
+  const withCal = [...events, ev('hal-cal', 'Halloween decorations: Get decorations from storage unit and test lights', { event_type: 'event', all_day: true, has_due_date: false, start_time: '2026-10-08T00:00:00Z', end_time: '2026-10-09T00:00:00Z' })]
+  const st = [{ ...steps[0], cal_event_id: 'hal-cal', cal_start: '2026-10-08' }, steps[1]]
+  const moved = withCal.map((e) => (e.id === 'hal-alexa' ? { ...e, start_time: '2026-10-09T16:00:00Z', end_time: '2026-10-09T16:30:00Z' } : e))
+  const [s] = parseTidyAi(JSON.stringify([{ keep: 'hal-step', drop: 'hal-alexa' }]), { events: moved, steps: st, projects, today, taken: new Set() })
+  assert.deepEqual(s.choices[0].ops, [
+    { op: 'retime', id: 'hal-step', start: '2026-10-09T16:00:00.000Z', end: '2026-10-09T16:30:00.000Z' },
+    { op: 'remove', id: 'hal-cal' },
+    { op: 'step_day', step_id: 's-hal', cal_start: '2026-10-09' },
+    { op: 'remove', id: 'hal-alexa' },
+  ])
+})

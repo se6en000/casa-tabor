@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { QrCode } from 'lucide-react'
 import type { NextMoveView } from './header'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
@@ -8,7 +8,7 @@ import { useDragSide } from './useSwipeDown'
 import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
-import { outAndAbout, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
+import { outAndAboutPlan, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 
 export interface WallPaperProps {
   now: Date
@@ -93,86 +93,152 @@ function PhoneButton({ o, onPhone }: { o: Outing; onPhone: (o: Outing) => void }
   )
 }
 
-/** Phone · Save · Not for us, under each outing. */
-function OutingActions({ o, onPhone, answer }: { o: Outing; onPhone: (o: Outing) => void; answer?: ScoutPaper['answer'] }) {
-  const saved = o.status === 'saved'
+/**
+ * A page that scrolls when there's more than fits (Jake, Oct 8: "fit up all the available spots even have a scroll on
+ * those pages if a lot is going on"): the front page's scroll — the wall moves the words, a fling and a soft end; the
+ * arrow keys while it's the page on show. A fade at the foot says there's more.
+ */
+function ScrollPage({ active, children }: { active: boolean; children: ReactNode }) {
+  const [max, setMax] = useState(0)
+  const viewRef = useRef<HTMLDivElement | null>(null)
+  const still = useCallback(() => {}, [])
+  const { content, handlers, glideTo, at } = useFrontScroll(max, still)
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (content.current && viewRef.current) setMax(Math.max(0, content.current.offsetHeight - viewRef.current.clientHeight))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    for (const el of [content.current, viewRef.current]) if (el) ro.observe(el)
+    return () => ro.disconnect()
+  }, [content])
+  useEffect(() => {
+    if (!active) return
+    const key = (e: KeyboardEvent) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') glideTo(at() + (e.key === 'ArrowDown' ? 320 : -320)) }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [active, glideTo, at])
   return (
-    <div className="mt-[10px] flex items-center gap-[14px] whitespace-nowrap">
-      <PhoneButton o={o} onPhone={onPhone} />
-      {answer && (
-        <>
-          <button type="button" aria-pressed={saved} onClick={() => answer(o.id, saved ? 'new' : 'saved')} className="h-[44px] border-0 bg-transparent px-[2px] text-wall-detail font-semibold text-wall-brass-ink">
-            {saved ? 'Saved ✓' : 'Save'}
-          </button>
-          <button type="button" onClick={() => answer(o.id, 'not_for_us')} className="h-[44px] border-0 bg-transparent px-[2px] text-wall-detail text-wall-ink-2 underline decoration-wall-rule underline-offset-[5px]">
-            Not for us
-          </button>
-        </>
-      )}
+    <div ref={viewRef} className="absolute inset-x-0 bottom-[112px] top-0 overflow-hidden" {...handlers}>
+      <div ref={content} className="px-[72px] pb-[48px] pt-[96px] will-change-transform">{children}</div>
+      {max > 0 && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[56px] bg-linear-to-b from-transparent to-wall-ground-calm" />}
     </div>
   )
 }
 
-const OUT_COLUMNS = [
-  { kind: 'couple', label: 'For the two of you' },
-  { kind: 'family', label: 'For the family' },
-  { kind: 'fitness', label: 'Get moving' },
-  { kind: 'restaurant', label: 'New & worth it' },
-] as const
+const KIND_WORD: Record<string, string> = { couple: 'For two', family: 'Family', fitness: 'Get moving', music: 'Live music', comedy: 'Comedy', trivia: 'Trivia', restaurant: 'Place' }
+const dayShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+const timeOf = (when: string | null) => (when && when.length > 10 ? outingWhen({ when, recurring: null })?.split(' · ')[1] ?? null : null)
 
-/** Page 2, Out & about (canvas 72B): the two best of each kind, checked this week. */
-function OutPage({ scout, onPhone }: { scout: ScoutPaper; onPhone: (o: Outing) => void }) {
-  const lists = outAndAbout(scout.outings, { today: scout.today })
-  const count = Object.values(lists).reduce((n, l) => n + l.length, 0)
+/** One outing on Out & about: what kind and when in small capitals, its name, where and why; a tap opens its card. */
+function Entry({ o, chip, onOpen }: { o: Outing; chip: string; onOpen: (o: Outing) => void }) {
+  const where = o.kind === 'restaurant' ? outingMeta(o) : [o.place && o.place !== o.title ? o.place : null, o.free ? 'free' : null].filter(Boolean).join(' · ')
   return (
-    <>
-      <PageHead kicker="Out & about · this week and next"
-        title={count >= 4 ? 'Plenty worth getting out for.' : count ? 'A few worth getting out for.' : 'Nothing checked out this week.'}
-        deck="Checked this week: real, on, and within half an hour of home." />
-      <div className="mt-[40px] grid min-h-0 flex-1 grid-cols-4 gap-x-[32px]">
-        {OUT_COLUMNS.map(({ kind, label }) => (
-          <section key={kind} aria-label={label} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-            <span className="border-0 border-b border-solid border-wall-rule pb-[10px] text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
-            {lists[kind].length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">Nothing this week.</span>}
-            {lists[kind].map((o, i) => (
-              <article key={o.id} aria-label={o.title} className={`flex flex-col pt-[16px] ${i ? 'mt-[16px] border-0 border-t border-solid border-wall-rule' : ''}`}>
-                <span className="line-clamp-2 font-display text-wall-date font-medium">{o.title}</span>
-                <span className="mt-[6px] line-clamp-2 text-wall-detail font-semibold text-wall-brass-ink">{outingMeta(o)}</span>
-                {o.why && <span className="mt-[6px] line-clamp-3 text-wall-detail text-wall-ink-2">{o.why}</span>}
-                <OutingActions o={o} onPhone={onPhone} answer={scout.answer} />
-              </article>
-            ))}
-          </section>
-        ))}
-      </div>
-    </>
+    <button type="button" aria-label={o.title} onClick={() => onOpen(o)} className="flex min-w-0 flex-col gap-[2px] border-0 border-t border-solid border-wall-rule bg-transparent px-0 pb-[10px] pt-[10px] text-left font-body text-wall-ink">
+      <span className="truncate text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{chip.toUpperCase()}{o.status === 'saved' ? ' · SAVED' : ''}</span>
+      <span className="line-clamp-2 font-display text-wall-heading font-semibold">{o.title}</span>
+      {where && <span className="truncate text-wall-detail text-wall-ink-2">{where}</span>}
+    </button>
+  )
+}
+
+function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+  return (
+    <section aria-label={label} className="mt-[34px] flex flex-col">
+      <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}{count ? ` · ${count}` : ''}</span>
+      {children}
+    </section>
+  )
+}
+
+/**
+ * Page 2, Out & about (canvas 72B, rethought Oct 8 — Jake: "im not seeing much … things that look cool a couple weeks
+ * out are good to know too for planning"): by when — tonight and the weekend day by day, next week, further out, every
+ * week, and places — everything the Scout and the calendars have, the page scrolling when it's a lot.
+ */
+function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void }) {
+  const plan = outAndAboutPlan(scout.outings, { today: scout.today, nowTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
+  const grid = 'mt-[6px] grid grid-cols-4 gap-x-[32px]'
+  return (
+    <ScrollPage active={active}>
+      <PageHead kicker="Out & about · the next six weeks"
+        title={plan.count >= 12 ? 'Plenty worth getting out for.' : plan.count ? 'A few worth getting out for.' : 'Nothing checked out this week.'}
+        deck="Checked: real, on, and within half an hour of home — an hour for a show worth the drive." />
+      <Section label="Tonight & this weekend">
+        <div className={`mt-[6px] grid gap-x-[32px] ${plan.weekend.length >= 4 ? 'grid-cols-4' : plan.weekend.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {plan.weekend.map((d) => (
+            <div key={d.day} aria-label={d.label} className="flex min-w-0 flex-col">
+              <span className="mb-[2px] mt-[10px] font-display text-wall-date font-semibold">{d.label} <span className="text-wall-ink-2">{d.label === 'Tonight' ? '' : dayShort(d.day).replace(/^\w+, /, '')}</span></span>
+              {d.items.length === 0 && <span className="border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing found yet.</span>}
+              {d.items.map((o) => <Entry key={o.id} o={o} chip={[timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}
+              {d.more > 0 && <span className="pt-[6px] text-wall-detail text-wall-ink-2">+{d.more} more {d.more === 1 ? 'band' : 'bands'} — ask Alexa</span>}
+            </div>
+          ))}
+        </div>
+      </Section>
+      {plan.nextWeek.length > 0 && (
+        <Section label="Next week" count={plan.nextWeek.length}>
+          <div className={grid}>{plan.nextWeek.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : null, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+        </Section>
+      )}
+      {plan.later.length > 0 && (
+        <Section label="Further out · worth planning for" count={plan.later.length}>
+          <div className={grid}>{plan.later.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)) : null, KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+        </Section>
+      )}
+      {plan.weekly.length > 0 && (
+        <Section label="Every week" count={plan.weekly.length}>
+          <div className={grid}>{plan.weekly.map((o) => <Entry key={o.id} o={o} chip={[o.recurring?.replace(/^every /i, ''), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+        </Section>
+      )}
+      {plan.places.length > 0 && (
+        <Section label="New & worth it · places" count={plan.places.length}>
+          <div className={grid}>{plan.places.map((o) => <Entry key={o.id} o={o} chip={o.gem ? 'Hidden gem' : 'Worth a try'} onOpen={onOpen} />)}</div>
+        </Section>
+      )}
+    </ScrollPage>
   )
 }
 
 const NEWS_COLUMNS = [
   { section: 'schools', label: 'The schools', none: 'Nothing from the schools this week.' },
   { section: 'city', label: 'The county & city', none: 'Nothing from the city this week.' },
-  { section: 'papers', label: 'From the papers', none: 'Nothing from the papers this week.' },
+  { section: 'papers', label: 'From the papers', none: 'Nothing from the papers yet — they come in as the newsletters do.' },
 ] as const
 
 const SHORT_DATE = { month: 'short', day: 'numeric', timeZone: 'UTC' } as const
 
-/** Page 3, Around town (canvas 72C): the morning's news, only what reaches the family, each line with where it's from. */
-function TownPage({ news }: { news: TownNews[] }) {
-  const page = townNewsPage(news)
+/**
+ * Page 3, Around town (canvas 72C, Oct 8 rethought): the dates to know first (soonest on), then everything from the
+ * schools, the city and the papers, each line with where it's from — scrolling when there's a lot.
+ */
+function TownPage({ news, today, active }: { news: TownNews[]; today: string; active: boolean }) {
+  const page = townNewsPage(news, today)
   return (
-    <>
+    <ScrollPage active={active}>
       <PageHead kicker="Around town · what touches us" title="The week’s news, for this house."
         deck="From the schools, the city and the papers you get — only what reaches the family." />
-      <div className="mt-[40px] grid min-h-0 flex-1 grid-cols-3 gap-x-[44px]">
+      {page.dates.length > 0 && (
+        <Section label="Dates to know" count={page.dates.length}>
+          <div className="mt-[10px] grid grid-cols-4 gap-[16px]">
+            {page.dates.slice(0, 8).map((n) => (
+              <div key={`${n.headline}-${n.on_date}`} className="flex min-w-0 flex-col gap-[2px] rounded-[14px] bg-wall-paper px-[18px] py-[12px]">
+                <span className="font-display text-wall-date font-semibold text-wall-brass-ink">{n.on_date ? dayShort(n.on_date) : ''}</span>
+                <span className="line-clamp-2 text-wall-detail text-wall-ink">{n.headline}</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+      <div className="mt-[34px] grid grid-cols-3 gap-x-[44px]">
         {NEWS_COLUMNS.map(({ section, label, none }) => (
-          <section key={section} aria-label={label} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <section key={section} aria-label={label} className="flex min-w-0 flex-col">
             <span className="border-0 border-b border-solid border-wall-rule pb-[10px] text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
             {page[section].length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">{none}</span>}
             {page[section].map((n, i) => (
               <article key={`${n.headline}-${i}`} aria-label={n.headline} className={`flex flex-col pt-[16px] ${i ? 'mt-[16px] border-0 border-t border-solid border-wall-rule' : ''}`}>
-                <span className="line-clamp-2 font-display text-wall-date font-medium">{n.headline}</span>
-                {n.line && <span className="mt-[6px] line-clamp-3 text-wall-detail text-wall-ink-2">{n.line}</span>}
+                <span className="font-display text-wall-date font-medium">{n.headline}</span>
+                {n.line && <span className="mt-[6px] text-wall-detail text-wall-ink-2">{n.line}</span>}
                 <span className="mt-[6px] text-wall-label font-bold tracking-[0.08em] text-wall-brass-ink">
                   {[n.source, n.source_date ? new Date(`${n.source_date}T12:00:00Z`).toLocaleDateString('en-US', SHORT_DATE) : null].filter(Boolean).join(' · ').toUpperCase()}
                 </span>
@@ -181,22 +247,29 @@ function TownPage({ news }: { news: TownNews[] }) {
           </section>
         ))}
       </div>
-    </>
+    </ScrollPage>
   )
 }
 
-/** The phone's QR for an outing: its page (or the place on Google Maps). */
-function PhoneCard({ o, onClose }: { o: Outing; onClose: () => void }) {
+/** An outing's card: its QR for the phone (its page, or the place on Google Maps), Save, Not for us. */
+function OutingCard({ o, answer, computer, onClose }: { o: Outing; answer?: ScoutPaper['answer']; computer: boolean; onClose: () => void }) {
+  const saved = o.status === 'saved'
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-wall-ink/30" onClick={onClose}>
-      <div role="dialog" aria-label={`${o.title} on your phone`} onClick={(e) => e.stopPropagation()} className="flex max-w-[760px] items-center gap-[28px] rounded-[24px] bg-wall-on-pigment px-[30px] py-[26px] text-wall-ink shadow-[0_8px_22px_rgba(38,34,29,0.18)]">
+      <div role="dialog" aria-label={`${o.title} on your phone`} onClick={(e) => e.stopPropagation()} className="flex max-w-[860px] items-center gap-[28px] rounded-[24px] bg-wall-on-pigment px-[30px] py-[26px] text-wall-ink shadow-[0_8px_22px_rgba(38,34,29,0.18)]">
         <Qr text={outingLink(o)} label={`QR code: ${o.title}`} />
         <div className="flex min-w-0 flex-col gap-[10px]">
-          <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">ON YOUR PHONE</span>
+          <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{(KIND_WORD[o.kind] ?? '').toUpperCase()} · ON YOUR PHONE</span>
           <span className="font-display text-wall-date font-bold leading-tight">{o.title}</span>
           <span className="text-wall-detail text-wall-ink-2">{outingMeta(o)}</span>
+          {o.why && <span className="text-wall-detail text-wall-ink-2">{o.why}</span>}
           <span className="text-wall-detail text-wall-ink-2">{o.kind === 'restaurant' ? 'Point your phone’s camera here — Google Maps opens with it.' : 'Point your phone’s camera here — its page opens.'}</span>
-          <button type="button" onClick={onClose} className="h-[52px] self-start rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">Done</button>
+          <div className="flex flex-wrap items-center gap-[12px]">
+            {computer && <a href={outingLink(o)} target="_blank" rel="noreferrer" className="flex h-[52px] items-center rounded-full bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment no-underline">Open its page</a>}
+            {answer && <button type="button" aria-pressed={saved} onClick={() => { answer(o.id, saved ? 'new' : 'saved'); onClose() }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">{saved ? 'Saved ✓' : 'Save'}</button>}
+            {answer && <button type="button" onClick={() => { answer(o.id, 'not_for_us'); onClose() }} className="h-[52px] rounded-full border border-solid border-wall-rule bg-transparent px-[22px] text-wall-detail text-wall-ink-2">Not for us</button>}
+            <button type="button" onClick={onClose} className="h-[52px] rounded-full border-0 bg-transparent px-[16px] text-wall-detail font-semibold text-wall-ink">Done</button>
+          </div>
         </div>
       </div>
     </div>
@@ -215,6 +288,8 @@ function PhoneCard({ o, onClose }: { o: Outing; onClose: () => void }) {
 export default function WallPaper({ now, facts, words, brief, next, nextPigment, counts, scout, onPutAway, onAsk }: WallPaperProps) {
   const pages = scout ? 3 : 1
   const [page, setPage] = useState(0)
+  const pageNow = useRef(0)
+  useEffect(() => { pageNow.current = page }, [page])
   const [phone, setPhone] = useState<Outing | null>(null)
   const computer = useMemo(() => deviceKeyboardHere(), [])
   const turn = (step: 1 | -1) => setPage((p) => Math.min(pages - 1, Math.max(0, p + step)))
@@ -233,7 +308,7 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') glideTo(scrolledTo() + (e.key === 'ArrowDown' ? 280 : -280))
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && pageNow.current === 0) glideTo(scrolledTo() + (e.key === 'ArrowDown' ? 280 : -280))
       if (e.key === 'ArrowRight') setPage((p) => Math.min(pages - 1, p + 1))
       if (e.key === 'ArrowLeft') setPage((p) => Math.max(0, p - 1))
     }
@@ -340,11 +415,11 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
 
           {scout && (
             <>
-              <section aria-label="Out & about" aria-hidden={page !== 1} className="flex h-full w-1/3 flex-col px-[72px] pb-[124px] pt-[96px]">
-                <OutPage scout={scout} onPhone={openPhone} />
+              <section aria-label="Out & about" aria-hidden={page !== 1} className="relative h-full w-1/3">
+                <OutPage scout={scout} active={page === 1} now={now} onOpen={setPhone} />
               </section>
-              <section aria-label="Around town" aria-hidden={page !== 2} className="flex h-full w-1/3 flex-col px-[72px] pb-[124px] pt-[96px]">
-                <TownPage news={scout.news} />
+              <section aria-label="Around town" aria-hidden={page !== 2} className="relative h-full w-1/3">
+                <TownPage news={scout.news} today={scout.today} active={page === 2} />
               </section>
             </>
           )}
@@ -378,7 +453,7 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
           </div>
         </footer>
       </div>
-      {phone && <PhoneCard o={phone} onClose={() => setPhone(null)} />}
+      {phone && <OutingCard o={phone} answer={scout?.answer} computer={computer} onClose={() => setPhone(null)} />}
     </article>
   )
 }

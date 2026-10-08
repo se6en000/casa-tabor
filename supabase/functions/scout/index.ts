@@ -10,7 +10,7 @@ import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
-  CALENDARS, CALENDAR_KINDS, calendarReach, foldIn, isBait, notLiveMusic, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
+  CALENDARS, CALENDAR_KINDS, calendarReach, foldIn, isBait, keptTwice, notLiveMusic, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   parseWeekendBroward, restaurantVerdict, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     const { data } = await sb.from('outings').select('*').in('status', ['new', 'offered', 'saved']).order('kind').limit(200)
     const live = (data ?? []).filter((o: { when: string | null }) => !o.when || o.when.slice(0, 10) >= today)
     // The paper's third page: the latest morning's news (a day or two old at most).
-    const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date')
+    const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date, on_date')
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
     const latest = news?.[0]?.news_date
     return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), today })
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
         if (seen.has(k)) return false
         seen.add(k)
         return true
-      }).slice(0, 24).map((m) => ({ id: m.gmail_message_id, from: m.from_email, subject: m.email_subject ?? m.subject, received: ymdNY(new Date(m.received_at)), body: m.email_body }))
+      }).slice(0, 30).map((m) => ({ id: m.gmail_message_id, from: m.from_email, subject: m.email_subject ?? m.subject, received: ymdNY(new Date(m.received_at)), body: m.email_body }))
       if (!emails.length) return { items: [], emails: 0 }
       const family = ((members ?? []) as Array<{ name: string; role: string | null }>).map((m) => `${m.name}${m.role ? ` (${m.role})` : ''}`).join(', ')
       const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
@@ -177,11 +177,15 @@ Deno.serve(async (req) => {
         const { error } = await sb.from('outings').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: false })
         if (error) throw new Error(error.message)
       }
+      // Kept twice from before the fold (Clematis by Night as the couple's and the family's): the extra put away.
+      const { data: liveNow } = await sb.from('outings').select('id, kind, title, "when", recurring, place, status, created_at').in('status', ['new', 'offered', 'saved']).limit(1000)
+      const twice = keptTwice(liveNow ?? [])
+      if (twice.length) await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).in('id', twice)
       // Past gigs put away; a weekly one no calendar has listed for two weeks has stopped.
       await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).lt('when', today).in('status', ['new', 'offered', 'saved'])
       await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).in('kind', CALENDAR_KINDS).is('when', null)
         .lt('verified_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).in('status', ['new', 'offered'])
-      return { found: found.length, written: rows.length, log }
+      return { found: found.length, written: rows.length, twice: twice.length, log }
     }
     try { return json(await read()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
   }
