@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { DayPlan, WallMember } from './engine/types'
-import { PAPER_UNTIL_HOUR, paperDate, paperFacts, type BriefFacts, type PaperWords } from './paper'
+import { paperDate, paperFacts, type BriefFacts, type PaperWords } from './paper'
 
 /**
  * Today's morning paper (canvas 48a): the words the server wrote, from the morning_papers table. On a morning with
@@ -12,7 +12,9 @@ import { PAPER_UNTIL_HOUR, paperDate, paperFacts, type BriefFacts, type PaperWor
 export function useMorningPaper(today: DayPlan | null, members: WallMember[], now: Date, weather?: { temp: number; condition: string } | null, more?: () => BriefFacts | null | undefined): PaperWords | null {
   const qc = useQueryClient()
   const date = paperDate(now)
-  const morning = now.getHours() >= 5 && now.getHours() < PAPER_UNTIL_HOUR
+  // Written once a day, from 5 on — any time after, too, when there's none (Jake, Oct 8: "regenerate the morning paper
+  // for today": the day's paper put away to be rewritten, the menu's preview and Alexa have today's again).
+  const morning = now.getHours() >= 5
   const { data, isFetched } = useQuery({
     queryKey: ['morning-paper', date],
     queryFn: async () => {
