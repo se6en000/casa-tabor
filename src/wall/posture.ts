@@ -104,22 +104,35 @@ const listed = (words: string[]) => (words.length <= 1 ? words.join('') : `${wor
  * Null outside the afternoon, or when tomorrow needs nothing.
  */
 export function tomorrowLine(tomorrow: DayPlan | null, checklist: WallChecklistItem[], decisionCount: number, now: Date): string | null {
+  const t = tomorrowParts(tomorrow, checklist, decisionCount, now)
+  if (!t) return null
+  const parts: string[] = []
+  if (t.what) parts.push(`${t.what}: ${t.items} still to do`)
+  if (t.more > 0) parts.push(`${t.more} more`)
+  if (t.decide > 0) parts.push(`${t.decide} to decide`)
+  if (t.firstOut) parts.push(`first out ${t.firstOut}`)
+  return parts.join(' · ')
+}
+
+/** The pieces of tomorrow's line, for the calm face's card (canvas 78C): what, its time, what's left, the rest. */
+export interface TomorrowParts { what: string | null; at: string | null; items: string; more: number; decide: number; firstOut: string | null }
+
+export function tomorrowParts(tomorrow: DayPlan | null, checklist: WallChecklistItem[], decisionCount: number, now: Date): TomorrowParts | null {
   const hour = now.getHours()
   if (!tomorrow || hour < TOMORROW_LINE_FROM_HOUR || hour >= EVENING_START_HOUR) return null
   const groups = packingGroups(tomorrow, checklist).groups
-    .map((g) => ({ title: g.heading.split(' · ')[0], open: g.items.filter((i) => !i.checked) }))
+    .map((g) => ({ heading: g.heading.split(' · '), open: g.items.filter((i) => !i.checked) }))
     .filter((g) => g.open.length > 0)
   if (groups.length === 0 && decisionCount === 0) return null
-  const parts: string[] = []
-  if (groups.length > 0) {
-    parts.push(`${groups[0].title}: ${listed(groups[0].open.map((i) => i.label))} still to do`)
-    const more = groups.slice(1).reduce((n, g) => n + g.open.length, 0)
-    if (more > 0) parts.push(`${more} more`)
-  }
-  if (decisionCount > 0) parts.push(`${decisionCount} to decide`)
   const first = tomorrow.trips.map((t) => t.leaveAt).filter((d): d is Date => Boolean(d)).sort((a, b) => a.getTime() - b.getTime())[0]
-  if (first) parts.push(`first out ${clockTime(first)}`)
-  return parts.join(' · ')
+  return {
+    what: groups[0]?.heading[0] ?? null,
+    at: groups[0]?.heading[1] ?? null,
+    items: groups[0] ? listed(groups[0].open.map((i) => i.label)) : '',
+    more: groups.slice(1).reduce((n, g) => n + g.open.length, 0),
+    decide: decisionCount,
+    firstOut: first ? clockTime(first) : null,
+  }
 }
 
 /** How long the evening face stays up after the last touch before it settles to the night Calm (canvas 36a). */

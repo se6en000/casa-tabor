@@ -19,7 +19,7 @@ import { coverageComingUp, tripCoverage } from './coverage'
 import { tripEventIds, tripTodos, type TravelSettings, type TravelTrip } from './engine/travel'
 import type { WallChore } from './engine/chores'
 import { surpriseSafeChecklist } from './surprise'
-import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
+import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tomorrowParts, tonightByClock, type Posture } from './posture'
 import { briefFacts, fallbackBrief, fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
 import WallPaper from './WallPaper'
 import { PaperRecall } from './paperRecall'
@@ -52,7 +52,7 @@ import WallTidy from './WallTidy'
 import type { TidyData } from './useTidy'
 import type { ScoreInteraction } from './WallScore'
 import WallNightCalm from './WallNightCalm'
-import { comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, type NextUpItem } from './nextUp'
+import { comingHours, eveningHeading, fitNextUp, nextUpItems, outTonight, stillTonight, thisEvening, type NextUpItem } from './nextUp'
 import { NextUpSection, StillTonight, TONIGHT_ROOM } from './WallNextUp'
 
 export interface WallViewProps {
@@ -147,6 +147,8 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 const PAPER_PUT_AWAY_KEY = 'casa.wall.paperPutAway'
 /** A tick crosses the line out this long before it's saved and leaves; a second tap in that time takes it back. */
 const TICK_MS = 4000
+/** How many lines THIS EVENING has room for in the left panel (canvas 78C). */
+const EVENING_ROOM = 5
 const addTo = (key: string) => (set: Set<string>) => new Set(set).add(key)
 const takeFrom = (key: string) => (set: Set<string>) => {
   const next = new Set(set)
@@ -618,7 +620,9 @@ export default function WallView(props: WallViewProps) {
   )
   const counts = tabs(null)
   const tomorrowText = tomorrowDate ? tomorrowLine(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now) : null
-  const tomorrowNote = tomorrowText && tomorrowDate ? { text: tomorrowText, onOpen: () => showDay(tomorrowDate) } : null
+  const tomorrowNote = tomorrowText && tomorrowDate
+    ? { text: tomorrowText, parts: tomorrowParts(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now), onOpen: () => showDay(tomorrowDate) }
+    : null
 
   // The surface of To do (board 09a): tonight's nudge on the evening face, one small job in a quiet stretch.
   const nudgeItem = todos ? tonightNudge(todos.list, now) : null
@@ -761,7 +765,10 @@ export default function WallView(props: WallViewProps) {
         }} />
     )
   } else if (shown.posture === 'calm') {
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} counts={counts} tomorrow={tomorrowNote} meanwhile={meanwhile} />
+    // Nothing else on the road: the rest of today in the left panel (canvas 78C).
+    const lines = thisEvening(jobs, shownToday, members, now)
+    const evening = { heading: eveningHeading(lines, now), lines: lines.slice(0, EVENING_ROOM), more: Math.max(0, lines.length - EVENING_ROOM) }
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} counts={counts} tomorrow={tomorrowNote} meanwhile={meanwhile} evening={evening} pigmentOf={rowProps.pigmentOf} />
   } else {
     // The full day (also Today tapped in the evening).
     face = (

@@ -51,7 +51,7 @@ export function WallNudge({ item, onDone, onLater, rail = false }: { item: TodoI
 /** One small job in a quiet stretch, under "A quiet stretch until 1:50." */
 export function WallQuietStep({ item, onDone }: { item: TodoItem; onDone: () => void }) {
   return (
-    <section aria-label="Meanwhile" className="flex items-center gap-[20px]">
+    <section aria-label="Meanwhile" className="flex w-full items-center gap-[20px]">
       <div className="flex min-w-0 flex-col gap-[2px]">
         <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">MEANWHILE · {item.minutes} MIN</span>
         <span className="truncate font-display text-wall-date font-semibold">{item.nextStep ?? item.title}</span>
@@ -63,7 +63,7 @@ export function WallQuietStep({ item, onDone }: { item: TodoItem; onDone: () => 
           event.stopPropagation()
           onDone()
         }}
-        className="h-[52px] shrink-0 rounded-full border-0 bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment"
+        className="ml-auto h-[52px] shrink-0 rounded-full border-0 bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment"
       >
         Done
       </button>

@@ -163,6 +163,38 @@ export function outTonight(plan: DayPlan | null, members: WallMember[], now: Dat
   return out
 }
 
+/** One line of THIS EVENING (canvas 78C): when, what, whose. */
+export interface EveningLine { key: string; at: Date; title: string; whoId: string | null; initial: string; late: boolean; meridiem: string | null }
+
+/** THIS EVENING heading before 4 PM only when every line is from 5 PM on; else LATER TODAY. */
+export function eveningHeading(lines: Pick<EveningLine, 'at'>[], now: Date): string {
+  return now.getHours() >= 16 || lines.every((l) => l.at.getHours() >= 17) ? 'THIS EVENING' : 'LATER TODAY'
+}
+
+/**
+ * The rest of today on the calm face's left panel when nothing else is on the road (canvas 78C; Jake, Oct 8: "this
+ * could look better"): the chores and timed to-dos still to do; whoever's at work, when they're off; and whoever's
+ * out — when they're done there, or when they go. In time order.
+ */
+export function thisEvening(jobs: NextUpItem[], plan: DayPlan | null, members: WallMember[], now: Date): EveningLine[] {
+  const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? ''
+  const line = (key: string, at: Date, title: string, whoId: string | null, late = false): EveningLine => ({ key, at, title, whoId, initial: nameOf(whoId).charAt(0), late, meridiem: meridiemFor(at, now) })
+  const lines = jobs.map((j) => line(j.key, j.at, j.title, j.whoId, j.state === 'late'))
+  if (plan && sameDay(plan.date, now)) {
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    for (const member of members) {
+      const work = (plan.lanes.get(member.id) ?? []).find((s) => s.work && s.start <= now && s.end > now && s.end < midnight)
+      if (work) lines.push(line(`work:${member.id}`, work.end, `${member.name} off work`, member.id))
+    }
+  }
+  for (const o of outTonight(plan, members, now)) {
+    const there = o.at.getTime() <= now.getTime()
+    const at = there && o.until ? o.until : o.at
+    lines.push(line(o.key, at, there ? `${nameOf(o.whoId)} done at ${o.title.slice(nameOf(o.whoId).length + 4)}` : `${o.title} ${o.tag ?? ''}`.trim(), o.whoId))
+  }
+  return lines.sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
+}
+
 /** "Gym" → "the gym", "Ferrin Park" stays as it is. */
 function placeWords(label: string): string {
   const name = label.split(':')[0].trim()

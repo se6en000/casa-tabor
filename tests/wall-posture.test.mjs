@@ -76,7 +76,7 @@ test('tomorrow\'s forecast is read from the first outing that has one', () => {
 })
 
 
-import { tomorrowLine } from '../src/wall/posture.ts'
+import { tomorrowLine, tomorrowParts } from '../src/wall/posture.ts'
 
 const kit = [
   { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
@@ -89,6 +89,11 @@ test('from 1 PM, tomorrow speaks up with what is still to do, and when the day s
   assert.equal(tomorrowLine(saturday, kit, 0, at(25, 12, 59)), null) // too early
   assert.equal(tomorrowLine(saturday, kit, 0, at(25, 13, 0)), "Kelly's Birthday: Birthday card and Gift still to do · 1 more · first out 11:56")
   assert.equal(tomorrowLine(saturday, kit, 0, at(25, 19, 0)), null) // the evening shows tomorrow itself
+})
+
+test('the calm card has tomorrow in pieces: what and when, what is left, the rest (canvas 78C)', () => {
+  assert.deepEqual(tomorrowParts(saturday, kit, 1, at(25, 14, 0)), { what: "Kelly's Birthday", at: '9:00', items: 'Birthday card and Gift', more: 1, decide: 1, firstOut: '11:56' })
+  assert.equal(tomorrowParts(saturday, kit, 0, at(25, 19, 0)), null)
 })
 
 test('tomorrow with a question but nothing to pack still speaks up; with nothing at all it stays quiet', () => {

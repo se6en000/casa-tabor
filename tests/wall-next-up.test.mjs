@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDayPlan } from '../src/wall/engine/dayPlan.ts'
-import { choreDoneKey, comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, tagFor, todoTimeToday } from '../src/wall/nextUp.ts'
+import { choreDoneKey, comingHours, eveningHeading, fitNextUp, nextUpItems, outTonight, stillTonight, tagFor, thisEvening, todoTimeToday } from '../src/wall/nextUp.ts'
 import { events, members, routines } from './fixtures/wall-day-2026-09-25.mjs'
 
 // Canvas 27a / 27c (Jake, 2026-10-01, approved): today's chores and timed to-dos as NEXT UP by day, and from 7 PM,
@@ -106,4 +106,27 @@ test('Next up cards: what it is, and how it got here', async () => {
   assert.equal(originLine({ via: 'project', where: null, text: null, at: at(1, 9, 0) }, 'Install Tesla charger in garage', now), 'Install Tesla charger in garage')
   assert.equal(originLine({ via: null, where: null, text: null, at: at(1, 9, 0) }, null, now), 'Added Oct 1')
   assert.equal(originLine(null, null, now), null)
+})
+
+// Canvas 78C (Jake, Oct 8: "this could look better" → "nailed it"): nothing else on the road, the left panel says the rest of the evening.
+test('this evening: off work, the chores and to-dos, and who goes out — in time order, with whose', () => {
+  const work = { key: 'work-hours', memberId: 'kelly', title: 'Work', routineType: 'work', venueName: '', venueAddress: '', daysOfWeek: [1, 2, 3, 4, 5], startLocal: '07:30', endLocal: '18:30', dayOverrides: [], dropoffDriverName: '', pickupDriverName: '', enabled: true }
+  const day = buildDayPlan({ date: FRIDAY, members, routines: [...routines, work], events: [...events, gym], chores })
+  const now = at(17, 20)
+  const lines = thisEvening(nextUpItems(day, null, new Set(), now), day, members, now)
+  assert.deepEqual(lines.map((l) => [l.at.getHours() * 100 + l.at.getMinutes(), l.title, l.initial]), [
+    [1830, 'Kelly off work', 'K'],
+    [1900, 'Kelly at the gym until 9:30', 'K'],
+    ...lines.filter((l) => l.key.startsWith('chore:')).map((l) => [l.at.getHours() * 100 + l.at.getMinutes(), l.title, l.initial]),
+  ].sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1])))
+  assert.equal(eveningHeading(lines, now), 'THIS EVENING')
+  // At the gym: when she's done there.
+  const later = thisEvening([], day, members, at(19, 40))
+  assert.deepEqual(later.map((l) => l.title), ['Kelly done at the gym'])
+})
+
+test('this evening is "later today" in the early afternoon unless it all starts from 5', () => {
+  assert.equal(eveningHeading([{ at: at(15, 0) }, { at: at(19, 0) }], at(13, 0)), 'LATER TODAY')
+  assert.equal(eveningHeading([{ at: at(18, 30) }], at(13, 0)), 'THIS EVENING')
+  assert.equal(eveningHeading([{ at: at(16, 30) }], at(16, 5)), 'THIS EVENING')
 })

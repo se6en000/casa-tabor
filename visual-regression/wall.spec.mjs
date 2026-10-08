@@ -2932,3 +2932,23 @@ test('wall: adding to an event — the card lists each get & pack line, and new 
   await expect(wall.getByRole('button', { name: 'Yes, add to the notes' })).toBeVisible()
   await expect(wall).toHaveScreenshot('band-adds-notes.png')
 })
+
+// Canvas 78C (Jake, Oct 8: "this could look better" → "nailed it"): nothing else on the road — the left panel says the
+// rest of the evening; Meanwhile and tomorrow sit side by side below, tomorrow in full.
+test('wall: the home stretch — this evening in the left panel; Meanwhile and tomorrow side by side', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T17:20:00&chores=1')
+  await expect(page.getByTestId('wall-fixture')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const evening = page.getByRole('region', { name: 'This evening' })
+  await expect(evening).toContainText('6:30')
+  await expect(evening).toContainText('Kelly off work')
+  await expect(evening).toContainText('Give Liv her meds')
+  await expect(evening).toContainText('Trash out to the street')
+  await expect(page.getByText('Nothing else on the road today.')).toHaveCount(1)
+  const meanwhile = await page.getByRole('region', { name: 'Meanwhile' }).boundingBox()
+  const tomorrow = page.getByRole('button', { name: /^Tomorrow:/ })
+  await expect(tomorrow).toContainText('FIRST OUT 11:56')
+  const box = await tomorrow.boundingBox()
+  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) / 2 - ((meanwhile?.y ?? 0) + (meanwhile?.height ?? 0) / 2))).toBeLessThan(20)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-home-stretch.png')
+})

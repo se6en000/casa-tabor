@@ -6,6 +6,7 @@ import { formatWallClock } from './clock'
 import type { NextMoveView } from './header'
 import { pigmentStyleFor } from './lanes'
 import type { PackingGroup, WallChecklistItem } from './packing'
+import type { EveningLine } from './nextUp'
 import { nextInWords } from './posture'
 
 // The left panel (canvas 56A; Jake, Oct 6: "OK I love this!" → "yup, its a go"). Every face keeps the same panel down
@@ -173,6 +174,35 @@ export function TakeWithYou({ groups, onToggleItem, onSeeAll, room = 4 }: {
             {more} more
           </button>
         )}
+      </div>
+    </section>
+  )
+}
+
+/** THIS EVENING on the calm face when nothing else is on the road (canvas 78C): the rest of today, a line each. */
+export function RailEvening({ heading, lines, more, pigmentOf }: { heading: string; lines: EveningLine[]; more: number; pigmentOf: (id: string) => number | null }) {
+  return (
+    <section aria-label={heading === 'THIS EVENING' ? 'This evening' : 'Later today'} className="flex shrink-0 flex-col">
+      <RailLabel tone="brass" aside={more > 0 ? `+${more} later` : undefined}>{heading}</RailLabel>
+      <div className="mt-[10px] flex flex-col">
+        {lines.map((line, i) => {
+          const pigment = line.whoId ? pigmentOf(line.whoId) : null
+          const clock = formatWallClock(line.at)
+          return (
+            <div key={line.key} className={`flex min-w-0 items-center gap-[16px] py-[14px] ${i ? 'border-0 border-t border-solid border-wall-rule' : ''}`}>
+              <span className={`w-[74px] shrink-0 font-display text-wall-date lining-nums ${line.late ? 'text-wall-rust' : ''}`}>
+                {clock.time}{line.meridiem && <span className="text-wall-label text-wall-ink-2"> {line.meridiem}</span>}
+              </span>
+              <span
+                aria-hidden="true"
+                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${pigment == null ? 'border-2 border-solid border-wall-rule' : `text-wall-on-pigment ${pigmentStyleFor(pigment).solid}`}`}
+              >
+                {pigment == null ? '' : line.initial}
+              </span>
+              <span className="min-w-0 truncate font-display text-wall-heading">{line.title}</span>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
