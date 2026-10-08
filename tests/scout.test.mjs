@@ -128,3 +128,115 @@ test('Alexa’s list: soonest first, a few weekly things and the best places, ne
   assert.ok(s.indexOf('Oktoberfest') < s.indexOf('Art After Dark'), 'dated first')
   assert.equal(outingsSection([], today), null)
 })
+
+// Canvas 72B, the paper's second page: the two best of each kind.
+test('Out & about: two of each kind, soonest and best first, never a no or a past one', async () => {
+  const { outAndAbout } = await import('../supabase/functions/_shared/scout.mjs')
+  const rows = [
+    { id: 'c1', kind: 'couple', title: 'Tasting', when: '2026-10-16 18:00', status: 'new' },
+    { id: 'c2', kind: 'couple', title: 'Art After Dark', recurring: 'Fridays', status: 'new' },
+    { id: 'c3', kind: 'couple', title: 'Comedy', when: '2026-10-09 20:00', status: 'not_for_us' },
+    { id: 'c4', kind: 'couple', title: 'Jazz', when: '2026-10-09 19:00', status: 'offered', offered_on: today },
+    { id: 'f1', kind: 'family', title: 'Old', when: '2026-10-01 10:00', status: 'new' },
+    { id: 'f2', kind: 'family', title: 'Pumpkin Fest', when: '2026-10-10 11:00', status: 'new' },
+    { id: 'r1', kind: 'restaurant', title: 'Gem', gem: true, status: 'new' },
+    { id: 'r2', kind: 'restaurant', title: 'Plain', status: 'new' },
+    { id: 'r3', kind: 'restaurant', title: 'Saved', status: 'saved' },
+  ]
+  const o = outAndAbout(rows, { today })
+  assert.deepEqual(o.couple.map((x) => x.id), ['c4', 'c1'])
+  assert.deepEqual(o.family.map((x) => x.id), ['f2'])
+  assert.deepEqual(o.fitness, [])
+  assert.deepEqual(o.restaurant.map((x) => x.id), ['r3', 'r1'])
+})
+
+// Jake, Oct 8: "on the front page include both the you may have forgotten & This Weekend (pick a couples thing with a
+// high percentage of impact — a highlight from the Out and about)".
+test('This weekend: the best thing for the two of them Friday to Sunday, else the best this week', async () => {
+  const { weekendHighlight } = await import('../supabase/functions/_shared/scout.mjs')
+  // Thursday, Oct 8: the weekend is Fri 9 – Sun 11.
+  const rows = [
+    { id: 'tue', kind: 'couple', title: 'Tuesday wine', when: '2026-10-13 19:00', status: 'new' },
+    { id: 'sat', kind: 'couple', title: 'Jazz', when: '2026-10-10 19:00', status: 'new' },
+    { id: 'fam', kind: 'family', title: 'Pumpkin Fest', when: '2026-10-10 11:00', status: 'new' },
+    { id: 'fri', kind: 'couple', title: 'Art After Dark', recurring: 'Fridays 5–8 PM', status: 'new' },
+    { id: 'no', kind: 'couple', title: 'Comedy', when: '2026-10-09 20:00', status: 'not_for_us' },
+  ]
+  const h = weekendHighlight(rows, { today })
+  assert.equal(h.label, 'This weekend')
+  assert.equal(h.outing.id, 'sat') // a date beats a weekly one
+  // A busy Saturday evening: the Friday one instead.
+  assert.equal(weekendHighlight(rows, { today, busy: { '2026-10-10': true } }).outing.id, 'fri')
+  // Nothing on the weekend: the week's best, said so.
+  const week = weekendHighlight([rows[0]], { today })
+  assert.deepEqual([week.label, week.outing.id], ['This week', 'tue'])
+  // On a Saturday, the weekend is this one.
+  assert.equal(weekendHighlight(rows, { today: '2026-10-10' }).outing.id, 'sat')
+  assert.equal(weekendHighlight([], { today }), null)
+})
+
+test('an outing’s when, the way the paper says it', async () => {
+  const { outingWhen } = await import('../supabase/functions/_shared/scout.mjs')
+  assert.equal(outingWhen({ when: '2026-10-16 18:00' }), 'Fri, Oct 16 · 6 PM')
+  assert.equal(outingWhen({ when: '2026-10-10 11:30' }), 'Sat, Oct 10 · 11:30 AM')
+  assert.equal(outingWhen({ when: '2026-10-10' }), 'Sat, Oct 10')
+  assert.equal(outingWhen({ recurring: 'Thursdays 6:30 PM' }), 'Thursdays 6:30 PM')
+  assert.equal(outingWhen({ kind: 'restaurant', drive_min: 7 }), null)
+})
+
+// Canvas 72C, Around town (Jake: "family news with outside news"): the week's emails from the schools, the city and the
+// papers, boiled down to what reaches this family — each line traced to a real email.
+test('Around town: the news prompt carries each email with its id and the family', async () => {
+  const { townNewsPrompt } = await import('../supabase/functions/_shared/scout.mjs')
+  const p = townNewsPrompt([{ id: 'm1', from: 'Palm Beach Public <news@palmbeachschools.org>', subject: 'Flu shots Oct 28', received: '2026-10-06', body: 'Free flu shots at the clinic' }], { today, family: 'Jake and Kelly; Liv, Emme and Owen' })
+  assert.match(p, /\[m1\]/)
+  assert.match(p, /Flu shots Oct 28/)
+  assert.match(p, /Liv, Emme and Owen/)
+  assert.match(p, /schools.*city.*papers/s)
+})
+
+test('Around town: only items from a real email, in a known section, four a section at most', async () => {
+  const { parseTownNews, townNewsPage } = await import('../supabase/functions/_shared/scout.mjs')
+  const refs = new Map([['m1', { received: '2026-10-06', from: 'news@palmbeachschools.org' }], ['m2', { received: '2026-10-01', from: 'updates@wpb.org' }]])
+  const text = 'Here: ' + JSON.stringify([
+    { section: 'schools', headline: 'Free flu shots at school, Oct 28', line: 'Emme and Owen can get theirs there.', source: 'Palm Beach Public', ref: 'm1' },
+    { section: 'city', headline: 'Referendum town hall moved', line: 'New date.', source: 'City of West Palm Beach', ref: 'm2' },
+    { section: 'city', headline: 'Made up', line: 'No such email.', source: 'Somewhere', ref: 'm9' },
+    { section: 'sports', headline: 'Wrong section', line: 'x', source: 'x', ref: 'm1' },
+    { section: 'schools', headline: 'free flu shots at school, oct 28', line: 'The same again.', source: 'Palm Beach Public', ref: 'm1' },
+    ...Array.from({ length: 6 }, (_, i) => ({ section: 'schools', headline: `School item ${i}`, line: 'x', source: 'Palm Beach Public', ref: 'm1' })),
+  ])
+  const items = parseTownNews(text, { refs, today })
+  assert.equal(items.filter((i) => i.section === 'schools').length, 4)
+  assert.equal(items.find((i) => i.headline === 'Made up'), undefined)
+  assert.equal(items.find((i) => i.headline === 'Wrong section'), undefined)
+  const flu = items.find((i) => /flu/i.test(i.headline))
+  assert.deepEqual([flu.source_date, flu.source_ref, flu.rank], ['2026-10-06', 'm1', 0])
+  const page = townNewsPage([...items].reverse())
+  assert.equal(page.schools[0].headline, 'Free flu shots at school, Oct 28')
+  assert.equal(page.city.length, 1)
+  assert.deepEqual(page.papers, [])
+  assert.deepEqual(parseTownNews('no json', { refs, today }), [])
+})
+
+// The first live run (Oct 8) kept "Downtown Master Plan update, October 6" and put a school's concert note under the papers.
+test('Around town: a line whose dates are all past is left out; the sender decides the section', async () => {
+  const { parseTownNews } = await import('../supabase/functions/_shared/scout.mjs')
+  const refs = new Map([['s', { received: '2026-10-02', from: 'Palm Beach Public <news@palmbeachschools.org>' }], ['c', { received: '2026-10-01', from: 'updates@wpb.org' }], ['p', { received: '2026-10-07', from: 'newsletters@palmbeachpost.com' }]])
+  const items = parseTownNews(JSON.stringify([
+    { section: 'city', headline: 'Downtown Master Plan update October 6', line: 'At City Hall on October 6, 2026.', source: 'City', ref: 'c' },
+    { section: 'city', headline: 'GreenMarket opens', line: 'From October 3 to April 25 on Saturdays.', source: 'City', ref: 'c' },
+    { section: 'papers', headline: 'Glazer Hall concerts for kids', line: 'On October 10.', source: 'Palm Beach Public', ref: 's' },
+    { section: 'schools', headline: 'New restaurant row', line: 'Opening this month.', source: 'Post', ref: 'p' },
+  ]), { refs, today })
+  assert.deepEqual(items.map((i) => [i.headline, i.section]), [['GreenMarket opens', 'city'], ['Glazer Hall concerts for kids', 'schools'], ['New restaurant row', 'papers']])
+})
+
+// The paper's "Phone" (canvas 72B): an event opens its own page; a restaurant opens in Google Maps.
+test('an outing’s link for the phone: its page, or the place on Google Maps', async () => {
+  const { outingLink } = await import('../supabase/functions/_shared/scout.mjs')
+  assert.equal(outingLink({ kind: 'couple', title: 'Jazz', url: 'https://example.org/jazz' }), 'https://example.org/jazz')
+  assert.equal(outingLink({ kind: 'restaurant', title: 'Celona', address: '1 Clematis St, West Palm Beach', url: 'https://celona.com', google_place_id: 'abc' }),
+    'https://www.google.com/maps/search/?api=1&query=Celona%201%20Clematis%20St%2C%20West%20Palm%20Beach&query_place_id=abc')
+  assert.equal(outingLink({ kind: 'family', title: 'Fair', place: 'Fairgrounds' }), 'https://www.google.com/maps/search/?api=1&query=Fair%20Fairgrounds')
+})

@@ -2657,11 +2657,14 @@ test('wall: a calm morning is the morning brief — today, the weekend, next mon
   await expect(paper.getByRole('heading')).toHaveText('Spirit Day, and Giselle has both pickups. And a big Saturday coming.')
   await expect(paper.getByText('THE MORNING · FRIDAY, SEPTEMBER 25')).toBeVisible()
   await expect(paper.getByRole('region', { name: 'Today · watch for' })).toContainText('Nothing’s wrong')
-  await expect(paper.getByRole('region', { name: 'This weekend' })).toContainText('Pack tonight')
+  await expect(paper.getByRole('region', { name: 'This weekend', exact: true })).toContainText('Pack tonight')
   await expect(paper.getByRole('region', { name: 'Next month' })).toContainText('Halloween · 5 weeks')
   await expect(paper.getByRole('region', { name: 'Way out' })).toContainText('Thanksgiving')
   await expect(paper.getByRole('region', { name: 'You may have forgotten' })).toContainText('The treehouse')
-  await expect(paper.getByRole('region', { name: 'Worth a try · date night' })).toContainText('Ela Curry & Cocktails')
+  // Jake, Oct 8: "on the front page include both the you may have forgotten & This Weekend (… a highlight from the Out
+  // and about)" — the best thing for the two of them this weekend, over the writer's own pick.
+  await expect(paper.getByRole('region', { name: 'This weekend · for two' })).toContainText('Sunset Jazz on the Waterfront')
+  await expect(paper.getByRole('region', { name: 'This weekend · for two' })).toContainText('Sat, Sep 26 · 7 PM · Meyer Amphitheatre')
   await expect(paper.getByText('the Taborville Classic')).toBeVisible()
   // The sky and the next thing are in the left panel.
   await expect(paper.getByRole('complementary', { name: 'Now' })).toContainText('86° by two')
@@ -2677,6 +2680,72 @@ test('wall: a calm morning is the morning brief — today, the weekend, next mon
   await page.reload()
   await expect(page.getByText(/A quiet stretch/)).toBeVisible()
   await expect(page.getByRole('article', { name: 'The morning paper' })).toHaveCount(0)
+})
+
+// Canvas 72 (Jake, Oct 8: "lets build this three page paper but please include a left right swipe to move between the
+// pages. I want to see how it will be on the pi"): the front page, Out & about, Around town — turned by a finger's swipe,
+// a mouse drag, the button at the foot or the arrow keys; turning never puts the paper away.
+test('wall: the morning paper’s three pages — swiped, dragged, the button or the keys; Out & about and Around town', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  // A finger: touch events (the Pi's Chromium sends pointercancel for a drag, so the paper reads touches).
+  const swipe = (dx) => page.evaluate((dx) => {
+    const el = document.querySelector('[aria-label="The morning paper"] > div.touch-none')
+    const at = (x) => [new Touch({ identifier: 1, target: el, clientX: x, clientY: 600 })]
+    el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: at(1300), changedTouches: at(1300) }))
+    el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, touches: at(1300 + dx / 2), changedTouches: at(1300 + dx / 2) }))
+    el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: at(1300 + dx) }))
+  }, dx)
+  await swipe(-200)
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  await expect(paper.getByRole('heading')).toHaveText('Plenty worth getting out for.')
+  await expect(paper.getByRole('region', { name: 'For the two of you' })).toContainText('Sunset Jazz on the Waterfront')
+  await expect(paper.getByRole('region', { name: 'For the family' })).toContainText('Pumpkin Fest')
+  await expect(paper.getByRole('region', { name: 'Get moving' })).toContainText('Rooftop Yoga at the Treehouse')
+  await expect(paper.getByRole('region', { name: 'New & worth it' })).toContainText('7 min away · 4.8★ from 46 · a hidden gem')
+  await page.waitForTimeout(500)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out.png')
+  // Save, and Not for us (gone at once; the Scout keeps the answer).
+  const celona = paper.getByRole('article', { name: 'Celona' })
+  await celona.getByRole('button', { name: 'Save' }).click()
+  await expect(celona.getByRole('button', { name: 'Saved ✓' })).toBeVisible()
+  await paper.getByRole('article', { name: 'Andino Spot' }).getByRole('button', { name: 'Not for us' }).click()
+  await expect(paper.getByRole('article', { name: 'Andino Spot' })).toHaveCount(0)
+  // Phone: the QR for its page.
+  await paper.getByRole('article', { name: 'Pumpkin Fest' }).getByRole('button', { name: 'Phone' }).click()
+  await expect(page.getByRole('dialog', { name: 'Pumpkin Fest on your phone' }).getByRole('img', { name: 'QR code: Pumpkin Fest' })).toBeVisible()
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await paper.getByRole('button', { name: 'Ask about it' }).click()
+  expect(await page.evaluate(() => window.__asked)).toBe('What should we do this weekend?')
+  // The button at the foot: Around town.
+  await paper.getByRole('button', { name: 'Around town ›' }).click()
+  await expect(paper.getByText('Around town · 3 of 3')).toBeVisible()
+  await expect(paper.getByRole('region', { name: 'The schools' })).toContainText('PALM BEACH PUBLIC · SEP 24')
+  await expect(paper.getByRole('region', { name: 'The county & city' })).toContainText('Referendum town hall moved')
+  await expect(paper.getByRole('region', { name: 'From the papers' })).toContainText('Nothing from the papers this week.')
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-town.png')
+  // A swipe left on the last page goes nowhere; the keys and a mouse drag go back.
+  await swipe(-200)
+  await expect(paper.getByText('Around town · 3 of 3')).toBeVisible()
+  await page.keyboard.press('ArrowLeft')
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  await page.mouse.move(900, 600)
+  await page.mouse.down()
+  await page.mouse.move(1000, 605, { steps: 4 })
+  await page.mouse.move(1100, 605, { steps: 4 })
+  await page.mouse.up()
+  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  // A Mac trackpad's two-finger swipe turns the page too — not the wall's day.
+  await page.mouse.move(1300, 600)
+  await page.mouse.wheel(400, 0)
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  // A tap on the page is just a tap: still the paper.
+  await paper.getByRole('heading').click()
+  await expect(paper).toBeVisible()
 })
 
 test('wall: the morning paper — plain words until the server’s arrive; gone after 11; previewed from the menu any time', async ({ page }) => {

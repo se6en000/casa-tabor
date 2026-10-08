@@ -21,7 +21,7 @@ export function telOf(phone: string | null): string | null {
   return `tel:${digits}`
 }
 
-function Qr({ text, label }: { text: string; label: string }) {
+export function Qr({ text, label }: { text: string; label: string }) {
   const modules = useMemo(() => qrModules(text), [text])
   const n = modules.length
   return (

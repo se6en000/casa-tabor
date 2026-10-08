@@ -326,6 +326,10 @@
       {
         "path": "src/wall/WallComingUp.tsx",
         "reason": "Family Wall: Ahead's timeline strip (canvas 64) places each dot, ✓ and week band by its date — runtime-derived geometry (left/width/top), no colors."
+      },
+      {
+        "path": "src/wall/WallPaper.tsx",
+        "reason": "Family Wall morning paper (canvas 72): the three pages slide with the finger (translateX by the drag) and to the page turned to — both known only at runtime."
       }
     ],
     "nativeControlRecreations": [
@@ -588,6 +592,10 @@
       {
         "path": "src/settings/ui.tsx",
         "reason": "Settings V2's own small kit (canvas 47): built on the Wall's tokens at two sizes (hand and wall), like the Family Wall's component set (CLAUDE.md Wall exception); the pages' buttons come from here."
+      },
+      {
+        "path": "src/wall/WallPaper.tsx",
+        "reason": "Family Wall morning paper (canvas 48a, 72): page turn, Ask about it, Put it away, and each outing's Phone / Save / Not for us — part of the Wall's own component set."
       }
     ]
   }

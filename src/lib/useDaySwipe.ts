@@ -39,6 +39,8 @@ export function useDaySwipe(ref: RefObject<HTMLElement | null>, onStep: (step: D
       e.preventDefault()
     }
     const onWheel = (e: WheelEvent) => {
+      // A page that turns its own pages (the morning paper) or drags things takes its own trackpad swipes.
+      if (e.target instanceof Element && e.target.closest('[data-no-swipe]')) return
       const r = wheelSwipe(wheel, { deltaX: e.deltaX, deltaY: e.deltaY, t: e.timeStamp })
       wheel = r.state
       if (r.step) latest.current(r.step)

@@ -1,14 +1,15 @@
 // The Scout (Jake, Oct 8): twice a week, research what's worth doing within half an hour of home — new and hidden-gem
 // restaurants, free workouts (yoga, pilates, run clubs, pickleball), evenings out for two, weekend family outings — and
 // keep only what checks out (scout.mjs). The newsletters the family subscribes to (the Palm Beach Post, the city) are
-// mined too. POST { action: 'research', force?, dry_run? } | { action: 'list' } | { action: 'feedback', id, status }.
+// mined too. POST { action: 'research', force?, dry_run? } | { action: 'list' } | { action: 'feedback', id, status }
+// | { action: 'news', force?, dry_run? } (the paper's Around town, each morning).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import {
-  AHEAD_DAYS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
-  parseCandidates, restaurantVerdict, townInReach,
+  AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
+  parseCandidates, parseTownNews, restaurantVerdict, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
 const CORS = {
@@ -64,13 +65,68 @@ Deno.serve(async (req) => {
   if (body.action === 'list') {
     const { data } = await sb.from('outings').select('*').in('status', ['new', 'offered', 'saved']).order('kind').limit(200)
     const live = (data ?? []).filter((o: { when: string | null }) => !o.when || o.when.slice(0, 10) >= today)
-    return json({ outings: live, today })
+    // The paper's third page: the latest morning's news (a day or two old at most).
+    const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date')
+      .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
+    const latest = news?.[0]?.news_date
+    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), today })
   }
 
   if (body.action === 'feedback') {
     if (!body.id || !['saved', 'not_for_us', 'been', 'new'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
     const { error } = await sb.from('outings').update({ status: body.status, updated_at: new Date().toISOString() }).eq('id', body.id)
     return error ? json({ error: error.message }, 500) : json({ ok: true })
+  }
+
+  if (body.action === 'news') {
+    if (!body.force && !body.dry_run) {
+      const { count } = await sb.from('town_news').select('id', { count: 'exact', head: true }).eq('news_date', today)
+      if (count) return json({ ok: true, skipped: 'written today' })
+    }
+    const write = async () => {
+      const [{ data: llmRow }, { data: members }, { data: mail }] = await Promise.all([
+        sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+        sb.from('family_members').select('name, role').neq('name', 'Tabor Family').order('sort_order'),
+        sb.from('gmail_processed_messages').select('gmail_message_id, from_email, subject, email_subject, email_body, received_at')
+          .gte('received_at', new Date(Date.now() - 7 * 86_400_000).toISOString()).not('email_body', 'is', null)
+          .or(NEWS_SENDERS.map((p) => `from_email.ilike.${p}`).join(',')).order('received_at', { ascending: false }).limit(40),
+      ])
+      const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+      if (!llm?.api_key) throw new Error('AI not configured')
+      // One of each (a resend, a reminder of the same thing).
+      const seen = new Set<string>()
+      const emails = ((mail ?? []) as Array<Record<string, string>>).filter((m) => {
+        const k = String(m.email_subject ?? m.subject ?? '').toLowerCase().replace(/^((re|fwd?|reminder|tomorrow)\s*[:\-]\s*)+/, '').trim()
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+      }).slice(0, 24).map((m) => ({ id: m.gmail_message_id, from: m.from_email, subject: m.email_subject ?? m.subject, received: ymdNY(new Date(m.received_at)), body: m.email_body }))
+      if (!emails.length) return { items: [], emails: 0 }
+      const family = ((members ?? []) as Array<{ name: string; role: string | null }>).map((m) => `${m.name}${m.role ? ` (${m.role})` : ''}`).join(', ')
+      const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: townNewsPrompt(emails, { today: longDay(today), family }) }] }],
+          generationConfig: { maxOutputTokens: 3000, temperature: 0.2, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      const text = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+      const refs = new Map(emails.map((e) => [e.id, { received: e.received, from: String(e.from ?? '') }]))
+      const items = parseTownNews(text, { refs, today })
+      if (body.dry_run || !items.length) return { items, emails: emails.length }
+      await sb.from('town_news').delete().eq('news_date', today)
+      const { error } = await sb.from('town_news').insert(items)
+      if (error) throw new Error(error.message)
+      // A week back is plenty.
+      await sb.from('town_news').delete().lt('news_date', addDays(today, -7))
+      return { items: items.length, emails: emails.length }
+    }
+    if (body.dry_run) {
+      try { return json(await write()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+    }
+    // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+    EdgeRuntime.waitUntil(write().catch((e) => console.error('[scout news]', e)))
+    return json({ ok: true, started: true }, 202)
   }
 
   if (body.action !== 'research') return json({ error: 'Unknown action' }, 400)

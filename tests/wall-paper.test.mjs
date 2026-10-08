@@ -144,3 +144,22 @@ test('the paper holds the morning from 6: only a leave within 15 minutes, someth
   assert.equal(home(9, 45), false, 'the call is on')
   assert.equal(home(10, 5), true, 'the call is over')
 })
+
+// Canvas 72 (Jake, Oct 8: "please include a left right swipe to move between the pages … I want to see how it will be
+// on the pi"): a sideways swipe turns the page; a tap, a slow wander or a mostly-up-and-down drag doesn't.
+test('the paper turns on a sideways swipe: left for the next page, right for the one before', async () => {
+  const { paperSwipe, paperDrag } = await import('../src/wall/paper.ts')
+  const s = { x: 1000, y: 500, t: 0 }
+  assert.equal(paperSwipe(s, { x: 880, y: 520, t: 400 }), 1) // left 120: next
+  assert.equal(paperSwipe(s, { x: 1100, y: 490, t: 400 }), -1) // right 100: back
+  assert.equal(paperSwipe(s, { x: 1040, y: 500, t: 400 }), 0) // a nudge
+  assert.equal(paperSwipe(s, { x: 950, y: 505, t: 150 }), 1) // a quick flick
+  assert.equal(paperSwipe(s, { x: 900, y: 650, t: 300 }), 0) // mostly down
+  assert.equal(paperSwipe(s, { x: 1000, y: 500, t: 80 }), 0) // a tap
+  // It follows the hand once it's clearly sideways; at the first and last page it gives a little, not all the way.
+  assert.equal(paperDrag(5, 0, 1, 3), 0)
+  assert.equal(paperDrag(-60, 10, 1, 3), -60)
+  assert.equal(paperDrag(-60, 80, 1, 3), 0)
+  assert.equal(paperDrag(90, 0, 0, 3), 30)
+  assert.equal(paperDrag(-90, 0, 2, 3), -30)
+})

@@ -229,25 +229,10 @@ const evening = (o) => {
  * `busy`: YYYY-MM-DD → true when that evening is spoken for.
  */
 export function scoutPicks(rows, { today, busy = {}, n = 3 }) {
-  const weekday = (ymd) => new Date(`${ymd}T12:00:00Z`).getUTCDay()
   const rested = (o) => !o.offered_on || o.offered_on <= addDays(today, -REST_DAYS)
   const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && rested(o)
     && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 9))))
-  const score = (o) => {
-    let s = { couple: 30, fitness: 28, restaurant: 26, family: 12 }[o.kind] ?? 0
-    const day = o.when?.slice(0, 10)
-    if (day) {
-      s += 10 - Math.min(9, Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000))
-      if (evening(o) && busy[day]) s -= 25
-      if (o.kind === 'family' && [0, 6].includes(weekday(day))) s += 14
-    }
-    if (o.status === 'saved') s += 6
-    if (o.gem) s += 4
-    if (o.source === 'email') s += 3
-    // Its own page read beats a search's word for it.
-    if (/confirmed by a search/.test(o.verify_note ?? '')) s -= 5
-    return s
-  }
+  const score = (o) => scoutScore(o, today, busy)
   const out = []
   const kinds = new Set()
   for (const o of live.sort((a, b) => score(b) - score(a))) {
@@ -258,6 +243,147 @@ export function scoutPicks(rows, { today, busy = {}, n = 3 }) {
     kinds.add(o.kind)
   }
   return out
+}
+
+/** How good a pick is today (scoutPicks, outAndAbout): soon, free that evening, the kinds for the two of them first. */
+export function scoutScore(o, today, busy = {}) {
+  const weekday = (ymd) => new Date(`${ymd}T12:00:00Z`).getUTCDay()
+  let s = { couple: 30, fitness: 28, restaurant: 26, family: 12 }[o.kind] ?? 0
+  const day = o.when?.slice(0, 10)
+  if (day) {
+    s += 10 - Math.min(9, Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000))
+    if (evening(o) && busy[day]) s -= 25
+    if (o.kind === 'family' && [0, 6].includes(weekday(day))) s += 14
+  }
+  if (o.status === 'saved') s += 6
+  if (o.gem) s += 4
+  if (o.source === 'email') s += 3
+  // Its own page read beats a search's word for it.
+  if (/confirmed by a search/.test(o.verify_note ?? '')) s -= 5
+  return s
+}
+
+/**
+ * The paper's second page, Out & about (canvas 72B): the two best of each kind — for the two of them, for the family,
+ * to get moving, new spots — on now or in the next two weeks, never one said no to. Offered recently is fine here (it's
+ * a list to browse, not the day's surprise).
+ */
+export function outAndAbout(rows, { today, busy = {}, each = 2 }) {
+  const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 14))))
+  const best = (kind) => live.filter((o) => o.kind === kind).sort((a, b) => scoutScore(b, today, busy) - scoutScore(a, today, busy)).slice(0, each)
+  return { couple: best('couple'), family: best('family'), fitness: best('fitness'), restaurant: best('restaurant') }
+}
+
+/**
+ * The front page's "This weekend" (Jake, Oct 8: "pick a couples thing with a high percentage of impact — a highlight from
+ * the Out and about"): the best thing for the two of them from Friday to Sunday — the coming weekend, or the rest of this
+ * one — a dated one before a weekly one; with nothing on the weekend, the best of the week, called that. Null with none.
+ */
+export function weekendHighlight(rows, { today, busy = {} }) {
+  const couple = outAndAbout(rows, { today, busy, each: 99 }).couple
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay()
+  const friday = addDays(today, dow === 0 ? -2 : dow === 6 ? -1 : 5 - dow)
+  const days = [0, 1, 2].map((i) => addDays(friday, i)).filter((d) => d >= today)
+  const names = days.map((d) => DAYS[new Date(`${d}T12:00:00Z`).getUTCDay()])
+  const onWeekend = (o) => (o.when ? days.includes(o.when.slice(0, 10)) : names.some((n) => new RegExp(`\\b${n}`, 'i').test(o.recurring ?? '')) || /weekend/i.test(o.recurring ?? ''))
+  const best = (list) => [...list].sort((a, b) => scoutScore(b, today, busy) - scoutScore(a, today, busy) || Number(Boolean(b.when)) - Number(Boolean(a.when)))[0]
+  const weekend = couple.filter(onWeekend)
+  if (weekend.length) return { label: 'This weekend', outing: best(weekend) }
+  const week = couple.filter((o) => !o.when || o.when.slice(0, 10) <= addDays(today, 7))
+  return week.length ? { label: 'This week', outing: best(week) } : null
+}
+
+/** An outing's when, as the paper says it: "Fri, Oct 16 · 6 PM", or its weekly line; null for a place (no when). */
+export function outingWhen(o) {
+  if (o.when) {
+    const d = new Date(`${o.when.slice(0, 10)}T12:00:00Z`)
+    const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    const m = /(\d{2}):(\d{2})$/.exec(o.when.length > 10 ? o.when : '')
+    if (!m) return day
+    const h = Number(m[1])
+    return `${day} · ${h % 12 || 12}${m[2] === '00' ? '' : `:${m[2]}`} ${h < 12 ? 'AM' : 'PM'}`
+  }
+  return o.recurring ?? null
+}
+
+/** Where "Phone" on the paper goes: a restaurant on Google Maps (directions, hours, the menu); an event, its own page. */
+export function outingLink(o) {
+  if (o.kind !== 'restaurant' && o.url) return o.url
+  const q = encodeURIComponent([o.title, o.address ?? o.place].filter(Boolean).join(' '))
+  return `https://www.google.com/maps/search/?api=1&query=${q}${o.google_place_id ? `&query_place_id=${encodeURIComponent(o.google_place_id)}` : ''}`
+}
+
+// Around town (canvas 72C; Jake, Oct 8: "family news with outside news"): the week's emails from the schools, the city
+// and county and the local papers, boiled down to what reaches this family. Each line traces to a real email.
+export const NEWS_SECTIONS = ['schools', 'city', 'papers']
+/** Who writes the news (ilike patterns on the sender): the schools, the city and county, the papers. */
+export const NEWS_SENDERS = ['%palmbeachschools%', '%schoolmessenger%', '%parentsquare%', '%k12.fl%', '%wpb.org%', '%govdelivery%', '%pbcgov%', '%pbc.gov%', '%palmbeachpost%', '%pbpost%', '%thepalmbeaches%', '%palmbeachdailynews%', '%palmbeachillustrated%', '%palmbeachculture%']
+
+const SENDER_SECTIONS = [
+  ['schools', /palmbeachschools|schoolmessenger|parentsquare|k12\.fl/i],
+  ['city', /wpb\.org|govdelivery|pbcgov|pbc\.gov/i],
+  ['papers', /palmbeachpost|pbpost|thepalmbeaches|palmbeachdailynews|palmbeachillustrated|palmbeachculture/i],
+]
+const senderSection = (from) => SENDER_SECTIONS.find(([, re]) => re.test(from ?? ''))?.[0] ?? null
+
+/** True when every date a line names ("October 6", "Oct 6, 2026") is before today — it's over; no dates, false. */
+function allPast(text, today) {
+  const year = Number(today.slice(0, 4))
+  const dates = [...String(text).matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?/gi)]
+    .map((m) => {
+      const md = `${String(MONTHS.findIndex((x) => x.startsWith(m[1].toLowerCase())) + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`
+      // No year and months behind ("October 3 to April 25"): next year's.
+      return m[3] ? `${m[3]}-${md}` : `${year}-${md}` < addDays(today, -90) ? `${year + 1}-${md}` : `${year}-${md}`
+    })
+  return dates.length > 0 && dates.every((d) => d < today)
+}
+
+export function townNewsPrompt(emails, { today, family }) {
+  const list = emails.map((e) => `--- [${e.id}] from ${String(e.from ?? '').slice(0, 100)} · "${String(e.subject ?? '').slice(0, 140)}" · received ${e.received}
+${String(e.body ?? '').replace(/\s+/g, ' ').slice(0, 4000)}`).join('\n\n')
+  return `You write the "Around town" page of a family's morning paper, on the kitchen wall. Today is ${today}. The family: ${family}. They live in West Palm Beach, Florida.
+Below are the last week's emails from the kids' schools, the city and county, and the local papers they subscribe to. Pick only the news that reaches this family and is still ahead or still true (anything dated before today is over — leave it out): a change at their school, a date to know, something the kids can do, a city or county decision that touches them, what's on in town. Skip fundraising asks and sales, things already past, other schools' and grades' news unless it matters to them, account and payment notices, and anything private (grades, health, money).
+Sections: "schools" (their schools and the school district), "city" (the city and county), "papers" (the local papers and magazines). Up to four in each, most useful first; fewer is fine.
+Each: "headline" — eight words at most, plain; "line" — one sentence, under 30 words, why it matters to them, with the date if there is one; "source" — the sender in plain words ("Palm Beach Public", "City of West Palm Beach", "Palm Beach Post"); "ref" — the email's id exactly as in the brackets.
+Answer with only a JSON array: [{"section": "schools" | "city" | "papers", "headline": "...", "line": "...", "source": "...", "ref": "..."}]
+
+${list}`
+}
+
+/** The writer's answer, kept only where it names a real email, a known section, and isn't said twice; four a section. */
+export function parseTownNews(text, { refs, today }) {
+  const s = String(text ?? '')
+  const start = s.indexOf('[')
+  const end = s.lastIndexOf(']')
+  if (start < 0 || end <= start) return []
+  let arr
+  try { arr = JSON.parse(s.slice(start, end + 1)) } catch { return [] }
+  if (!Array.isArray(arr)) return []
+  const str = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null)
+  const seen = new Set()
+  const count = {}
+  const out = []
+  for (const o of arr) {
+    if (!o || typeof o !== 'object' || !NEWS_SECTIONS.includes(o.section)) continue
+    const headline = str(o.headline, 100)
+    const line = str(o.line, 260) ?? ''
+    const ref = refs.get(String(o.ref ?? ''))
+    if (!headline || !ref || seen.has(headline.toLowerCase()) || allPast(`${headline} ${line}`, today)) continue
+    // Who sent it decides where it goes (a school's note on a concert is the school's news); the writer's word otherwise.
+    const section = senderSection(ref.from) ?? o.section
+    if ((count[section] ?? 0) >= 4) continue
+    seen.add(headline.toLowerCase())
+    out.push({ news_date: today, section, headline, line, source: str(o.source, 60) ?? ref.from, source_date: ref.received, source_ref: String(o.ref), rank: count[section] ?? 0 })
+    count[section] = (count[section] ?? 0) + 1
+  }
+  return out
+}
+
+/** The page: each section's lines in the writer's order. */
+export function townNewsPage(rows) {
+  const page = Object.fromEntries(NEWS_SECTIONS.map((k) => [k, []]))
+  for (const r of [...(rows ?? [])].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))) page[r.section]?.push(r)
+  return page
 }
 
 /** The paper's notes on them: verified facts only, each with its id, so the writer names one and it's marked offered. */

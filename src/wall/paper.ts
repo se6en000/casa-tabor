@@ -248,3 +248,25 @@ export function fallbackBrief(facts: PaperFacts, more: BriefFacts | null): Paper
     aside: null,
   }
 }
+
+type Touchpoint = { x: number; y: number; t: number }
+
+/**
+ * The paper's pages turn sideways (canvas 72; Jake, Oct 8: "a left right swipe to move between the pages"): 1 for the
+ * next page (a swipe left), -1 for the one before, 0 for a tap or a mostly-up-and-down drag. 80 px, or a quick flick.
+ */
+export function paperSwipe(start: Touchpoint, end: Touchpoint): -1 | 0 | 1 {
+  const dx = end.x - start.x
+  const dy = Math.abs(end.y - start.y)
+  const far = Math.abs(dx) >= 80 && Math.abs(dx) > dy * 1.5
+  const flick = Math.abs(dx) >= 40 && end.t - start.t <= 250 && Math.abs(dx) > dy * 2
+  if (!far && !flick) return 0
+  return dx < 0 ? 1 : -1
+}
+
+/** How far the page follows the hand: nothing until it's clearly sideways; a third past the first or last page. */
+export function paperDrag(dx: number, dy: number, page: number, pages: number): number {
+  if (Math.abs(dx) <= 8 || Math.abs(dx) <= Math.abs(dy)) return 0
+  const pastEdge = (page === 0 && dx > 0) || (page === pages - 1 && dx < 0)
+  return pastEdge ? Math.round(dx / 3) : dx
+}

@@ -22,6 +22,7 @@ import { surpriseSafeChecklist } from './surprise'
 import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
 import { briefFacts, fallbackBrief, fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
 import WallPaper from './WallPaper'
+import type { ScoutPaper } from './useScout'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
@@ -133,6 +134,8 @@ export interface WallViewProps {
   tickChore?: (choreId: string, date: Date, done: boolean) => Promise<void>
   /** The morning paper's words for today (canvas 48a), once the server has written them; until then, plain ones. */
   paper?: PaperWords | null
+  /** The paper's Out & about and Around town (canvas 72). */
+  scout?: ScoutPaper | null
 }
 
 const NO_TICKS: ReadonlySet<string> = new Set()
@@ -173,7 +176,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null, scout = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
@@ -716,7 +719,8 @@ export default function WallView(props: WallViewProps) {
         next={nextView}
         nextPigment={nextView?.driverId ? pigments.get(nextView.driverId) ?? null : null}
         counts={counts}
-        onAsk={onAsk ? () => onAsk('Tell me more about today') : undefined}
+        scout={scout}
+        onAsk={onAsk ? (say) => onAsk(say) : undefined}
         onPutAway={() => {
           const day = paperDate(now)
           try { localStorage.setItem(PAPER_PUT_AWAY_KEY, day) } catch { /* private mode: for this visit only */ }

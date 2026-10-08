@@ -27,6 +27,8 @@ import { WallSpeechContext } from './speechContext'
 import WallGroceriesFixture from './WallGroceriesFixture'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import type { HandledItem } from './comingUp'
+import type { ScoutPaper } from './useScout'
+import type { Outing, TownNews } from '../../supabase/functions/_shared/scout.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members as baseMembers, routines as schoolRoutines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
@@ -57,6 +59,25 @@ const PAPER_WORDS = {
     aside: 'Two games at 12:30 in one park: the Taborville Classic.',
   },
 }
+// ?paper=1 also brings the paper's Out & about and Around town (canvas 72), as the Scout's list returns them.
+const OUTINGS = [
+  { id: 'o1', kind: 'couple', title: 'Sunset Jazz on the Waterfront', inDays: 1, at: '19:00', recurring: null, place: 'Meyer Amphitheatre', why: 'A free evening concert by the water — Saturday evening looks free.', free: true },
+  { id: 'o2', kind: 'couple', title: 'Art After Dark', inDays: null, at: null, recurring: 'Thursdays 5–9 PM', place: 'Norton Museum', why: 'The museum after hours, with music and a bar.', free: false },
+  { id: 'o3', kind: 'family', title: 'Pumpkin Fest', inDays: 8, at: '11:00', recurring: null, place: 'Harbourside Place', why: 'Pumpkin patch, live music and trick-or-treating, for a good cause.', free: true },
+  { id: 'o4', kind: 'family', title: 'Clematis by Fright!', inDays: 13, at: '18:00', recurring: null, place: 'the Waterfront', why: 'Hayrides, games and trick-or-treating downtown.', free: true },
+  { id: 'o5', kind: 'fitness', title: 'Rooftop Yoga at the Treehouse', inDays: null, at: null, recurring: 'Thursdays 6:30 PM', place: 'The Canopy, 6th floor', why: 'An hour of yoga with the city below.', free: false },
+  { id: 'o6', kind: 'fitness', title: 'Pickleball open play', inDays: null, at: null, recurring: 'Mon, Wed, Fri 8:30 AM', place: 'Mandel Rec Center', why: 'First come, first served — bring a paddle.', free: true },
+  { id: 'o7', kind: 'restaurant', title: 'Celona', inDays: null, at: null, recurring: null, place: 'Celona', why: 'Restaurant & gin lounge — date-night quiet.', free: null, drive_min: 7, rating: 4.8, rating_count: 46, gem: true },
+  { id: 'o8', kind: 'restaurant', title: 'Andino Spot', inDays: null, at: null, recurring: null, place: 'Andino Spot', why: 'Colombian — arepas worth a Saturday lunch.', free: null, drive_min: 4, rating: 5, rating_count: 134, gem: false },
+] as const
+const TOWN_NEWS = [
+  { section: 'schools', headline: 'Free flu shots at school, Oct 28', line: 'Palm Beach Public’s clinic — Emme and Owen can get theirs there; the form is in the email.', source: 'Palm Beach Public', source_date: '2026-09-24', rank: 0 },
+  { section: 'schools', headline: 'Detention days change at Bak', line: 'From December 1, after-school detentions only on the 1st and 3rd Wednesdays.', source: 'Bak Middle', source_date: '2026-09-22', rank: 1 },
+  { section: 'schools', headline: 'PTO family portraits, Oct 16–18', line: 'Sign-up opens this week; the kids’ Spirit Day is Oct 30.', source: 'Palm Beach Public', source_date: '2026-09-21', rank: 2 },
+  { section: 'city', headline: 'Referendum town hall moved', line: 'The District 7 town hall on the 2026 school referendum has a new date — worth hearing before November.', source: 'School District', source_date: '2026-09-23', rank: 0 },
+  { section: 'city', headline: 'What’s on downtown this month', line: 'Clematis by Night every Thursday; Clematis by Fright on the 29th; the GreenMarket opens its season.', source: 'City of West Palm Beach', source_date: '2026-09-20', rank: 1 },
+] as const
+
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 seedKnown(queryClient)
@@ -255,6 +276,14 @@ export default function WallFixturePage() {
     </ProfileSessionContext.Provider>
   ) : null
   const ymd = (offset: number) => { const d = new Date(day); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const [outings, setOutings] = useState<Outing[]>(() => OUTINGS.map(({ inDays, at, ...o }) => ({
+    address: null, url: `https://example.org/${o.id}`, drive_min: null, rating: null, rating_count: null, gem: false, status: 'new' as const, ...o,
+    when: inDays == null ? null : `${ymd(inDays)} ${at}`,
+  } as Outing)))
+  const scout: ScoutPaper | null = PAPER ? {
+    outings, news: TOWN_NEWS as unknown as TownNews[], today: ymd(0),
+    answer: (id, status) => setOutings((list) => (status === 'not_for_us' ? list.filter((o) => o.id !== id) : list.map((o) => (o.id === id ? { ...o, status } : o)))),
+  } : null
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => ({ live: COMING_UP_LIVE, projects: COMING_UP_PROJECTS }[new URLSearchParams(window.location.search).get('comingUp') ?? ''] ?? COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const { todos, setProjects, setTodoList } = useFixtureTodos({ stepEvent: STEP_EVENT, twoInside: new URLSearchParams(window.location.search).get('twoInside') === '1', closedInside: new URLSearchParams(window.location.search).get('closedInside') === '1' })
   // A season started (canvas 11c): this year's project from the same starter plan the server uses.
@@ -313,7 +342,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
-      <WallView paper={PAPER ? PAPER_WORDS : null} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView paper={PAPER ? PAPER_WORDS : null} scout={scout} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),
