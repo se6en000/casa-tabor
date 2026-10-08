@@ -7,7 +7,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const VALID_SOURCES = new Set(['window.onerror', 'unhandledrejection', 'react-error-boundary'])
+const VALID_SOURCES = new Set(['window.onerror', 'unhandledrejection', 'react-error-boundary', 'react-query'])
 const MAX_MESSAGE_LEN = 2000
 const MAX_STACK_LEN = 8000
 

@@ -17,7 +17,7 @@ const MAX_REPORTS_PER_SESSION = 20
 const seenMessages = new Set<string>()
 let reportCount = 0
 
-export type ClientErrorSource = 'window.onerror' | 'unhandledrejection' | 'react-error-boundary'
+export type ClientErrorSource = 'window.onerror' | 'unhandledrejection' | 'react-error-boundary' | 'react-query'
 
 export function reportClientError(error: unknown, source: ClientErrorSource): void {
   try {

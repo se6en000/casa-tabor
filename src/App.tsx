@@ -3,7 +3,7 @@ import { CHUNK_RELOAD_GAP_MS, isChunkLoadError, lazyWithReload } from './utils/l
 import { BrowserRouter, Navigate, useLocation } from 'react-router-dom'
 import { homeRedirect, isWideScreen, phoneRedirect, readWallHomeFlag, wallHomeFlagFromUrl, writeWallHomeFlag } from './wall/kioskHome'
 import { useReturnToWall } from './wall/useReturnToWall'
-import { QueryClient, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, useQueryClient, QueryCache } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import {
   eventsCachePersister,
@@ -81,6 +81,14 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 }
 
 const queryClient = new QueryClient({
+  // A list that can't refresh shows its last copy without a word (Jake, Oct 8: the Mac's To do stuck hours behind the
+  // wall while the calendar kept up): every failed fetch is reported, with which list it was, so it can be found.
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      const message = error instanceof Error ? error.message : String(error)
+      reportClientError(new Error(`${JSON.stringify(query.queryKey).slice(0, 80)} — ${message}`), 'react-query')
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,
