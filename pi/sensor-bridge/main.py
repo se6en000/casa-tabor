@@ -1465,6 +1465,33 @@ def _limit(c: tuple[float, float, float]) -> tuple[float, float, float]:
     peak = max(c)
     return _scale(c, LED_MAX_BRIGHT / peak) if peak > LED_MAX_BRIGHT else c
 
+# The strip on the back of the monitor (Jake, Oct 7): up the left side, across the top, down the right side.
+LED_SIDE = 17  # lights up each side (Jake: "about 17 led lights up the sides and the rest go across": 17 + 26 + 17)
+
+def _led_height(i: int) -> float:
+    """How high a light sits on the monitor, 0 at the bottom of a side to 1 across the top."""
+    if i < LED_SIDE:
+        return i / max(LED_SIDE - 1, 1)
+    if i >= NUM_LEDS - LED_SIDE:
+        return (NUM_LEDS - 1 - i) / max(LED_SIDE - 1, 1)
+    return 1.0
+
+def _hash01(n: float) -> float:
+    """A fixed pseudo-random number in [0, 1) for n (the candle's noise; pure, so frames can be checked off the Pi)."""
+    x = math.sin(n * 12.9898 + 78.233) * 43758.5453
+    return x - math.floor(x)
+
+def _smooth_noise(x: float) -> float:
+    """Smooth value noise in [0, 1): random points joined by eased curves — wanders, never repeats."""
+    k = math.floor(x)
+    f = x - k
+    u = f * f * (3.0 - 2.0 * f)
+    return _hash01(k) * (1.0 - u) + _hash01(k + 1.0) * u
+
+def _wobble(x: float, seed: int) -> float:
+    """Smooth noise centred on 0, in [-1, 1), one stream per seed."""
+    return 2.0 * _smooth_noise(x + seed * 101.7) - 1.0
+
 def _frame_color(mode: str, i: int, t: float, voice_env: float, night: bool) -> tuple[float, float, float]:
     """One LED's colour for a mode at time t (seconds). Pure, so it can be checked off the Pi."""
     return _limit(_frame_color_raw(mode, i, t, voice_env, night))
@@ -1505,9 +1532,23 @@ def _frame_color_raw(mode: str, i: int, t: float, voice_env: float, night: bool)
         pulse = 0.5 + 0.5 * math.sin((2 * math.pi * t) / 3.0)
         return _tone(base, 0.55 + 0.10 * pulse, night)
     if mode == "glow":
-        # Night idle: a faint ember with a slow, uneven flicker.
-        flicker = 0.85 + 0.10 * math.sin(t * 1.3 + i * 0.7) + 0.05 * math.sin(t * 3.1 + i * 1.9)
-        return _tone(EMBER, 0.35 * flicker, True)
+        # Night idle: a candle (Jake, Oct 7: "something that is a little more random like a candle flame"). The strip
+        # runs up the monitor's left side, across the top and down the right ("only 3 sides have the leds"), so it
+        # burns like one: brightest across the top, a little dimmer down the sides; each flicker rises up both sides;
+        # the hot spot sways along the top; now and then a gust makes it dip and flutter; deeper orange as it dips.
+        h = _led_height(i)
+        lag = h * 0.35  # a flicker starts at the bottom and reaches the top a beat later
+        tt = t - lag
+        flame = 0.78 + 0.16 * _wobble(tt * 0.45, 1) + 0.10 * _wobble(tt * 2.1, 2) + 0.05 * _wobble(tt * 7.3, 3)
+        gust = max(0.0, _smooth_noise(tt * 0.32 + 17.0) - 0.74) / 0.26
+        if gust > 0.0:
+            flame -= 0.42 * gust * (0.6 + 0.4 * math.sin(tt * 17.0 + 3.0 * _smooth_noise(tt * 4.0 + 5.0)))
+        top_mid = LED_SIDE + (NUM_LEDS - 2 * LED_SIDE - 1) / 2.0
+        hot = top_mid + (NUM_LEDS - 2 * LED_SIDE) * 0.40 * _wobble(t * 0.18, 4)
+        near = math.exp(-(((i - hot) / (NUM_LEDS * 0.22)) ** 2))
+        level = max(0.08, flame) * (0.62 + 0.38 * h) * (0.85 + 0.15 * near) * (1.0 + 0.04 * _wobble(t * 5.0 + i * 0.83, 5))
+        warm = _add(_scale(EMBER, 1.0 - near * 0.6), _scale(EMBER_GLINT, near * 0.6))
+        return _tone(tuple(int(round(c)) for c in warm), 0.44 * level, True)
     return (0.0, 0.0, 0.0)
 
 def _comet_loop():
