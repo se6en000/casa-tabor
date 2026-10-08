@@ -339,6 +339,9 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const notes = notesKept ?? notesOf(event.description)
   const source = notesSource(event.description)
   const typingNotes = keyboard === 'notes'
+  // On a computer the notes are one text box right there (Jake, Oct 7: "why cant i just type into the edit box, theres
+  // two boxes?"); the wall's keys, and the room made for them, are the kiosk's.
+  const notesOnKeys = typingNotes && !computer
   const saveNotes = async () => {
     const text = notesText.trim()
     setKeyboard(null)
@@ -385,7 +388,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
             <People event={event} trip={trip} nameOf={nameOf} pigmentOf={pigmentOf} />
 
-            {projectStep && !typingNotes && (
+            {projectStep && !notesOnKeys && (
               <div className="flex flex-col gap-[12px] rounded-[22px] border-[1.5px] border-solid border-wall-brass px-[24px] py-[18px]">
                 <div className={`${eyebrow} text-wall-brass-ink`}>A PROJECT STEP</div>
                 <div className="text-wall-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
@@ -398,7 +401,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               </div>
             )}
 
-            {typingNotes ? null : trip ? (
+            {notesOnKeys ? null : trip ? (
               <div className="flex flex-col gap-[12px]">
                 <div className={`${eyebrow} text-wall-ink-2`}>THE TRIP</div>
                 <div className="grid grid-cols-4 text-wall-detail text-wall-ink-2">
@@ -429,7 +432,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               )
             )}
 
-            {(own.length > 0 || onAddItem) && !typingNotes && (
+            {(own.length > 0 || onAddItem) && !notesOnKeys && (
               <div className="flex flex-col">
                 <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>
                   {own.length ? `GET & PACK · ${own.filter((i) => i.checked).length} OF ${own.length}` : 'GET & PACK'}
@@ -469,7 +472,14 @@ export default function WallEventSheet(props: WallEventSheetProps) {
             {!isNew && (notes || onSaveNotes) && (
               <div className="flex min-h-0 shrink flex-col overflow-hidden">
                 <div className={`${eyebrow} mb-[6px] text-wall-ink-2`}>NOTES</div>
-                {typingNotes ? (
+                {typingNotes && computer ? (
+                  <textarea aria-label="Notes" autoFocus rows={6} value={notesText}
+                    onChange={(e) => { touch(); setNotesText(e.target.value) }}
+                    onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur() } }}
+                    onBlur={() => void saveNotes()}
+                    className="min-h-[200px] w-full resize-none rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px] py-[14px] font-body text-wall-body leading-snug text-wall-ink outline-none" />
+                ) : typingNotes ? (
                   <div className="flex max-h-[330px] flex-col justify-end overflow-hidden rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px] py-[14px]">
                     <div className="whitespace-pre-wrap break-words text-wall-body leading-snug text-wall-ink">
                       {notesText}
@@ -883,7 +893,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
         )}
       </section>
 
-      {keyboard && (
+      {keyboard && !(keyboard === 'notes' && computer) && (
         <WallKeyboard
           key={keyboard}
           value={keyboardValue}

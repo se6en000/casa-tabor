@@ -292,14 +292,20 @@ export function handledFromState(stateRows, today) {
 const GENERIC = new Set([...STOP, 'birthday', 'anniversary', 'appointment', 'appt', 'due', 'event', 'meeting', 'reminder', 'text', 'call', 'pick', 'get', 'happy', 'message', 'send', 'order', 'buy', 'gift', 'make', 'sure', 'from', 'her', 'his', 'their'])
 const markWords = (t) => String(t ?? '').toLowerCase().replace(/['’]s\b/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !GENERIC.has(w))
 
-/** Whether an event or reminder is about this line: a birthday's or anniversary's person by name; else a word in common. */
+/**
+ * Whether an event or reminder is about this line: a birthday's or anniversary's person by name; else every word of
+ * its name (two in three for a long one) — "Christmas cards" is not Christmas Day (live, Oct 7).
+ */
 function about(item, title) {
   const theirs = new Set(markWords(title))
   if (item.kind === 'birthday' || item.kind === 'anniversary') {
     const who = markWords(item.title)[0]
     return Boolean(who && theirs.has(who))
   }
-  return markWords(item.title).some((w) => theirs.has(w))
+  const mine = [...new Set(markWords(item.title))]
+  if (!mine.length) return false
+  const hits = mine.filter((w) => theirs.has(w)).length
+  return mine.length <= 3 ? hits === mine.length : hits >= Math.ceil((mine.length * 2) / 3)
 }
 
 /**
@@ -313,7 +319,8 @@ export function aheadMarks(items, events) {
     const onCalendar = Boolean(own) || evs.some((e) => e.event_type !== 'reminder' && localDate(e) === item.date && about(item, e.title))
     const from = addDays(item.date, -30)
     const reminder = evs
-      .filter((e) => e.event_type === 'reminder' && e.has_due_date !== false && localDate(e) >= from && localDate(e) <= item.date && about(item, e.title))
+      // Never itself (a reminder on the list isn't "set" for itself).
+      .filter((e) => e.id !== item.key && e.event_type === 'reminder' && e.has_due_date !== false && localDate(e) >= from && localDate(e) <= item.date && about(item, e.title))
       .sort((a, b) => String(b.start_time).localeCompare(String(a.start_time)))[0]
     return { ...item, onCalendar, reminder: reminder ? { id: reminder.id, title: String(reminder.title), at: String(reminder.start_time), allDay: reminder.all_day === true } : null }
   })

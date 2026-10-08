@@ -378,4 +378,8 @@ test('Ahead marks what is already set: on the calendar, and a reminder for it', 
   assert.equal(hw.reminder, null)
   // A reminder long before (two months) isn't for this one.
   assert.equal(liv.reminder, null)
+  // Live, Oct 7: "Christmas cards" isn't Christmas Day; a reminder on the list isn't set for itself.
+  const xmas = [{ id: 'x', title: 'Christmas Day', start_time: '2026-12-25T05:00:00Z', end_time: '2026-12-26T05:00:00Z', all_day: true, event_type: 'event' }]
+  assert.equal(aheadMarks([{ key: 'season:cards:2026', kind: 'season', title: 'Christmas cards', date: '2026-12-25' }], xmas)[0].onCalendar, false)
+  assert.equal(aheadMarks([{ key: 'r1', kind: 'reminder', title: 'Text Heather a happy birthday message', date: '2026-10-08' }], events)[0].reminder, null)
 })

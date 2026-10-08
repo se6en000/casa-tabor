@@ -109,6 +109,23 @@ test('wall: an event’s notes — the email’s specifics and its sender; a tap
   await expect(sheet.getByText('From Coach Rivera’s email · Sep 22')).toBeVisible()
 })
 
+// Jake, Oct 7 (on his Mac): "why cant i just type into the edit box, theres two boxes?" — on a computer, one box.
+test('wall: on a computer, the notes are one text box in place — Enter for a new line, Esc keeps them', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00&keyboard=device')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  const sheet = wall.getByRole('region', { name: 'Softball: Huskies @ RPB Cascade details' })
+  await sheet.getByRole('button', { name: /^Notes: / }).click()
+  await expect(page.getByRole('textbox')).toHaveCount(1)
+  await expect(sheet.getByText('THE TRIP')).toBeVisible()
+  const box = sheet.getByRole('textbox', { name: 'Notes' })
+  await box.press('Enter')
+  await box.pressSequentially('Folding chairs')
+  await expect(page).toHaveScreenshot('event-notes-computer.png')
+  await box.press('Escape')
+  await expect(sheet.getByRole('button', { name: /^Notes: [\s\S]*kids free\)\sFolding chairs$/ })).toBeVisible()
+})
+
 test('wall: a reminder with no notes offers “Add a note”', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
   const wall = page.getByTestId('wall-fixture')

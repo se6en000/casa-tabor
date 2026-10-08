@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import WallDatePicker from './WallDatePicker'
 import WallKeyboard from './WallKeyboard'
+import { deviceKeyboardHere } from './keyboardMode'
 import { timeOf, type TodoAction, type TodoItem } from './todos'
 
 // Editing one to-do by touch (P3.22 step 5; Jake 2026-09-28: "small reminders I should be able to
@@ -36,6 +37,8 @@ export default function WallTodoSheet({ item, now, onAct, onClose, onSaveNotes }
   const [busy, setBusy] = useState(false)
   // Notes (canvas 65): what's typed, and what was saved until the list catches up.
   const [notesTyping, setNotesTyping] = useState(false)
+  // On a computer: one text box right there, no wall keys (Jake, Oct 7: "theres two boxes?").
+  const [computer] = useState(deviceKeyboardHere)
   const [notesText, setNotesText] = useState('')
   const [notesKept, setNotesKept] = useState<string | null>(null)
   const notes = notesKept ?? item.notes ?? ''
@@ -112,7 +115,14 @@ export default function WallTodoSheet({ item, now, onAct, onClose, onSaveNotes }
         {(notes || onSaveNotes) && (
           <div className="flex min-h-0 shrink flex-col overflow-hidden">
             <span className="mb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">NOTES</span>
-            {notesTyping ? (
+            {notesTyping && computer ? (
+              <textarea aria-label="Notes" autoFocus rows={6} value={notesText}
+                    onChange={(e) => { setNotesText(e.target.value) }}
+                    onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur() } }}
+                    onBlur={() => void saveNotes()}
+                    className="min-h-[200px] w-full resize-none rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-ground px-[20px] py-[14px] font-body text-wall-body leading-snug text-wall-ink outline-none" />
+            ) : notesTyping ? (
               <div className="flex max-h-[300px] flex-col justify-end overflow-hidden rounded-[14px] border-[3px] border-solid border-wall-brass-ink bg-wall-on-pigment px-[20px] py-[14px]">
                 <div className="whitespace-pre-wrap break-words text-wall-body leading-snug">
                   {notesText}
@@ -147,7 +157,7 @@ export default function WallTodoSheet({ item, now, onAct, onClose, onSaveNotes }
         </div>
       </section>
       {typing && <WallKeyboard value={title} onChange={setTitle} onDone={() => setTyping(false)} />}
-      {notesTyping && <WallKeyboard value={notesText} onChange={setNotesText} onDone={() => void saveNotes()} showsValue multiline />}
+      {notesTyping && !computer && <WallKeyboard value={notesText} onChange={setNotesText} onDone={() => void saveNotes()} showsValue multiline />}
     </div>
   )
 }
