@@ -70,8 +70,10 @@ function NextRow({ item, project, snoozing, onSnoozeToggle, onAct, onOpen, onEdi
             {project} · now
           </span>
         )}
-        <button type="button" aria-label={`Edit ${item.title}`} onClick={(e) => { e.stopPropagation(); onEdit() }} className="min-w-0 truncate border-0 bg-transparent p-0 text-left font-display text-wall-date font-semibold leading-tight text-wall-ink">{item.title}</button>
-        {item.nextStep && <span className="truncate text-wall-detail font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
+        {/* The whole title (Jake, Oct 7: "I need to see the full titles on these next up … I want to read the whole
+            title"): two lines when it needs them; a project's step without its project's name, which sits just above. */}
+        <button type="button" aria-label={`Edit ${item.title}`} onClick={(e) => { e.stopPropagation(); onEdit() }} className="line-clamp-2 min-w-0 border-0 bg-transparent p-0 text-left font-display text-wall-date font-semibold leading-tight text-wall-ink">{project && item.title.startsWith(`${project}: `) ? item.title.slice(project.length + 2) : item.title}</button>
+        {item.nextStep && <span className="line-clamp-2 text-wall-detail font-bold text-wall-brass-ink">Next: {item.nextStep}</span>}
         {snoozing ? (
           <span className="flex items-center gap-[8px] pt-[2px]">
             <span className="text-wall-label text-wall-ink-2">Not now — back in</span>
@@ -119,7 +121,7 @@ function PastStepRow({ step, today, onAct }: { step: PastStep; today: string; on
       <div className="flex items-center gap-[24px]">
         <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
           <span className="truncate text-wall-label font-bold text-wall-brass-ink">{step.project}</span>
-          <span className="truncate font-display text-wall-date font-semibold leading-tight">{step.title}</span>
+          <span className="line-clamp-2 font-display text-wall-date font-semibold leading-tight">{step.title}</span>
           <span className="text-wall-detail font-semibold text-wall-rust">It was {when}. Done?</span>
         </div>
         <div className="flex shrink-0 gap-[8px]">
@@ -188,8 +190,8 @@ export default function WallTodos({ now, list, onAct, onSaveNotes, onOpen, canOp
       return list.suggestions.map((s) => (
         <div key={s.id} className="flex items-center gap-[12px] border-0 border-t border-solid border-wall-stone py-[8px]">
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-wall-detail font-semibold">{s.title}</span>
-            <span className="truncate text-wall-label text-wall-ink-2">{suggestionLine(s)}</span>
+            <span className="line-clamp-2 text-wall-detail font-semibold">{s.title}</span>
+            <span className="line-clamp-2 text-wall-label text-wall-ink-2">{suggestionLine(s)}</span>
           </span>
           <Pill small label="Keep" onClick={() => void act({ action: 'dismiss', id: s.id })} />
           <Pill small primary label="Yes" onClick={() => void act({ action: 'accept', id: s.id })} />
@@ -200,8 +202,8 @@ export default function WallTodos({ now, list, onAct, onSaveNotes, onOpen, canOp
       return list.projects.map((p) => (
         <div key={p.id} className="flex items-center gap-[12px] border-0 border-t border-solid border-wall-stone py-[8px]">
           <button type="button" aria-label={`Open ${p.title}`} onClick={(e) => { e.stopPropagation(); setProjectId(p.id) }} className="flex min-w-0 flex-1 flex-col border-0 bg-transparent p-0 text-left text-wall-ink">
-            <span className="truncate text-wall-detail font-semibold">{p.title}</span>
-            <span className="truncate text-wall-label text-wall-ink-2">{p.done} of {p.total}{p.next ? ` · next: ${p.next}` : ''}{p.aimDate ? ` · target ${new Date(`${p.aimDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
+            <span className="line-clamp-2 text-wall-detail font-semibold">{p.title}</span>
+            <span className="line-clamp-2 text-wall-label text-wall-ink-2">{p.done} of {p.total}{p.next ? ` · next: ${p.next}` : ''}{p.aimDate ? ` · target ${new Date(`${p.aimDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
           </button>
           <span aria-hidden="true" className="text-wall-heading text-wall-ink-2">›</span>
         </div>
@@ -210,8 +212,9 @@ export default function WallTodos({ now, list, onAct, onSaveNotes, onOpen, canOp
     return list.groups[key as keyof TodoList['groups']].map((i) => (
       <div key={i.id} className="flex items-center gap-[12px] border-0 border-t border-solid border-wall-stone py-[8px]">
         <button type="button" aria-label={`Edit ${i.title}`} onClick={(e) => { e.stopPropagation(); openItem(i) }} className="flex min-w-0 flex-1 flex-col border-0 bg-transparent p-0 text-left text-wall-ink">
-          <span className="truncate text-wall-detail font-semibold">{i.title}</span>
-          <span className="truncate text-wall-label text-wall-ink-2">{sizeLine(i)}{i.snoozedUntil ? ' · snoozed' : ''}</span>
+          {/* Whole titles here too (Jake, Oct 7: "the other screen in to do also have cut off titles/txt"). */}
+          <span className="line-clamp-2 text-wall-detail font-semibold">{i.title}</span>
+          <span className="line-clamp-2 text-wall-label text-wall-ink-2">{sizeLine(i)}{i.snoozedUntil ? ' · snoozed' : ''}</span>
         </button>
         <Pill small primary label="Done" onClick={() => void act({ action: 'done', id: i.id })} />
       </div>
@@ -237,7 +240,12 @@ export default function WallTodos({ now, list, onAct, onSaveNotes, onOpen, canOp
         </span>
         {groups.length > 0 && (
           <div className="mt-[28px]">
-            <RailNav items={groups.map((g) => ({ key: g.key, label: g.label, aside: g.key === 'noticed' ? g.summary : String(g.count), open: openGroup === g.key, onOpen: () => toggle(g.key) }))} />
+            {/* The way back to the page as it opens, from inside a group (Jake, Oct 7: "i need a link to go back to the to
+                do home screen... there doesnt seem to be a way to do that after clicking into these sections"). */}
+            <RailNav items={[
+              { key: 'home', label: 'All of To do', aside: '', open: openGroup === null, onOpen: () => setOpenGroup(null), ariaLabel: 'All of To do' },
+              ...groups.map((g) => ({ key: g.key, label: g.label, aside: g.key === 'noticed' ? g.summary : String(g.count), open: openGroup === g.key, onOpen: () => toggle(g.key) })),
+            ]} />
           </div>
         )}
       </RailShell>

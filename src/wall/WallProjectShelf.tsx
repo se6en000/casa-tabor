@@ -43,17 +43,17 @@ export default function WallProjectShelf({ projects, today, onOpen, upcoming = [
                 <span className="text-wall-label font-bold tracking-[0.15em] text-wall-ink-2">{c.kind}</span>
                 <span aria-hidden="true" className="text-wall-heading text-wall-ink-2">›</span>
               </span>
-              <span className="w-full truncate font-display text-wall-date font-semibold leading-none">{p.title}</span>
+              <span className="line-clamp-2 w-full shrink-0 font-display text-wall-date font-semibold leading-tight">{p.title}</span>
               <span aria-hidden="true" className="flex h-[12px] w-full shrink-0 gap-[4px]">
                 {c.segments.map((k, i) => <span key={i} className={`h-[12px] flex-1 rounded-full ${SEGMENT[k]}`} />)}
               </span>
-              <span className="w-full truncate text-wall-detail text-wall-ink-2">{c.stats}</span>
-              <span className="flex w-full flex-col">
+              <span className="w-full shrink-0 truncate text-wall-detail text-wall-ink-2">{c.stats}</span>
+              <span className="flex w-full shrink-0 flex-col">
                 <span className="truncate text-wall-detail font-bold">{c.targetLine}</span>
                 {c.pace && <span className={`truncate text-wall-label font-bold ${c.pace.late ? 'text-wall-rust' : 'text-wall-brass-ink'}`}>{c.pace.text}</span>}
               </span>
               <span className="h-px w-full shrink-0 bg-wall-stone" />
-              <span className="flex w-full flex-col gap-[2px]">
+              <span className="flex min-h-0 w-full flex-col gap-[2px] overflow-hidden">
                 <span className="text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink">{c.nowLabel}</span>
                 <span className="line-clamp-2 text-wall-body font-bold leading-snug">{c.now.length ? c.now.join(' · ') : c.inside ? `Waiting on ${c.inside.title}` : 'Nothing left: done?'}</span>
               </span>
