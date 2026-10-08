@@ -270,3 +270,45 @@ export function paperDrag(dx: number, dy: number, page: number, pages: number): 
   const pastEdge = (page === 0 && dx > 0) || (page === pages - 1 && dx < 0)
   return pastEdge ? Math.round(dx / 3) : dx
 }
+
+/** The front page's cards slim once it has moved this far (canvas 73A). */
+export const PAPER_SLIM_AT = 12
+
+/**
+ * How far the front page scrolls (canvas 73A): not at all when it all fits above the full cards; otherwise to where its
+ * last line clears the slim ones — and at least a little past PAPER_SLIM_AT, so a page that fits only once the cards
+ * slim can still slim them. `content` is the words' height; `full`/`slim` the cards' heights with their gaps.
+ */
+export function frontScrollMax({ content, view, full, slim }: { content: number; view: number; full: number; slim: number }): number {
+  if (content + full <= view) return 0
+  return Math.max(content + slim - view, PAPER_SLIM_AT + 28)
+}
+
+/** Pulled past an end, the page gives a third of the pull. */
+export function rubberBand(y: number, max: number): number {
+  if (y < 0) return y / 3
+  if (y > max) return max + (y - max) / 3
+  return y
+}
+
+/**
+ * One step of the page after the finger lets go (`v` in px/ms, down the page positive): inside, it coasts and slows
+ * (friction); past an end, a critically damped spring brings it back to the end without going past it.
+ */
+export function flingStep({ y, v }: { y: number; v: number }, dt: number, max: number): { y: number; v: number } {
+  const step = Math.min(dt, 32)
+  const edge = y < 0 ? 0 : y > max ? max : null
+  if (edge === null) {
+    const nv = v * Math.pow(0.9965, step)
+    const ny = y + nv * step
+    return { y: ny, v: Math.abs(nv) < 0.005 && ny >= 0 && ny <= max ? 0 : nv }
+  }
+  // Past the end: x'' = -k·x - c·x', critically damped (c = 2√k), so it settles on the edge without crossing it.
+  const k = 0.00028
+  const c = 2 * Math.sqrt(k)
+  let nv = v + (-k * (y - edge) - c * v) * step
+  let ny = y + nv * step
+  if ((y - edge) * (ny - edge) <= 0) { ny = edge; nv = 0 }
+  if (Math.abs(ny - edge) < 0.3 && Math.abs(nv) < 0.02) { ny = edge; nv = 0 }
+  return { y: ny, v: nv }
+}

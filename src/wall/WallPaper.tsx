@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { QrCode } from 'lucide-react'
 import type { NextMoveView } from './header'
-import type { BriefLine, PaperBrief, PaperFacts, PaperWords } from './paper'
+import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailNext, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
 import { useDragSide } from './useSwipeDown'
+import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
 import { outAndAbout, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
@@ -35,16 +36,28 @@ const PAGES = [
 
 function Column({ label, lines }: { label: string; lines: BriefLine[] }) {
   return (
-    <section aria-label={label} className="flex min-h-0 min-w-0 flex-col overflow-hidden border-0 border-t-2 border-solid border-wall-ink pt-[14px]">
+    <section aria-label={label} className="flex min-w-0 flex-col border-0 border-t-2 border-solid border-wall-ink pt-[14px]">
       <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
       {lines.length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">Nothing to say.</span>}
       {lines.map((line, i) => (
         <div key={i} className="mt-[16px] flex flex-col gap-[4px]">
           <span className="font-display text-wall-heading font-semibold">{line.title}</span>
-          <span className="line-clamp-3 text-wall-detail text-wall-ink-2">{line.detail}</span>
+          <span className="text-wall-detail text-wall-ink-2">{line.detail}</span>
         </div>
       ))}
     </section>
+  )
+}
+
+// The cards' slim and open (canvas 73A; Jake: "very smooth and very cool feeling"): a long, soft ease-out.
+const CARD_MOTION = 'transition-all duration-[560ms] ease-[cubic-bezier(0.22,1,0.36,1)]'
+
+/** A card's note, folding away to nothing and back (its height and its fade together). */
+function Folds({ open, late = false, children }: { open: boolean; late?: boolean; children: ReactNode }) {
+  return (
+    <div className={`grid ${CARD_MOTION} ${late ? 'delay-[70ms]' : ''} ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
   )
 }
 
@@ -203,16 +216,28 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
   const [phone, setPhone] = useState<Outing | null>(null)
   const computer = useMemo(() => deviceKeyboardHere(), [])
   const turn = (step: 1 | -1) => setPage((p) => Math.min(pages - 1, Math.max(0, p + step)))
+  // The front page's scroll (canvas 73A): how far it goes, and whether the cards are slim.
+  const [slim, setSlim] = useState(false)
+  const slimNow = useRef(false)
+  const [max, setMax] = useState(0)
+  const viewRef = useRef<HTMLDivElement | null>(null)
+  const cardsRef = useRef<HTMLDivElement | null>(null)
+  const cardHeights = useRef({ full: 0, slim: 0 })
+  const { content: frontContent, handlers: frontHandlers, glideTo, at: scrolledTo } = useFrontScroll(max, (y) => {
+    const s = y > PAPER_SLIM_AT
+    if (s !== slimNow.current) { slimNow.current = s; setSlim(s) }
+  })
   const { handlers, dragX } = useDragSide(turn, page, pages)
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') glideTo(scrolledTo() + (e.key === 'ArrowDown' ? 280 : -280))
       if (e.key === 'ArrowRight') setPage((p) => Math.min(pages - 1, p + 1))
       if (e.key === 'ArrowLeft') setPage((p) => Math.max(0, p - 1))
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [pages])
+  }, [pages, glideTo, scrolledTo])
 
   // This weekend's best for the two of them (Jake: "a highlight from the Out and about"); the writer's own pick without it.
   const weekend = scout ? weekendHighlight(scout.outings, { today: scout.today }) : null
@@ -220,6 +245,23 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
     ? { label: `${weekend.label} · for two`, title: weekend.outing.title, detail: [outingMeta(weekend.outing), weekend.outing.why].filter(Boolean).join(' — '), outing: weekend.outing }
     : brief.feature ? { ...brief.feature, outing: null } : null
   const both = Boolean(brief.forgot && feature)
+  // How far the words scroll: measured, and again whenever they or the cards change size (a resize, the cards slimming).
+  useLayoutEffect(() => {
+    const measure = () => {
+      const content = frontContent.current
+      const view = viewRef.current
+      if (!content || !view) return
+      const cards = cardsRef.current?.offsetHeight ?? 0
+      const h = cardHeights.current
+      if (!slimNow.current) h.full = cards
+      else h.slim = h.slim ? Math.min(h.slim, cards) : cards
+      setMax(frontScrollMax({ content: content.offsetHeight, view: view.clientHeight, full: h.full || cards, slim: cards ? h.slim || Math.round((h.full || cards) * 0.62) : 0 }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    for (const el of [frontContent.current, viewRef.current, cardsRef.current]) if (el) ro.observe(el)
+    return () => ro.disconnect()
+  }, [words, brief, feature?.title]) // eslint-disable-line react-hooks/exhaustive-deps
   const openPhone = (o: Outing) => {
     if (computer) window.open(outingLink(o), '_blank', 'noopener')
     else setPhone(o)
@@ -241,46 +283,57 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
           className={`flex h-full ${pages > 1 ? 'w-[300%]' : 'w-full'} ${dragX ? '' : 'transition-transform duration-[420ms] ease-out'}`}
           style={{ transform: `translateX(calc(${(-page * 100) / pages}% + ${dragX}px))` }}
         >
-          <section aria-label="The front page" aria-hidden={page !== 0} className={`flex h-full ${pages > 1 ? 'w-1/3' : 'w-full'} flex-col px-[72px] pb-[124px] pt-[48px]`}>
-            <div className="flex shrink-0 items-center gap-[18px]">
-              <span aria-hidden="true" className="h-[2px] w-[40px] bg-wall-brass" />
-              <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE MORNING · {facts.day.replace(/, \d{4}$/, '').toUpperCase()}</span>
-            </div>
-            <h1 className="m-0 mt-[16px] line-clamp-2 shrink-0 font-display text-wall-headline font-medium text-wall-ink">
-              {words.headline}
-              {brief.turn && <> <i className="text-wall-brass-ink">{brief.turn}</i></>}
-            </h1>
-            {words.deck && <p className="m-0 mt-[16px] line-clamp-2 shrink-0 font-display text-wall-answer italic text-wall-ink-2">{words.deck}</p>}
+          <section aria-label="The front page" aria-hidden={page !== 0} className={`relative h-full ${pages > 1 ? 'w-1/3' : 'w-full'}`}>
+            {/* The words scroll (canvas 73A): moved by the wall, not the browser, so the Pi stays smooth. */}
+            <div ref={viewRef} className="absolute inset-x-0 bottom-[112px] top-0 overflow-hidden" {...frontHandlers}>
+              <div ref={frontContent} className="px-[72px] pb-[8px] pt-[48px] will-change-transform">
+                <div className="flex items-center gap-[18px]">
+                  <span aria-hidden="true" className="h-[2px] w-[40px] bg-wall-brass" />
+                  <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE MORNING · {facts.day.replace(/, \d{4}$/, '').toUpperCase()}</span>
+                </div>
+                <h1 className="m-0 mt-[16px] font-display text-wall-headline font-medium text-wall-ink">
+                  {words.headline}
+                  {brief.turn && <> <i className="text-wall-brass-ink">{brief.turn}</i></>}
+                </h1>
+                {words.deck && <p className="m-0 mt-[16px] font-display text-wall-answer italic text-wall-ink-2">{words.deck}</p>}
 
-            <div className="mt-[36px] grid min-h-0 flex-1 grid-cols-4 gap-x-[36px]">
-              <Column label="Today · watch for" lines={brief.today} />
-              <Column label="This weekend" lines={brief.weekend} />
-              <Column label="Next month" lines={brief.month} />
-              <Column label="Way out" lines={brief.wayOut} />
-            </div>
-
-            {(brief.forgot || feature) && (
-              <div className={`mt-[24px] grid shrink-0 gap-[28px] ${both ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {brief.forgot && (
-                  <section aria-label="You may have forgotten" className="flex min-w-0 flex-col gap-[8px] rounded-[18px] border-[1.5px] border-solid border-wall-brass bg-wall-brass/10 px-[26px] py-[20px]">
-                    <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">YOU MAY HAVE FORGOTTEN</span>
-                    <span className="line-clamp-2 font-display text-wall-date font-semibold">{brief.forgot.title}</span>
-                    <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{brief.forgot.detail}</span>
-                  </section>
-                )}
-                {feature && (
-                  <section aria-label={feature.label} className="flex min-w-0 items-center gap-[20px] rounded-[18px] bg-wall-paper px-[26px] py-[20px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]">
-                    <div className="flex min-w-0 flex-1 flex-col gap-[8px]">
-                      <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{feature.label.toUpperCase()}</span>
-                      <span className="line-clamp-2 font-display text-wall-date font-semibold">{feature.title}</span>
-                      <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{feature.detail}</span>
-                    </div>
-                    {feature.outing && <PhoneButton o={feature.outing} onPhone={openPhone} />}
-                  </section>
-                )}
+                <div className="mt-[36px] grid grid-cols-4 gap-x-[36px]">
+                  <Column label="Today · watch for" lines={brief.today} />
+                  <Column label="This weekend" lines={brief.weekend} />
+                  <Column label="Next month" lines={brief.month} />
+                  <Column label="Way out" lines={brief.wayOut} />
+                </div>
+                {brief.aside && <p className="m-0 mt-[28px] font-display text-wall-date italic text-wall-ink-2">{brief.aside}</p>}
               </div>
-            )}
-            {brief.aside && <p className="m-0 mt-[20px] shrink-0 truncate font-display text-wall-date italic text-wall-ink-2">{brief.aside}</p>}
+
+              {/* The two cards stay at the foot; once the words move they slim to a line each, and open again at the top. */}
+              {(brief.forgot || feature) && (
+                <div ref={cardsRef} className="absolute inset-x-0 bottom-0 px-[72px]">
+                  <div aria-hidden="true" className="h-[28px] bg-linear-to-b from-transparent to-wall-ground-calm" />
+                  <div className={`grid gap-[28px] bg-wall-ground-calm pb-[12px] ${both ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {brief.forgot && (
+                      <section aria-label="You may have forgotten" onClick={slim ? () => glideTo(0) : undefined}
+                        className={`flex min-w-0 flex-col rounded-[18px] border-[1.5px] border-solid border-wall-brass bg-wall-brass/10 px-[26px] ${CARD_MOTION} ${slim ? 'py-[12px]' : 'py-[20px]'}`}>
+                        <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">YOU MAY HAVE FORGOTTEN</span>
+                        <span className={`mt-[8px] overflow-hidden font-display text-wall-date font-semibold ${CARD_MOTION} ${slim ? 'max-h-[34px]' : 'max-h-[68px]'}`}>{brief.forgot.title}</span>
+                        <Folds open={!slim}><span className="mt-[8px] block text-wall-detail text-wall-ink-2">{brief.forgot.detail}</span></Folds>
+                      </section>
+                    )}
+                    {feature && (
+                      <section aria-label={feature.label} onClick={slim ? () => glideTo(0) : undefined}
+                        className={`flex min-w-0 items-center gap-[20px] rounded-[18px] bg-wall-paper px-[26px] delay-[70ms] ${CARD_MOTION} ${slim ? 'py-[12px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_3px_10px_rgba(38,34,29,0.10)]' : 'py-[20px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]'}`}>
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{feature.label.toUpperCase()}</span>
+                          <span className={`mt-[8px] overflow-hidden font-display text-wall-date font-semibold delay-[70ms] ${CARD_MOTION} ${slim ? 'max-h-[34px]' : 'max-h-[68px]'}`}>{feature.title}</span>
+                          <Folds open={!slim} late><span className="mt-[8px] block text-wall-detail text-wall-ink-2">{feature.detail}</span></Folds>
+                        </div>
+                        {feature.outing && <PhoneButton o={feature.outing} onPhone={openPhone} />}
+                      </section>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
 
           {scout && (

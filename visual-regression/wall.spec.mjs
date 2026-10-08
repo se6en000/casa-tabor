@@ -2748,6 +2748,50 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await expect(paper).toBeVisible()
 })
 
+// Canvas 73A (Jake, Oct 8: "the front page is the most important. how can we fix the cut off text. I dont want less" →
+// "on vertical scroll the cards shrink away as the scroll goes up … as the scroll goes back down the cards expand back up"
+// → "the shrink / expand should be very smooth and very cool feeling"). A heavy day's real paper (Oct 8's): nothing is
+// cut; a drag up moves the words and slims the cards to a line each, and back at the top they open again.
+const HEAVY_PAPER = {"headline": "Happy Birthday, Grandma,", "deck": "Giselle has a full schedule of school pickups, while Jake tackles the Tesla charger and Halloween decorations. Tomorrow begins with school runs for Jake and Kelly.", "sky": "A warm morning at 75°, reaching 86° by 2 PM. Rain chances climb after 4 PM, so keep an eye on the evening sky.", "brief": {"aside": "Halloween decorations and a Tesla charger: Jake’s day job.", "feature": {"detail": "Petting zoo, water activities, music, and games at Mounts Botanical Garden this Saturday and Sunday. Concert Saturday at 4:00 p.m.", "label": "This weekend · outing", "title": "SummerFest. West Palm Beach"}, "forgot": {"detail": "Overdue since September 16. A working sensor means a safer drive, and peace of mind is always in season.", "title": "Replace tire sensor"}, "month": [{"detail": "In 20 days, the orthodontist visit is coming. Make sure it works with your work schedule.", "title": "Orthodontist appointment"}, {"detail": "Veterans Day in 34 days means no school. Time to plan who's with the kids that day.", "title": "Veterans Day"}, {"detail": "In 46 days, Thanksgiving break arrives. What are the plans for the week off — a trip or camp?", "title": "Thanksgiving break"}], "today": [{"detail": "Giselle picks up Owen at 2:00, Emme at 3:00, then Liv at 3:30. A brisk pace for our chauffeur.", "title": "Giselle’s busy afternoon"}, {"detail": "Jake aims to get Tesla charger quotes and retrieve Halloween decorations from storage today. A full plate.", "title": "Jake's projects"}, {"detail": "Don't forget to send Grandma a happy birthday message. It’s her special day.", "title": "Text Grandma"}], "turn": "and a busy day of pickups for Giselle.", "wayOut": [{"detail": "Decorating for Christmas in 48 days. The house suggests getting it done before Thanksgiving.", "title": "Christmas decorating"}, {"detail": "The Christmas lights go up in 48 days. Might as well get them up before Thanksgiving, too.", "title": "Christmas lights"}, {"detail": "In 78 days, Christmas gifts will be due. Start that gift list early, won't you?", "title": "Christmas gifts"}], "weekend": [{"detail": "For Friday's practice with Meredith, Emme still needs to pack her violin and music sheets.", "title": "Emme’s violin practice"}, {"detail": "Kelly's Pilates at Amped Saturday at 9:30. Jake, remember your day pass for Amped Fitness.", "title": "Kelly’s Pilates"}, {"detail": "Jake has a game Saturday at 11:30. Pack your water bottle, glove, and sunscreen for Lake Lytal.", "title": "Jake’s Softball"}]}}
+test('wall: a heavy front page scrolls — the cards slim as it goes up and open again at the top; nothing cut', async ({ page }) => {
+  await page.addInitScript((w) => { window.__paperWords = w }, HEAVY_PAPER)
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  const forgot = paper.getByRole('region', { name: 'You may have forgotten' })
+  // Full, a card is its label, title and note; slim, its label and title (the note folds away).
+  const cardHeight = async () => Math.round((await forgot.boundingBox()).height)
+  await expect.poll(cardHeight).toBeGreaterThan(150)
+  const drag = (ys) => page.evaluate((ys) => {
+    const el = document.querySelector('section[aria-label="The front page"] > div')
+    const at = (y) => [new Touch({ identifier: 1, target: el, clientX: 1200, clientY: y })]
+    el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: at(ys[0]), changedTouches: at(ys[0]) }))
+    for (const y of ys.slice(1)) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, touches: at(y), changedTouches: at(y) }))
+    el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [] }))
+  }, ys)
+  // At the top, the last notes sit under the full cards.
+  const last = paper.getByText(/Start that gift list early/)
+  const under = async () => (await last.boundingBox()).y + (await last.boundingBox()).height > (await forgot.boundingBox()).y
+  expect(await under()).toBe(true)
+  // Up: the cards slim to their titles (the notes fold away), and every line of the brief clears them.
+  await drag([800, 740, 680, 620])
+  await expect.poll(cardHeight).toBeLessThan(100)
+  await expect(forgot.getByText('Replace tire sensor')).toBeVisible()
+  await page.waitForTimeout(1200)
+  expect(await under()).toBe(false)
+  await expect(paper.getByText('Halloween decorations and a Tesla charger: Jake’s day job.')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-scrolled.png')
+  // Back down to the top: they open again. Scrolling never turns the page or puts the paper away.
+  await drag([300, 420, 560, 700])
+  await expect.poll(cardHeight).toBeGreaterThan(150)
+  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  // The keys and a slim card do it too.
+  await page.keyboard.press('ArrowDown')
+  await expect.poll(cardHeight).toBeLessThan(100)
+  await forgot.click()
+  await expect.poll(cardHeight).toBeGreaterThan(150)
+})
+
 test('wall: the morning paper — plain words until the server’s arrive; gone after 11; previewed from the menu any time', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
   await expect(page.getByRole('article', { name: 'The morning paper' }).getByRole('heading')).toHaveText('An easy Friday.')

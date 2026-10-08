@@ -163,3 +163,34 @@ test('the paper turns on a sideways swipe: left for the next page, right for the
   assert.equal(paperDrag(90, 0, 0, 3), 30)
   assert.equal(paperDrag(-90, 0, 2, 3), -30)
 })
+
+// Canvas 73A (Jake, Oct 8: "on vertical scroll the cards shrink away as the scroll goes up … as the scroll goes back
+// down the cards expand back up" → "i want to try A first, the shrink / expand should be very smooth and very cool
+// feeling"): the front page scrolls under a finger with a fling and a soft edge; the cards slim once it moves.
+test('the front page scrolls only when its words don’t fit, far enough to clear the slim cards', async () => {
+  const { frontScrollMax, PAPER_SLIM_AT } = await import('../src/wall/paper.ts')
+  // Everything fits above the full cards: no scrolling, the cards stay full.
+  assert.equal(frontScrollMax({ content: 600, view: 900, full: 180, slim: 84 }), 0)
+  // Too long with the full cards: it scrolls to the end above the slim ones.
+  assert.equal(frontScrollMax({ content: 1000, view: 900, full: 180, slim: 84 }), 1000 + 84 - 900)
+  // Fits only once the cards slim: a short scroll, just past the point they slim.
+  assert.ok(frontScrollMax({ content: 760, view: 900, full: 180, slim: 84 }) > PAPER_SLIM_AT)
+})
+
+test('the fling slows to a stop inside; past an edge it springs back without bouncing past it', async () => {
+  const { flingStep, rubberBand } = await import('../src/wall/paper.ts')
+  let s = { y: 100, v: 2 } // 2 px/ms down the page
+  for (let i = 0; i < 200 && Math.abs(s.v) > 0.005; i++) s = flingStep(s, 16, 1000)
+  assert.ok(s.y > 300 && s.y < 1000, `coasted to ${s.y}`)
+  assert.ok(Math.abs(s.v) <= 0.005)
+  // Let go 90 px past the end: it eases back to the end and stays there.
+  s = { y: 1090, v: 0 }
+  const seen = []
+  for (let i = 0; i < 120; i++) { s = flingStep(s, 16, 1000); seen.push(s.y) }
+  assert.ok(Math.abs(s.y - 1000) < 1)
+  assert.ok(seen.every((y) => y >= 999.5), 'never back past the edge')
+  // Pulled past the top, it gives a third.
+  assert.equal(rubberBand(-90, 1000), -30)
+  assert.equal(rubberBand(1060, 1000), 1020)
+  assert.equal(rubberBand(500, 1000), 500)
+})
