@@ -1,4 +1,4 @@
-export type OutingKind = 'restaurant' | 'fitness' | 'couple' | 'family'
+export type OutingKind = 'restaurant' | 'fitness' | 'couple' | 'family' | 'music' | 'comedy' | 'trivia'
 export interface Outing {
   id: string
   kind: OutingKind

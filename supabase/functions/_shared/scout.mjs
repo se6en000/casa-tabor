@@ -251,7 +251,7 @@ export function scoutPicks(rows, { today, busy = {}, n = 3 }) {
 /** How good a pick is today (scoutPicks, outAndAbout): soon, free that evening, the kinds for the two of them first. */
 export function scoutScore(o, today, busy = {}) {
   const weekday = (ymd) => new Date(`${ymd}T12:00:00Z`).getUTCDay()
-  let s = { couple: 30, fitness: 28, restaurant: 26, family: 12 }[o.kind] ?? 0
+  let s = { couple: 30, comedy: 29, fitness: 28, music: 27, restaurant: 26, trivia: 24, family: 12 }[o.kind] ?? 0
   const day = o.when?.slice(0, 10)
   if (day) {
     s += 10 - Math.min(9, Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000))
@@ -273,8 +273,18 @@ export function scoutScore(o, today, busy = {}) {
  */
 export function outAndAbout(rows, { today, busy = {}, each = 2 }) {
   const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 14))))
-  const best = (kind) => live.filter((o) => o.kind === kind).sort((a, b) => scoutScore(b, today, busy) - scoutScore(a, today, busy)).slice(0, each)
-  return { couple: best('couple'), family: best('family'), fitness: best('fitness'), restaurant: best('restaurant') }
+  const ranked = (kinds) => live.filter((o) => kinds.includes(o.kind)).sort((a, b) => scoutScore(b, today, busy) - scoutScore(a, today, busy))
+  const best = (kind) => ranked([kind]).slice(0, each)
+  // For the two of you (Jake, Oct 8: "make the trivia concerts, etc just part of the out and about"): the best evening out
+  // and the best gig, comedy show or trivia night from the calendars — the rest of either when one runs short.
+  const evenings = ranked(['couple'])
+  // A spread: after the best gig, one of another kind (a trivia night beside a band) before a second of the same.
+  const gigs = ranked(CALENDAR_KINDS)
+  const other = gigs.findIndex((g) => gigs[0] && g.kind !== gigs[0].kind)
+  if (other > 1) gigs.splice(1, 0, ...gigs.splice(other, 1))
+  const couple = [...evenings.slice(0, Math.ceil(each / 2)), ...gigs.slice(0, Math.floor(each / 2))]
+  for (const extra of [...evenings, ...gigs]) if (couple.length < each && !couple.includes(extra)) couple.push(extra)
+  return { couple: couple.slice(0, each), family: best('family'), fitness: best('fitness'), restaurant: best('restaurant') }
 }
 
 /**

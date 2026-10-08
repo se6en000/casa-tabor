@@ -69,6 +69,8 @@ const OUTINGS = [
   { id: 'o4', kind: 'family', title: 'Clematis by Fright!', inDays: 13, at: '18:00', recurring: null, place: 'the Waterfront', why: 'Hayrides, games and trick-or-treating downtown.', free: true },
   { id: 'o5', kind: 'fitness', title: 'Rooftop Yoga at the Treehouse', inDays: null, at: null, recurring: 'Thursdays 6:30 PM', place: 'The Canopy, 6th floor', why: 'An hour of yoga with the city below.', free: false },
   { id: 'o6', kind: 'fitness', title: 'Pickleball open play', inDays: null, at: null, recurring: 'Mon, Wed, Fri 8:30 AM', place: 'Mandel Rec Center', why: 'First come, first served — bring a paddle.', free: true },
+  { id: 'o9', kind: 'music', title: 'The Goodnicks', inDays: 0, at: '20:00', recurring: null, place: 'Centennial Square', why: 'classic rock · Clematis by Night', free: true },
+  { id: 'o10', kind: 'trivia', title: 'Live Trivia', inDays: null, at: null, recurring: 'Thursdays 7–9 PM', place: 'Newport Diner', why: 'free team trivia, real bar prizes', free: true },
   { id: 'o7', kind: 'restaurant', title: 'Celona', inDays: null, at: null, recurring: null, place: 'Celona', why: 'Restaurant & gin lounge — date-night quiet.', free: null, drive_min: 7, rating: 4.8, rating_count: 46, gem: true },
   { id: 'o8', kind: 'restaurant', title: 'Andino Spot', inDays: null, at: null, recurring: null, place: 'Andino Spot', why: 'Colombian — arepas worth a Saturday lunch.', free: null, drive_min: 4, rating: 5, rating_count: 134, gem: false },
 ] as const

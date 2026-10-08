@@ -381,3 +381,22 @@ test('the same name on the same night at two places is two things; karaoke and D
   assert.equal(notLiveMusic({ kind: 'music', title: 'SnapHook', why: null }), false)
   assert.equal(notLiveMusic({ kind: 'trivia', title: 'Music Bingo' }), false)
 })
+
+// Jake, Oct 8: "can you make the trivia concerts, etc just part of the out and about?" — For the two of you: its best
+// evening out and the best of the calendars' gigs (a band, a comedian, trivia) — two of either when there's only one kind.
+test('Out & about: For the two of you mixes the best evening out with the best gig, comedy show or trivia night', async () => {
+  const { outAndAbout } = await import('../supabase/functions/_shared/scout.mjs')
+  const rows = [
+    { id: 'c1', kind: 'couple', title: 'Wine tasting', when: '2026-10-09 19:00', status: 'new' },
+    { id: 'c2', kind: 'couple', title: 'Art After Dark', recurring: 'Fridays', status: 'new' },
+    { id: 'm1', kind: 'music', title: 'The Goodnicks', when: '2026-10-08 18:00', place: 'Centennial Square', status: 'new' },
+    { id: 'm2', kind: 'music', title: 'Far-off band', when: '2026-10-21 21:00', status: 'new' },
+    { id: 't1', kind: 'trivia', title: 'Live Trivia', recurring: 'Thursdays 7–9 PM', place: 'Newport Diner', status: 'new' },
+  ]
+  const o = outAndAbout(rows, { today })
+  assert.deepEqual(o.couple.map((x) => x.id), ['c1', 'm1'])
+  // Only gigs: two of them.
+  assert.deepEqual(outAndAbout(rows.filter((r) => r.kind !== 'couple'), { today }).couple.map((x) => x.id), ['m1', 't1'])
+  // No gigs: two evenings out, as before.
+  assert.deepEqual(outAndAbout(rows.filter((r) => r.kind === 'couple'), { today }).couple.map((x) => x.id), ['c1', 'c2'])
+})

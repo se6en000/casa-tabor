@@ -80,7 +80,9 @@ function outingMeta(o: Outing): string {
   if (o.kind === 'restaurant') {
     return [o.drive_min ? `${o.drive_min} min away` : null, o.rating ? `${o.rating}★ from ${o.rating_count ?? 0}` : null, o.gem ? 'a hidden gem' : null].filter(Boolean).join(' · ')
   }
-  return [outingWhen(o), o.place && o.place !== o.title ? o.place : null, o.free ? 'free' : null].filter(Boolean).join(' · ')
+  // A gig from the calendars says what it is (Jake, Oct 8: trivia, concerts "just part of the out and about").
+  const what = { music: 'Live music', comedy: 'Comedy', trivia: 'Trivia night' }[o.kind as string] ?? null
+  return [what, outingWhen(o), o.place && o.place !== o.title ? o.place : null, o.free ? 'free' : null].filter(Boolean).join(' · ')
 }
 
 function PhoneButton({ o, onPhone }: { o: Outing; onPhone: (o: Outing) => void }) {

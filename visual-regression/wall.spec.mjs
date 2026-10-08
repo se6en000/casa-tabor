@@ -2764,6 +2764,8 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
   await expect(paper.getByRole('heading')).toHaveText('Plenty worth getting out for.')
   await expect(paper.getByRole('region', { name: 'For the two of you' })).toContainText('Sunset Jazz on the Waterfront')
+  // Jake, Oct 8: "make the trivia concerts, etc just part of the out and about" — the best gig beside the best evening out.
+  await expect(paper.getByRole('region', { name: 'For the two of you' })).toContainText('Live music · Fri, Sep 25 · 8 PM · Centennial Square · free')
   await expect(paper.getByRole('region', { name: 'For the family' })).toContainText('Pumpkin Fest')
   await expect(paper.getByRole('region', { name: 'Get moving' })).toContainText('Rooftop Yoga at the Treehouse')
   await expect(paper.getByRole('region', { name: 'New & worth it' })).toContainText('7 min away · 4.8★ from 46 · a hidden gem')
