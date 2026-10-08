@@ -67,8 +67,8 @@ test('what an answer named is remembered, in the order it named them', () => {
 // Version D as all of layer 2 (P3.17): the old path's other abilities, still as cards or lookups.
 test('D has the old path\'s other abilities: grocery changes, recipes, and lookups (read-only, no card)', async () => {
   const { LOOKUP_TOOLS, READ_TOOLS } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
-  assert.deepEqual(FULL_AI_TOOLS.map((t) => t.name), ['create_event', 'update_event', 'delete_event', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'create_recipe', 'add_gift_idea', 'add_todo', 'plan_project', 'find_events', 'get_gift_ideas', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'get_coming_up', 'search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta', 'get_recipe', 'finish_todo', 'search_email', 'search_family_notes', 'open_email_review', 'add_prep_item', 'show_directions', 'save_address', 'remember', 'forget', 'undo_memory', 'keep_me_posted', 'show_day'])
-  assert.deepEqual([...READ_TOOLS].sort(), ['find_events', 'forget', 'get_coming_up', 'get_gift_ideas', 'get_recipe', 'get_travel_eta', 'get_weather_forecast', 'open_email_review', 'remember', 'search_email', 'search_family_notes', 'search_places', 'search_web', 'show_day', 'show_directions', 'undo_memory'])
+  assert.deepEqual(FULL_AI_TOOLS.map((t) => t.name), ['create_event', 'update_event', 'delete_event', 'add_grocery_items', 'check_grocery_item', 'remove_grocery_item', 'update_grocery_item_quantity', 'clear_checked_grocery_items', 'create_recipe', 'add_gift_idea', 'add_todo', 'plan_project', 'find_events', 'get_gift_ideas', 'add_to_coming_up', 'add_coming_up_rule', 'change_coming_up_item', 'get_coming_up', 'search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta', 'get_recipe', 'finish_todo', 'search_email', 'search_family_notes', 'open_email_review', 'add_prep_item', 'show_directions', 'save_address', 'remember', 'forget', 'answer_tidy', 'undo_memory', 'keep_me_posted', 'show_day'])
+  assert.deepEqual([...READ_TOOLS].sort(), ['answer_tidy', 'find_events', 'forget', 'get_coming_up', 'get_gift_ideas', 'get_recipe', 'get_travel_eta', 'get_weather_forecast', 'open_email_review', 'remember', 'search_email', 'search_family_notes', 'search_places', 'search_web', 'show_day', 'show_directions', 'undo_memory'])
   assert.deepEqual(LOOKUP_TOOLS, ['search_web', 'search_places', 'get_weather_forecast', 'get_travel_eta'])
 })
 
@@ -262,4 +262,15 @@ test('the morning paper and its news are in Alexa’s context when there is one'
   const withIt = buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', paper })
   assert.match(withIt, /TODAY’S MORNING PAPER[\s\S]*You may have forgotten: Replace tire sensor/)
   assert.doesNotMatch(buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach' }), /MORNING PAPER/)
+})
+
+// Canvas 75 (Jake, Oct 8: "have alexa proactively say 'i got something for you' for me to talk and see whats up and merge,
+// dedupe, delete"): what she has is in her context, answered by voice at once (he said it).
+test('the tidy-up is in Alexa’s context, and answer_tidy runs at once', async () => {
+  const { tidySection } = await import('../supabase/functions/_shared/tidy.mjs')
+  const tidy = tidySection([{ id: 't1', says: '“Look into box character project” is on twice.', fix: 'Keep one.', choices: [{ key: 'yes', label: 'Merge them' }, { key: 'no', label: 'Keep both' }] }])
+  const system = buildFullAiSystem({ family, events, groceries: [], pending: null, onScreenIds: [], utcOffset, now, homeCity: 'West Palm Beach', tidy })
+  assert.match(system, /SOMETHING FOR YOU[\s\S]*\[t1\] “Look into box character project” is on twice/)
+  const { READ_TOOLS: reads } = await import('../supabase/functions/_shared/assistant-full-ai.mjs')
+  assert.ok(reads.has('answer_tidy'))
 })

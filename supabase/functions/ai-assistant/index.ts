@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { outingsSection, tonightSection } from '../_shared/scout.mjs'
 import { paperSection } from '../_shared/morning-paper.mjs'
+import { tidySection } from '../_shared/tidy.mjs'
 import { notesOf } from '../_shared/event-notes.mjs'
 import { placeOnCard } from '../_shared/ai-event-edit.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
@@ -1051,7 +1052,7 @@ Deno.serve(async (req) => {
     // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
     // health, therapy and money facts are left out on the wall; they're answered on a phone.
     // In the order asked (it once read the persona from the routines' answer, the routines from the days off — Oct 8).
-    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }] = await Promise.all([
+    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }, { data: tidyRows }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle(),
       // The routines (school, work, who has whom) and the days off in the next three weeks (Oct 7).
       sb.from('member_availability_rules').select('member_id, day_of_week, reason').limit(200),
@@ -1063,6 +1064,8 @@ Deno.serve(async (req) => {
       // This morning's paper as the wall showed it, and its Around town — the latest news (Jake, Oct 8: "yes add it").
       sb.from('morning_papers').select('headline, deck, brief').eq('paper_date', todayYmdNY()).maybeSingle(),
       sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date').order('news_date', { ascending: false }).limit(40),
+      // What she has for them (canvas 75): the morning's tidy-up, still open.
+      sb.from('tidy_suggestions').select('id, says, fix, choices').eq('status', 'open').gte('made_on', new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)).order('created_at').limit(8),
     ])
     const onWall = String(context?.page ?? '').startsWith('wall')
     const memory = ((memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string; sensitive?: boolean }>)
@@ -1136,7 +1139,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), tonight: tonightSection(outingRows ?? [], todayYmdNY()),
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), tonight: tonightSection(outingRows ?? [], todayYmdNY()), tidy: tidySection(tidyRows ?? []),
       paper: paperSection({ paper: paperRow ?? null, outings: outingRows ?? [], news: (newsRows ?? []).filter((n: { news_date: string }) => n.news_date === newsRows?.[0]?.news_date), today: todayYmdNY() }) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
@@ -1252,6 +1255,14 @@ Deno.serve(async (req) => {
             result = { name: found.name, address: found.address, phone: found.phone, note: 'The route is on the screen.' }
           } else {
             result = found ? { error: `No address saved for ${found.missing}. Ask him for it, then save_address.` } : { error: 'No one and no place by that name in CONTACTS or PLACES.' }
+          }
+        } else if (call.name === 'answer_tidy') {
+          // The tidy-up answered by voice (canvas 75): done at once, as the band's button would; Undo is on the wall.
+          if (dryRun) result = { done: true, dry_run: true }
+          else {
+            const { data, error } = await sb.functions.invoke('tidy', { body: { action: 'answer', id: String(call.args?.id ?? ''), choice: String(call.args?.choice ?? '') } })
+            result = error ? { error: error.message } : (data as Record<string, unknown>) ?? { ok: true }
+            if (!result.error) result.note = 'Done. Undo is on the wall under “I have something for you”.'
           }
         } else if (call.name === 'remember' || call.name === 'forget' || call.name === 'undo_memory') {
           // Casa's memory (phase 1): saved at once in his words, no card. A dry run saves nothing.

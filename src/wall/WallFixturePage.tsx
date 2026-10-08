@@ -28,6 +28,7 @@ import WallGroceriesFixture from './WallGroceriesFixture'
 import { SEASONS } from '../../supabase/functions/_shared/coming-up.mjs'
 import type { HandledItem } from './comingUp'
 import type { ScoutPaper } from './useScout'
+import type { TidyData, TidySuggestion } from './useTidy'
 import type { Outing, TownNews } from '../../supabase/functions/_shared/scout.mjs'
 import { withDriver } from './editing'
 import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
@@ -78,6 +79,14 @@ const TOWN_NEWS = [
   { section: 'city', headline: 'Referendum town hall moved', line: 'The District 7 town hall on the 2026 school referendum has a new date — worth hearing before November.', source: 'School District', source_date: '2026-09-23', rank: 0 },
   { section: 'city', headline: 'What’s on downtown this month', line: 'Clematis by Night every Thursday; Clematis by Fright on the 29th; the GreenMarket opens its season.', source: 'City of West Palm Beach', source_date: '2026-09-20', rank: 1 },
 ] as const
+
+// `?tidy=1` (canvas 75): Alexa's tidy-up, Oct 8's real four; answers and Undo in memory (window.__tidy records them).
+const TIDY_OPEN: TidySuggestion[] = [
+  { id: 'tidy-copy', kind: 'copy', says: '“Look into box character project” is on twice, both at 9:17 AM today.', fix: 'Keep one — I’ll fold the second into the first.', choices: [{ key: 'yes', label: 'Merge them' }, { key: 'no', label: 'Keep both' }] },
+  { id: 'tidy-step', kind: 'same_thing', says: '“Get Halloween decorations from storage.” (12:00 PM today) is your Halloween decorations project’s step “Get decorations from storage unit and test lights”.', fix: 'Make it that step, at 12:00 PM today.', choices: [{ key: 'yes', label: 'Make it the step' }, { key: 'no', label: 'Keep both' }] },
+  { id: 'tidy-double', kind: 'step_double', says: '“Install Tesla charger in garage: Get quotes from licensed electricians” is on all day today and again at 3:00 PM.', fix: 'Keep the 3:00 PM one; take the all-day off.', choices: [{ key: 'yes', label: 'Clean it up' }, { key: 'no', label: 'Leave it' }] },
+  { id: 'tidy-stuck', kind: 'stuck', says: '“Replace tire sensor” has been overdue since Sep 16.', fix: 'Sunday 10 AM is open — put it there?', choices: [{ key: 'yes', label: 'Sunday 10 AM' }, { key: 'done', label: 'Done already' }, { key: 'drop', label: 'Drop it' }] },
+]
 
 // No network in the fixture: saved places load empty and nothing is ever saved.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
@@ -285,6 +294,18 @@ export default function WallFixturePage() {
     outings, news: TOWN_NEWS as unknown as TownNews[], today: ymd(0),
     answer: (id, status) => setOutings((list) => (status === 'not_for_us' ? list.filter((o) => o.id !== id) : list.map((o) => (o.id === id ? { ...o, status } : o)))),
   } : null
+  const [tidyOpen, setTidyOpen] = useState<TidySuggestion[]>(TIDY_OPEN)
+  const tidy: TidyData | null = new URLSearchParams(window.location.search).get('tidy') === '1' ? {
+    open: tidyOpen, through: ymd(3),
+    answer: async (id, choice) => {
+      ((window as unknown as { __tidy?: string[] }).__tidy ??= []).push(`${id}:${choice}`)
+      setTidyOpen((list) => list.filter((t) => t.id !== id))
+    },
+    undo: async (id) => {
+      ((window as unknown as { __tidy?: string[] }).__tidy ??= []).push(`${id}:undo`)
+      setTidyOpen((list) => [...list, ...TIDY_OPEN.filter((t) => t.id === id)])
+    },
+  } : null
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => ({ live: COMING_UP_LIVE, projects: COMING_UP_PROJECTS }[new URLSearchParams(window.location.search).get('comingUp') ?? ''] ?? COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
   const { todos, setProjects, setTodoList } = useFixtureTodos({ stepEvent: STEP_EVENT, twoInside: new URLSearchParams(window.location.search).get('twoInside') === '1', closedInside: new URLSearchParams(window.location.search).get('closedInside') === '1', detail: new URLSearchParams(window.location.search).get('nextUpDetail') === '1' })
   // A season started (canvas 11c): this year's project from the same starter plan the server uses.
@@ -343,7 +364,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
-      <WallView paper={PAPER ? ((window as unknown as { __paperWords?: typeof PAPER_WORDS }).__paperWords ?? PAPER_WORDS) : null} scout={scout} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView paper={PAPER ? ((window as unknown as { __paperWords?: typeof PAPER_WORDS }).__paperWords ?? PAPER_WORDS) : null} scout={scout} tidy={tidy} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

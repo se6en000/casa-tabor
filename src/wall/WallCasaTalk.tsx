@@ -7,6 +7,11 @@ import type { CasaTopic, TalkAnswer } from './casaTalk'
 
 /** 21a: the quiet line in the header, "Casa has something for you · Jake". */
 export function CasaCalling({ topic, onOpen, className = '' }: { topic: CasaTopic; onOpen: () => void; className?: string }) {
+  return <CallingPill label={topic.forName ? `Something for you, ${topic.forName}` : 'Something for you'} onOpen={onOpen} className={className} />
+}
+
+/** The quiet brass line beside the mic: what Alexa has (row 21's question, or canvas 75's tidy-up). */
+export function CallingPill({ label, onOpen, className = '' }: { label: string; onOpen: () => void; className?: string }) {
   return (
     <button
       type="button"
@@ -17,7 +22,7 @@ export function CasaCalling({ topic, onOpen, className = '' }: { topic: CasaTopi
       className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full border border-solid border-wall-brass bg-wall-brass/15 pl-[14px] pr-[12px] text-wall-detail font-bold text-wall-brass-ink ${className}`}
     >
       <span aria-hidden="true" className="h-[10px] w-[10px] rounded-full bg-wall-brass-ink" />
-      {topic.forName ? `Something for you, ${topic.forName}` : 'Something for you'}
+      {label}
       <ChevronRight size={20} aria-hidden="true" />
     </button>
   )
@@ -59,7 +64,7 @@ export default function WallCasaTalk({ topic, onAnswer, onTalk, onClose }: {
           >
             <Mic size={40} strokeWidth={1.8} />
           </button>
-          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">CASA</div>
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">ALEXA</div>
           <div className="text-center text-wall-detail text-wall-night-ink-2">Talk it through,<br />or tap an answer</div>
         </div>
         <div className="flex w-[420px] shrink-0 flex-col gap-[12px] text-wall-body text-wall-night-ink-2">

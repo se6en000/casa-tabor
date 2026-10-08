@@ -2379,6 +2379,37 @@ test('wall on a computer: text is typed in place — a step’s title, a new ste
   await expect(page.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
 })
 
+// Canvas 75 (Jake, Oct 8: "have alexa proactively say 'i got something for you' for me to talk and see whats up and
+// merge, dedupe, delete" → approved, the pill only: "she does not know when theres a walk up"). Her tidy-up: what she
+// found and what she'd do, each with its answers; Undo while it's open; Do all; or talk it through.
+test('wall: Alexa’s tidy-up — I have something for you; merge, undo, do all, or talk it through', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T18:40:00&chores=1&gym=1&tidy=1')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByRole('region', { name: 'Meanwhile' })).toBeVisible()
+  await page.mouse.click(400, 600)
+  await wall.getByRole('button', { name: 'I have something for you' }).click()
+  const band = wall.getByRole('region', { name: 'I have something for you' })
+  await expect(band.getByText('TIDYING UP · TODAY TO MONDAY · 4')).toBeVisible()
+  await expect(band.getByText('Four things I’d clean up. Say “do them all,” or one at a time.')).toBeVisible()
+  await expect(band.getByText('ALEXA')).toBeVisible()
+  await expect(wall).toHaveScreenshot('tidy-band.png')
+  // One: merged, with Undo; undone, its answers back.
+  const copy = band.getByLabel('“Look into box character project” is on twice, both at 9:17 AM today.')
+  await copy.getByRole('button', { name: 'Merge them' }).click()
+  await expect(copy.getByText('Done — merge them')).toBeVisible()
+  await copy.getByRole('button', { name: 'Undo' }).click()
+  await expect(copy.getByRole('button', { name: 'Merge them' })).toBeVisible()
+  // Do all: each its first answer.
+  await band.getByRole('button', { name: 'Do all 4' }).click()
+  await expect(band.getByText('Done — sunday 10 am')).toBeVisible()
+  expect(await page.evaluate(() => window.__tidy)).toEqual(['tidy-copy:yes', 'tidy-copy:undo', 'tidy-copy:yes', 'tidy-step:yes', 'tidy-double:yes', 'tidy-stuck:yes'])
+  await band.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(band).toHaveCount(0)
+  // Nothing left: the pill is gone.
+  await expect(wall.getByRole('button', { name: 'I have something for you' })).toHaveCount(0)
+})
+
 // Canvas 74C1 (Jake, Oct 8: "next up items are still not even readable" → C; "is this an event, a reminder, a get and
 // prep and project? how did it get here"): a card a box, four across with nothing else in the row; what it is above its
 // name, where it came from at its foot; a copy of the same thing says so, and Merge folds it into the first.

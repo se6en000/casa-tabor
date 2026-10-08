@@ -46,7 +46,9 @@ import { weekDays } from './week'
 import { dayHeading, mergeEvents, needsAroundFetch, stripDates } from './dayFocus'
 import { casaTopic, pushMessage, pushNow, snoozeUntil, type TalkAnswer } from './casaTalk'
 import type { CasaTalkProps } from './useCasaTalk'
-import WallCasaTalk, { CasaCalling } from './WallCasaTalk'
+import WallCasaTalk, { CallingPill, CasaCalling } from './WallCasaTalk'
+import WallTidy from './WallTidy'
+import type { TidyData } from './useTidy'
 import type { ScoreInteraction } from './WallScore'
 import WallNightCalm from './WallNightCalm'
 import { comingHours, fitNextUp, nextUpItems, outTonight, stillTonight, type NextUpItem } from './nextUp'
@@ -136,6 +138,8 @@ export interface WallViewProps {
   paper?: PaperWords | null
   /** The paper's Out & about and Around town (canvas 72). */
   scout?: ScoutPaper | null
+  /** Alexa's tidy-up (canvas 75): "I have something for you". */
+  tidy?: TidyData | null
 }
 
 const NO_TICKS: ReadonlySet<string> = new Set()
@@ -176,7 +180,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null, scout = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null, scout = null, tidy = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
@@ -496,6 +500,12 @@ export default function WallView(props: WallViewProps) {
     showDay(topic.decision.date)
   }
   const calling = topic && !overlay && !talkOpen ? { topic, onOpen: openTalk } : null
+  // Alexa's tidy-up (canvas 75; Jake: "she does not know when theres a walk up so just keep it as the 'I have something
+  // for you'"): the pill and the glowing mic when she has something and nothing else is asking.
+  const [tidyOpen, setTidyOpen] = useState(false)
+  const tidyCalling = !calling && !overlay && !tidyOpen && (tidy?.open.length ?? 0) > 0
+  const openTidy = () => setTidyOpen(true)
+  const micAsk = calling ? openTalk : tidyCalling ? openTidy : onAsk
   const decisionsOn = (date: Date) => stripDecisions.filter((d) => sameDay(d.date, date))
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
@@ -786,16 +796,18 @@ export default function WallView(props: WallViewProps) {
         !(nightSettled && now.getHours() < 6) && (
           <div className={`wall-evening absolute left-[52px] top-[40px] z-10 flex items-center gap-[14px] ${nightSettled ? 'opacity-60' : ''}`}>
             <MenuButton onOpen={openMenu} />
-            {onAsk && <MicButton onDark onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} />}
+            {onAsk && <MicButton onDark onAsk={micAsk ?? onAsk} calling={Boolean(calling) || tidyCalling} />}
             {createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} />}
             {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="ml-[4px]" />}
+            {tidyCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="ml-[4px]" />}
           </div>
         )
       ) : (
         <>
           {!(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
-          {!(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={calling ? openTalk : onAsk} calling={Boolean(calling)} className="absolute right-[108px] top-[38px]" />}
+          {!(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={micAsk ?? onAsk} calling={Boolean(calling) || tidyCalling} className="absolute right-[108px] top-[38px]" />}
           {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
+          {tidyCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="absolute right-[256px] top-[44px]" />}
           {!(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className={`absolute right-[184px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
         </>
       )}
@@ -814,6 +826,9 @@ export default function WallView(props: WallViewProps) {
           onTalk={() => { setTalkOpen(false); onAsk?.() }}
           onClose={() => setTalkOpen(false)}
         />
+      )}
+      {tidyOpen && tidy && !overlay && !selected && !handOff && (
+        <WallTidy tidy={tidy} onClose={() => setTidyOpen(false)} onTalk={() => { setTidyOpen(false); onAsk?.('What’s the something you have for me?') }} />
       )}
       {(shown.preview || paperPreview) && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
