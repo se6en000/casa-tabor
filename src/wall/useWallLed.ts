@@ -31,9 +31,12 @@ export function useWallLed(bandOpen: boolean, now: Date) {
   })
   const night = isLedNight(now)
   const mode = wallLedMode({ bandOpen, bandState: band.state, micOpen: band.micOpen, closing: band.closing, night, glowEnabled: config?.led_night_glow !== false })
+  // How bright the candle burns (Settings › The wall › Glow brightness; 1 as designed).
+  const glowLevel = Math.max(0.1, Math.min(3, config?.led_glow_level ?? 1))
   useEffect(() => {
     led.setNight(night)
-    led[mode]()
-  }, [led, mode, night])
+    if (mode === 'glow') led.glow(glowLevel)
+    else led[mode]()
+  }, [led, mode, night, glowLevel])
   return { onBandLed: setBand, onOutcome: (kind: 'confirm' | 'cancel') => (kind === 'confirm' ? led.confirm() : led.cancel()) }
 }

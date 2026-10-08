@@ -1372,6 +1372,8 @@ _led_current_pixels = [[0.0, 0.0, 0.0] for _ in range(NUM_LEDS)]
 _led_mode = "off"  # off | listening | closing | processing
 _closing_from = 0.0
 _closing_ms = 5000
+# How bright the night glow burns, from Settings › The wall › Glow brightness (Jake, Oct 7): 1.0 as designed.
+_glow_level = 1.0
 _voice_level = 0.0
 _voice_until = 0.0
 _color_lock   = threading.Lock()
@@ -1548,7 +1550,7 @@ def _frame_color_raw(mode: str, i: int, t: float, voice_env: float, night: bool)
         near = math.exp(-(((i - hot) / (NUM_LEDS * 0.22)) ** 2))
         level = max(0.08, flame) * (0.62 + 0.38 * h) * (0.85 + 0.15 * near) * (1.0 + 0.04 * _wobble(t * 5.0 + i * 0.83, 5))
         warm = _add(_scale(EMBER, 1.0 - near * 0.6), _scale(EMBER_GLINT, near * 0.6))
-        return _tone(tuple(int(round(c)) for c in warm), 0.44 * level, True)
+        return _tone(tuple(int(round(c)) for c in warm), 0.44 * level * _glow_level, True)
     return (0.0, 0.0, 0.0)
 
 def _comet_loop():
@@ -1702,8 +1704,11 @@ def led_waiting(night: bool = False):
     return {"ok": True, "mode": "waiting"}
 
 @app.post("/led/glow")
-def led_glow():
-    """Night, nobody talking to Casa: a faint ember glow."""
+def led_glow(level: float = 1.0):
+    """Night, nobody talking to Casa: a faint candle glow; `level` from Settings (0.25–3, 1 as designed)."""
+    global _glow_level
+    with _color_lock:
+        _glow_level = max(0.1, min(3.0, level))
     _set_night(True)
     with _led_lock:
         _set_mode("glow")

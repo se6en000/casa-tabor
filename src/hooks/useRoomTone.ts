@@ -54,6 +54,7 @@ export interface DisplayConfig {
   brightness_max: number
   auto_sleep_enabled: boolean   // blank display when room is very dark
   led_night_glow: boolean       // the LED strip's faint candle glow at night while nobody's talking to Casa
+  led_glow_level?: number       // how bright that glow burns: 1 as designed, 0.25–3
   sleep_lux_threshold: number   // lux floor before sleep (default 0.5)
   wake_lux_threshold: number    // lux to wake from sleep (default 3.0)
   sleep_delay_s: number         // seconds in darkness before sleeping (default 30)

@@ -95,3 +95,26 @@ print(json.dumps(frames))
   // (a gust dims the top a beat after the sides, so now and then a side is brightest for a moment)
   assert.ok(brightest.filter((k) => k >= 12 && k <= 47).length > brightest.length * 0.9, 'the hot spot left the top')
 })
+
+// Settings › The wall › Glow brightness (Jake, Oct 7: "can you give me setting in the glow setting menu to configure
+// how bright it goes?"): the level scales the candle, still amber, never past the strip's cap.
+test('the glow brightness setting scales the candle', () => {
+  const peaks = JSON.parse(execFileSync('python3', ['-c', `
+import json, importlib.util
+spec = importlib.util.spec_from_file_location('main', 'pi/sensor-bridge/main.py')
+main = importlib.util.module_from_spec(spec); spec.loader.exec_module(main)
+out = {}
+for lv in (0.5, 1.0, 2.0, 3.0):
+    main._glow_level = lv
+    out[str(lv)] = [main._frame_color('glow', i, t / 4.0, 0.0, True) for i in range(main.NUM_LEDS) for t in range(0, 200)]
+out['cap'] = main.LED_MAX_BRIGHT
+print(json.dumps(out))
+`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
+  const meanRed = (lv) => peaks[lv].reduce((s, [r]) => s + r, 0) / peaks[lv].length
+  assert.ok(Math.abs(meanRed('2.0') / meanRed('1.0') - 2) < 0.15, 'twice as bright at 200%')
+  assert.ok(Math.abs(meanRed('0.5') / meanRed('1.0') - 0.5) < 0.1, 'half as bright at 50%')
+  for (const [r, g, b] of peaks['3.0']) {
+    assert.ok(Math.max(r, g, b) <= peaks.cap, 'never past the cap')
+    if (r >= 4) assert.ok(g <= r * 0.45 && g >= r * 0.18 && b <= r * 0.08, 'still amber')
+  }
+})

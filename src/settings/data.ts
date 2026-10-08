@@ -78,6 +78,7 @@ export interface DisplayConfigLite {
   auto_sleep_enabled?: boolean
   sleep_delay_s?: number
   led_night_glow?: boolean
+  led_glow_level?: number
   /** How far under the room's light the wall sits, 0–0.9 (the Pi's "below the room"; 0.30 when unset). */
   room_dim_strength?: number
   /** The colour shift toward the room's light: 0 = true to it, 0.4 = softened. */

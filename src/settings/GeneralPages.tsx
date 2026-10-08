@@ -439,6 +439,11 @@ export function WallPage({ head }: { head: ReactNode }) {
           <Row name="After the room goes dark" right={<Stepper label="Sleep after the room goes dark" value={c.sleep_delay_s ?? 120} min={30} max={900} step={30} format={secs} onChange={(v) => void set({ sleep_delay_s: v })} />} />
         )}
         <Row name="Night glow" state="A faint candle glow on the light strip at night" right={<Toggle label="Night glow" on={c.led_night_glow !== false} onChange={(on) => void set({ led_night_glow: on })} />} />
+        {/* Jake, Oct 7: "can you give me setting in the glow setting menu to configure how bright it goes?" */}
+        {c.led_night_glow !== false && (
+          <Row name="Glow brightness" state="How bright the candle burns; 100% is as it came"
+            right={<Stepper label="Glow brightness" value={Math.round((c.led_glow_level ?? 1) * 100)} min={25} max={300} step={25} unit="%" onChange={(v) => void set({ led_glow_level: v / 100 })} />} />
+        )}
       </Group>
       {src.onWall && (
         <Group label="The light sensor, on this wall">

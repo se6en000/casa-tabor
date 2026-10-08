@@ -68,8 +68,13 @@ test('settings: the wall page — brightness steps, sleep and night glow switch,
   await expect(s.getByRole('status')).toHaveText('Saved')
   await s.getByRole('switch', { name: 'Sleep when the room is dark' }).click()
   await expect(s.getByRole('group', { name: 'Sleep after the room goes dark' })).toHaveCount(0)
+  // How bright the candle burns (Jake, Oct 7): 100% as it came, in 25% steps.
+  await expect(s.getByRole('group', { name: 'Glow brightness' })).toContainText('100 %')
+  await s.getByRole('button', { name: 'More: Glow brightness' }).click()
+  await expect(s.getByRole('group', { name: 'Glow brightness' })).toContainText('125 %')
   await s.getByRole('switch', { name: 'Night glow' }).click()
   await expect(s.getByRole('switch', { name: 'Night glow' })).toHaveAttribute('aria-checked', 'false')
+  await expect(s.getByRole('group', { name: 'Glow brightness' })).toHaveCount(0)
   // The screen's own idle switch is only on the wall itself.
   await expect(s.getByRole('switch', { name: 'Turn the screen off when idle' })).toHaveCount(0)
 })

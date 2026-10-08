@@ -6,9 +6,10 @@ const FEEDBACK_LOCK_MS = 2800  // how long confirm/cancel block phase sync
 type LedMode = 'listening' | 'closing' | 'processing' | 'waiting' | 'glow' | 'confirm' | 'cancel' | 'off'
 
 /** `night`: the same moment in dim amber (the Family Wall's evening; P3.14). */
-function callLed(mode: LedMode, night = false) {
+function callLed(mode: LedMode, night = false, glowLevel = 1) {
   // "closing": the listening light fading out over the follow-up window's last seconds (CLOSING_FADE_MS).
-  const params = [night ? 'night=true' : '', mode === 'closing' ? 'ms=5000' : ''].filter(Boolean).join('&')
+  // "glow": how bright, from Settings › The wall › Glow brightness (1 as designed).
+  const params = [night ? 'night=true' : '', mode === 'closing' ? 'ms=5000' : '', mode === 'glow' ? `level=${glowLevel}` : ''].filter(Boolean).join('&')
   fetch(`${SENSOR_BRIDGE}/led/${mode}${params ? `?${params}` : ''}`, { method: 'POST' }).catch(() => {})
 }
 
@@ -24,12 +25,13 @@ export function useLedStrip() {
   const lockedUntil  = useRef<number>(0)
   const desiredMode  = useRef<LedMode>('off')
   const unlockTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const glowLevel    = useRef(1)
 
   const setMode = useCallback((mode: LedMode) => {
-    const shown = `${mode}${nightRef.current ? ':night' : ''}`
+    const shown = `${mode}${nightRef.current ? ':night' : ''}${mode === 'glow' ? `:${glowLevel.current}` : ''}`
     if (currentMode.current === shown) return
     currentMode.current = shown
-    callLed(mode, nightRef.current)
+    callLed(mode, nightRef.current, glowLevel.current)
   }, [])
 
   const setFeedback = useCallback((mode: 'confirm' | 'cancel') => {
@@ -66,7 +68,7 @@ export function useLedStrip() {
   /** Day or night colours for what follows. */
   const setNight = useCallback((night: boolean) => { nightRef.current = night }, [])
   const waiting = useCallback(() => setPhaseMode('waiting'), [setPhaseMode])
-  const glow = useCallback(() => setPhaseMode('glow'), [setPhaseMode])
+  const glow = useCallback((level = 1) => { glowLevel.current = level; setPhaseMode('glow') }, [setPhaseMode])
   const listening = useCallback(() => setPhaseMode('listening'), [setPhaseMode])
   const processing = useCallback(() => setPhaseMode('processing'), [setPhaseMode])
   const closing = useCallback(() => setPhaseMode('closing'), [setPhaseMode])
