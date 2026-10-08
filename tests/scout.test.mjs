@@ -240,3 +240,144 @@ test('an outing’s link for the phone: its page, or the place on Google Maps', 
     'https://www.google.com/maps/search/?api=1&query=Celona%201%20Clematis%20St%2C%20West%20Palm%20Beach&query_place_id=abc')
   assert.equal(outingLink({ kind: 'family', title: 'Fair', place: 'Fairgrounds' }), 'https://www.google.com/maps/search/?api=1&query=Fair%20Fairgrounds')
 })
+
+// Jake, Oct 8: "do the calendar feeds" — local live music, comedy and trivia, read straight from the calendars' own
+// markup (no AI): Weekend Broward's nightly Palm Beach gigs, South Florida Live Music's gig list, Great Big Trivia's games.
+test('calendars: Great Big Trivia’s weekly games, from its structured data', async () => {
+  const { parseTriviaSchedule } = await import('../supabase/functions/_shared/scout.mjs')
+  const ld = { '@graph': [
+    { '@type': 'EventSeries', name: 'Live Trivia at Newport Diner', description: 'Free weekly live trivia night with DJ host and real bar prizes.', eventSchedule: { byDay: 'https://schema.org/Thursday', startTime: '19:00', endTime: '21:00' }, location: { name: 'Newport Diner', address: { streetAddress: '1 Clematis St', addressLocality: 'West Palm Beach' } }, isAccessibleForFree: true },
+    { '@type': 'FAQPage' },
+  ] }
+  const html = `<script type="application/ld+json">${JSON.stringify(ld)}</script>`
+  const [t] = parseTriviaSchedule(html, 'https://www.greatbigtrivia.com/play/palm-beach-county')
+  assert.equal(t.kind, 'trivia')
+  assert.equal(t.title, 'Live Trivia')
+  assert.equal(t.place, 'Newport Diner')
+  assert.equal(t.recurring, 'Thursdays 7–9 PM')
+  assert.equal(t.address, '1 Clematis St, West Palm Beach')
+  assert.equal(t.free, true)
+})
+
+test('calendars: Weekend Broward’s gigs — the act, the venue, the time and its own link', async () => {
+  const { parseWeekendBroward } = await import('../supabase/functions/_shared/scout.mjs')
+  const html = `<li class="simcal-event" itemscope itemtype="http://schema.org/Event"><span class="simcal-event-title" itemprop="name">The Goodnicks at Centennial Square &amp; Great Lawn in West Palm Beach +*</span>
+    <span class="simcal-event-start" itemprop="startDate" content="2026-10-08T18:00:00-04:00">October 8</span>
+    <span itemprop="location"><meta itemprop="address" content="Nancy M. Graham Centennial Square, 150 N Clematis St, West Palm Beach, FL 33401, USA" /></span>
+    <div class="simcal-event-description" itemprop="description"><h2><span>Clematis by Night</span></h2><p>Every Thursday.</p><a href="https://www.wpb.org/clematis-by-night">x</a></div></li>`
+  const [g] = parseWeekendBroward(html)
+  assert.deepEqual([g.kind, g.title, g.when, g.place], ['music', 'The Goodnicks', '2026-10-08 18:00', 'Nancy M. Graham Centennial Square'])
+  assert.equal(g.address, '150 N Clematis St, West Palm Beach, FL 33401')
+  assert.equal(g.url, 'https://www.wpb.org/clematis-by-night')
+  assert.equal(g.why, 'Clematis by Night')
+})
+
+test('calendars: South Florida Live Music’s gigs — dated, tonight or weekly; comedy is comedy', async () => {
+  const { parseSflmGigs } = await import('../supabase/functions/_shared/scout.mjs')
+  const gig = (o) => JSON.stringify({ slug: o.slug, artist: o.artist, venue: o.venue, genre: o.genre, genreCls: 'x', time: o.time, cover: o.cover, lat: '26.346648', lng: '-80.084623', detailUrl: `https://southfloridalivemusic.com/gig/?gig=${o.slug}` })
+  const html = `<script>var gigs = [${[
+    gig({ slug: 'a', artist: 'Chicago Transit Canada', venue: 'The Funky Biscuit', genre: 'CLASSIC ROCK', time: 'Wed, Oct 21 · 9 PM', cover: 'Ticketed' }),
+    gig({ slug: 'b', artist: 'Rotating Live Music at Bamboo Room', venue: 'Bamboo Room', genre: 'ROCK', time: 'Every Sun, Wed & Sat', cover: 'Free' }),
+    gig({ slug: 'c', artist: 'Celtic Thursday', venue: 'Luna Star Cafe', genre: 'FOLK', time: 'Tonight', cover: 'No cover' }),
+    gig({ slug: 'd', artist: 'Nate Bargatze', venue: 'Kravis Center', genre: 'COMEDY', time: 'Sat, Jan 9 · 7:30 PM', cover: 'Ticketed' }),
+  ].join(',')}]</script>`
+  const [a, b, c, d] = parseSflmGigs(html, '2026-10-08')
+  assert.deepEqual([a.kind, a.title, a.place, a.when, a.ticketed], ['music', 'Chicago Transit Canada', 'The Funky Biscuit', '2026-10-21 21:00', true])
+  assert.deepEqual([b.when, b.recurring], [null, 'Every Sun, Wed & Sat'])
+  assert.equal(c.when, '2026-10-08')
+  assert.deepEqual([d.kind, d.when], ['comedy', '2027-01-09 19:30'])
+  assert.deepEqual(a.at, { lat: 26.346648, lng: -80.084623 })
+})
+
+// Local first: everyday things within half an hour; a ticketed show (a touring band, a comedian) up to an hour.
+test('calendars: within half an hour, or an hour for a ticketed show', async () => {
+  const { calendarReach } = await import('../supabase/functions/_shared/scout.mjs')
+  const home = { lat: 26.6779, lng: -80.059 }
+  assert.equal(calendarReach({ at: { lat: 26.70, lng: -80.06 } }, home).ok, true)
+  assert.equal(calendarReach({ at: { lat: 26.3466, lng: -80.0846 } }, home).ok, false) // Boca bar gig, ~40 min
+  assert.equal(calendarReach({ at: { lat: 26.3466, lng: -80.0846 }, ticketed: true }, home).ok, true)
+  assert.equal(calendarReach({ at: { lat: 25.79, lng: -80.19 }, ticketed: true }, home).ok, false) // Miami
+  assert.equal(calendarReach({ address: 'Rudy’s Pub, Lake Worth, FL' }, home).ok, true)
+  assert.equal(calendarReach({ address: 'Tin Roof, 8 E Atlantic Ave, Delray Beach, FL' }, home).ok, true)
+  assert.equal(calendarReach({ address: "Crazy Uncle Mike's, 6450 N Federal Hwy, Boca Raton, FL" }, home).ok, false)
+})
+
+// Jake, Oct 8: "the last thing I want to hear about is typical tourist stuff / referral bait".
+test('no tourist stuff or referral bait', async () => {
+  const { isBait } = await import('../supabase/functions/_shared/scout.mjs')
+  for (const t of ['Sunset Sightseeing Boat Tour', 'Palm Beach Trolley Tour', 'Airboat Adventure', 'Win 2 VIP tickets — enter now', 'Top 10 things to do in Palm Beach', 'Use promo code PALM20']) assert.equal(isBait({ title: t }), true, t)
+  assert.equal(isBait({ title: 'Clematis by Night', why: 'free waterfront concert' }), false)
+  assert.equal(isBait({ title: 'Live Trivia', place: 'Newport Diner' }), false)
+  assert.equal(isBait({ title: 'Jazz night', why: 'Sponsored by Visit Florida' }), true)
+})
+
+// Jake, Oct 8: "we will need some significant deduping … a lot of these sources are going to have the same information".
+test('the same thing from two sources is one: by its name, its day and its place', async () => {
+  const { sameOuting, foldIn } = await import('../supabase/functions/_shared/scout.mjs')
+  const wb = { kind: 'music', title: 'The Goodnicks', when: '2026-10-08 18:00', place: 'Nancy M. Graham Centennial Square', address: '150 N Clematis St, West Palm Beach', url: 'https://www.wpb.org/clematis-by-night', verify_note: 'on Weekend Broward' }
+  const sflm = { kind: 'music', title: 'Goodnicks', when: '2026-10-08 18:00', place: 'Centennial Square', drive_min: 6, verify_note: 'on South Florida Live Music' }
+  const clematis = { kind: 'couple', title: 'Clematis by Night: The Goodnicks', when: '2026-10-08 18:00', place: 'West Palm Beach Waterfront', verify_note: 'its page shows it' }
+  assert.equal(sameOuting(wb, sflm), true)
+  assert.equal(sameOuting(wb, clematis), true) // the newsletter's / the search's write-up of the same night
+  assert.equal(sameOuting(wb, { ...sflm, when: '2026-10-15 18:00' }), false) // next week's is another night
+  assert.equal(sameOuting(wb, { ...sflm, title: 'Spider Cherry' }), false) // another act
+  // A weekly one and that week's dated listing at the same place: one.
+  const weekly = { kind: 'music', title: 'Rotating Live Music', recurring: 'Every Sun, Wed & Sat', place: 'Bamboo Room' }
+  assert.equal(sameOuting(weekly, { kind: 'music', title: 'Live music', when: '2026-10-10 20:00', place: 'The Bamboo Room' }), true) // a Saturday
+  assert.equal(sameOuting(weekly, { kind: 'music', title: 'Live music', when: '2026-10-09 20:00', place: 'The Bamboo Room' }), false) // a Friday
+  // A restaurant never merges with an event there.
+  assert.equal(sameOuting({ kind: 'restaurant', title: 'Celona', place: 'Celona' }, { kind: 'couple', title: 'Gin tasting at Celona', when: '2026-10-09 19:00', place: 'Celona' }), false)
+  // Folded into what's kept: the kept row's key and answer stay; the best details from each; where it was seen.
+  const kept = [{ ...clematis, dedupe_key: 'e:clematis-night:2026-10-08', status: 'saved' }]
+  const rows = foldIn([wb, sflm], kept)
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].dedupe_key, 'e:clematis-night:2026-10-08')
+  assert.equal(rows[0].status, 'saved')
+  assert.equal(rows[0].address, '150 N Clematis St, West Palm Beach')
+  assert.equal(rows[0].drive_min, 6)
+  assert.match(rows[0].verify_note, /its page shows it.*Weekend Broward.*South Florida Live Music/)
+  // Said no to: it stays gone, from any source.
+  assert.deepEqual(foldIn([wb], [{ ...clematis, dedupe_key: 'k', status: 'not_for_us' }]), [])
+})
+
+// Alexa: "who's playing tonight?", "any comedy this weekend?", "where's trivia tonight?" — from the calendars.
+test('Alexa’s live music, comedy and trivia: tonight first, the week, the weekly ones by day; kept apart from the rest', async () => {
+  const { tonightSection, outingsSection, scoutPicks } = await import('../supabase/functions/_shared/scout.mjs')
+  const rows = [
+    { kind: 'music', title: 'The Goodnicks', when: '2026-10-08 18:00', place: 'Centennial Square', why: 'Clematis by Night', status: 'new' },
+    { kind: 'music', title: 'Edwin McCain', when: '2026-10-10 19:00', place: 'The Funky Biscuit', why: 'rock · ticketed', status: 'new' },
+    { kind: 'comedy', title: 'Nate Bargatze', when: '2026-10-11 19:30', place: 'Kravis Center', status: 'new' },
+    { kind: 'trivia', title: 'Live Trivia', recurring: 'Thursdays 7–9 PM', place: 'Newport Diner', status: 'new' },
+    { kind: 'music', title: 'Old gig', when: '2026-10-01 20:00', place: 'X', status: 'new' },
+    { kind: 'music', title: 'Far off', when: '2026-11-30 20:00', place: 'Y', status: 'new' },
+    { kind: 'couple', title: 'Art After Dark', recurring: 'Fridays 5–8 PM', place: 'Norton', status: 'new' },
+    { kind: 'couple', title: 'Clematis by Night: Uncle Morty', when: '2026-10-08 18:00', place: 'Waterfront', status: 'new', verify_note: 'its page shows it · on Weekend Broward' },
+  ]
+  const s = tonightSection(rows, today)
+  assert.match(s, /^LIVE MUSIC, COMEDY & TRIVIA/)
+  assert.match(s, /Tonight[^\n]*\n- 6 PM · The Goodnicks at Centennial Square/)
+  assert.match(s, /Sat Oct 10 · 7 PM · Edwin McCain at The Funky Biscuit/)
+  assert.match(s, /comedy: Sun Oct 11 · 7:30 PM · Nate Bargatze at Kravis Center/)
+  assert.match(s, /Thursdays 7–9 PM · Live Trivia at Newport Diner/)
+  assert.match(s, /6 PM · Clematis by Night: Uncle Morty at Waterfront/) // a calendar listed it, kept as the Scout's own
+  assert.doesNotMatch(s, /Old gig|Far off|Art After Dark/)
+  // The rest of the Scout's list leaves them to this section; the paper's picks too.
+  assert.doesNotMatch(outingsSection(rows, today) ?? '', /Goodnicks|Live Trivia/)
+  assert.ok(scoutPicks(rows, { today, n: 5 }).every((o) => !['music', 'comedy', 'trivia'].includes(o.kind)))
+  assert.equal(tonightSection([], today), null)
+})
+
+// The first calendar run (Oct 8): "Live Trivia, Mondays" at PapiChulo and at Uncle Mick's became one — the key had no
+// place. Two places are two things; and karaoke and DJ nights aren't the live music asked for.
+test('the same name on the same night at two places is two things; karaoke and DJ nights are left out', async () => {
+  const { dedupeKey, foldIn, notLiveMusic } = await import('../supabase/functions/_shared/scout.mjs')
+  const a = { kind: 'trivia', title: 'Live Trivia', recurring: 'Mondays 7–9 PM', place: 'PapiChulo Tacos' }
+  const b = { kind: 'trivia', title: 'Live Trivia', recurring: 'Mondays 8–10 PM', place: "Uncle Mick's Bar & Grill" }
+  assert.notEqual(dedupeKey(a), dedupeKey(b))
+  assert.equal(foldIn([a, b], []).length, 2)
+  assert.equal(notLiveMusic({ kind: 'music', title: 'Weekly Karaoke', place: 'Foster’s Shak' }), true)
+  assert.equal(notLiveMusic({ kind: 'music', title: 'House and Techno Weekends', why: 'house, techno · free' }), true)
+  assert.equal(notLiveMusic({ kind: 'music', title: 'Sunset DJ Sets at Serena Rooftop' }), true)
+  assert.equal(notLiveMusic({ kind: 'music', title: 'SnapHook', why: null }), false)
+  assert.equal(notLiveMusic({ kind: 'trivia', title: 'Music Bingo' }), false)
+})

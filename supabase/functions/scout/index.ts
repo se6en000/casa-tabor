@@ -2,14 +2,16 @@
 // restaurants, free workouts (yoga, pilates, run clubs, pickleball), evenings out for two, weekend family outings — and
 // keep only what checks out (scout.mjs). The newsletters the family subscribes to (the Palm Beach Post, the city) are
 // mined too. POST { action: 'research', force?, dry_run? } | { action: 'list' } | { action: 'feedback', id, status }
-// | { action: 'news', force?, dry_run? } (the paper's Around town, each morning).
+// | { action: 'news', force?, dry_run? } (the paper's Around town, each morning)
+// | { action: 'calendars', dry_run? } (live music, comedy and trivia from local calendars, each morning).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
-  parseCandidates, parseTownNews, restaurantVerdict, townInReach, townNewsPrompt,
+  CALENDARS, CALENDAR_KINDS, calendarReach, foldIn, isBait, notLiveMusic, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
+  parseWeekendBroward, restaurantVerdict, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
 const CORS = {
@@ -22,7 +24,9 @@ const providerFetch = createTrackedProviderFetch({ functionName: 'scout', capabi
 const mapsFetch = createTrackedMapsFetch({ functionName: 'scout', service: 'places', sku: 'Places Text Search', callPurpose: 'scout-research' })
 
 // The newsletters worth mining (Jake subscribes the inbox Tabor House reads).
-const NEWSLETTERS = ['%palmbeachpost%', '%pbpost%', '%wpb.org%', '%thepalmbeaches%', '%palmbeachculture%', '%palmbeachillustrated%', '%palmbeachdailynews%', '%eventbrite%', '%meetup%']
+const NEWSLETTERS = ['%palmbeachpost%', '%pbpost%', '%wpb.org%', '%thepalmbeaches%', '%palmbeachculture%', '%palmbeachillustrated%', '%palmbeachdailynews%', '%eventbrite%', '%meetup%',
+  // Jake's Oct 8 subscriptions: Weekend Broward, the Palm Beach Weekender, Palm Beach Locals, Macaroni Kid, Florida Weekly, Palms West.
+  '%weekendbroward%', '%palmbeachweekender%', '%mypalmbeachlocals%', '%palmbeachlocals%', '%macaronikid%', '%floridaweekly%', '%palmswest%']
 // Places' own searches for hidden gems near home.
 const GEM_QUERIES = ['hidden gem restaurant', 'chef driven restaurant', 'wine bar small plates', 'omakase', 'romantic restaurant', 'farm to table restaurant', 'cocktail bar', 'waterfront restaurant']
 const PLACE_FIELDS = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.location,places.primaryTypeDisplayName,places.editorialSummary,places.websiteUri,places.googleMapsUri,places.priceLevel'
@@ -129,6 +133,59 @@ Deno.serve(async (req) => {
     return json({ ok: true, started: true }, 202)
   }
 
+  if (body.action === 'calendars') {
+    const read = async () => {
+      const [{ data: homeRow }, { data: known }] = await Promise.all([
+        sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+        sb.from('outings').select('*').in('status', ['new', 'offered', 'saved', 'not_for_us']).limit(1000),
+      ])
+      const geo = homeRow?.value?.geocode_cache
+      const home = typeof geo?.lat === 'number' ? { lat: geo.lat as number, lng: geo.lng as number } : null
+      const found: Array<Record<string, unknown>> = []
+      const log: Array<Record<string, unknown>> = []
+      await Promise.all(CALENDARS.map(async (cal) => {
+        try {
+          const res = await fetch(cal.url, { redirect: 'follow', headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36' } })
+          if (!res.ok) { log.push({ cal: cal.id, status: res.status }); return }
+          const html = await res.text()
+          const items = cal.id === 'weekendbroward' ? parseWeekendBroward(html) : cal.id === 'sflm' ? parseSflmGigs(html, today) : parseTriviaSchedule(html, cal.url)
+          let kept = 0
+          for (const it of items as Array<Record<string, any>>) {
+            if (it.when && String(it.when).slice(0, 10) < today) continue
+            if (it.when && String(it.when).slice(0, 10) > addDays(today, AHEAD_DAYS * 3)) continue
+            if (isBait(it) || notLiveMusic(it)) continue
+            const reach = calendarReach(it, home)
+            if (!reach.ok) continue
+            const { at: _at, ticketed: _t, ...row } = it
+            found.push({ ...row, drive_min: reach.minutes ?? null, source: 'calendar', source_ref: cal.id, verify_note: `on ${cal.name}` })
+            kept++
+          }
+          log.push({ cal: cal.id, read: items.length, kept })
+        } catch (e) {
+          log.push({ cal: cal.id, error: e instanceof Error ? e.message : String(e) })
+        }
+      }))
+      // One row per thing, however many calendars (or newsletters, or searches) list it.
+      const rows = foldIn(found, (known ?? []) as Array<Record<string, unknown>>).map((r: Record<string, any>) => ({
+        dedupe_key: r.dedupe_key, kind: r.kind, title: r.title, when: r.when ?? null, recurring: r.recurring ?? null, place: r.place ?? null, address: r.address ?? null,
+        url: r.url ?? null, why: r.why ?? null, free: r.free ?? null, drive_min: r.drive_min ?? null, rating: r.rating ?? null, rating_count: r.rating_count ?? null,
+        gem: r.gem ?? false, google_place_id: r.google_place_id ?? null, source: r.source ?? 'calendar', source_ref: r.source_ref ?? null, verify_note: r.verify_note ?? null,
+        status: r.status ?? 'new', verified_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }))
+      if (body.dry_run) return { found: found.length, rows, log }
+      if (rows.length) {
+        const { error } = await sb.from('outings').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: false })
+        if (error) throw new Error(error.message)
+      }
+      // Past gigs put away; a weekly one no calendar has listed for two weeks has stopped.
+      await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).lt('when', today).in('status', ['new', 'offered', 'saved'])
+      await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).in('kind', CALENDAR_KINDS).is('when', null)
+        .lt('verified_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).in('status', ['new', 'offered'])
+      return { found: found.length, written: rows.length, log }
+    }
+    try { return json(await read()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+  }
+
   if (body.action !== 'research') return json({ error: 'Unknown action' }, 400)
 
   // At most once in two days, whoever calls (the cron is public).
@@ -142,7 +199,7 @@ Deno.serve(async (req) => {
     const [{ data: llmRow }, { data: homeRow }, { data: known }, { data: mined }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
       sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
-      sb.from('outings').select('dedupe_key, status, google_place_id, source_ref'),
+      sb.from('outings').select('*').limit(2000),
       sb.from('settings').select('value').eq('key', 'scout_state').maybeSingle(),
     ])
     const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
@@ -300,22 +357,30 @@ Deno.serve(async (req) => {
     const byKey = new Map<string, Kept>()
     for (const k of kept) if (!byKey.has(k.dedupe_key)) byKey.set(k.dedupe_key, k)
     const known_ = new Map((known ?? []).map((k: { dedupe_key: string; status: string }) => [k.dedupe_key, k.status]))
-    const rows = [...byKey.values()].filter((k) => known_.get(k.dedupe_key) !== 'not_for_us').map((k) => ({
+    const rows = [...byKey.values()].filter((k) => known_.get(k.dedupe_key) !== 'not_for_us' && !isBait(k)).map((k) => ({
       dedupe_key: k.dedupe_key, kind: k.kind, title: k.title, when: k.when, recurring: k.recurring, place: k.place, address: k.address, url: k.url, why: k.why, free: k.free,
       drive_min: k.drive_min ?? null, rating: k.rating ?? null, rating_count: k.rating_count ?? null, gem: k.gem ?? false, google_place_id: k.google_place_id ?? null,
       source: k.source, source_ref: k.source_ref ?? null, verify_note: k.verify_note, verified_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       // Checked again: back on the list, keeping what the family said of it (saved, been) and when it was offered.
       status: ['saved', 'been', 'offered'].includes(String(known_.get(k.dedupe_key))) ? known_.get(k.dedupe_key) : 'new',
     }))
-    if (body.dry_run) return { kept: rows, rejected, newsletters: fresh.length, readerLog }
-    if (rows.length) {
-      const { error } = await sb.from('outings').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: false })
+    // The same thing found another way (a calendar, a newsletter, another search) is one row: fold into what's kept.
+    const folded = foldIn(rows, (known ?? []) as Array<Record<string, unknown>>).map((r: Record<string, any>) => ({
+      dedupe_key: r.dedupe_key, kind: r.kind, title: r.title, when: r.when ?? null, recurring: r.recurring ?? null, place: r.place ?? null, address: r.address ?? null,
+      url: r.url ?? null, why: r.why ?? null, free: r.free ?? null, drive_min: r.drive_min ?? null, rating: r.rating ?? null, rating_count: r.rating_count ?? null,
+      gem: r.gem ?? false, google_place_id: r.google_place_id ?? null, source: r.source, source_ref: r.source_ref ?? null, verify_note: r.verify_note ?? null,
+      verified_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      status: r.status === 'expired' ? 'new' : r.status ?? 'new',
+    }))
+    if (body.dry_run) return { kept: folded, rejected, newsletters: fresh.length, readerLog }
+    if (folded.length) {
+      const { error } = await sb.from('outings').upsert(folded, { onConflict: 'dedupe_key', ignoreDuplicates: false })
       if (error) throw new Error(error.message)
     }
     // Past ones put away.
     await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).lt('when', today).in('status', ['new', 'offered', 'saved'])
     await sb.from('settings').upsert({ key: 'scout_state', value: { researched_at: new Date().toISOString(), kept: rows.length, rejected: rejected.length, mined: [...minedIds].slice(-200) } }, { onConflict: 'key' })
-    return { kept: rows.length, rejected: rejected.length, newsletters: fresh.length }
+    return { kept: folded.length, rejected: rejected.length, newsletters: fresh.length }
   }
 
   if (body.dry_run) {

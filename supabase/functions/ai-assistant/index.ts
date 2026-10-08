@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { outingsSection } from '../_shared/scout.mjs'
+import { outingsSection, tonightSection } from '../_shared/scout.mjs'
 import { paperSection } from '../_shared/morning-paper.mjs'
 import { notesOf } from '../_shared/event-notes.mjs'
 import { placeOnCard } from '../_shared/ai-event-edit.mjs'
@@ -1136,7 +1136,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()),
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), tonight: tonightSection(outingRows ?? [], todayYmdNY()),
       paper: paperSection({ paper: paperRow ?? null, outings: outingRows ?? [], news: (newsRows ?? []).filter((n: { news_date: string }) => n.news_date === newsRows?.[0]?.news_date), today: todayYmdNY() }) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)

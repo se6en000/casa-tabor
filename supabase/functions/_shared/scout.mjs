@@ -33,6 +33,7 @@ export function laneSearchPrompt(lane, { today, until, area = TOWNS }) {
   return `Search the web for ${lane.ask}, in or near ${area} (within about 30 minutes' drive of West Palm Beach). Today is ${today}.
 ${dated ? `Only things happening between today and ${until}, or that happen every week right now (say which day and time). Nothing that has ended, been cancelled or moved online; nothing before today.` : 'Only places open now, with their town.'}
 Prefer what ${SOURCES} list. Real, current things only — if you are not sure it is on, leave it out.
+Locals' picks only (Jake: "the last thing I want to hear about is typical tourist stuff / referral bait"): nothing aimed at visitors (sightseeing, boat or trolley tours, souvenir spots, resort or hotel packages) and no sponsored, affiliate, giveaway or "top 10" picks.
 Answer with only a JSON array (no prose), up to 6 items: [{"kind": "fitness" (a workout), "couple" (good for two adults) or "family" (for kids), "title": "its exact name", "when": "YYYY-MM-DD HH:MM" or null, "recurring": "every Thursday 6–9 PM" or null, "place": "venue or area", "address": "street address, town" or null, "url": "the page that lists it (the event's or venue's own page)", "why": "one short line: what makes it worth going to", "free": true or false or null}]`
 }
 
@@ -206,13 +207,15 @@ export function restaurantVerdict(place, home, { fresh = false } = {}) {
 export function dedupeKey(o) {
   const base = words(o.place && o.kind === 'restaurant' ? o.place : o.title).slice(0, 5).join('-')
   // An event is one event whoever it's for (Clematis by Night came back as both a couple's and a family's).
-  return o.kind === 'restaurant' ? `r:${base}` : `e:${base}:${o.when?.slice(0, 10) ?? o.recurring?.toLowerCase().replace(/[^a-z]+/g, '-').slice(0, 30) ?? ''}`
+  // Two places are two things ("Live Trivia, Mondays" at two bars — the first calendar run, Oct 8).
+  const at = o.place && !words(o.title).some((w) => words(o.place).includes(w)) ? `@${words(o.place).slice(0, 3).join('-')}` : ''
+  return o.kind === 'restaurant' ? `r:${base}` : `e:${base}${at}:${o.when?.slice(0, 10) ?? o.recurring?.toLowerCase().replace(/[^a-z]+/g, '-').slice(0, 30) ?? ''}`
 }
 
 /** A newsletter issue (the Palm Beach Post's, the city's): the outings in it, as the lanes' JSON. */
 export function newsletterPrompt(email, today) {
   return `This is a local newsletter the family subscribes to (${String(email.from_email ?? '').slice(0, 80)}, "${String(email.subject ?? '').slice(0, 120)}"). Today is ${today}.
-Pick out what a couple in their forties in West Palm Beach might actually go to, from now until ${addDays(today, AHEAD_DAYS)}: restaurants (new or notable), free or low-cost workouts (yoga, pilates, run clubs, pickleball), evenings out (music, tastings, comedy, art walks, downtown events) and weekend family outings. Skip ads, deals, real estate, news and anything past or outside about 30 minutes of West Palm Beach.
+Pick out what a couple in their forties in West Palm Beach might actually go to, from now until ${addDays(today, AHEAD_DAYS)}: restaurants (new or notable), free or low-cost workouts (yoga, pilates, run clubs, pickleball), evenings out (music, tastings, comedy, art walks, downtown events) and weekend family outings. Skip ads, deals, real estate, news and anything past or outside about 30 minutes of West Palm Beach. Locals' picks only (Jake: "the last thing I want to hear about is typical tourist stuff / referral bait"): nothing aimed at visitors (sightseeing, boat or trolley tours, souvenir spots, resort or hotel packages) and no sponsored, affiliate, giveaway or "top 10" picks.
 Answer with only a JSON array, up to 10 items: [{"kind": "restaurant" | "fitness" | "couple" | "family", "title": "...", "when": "YYYY-MM-DD HH:MM" or null, "recurring": "..." or null, "place": "...", "address": "..." or null, "url": "its link in the email" or null, "why": "one short line", "free": true or false or null}]
 The email:
 ${String(email.body ?? '').slice(0, 24000)}`
@@ -230,7 +233,7 @@ const evening = (o) => {
  */
 export function scoutPicks(rows, { today, busy = {}, n = 3 }) {
   const rested = (o) => !o.offered_on || o.offered_on <= addDays(today, -REST_DAYS)
-  const live = (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && rested(o)
+  const live = (rows ?? []).filter((o) => SCOUT_KINDS.includes(o.kind) && ['new', 'saved', 'offered'].includes(o.status ?? 'new') && rested(o)
     && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 9))))
   const score = (o) => scoutScore(o, today, busy)
   const out = []
@@ -404,7 +407,7 @@ export function scoutNotes(picks) {
  * saved ones in, never one said no to — at most 15 lines, with the rule that she suggests only these (or a fresh search).
  */
 export function outingsSection(rows, today) {
-  const live = (rows ?? []).filter((o) => ['new', 'offered', 'saved'].includes(o.status ?? 'new') && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 14))))
+  const live = (rows ?? []).filter((o) => !CALENDAR_KINDS.includes(o.kind) && ['new', 'offered', 'saved'].includes(o.status ?? 'new') && (!o.when || (o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 14))))
   const dated = live.filter((o) => o.when).sort((a, b) => a.when.localeCompare(b.when)).slice(0, 7)
   const weekly = live.filter((o) => !o.when && o.kind !== 'restaurant').slice(0, 3)
   const places = live.filter((o) => o.kind === 'restaurant').sort((a, b) => Number(b.status === 'saved') - Number(a.status === 'saved') || Number(b.gem) - Number(a.gem) || (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 5)
@@ -412,4 +415,256 @@ export function outingsSection(rows, today) {
   if (!all.length) return null
   const line = (o) => `- ${o.kind}: ${o.title}${o.when ? ` · ${o.when}` : o.recurring ? ` · ${o.recurring}` : ''}${o.place && o.place !== o.title ? ` · ${o.place}` : ''}${o.drive_min ? ` · ~${o.drive_min} min` : ''}${o.rating ? ` · ${o.rating}★ (${o.rating_count})` : ''}${o.gem ? ' · hidden gem' : ''}${o.free ? ' · free' : ''}${o.status === 'saved' ? ' · they saved it' : ''}${o.why ? ` — ${o.why}` : ''}`
   return `OUT AND ABOUT (the Scout's list: checked this week as real, on, and within half an hour of home): when they ask for something to do, a date night, a new restaurant or a workout (yoga, pilates, run club, pickleball), suggest from these — two to four, each with when and where, leaning to the two of them unless the kids are asked about. Never suggest a place or event that isn't here unless search_web finds it right now, and never one they've said no to. "Put it on the calendar" is create_event.\n${all.map(line).join('\n')}`
+}
+
+// ── The calendars (Jake, Oct 8: "do the calendar feeds" — live music, comedy, trivia; "local first") ──────────────
+// Read straight from each calendar's own markup, no AI: Weekend Broward's Palm Beach County gigs (today's, every
+// morning), South Florida Live Music's gig list (weeks ahead, weekly residencies, ticketed shows), Great Big Trivia's
+// weekly games. They're the source, so a listing is taken on their word.
+export const CALENDAR_KINDS = ['music', 'comedy', 'trivia']
+export const CALENDARS = [
+  { id: 'weekendbroward', name: 'Weekend Broward', url: 'https://weekendbroward.com/live-music-calendar-palm-beach-county/' },
+  { id: 'sflm', name: 'South Florida Live Music', url: 'https://southfloridalivemusic.com/gigs-calendar/' },
+  { id: 'greatbigtrivia', name: 'Great Big Trivia', url: 'https://www.greatbigtrivia.com/play/palm-beach-county' },
+]
+
+const decode = (s) => String(s ?? '').replace(/&amp;/g, '&').replace(/&#0?39;|&#8217;|&rsquo;/g, '’').replace(/&#8216;/g, '‘').replace(/&quot;|&#8220;|&#8221;/g, '"').replace(/&nbsp;/g, ' ').replace(/&#8211;/g, '–').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/\s+/g, ' ').trim()
+const hhmm = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+const clock = (t) => { const [h, m] = String(t).split(':').map(Number); return { h, m, text: `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}`, pm: h >= 12 } }
+
+/** Great Big Trivia: its weekly games (schema.org EventSeries in the page's JSON-LD). */
+export function parseTriviaSchedule(html, url) {
+  const out = []
+  const walk = (o) => {
+    if (Array.isArray(o)) return o.forEach(walk)
+    if (!o || typeof o !== 'object') return
+    if (o['@type'] === 'EventSeries' && o.name && o.eventSchedule) {
+      const day = String(o.eventSchedule.byDay ?? '').split('/').pop()
+      const a = clock(o.eventSchedule.startTime ?? '19:00')
+      const b = o.eventSchedule.endTime ? clock(o.eventSchedule.endTime) : null
+      const range = b ? (a.pm === b.pm ? `${a.text}–${b.text} ${b.pm ? 'PM' : 'AM'}` : `${a.text} ${a.pm ? 'PM' : 'AM'}–${b.text} ${b.pm ? 'PM' : 'AM'}`) : `${a.text} ${a.pm ? 'PM' : 'AM'}`
+      const addr = o.location?.address ?? {}
+      out.push({
+        kind: 'trivia', title: decode(o.name).replace(/\s+at\s+.*$/i, ''), when: null, recurring: day ? `${day}s ${range}` : null,
+        place: decode(o.location?.name) || null, address: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', ') || null,
+        url, why: /bingo/i.test(o.name) ? 'free music bingo, real bar prizes' : 'free team trivia, real bar prizes', free: o.isAccessibleForFree === true ? true : null,
+      })
+    }
+    Object.values(o).forEach(walk)
+  }
+  for (const m of String(html).matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { walk(JSON.parse(m[1])) } catch { /* a broken block: the rest still count */ }
+  }
+  return out
+}
+
+/** Weekend Broward: the day's Palm Beach County gigs (Simple Calendar's schema.org Event markup). */
+export function parseWeekendBroward(html) {
+  const out = []
+  for (const li of String(html).match(/<li class="simcal-event[\s\S]*?<\/li>/g) ?? []) {
+    const name = decode(li.match(/simcal-event-title"[^>]*>([^<]*)/)?.[1]).replace(/[\s+*]+$/, '')
+    const start = li.match(/itemprop="startDate" content="(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/)
+    if (!name || !start) continue
+    const where = decode(li.match(/itemprop="address" content="([^"]*)"/)?.[1]).replace(/,\s*USA$/, '')
+    const parts = where ? where.split(/,\s*/) : []
+    const venueFirst = parts.length > 1 && !/^\d/.test(parts[0])
+    const desc = li.match(/simcal-event-description[\s\S]*$/)?.[0] ?? ''
+    const why = decode(desc.match(/<h2[^>]*>([\s\S]*?)<\/h2>/)?.[1]?.replace(/<[^>]+>/g, '')) || decode(desc.match(/<p[^>]*>([\s\S]*?)<\/p>/)?.[1]?.replace(/<[^>]+>/g, '')).slice(0, 80) || null
+    out.push({
+      kind: /comedy|comedian|stand-?up/i.test(name + why) ? 'comedy' : 'music', title: name.split(/\s+at\s+/i)[0],
+      when: `${start[1]} ${start[2]}:${start[3]}`, recurring: null,
+      place: venueFirst ? parts[0] : (name.split(/\s+at\s+/i)[1]?.replace(/\s+in\s+[^,]+$/i, '') ?? null),
+      address: (venueFirst ? parts.slice(1) : parts).join(', ') || null,
+      url: desc.match(/href="(https?:\/\/[^"]+)"/)?.[1] ?? null, why: why && !/^more info/i.test(why) ? why : null, free: null,
+    })
+  }
+  return out
+}
+
+const MONTHS3 = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+/** South Florida Live Music: its gigs (the page's own gig list: act, venue, when, genre, cover, the venue's spot). */
+export function parseSflmGigs(html, today) {
+  const out = []
+  const seen = new Set()
+  for (const m of String(html).match(/\{"slug":"[^{}]*?"detailUrl":"[^"]*"\}/g) ?? []) {
+    let g
+    try { g = JSON.parse(m) } catch { continue }
+    if (seen.has(g.slug)) continue
+    seen.add(g.slug)
+    const time = decode(g.time)
+    let when = null
+    let recurring = null
+    const d = time.match(/^[A-Za-z]{3},\s+([A-Za-z]{3})\s+(\d{1,2})(?:\s*·\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM))?/i)
+    if (d) {
+      const mo = MONTHS3.indexOf(d[1].toLowerCase()) + 1
+      const year = Number(today.slice(0, 4))
+      const md = `${String(mo).padStart(2, '0')}-${d[2].padStart(2, '0')}`
+      const day = `${year}-${md}` < addDays(today, -30) ? `${year + 1}-${md}` : `${year}-${md}`
+      when = d[3] ? `${day} ${hhmm((Number(d[3]) % 12) + (/pm/i.test(d[5]) ? 12 : 0), Number(d[4] ?? 0))}` : day
+    } else if (/^tonight/i.test(time)) when = today
+    else if (/^tomorrow/i.test(time)) when = addDays(today, 1)
+    else if (/^every/i.test(time)) recurring = time
+    else continue
+    const venue = decode(g.venue)
+    const comedy = /comedy|stand-?up/i.test(g.genre ?? '')
+    const lat = Number(g.lat)
+    const lng = Number(g.lng)
+    out.push({
+      kind: comedy ? 'comedy' : 'music', title: decode(g.artist).replace(/\s+·\s+/g, ' & ').replace(new RegExp(`\\s+at\\s+${venue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*$`, 'i'), ''),
+      when, recurring, place: venue || null, address: null, url: g.detailUrl ?? null,
+      why: [String(g.genre ?? '').toLowerCase(), g.cover ? String(g.cover).toLowerCase() : null].filter(Boolean).join(' · ') || null,
+      free: /^(free|no cover)$/i.test(g.cover ?? '') ? true : /ticket/i.test(g.cover ?? '') ? false : null,
+      ticketed: /ticket/i.test(g.cover ?? ''), at: Number.isFinite(lat) && Number.isFinite(lng) && lat ? { lat, lng } : null,
+    })
+  }
+  return out
+}
+
+/** Karaoke and DJ nights: on the gig calendars, but not the live music asked for (Jake: "bands … live music"). */
+export function notLiveMusic(o) {
+  if (o.kind !== 'music') return false
+  return /\bkaraoke\b|\bdj\b|\bdjs\b|\bdj sets?\b|\btechno\b|\bedm\b|open format/i.test(`${o.title ?? ''} ${o.why ?? ''}`)
+}
+
+// Drive time for the calendars: town streets near home, then the interstate further out.
+const roadMinutes = (km) => Math.round(km < 15 ? km / 0.75 + 4 : 24 + (km - 15) / 1.25)
+const HOUR_TOWNS = ['boca raton', 'deerfield', 'pompano', 'fort lauderdale', 'ft. lauderdale', 'hollywood', 'sunrise', 'coral springs', 'coconut creek', 'margate', 'parkland', 'stuart', 'hobe sound', 'jensen beach', 'palm city', 'port st']
+/**
+ * Local first (Jake, Oct 8): an everyday thing — a bar band, trivia — within about 35 minutes; a ticketed show (a
+ * touring band, a comedian) up to about an hour (Boca, Fort Lauderdale; never Miami).
+ */
+export function calendarReach(item, home) {
+  if (item.at && home) {
+    const minutes = roadMinutes(haversineKm(home, item.at))
+    return minutes <= 35 || (item.ticketed && minutes <= 70) ? { ok: true, minutes } : { ok: false, note: `about ${minutes} min` }
+  }
+  const t = `${item.address ?? ''} ${item.place ?? ''}`.toLowerCase()
+  if (HOUR_TOWNS.some((x) => t.includes(x))) return item.ticketed ? { ok: true, minutes: null } : { ok: false, note: 'about 40+ min' }
+  if (NEAR.some((x) => t.includes(x))) return { ok: true, minutes: null }
+  return { ok: false, note: 'no town in reach' }
+}
+
+/**
+ * Not for this family (Jake, Oct 8: "the last thing I want to hear about is typical tourist stuff / referral bait"):
+ * sightseeing and tours for visitors, packages, giveaways, promo codes, sponsored picks and "top 10" lists.
+ */
+export function isBait(o) {
+  const t = `${o.title ?? ''} ${o.why ?? ''} ${o.place ?? ''}`.toLowerCase()
+  return /\b(sightseeing|boat tours?|trolley tours?|duck tours?|airboats?|hop[- ]on|segway tours?|bus tours?|souvenirs?|tourists?|vacation packages?|hotel packages?|resort packages?|stay(cation)? packages?|timeshares?|sweepstakes|giveaways?|enter (now|to win)|win (\d+|a|an|two|vip|free)\b|promo codes?|discount codes?|use code|coupons?|groupon|affiliate|sponsored|top \d+|best things to do|bucket list|must[- ]see)\b/.test(t)
+}
+
+// ── One thing, however many sources say it (Jake, Oct 8: "we will need some significant deduping") ────────────
+const FILLER = new Set(['live', 'music', 'band', 'bands', 'duo', 'trio', 'weekly', 'every', 'rotating', 'local', 'featuring', 'feat', 'presents', 'show', 'tonight', 'night', 'nights', 'free', 'with'])
+const sig = (t) => new Set(words(t).filter((w) => !FILLER.has(w)))
+const DAY_WORDS = [/\bsun(day)?s?\b/, /\bmon(day)?s?\b/, /\btue(s|sday)?s?\b/, /\bwed(nesday)?s?\b/, /\bthu(r|rs|rsday)?s?\b/, /\bfri(day)?s?\b/, /\bsat(urday)?s?\b/]
+const weekdaysOf = (text) => DAY_WORDS.map((re, i) => (re.test(String(text ?? '').toLowerCase()) ? i : -1)).filter((i) => i >= 0)
+const weekdayOf = (ymd) => new Date(`${ymd}T12:00:00Z`).getUTCDay()
+const minutesOf = (when) => (when && when.length > 10 ? Number(when.slice(11, 13)) * 60 + Number(when.slice(14, 16)) : null)
+
+/** Whether two outings are the same thing: the same day (or week day), the same act or name, the same place. */
+export function sameOuting(a, b) {
+  const ra = a.kind === 'restaurant'
+  const rb = b.kind === 'restaurant'
+  if (ra !== rb) return false
+  const va = sig(a.place)
+  const vb = sig(b.place)
+  if (ra) {
+    const x = sig(a.place ?? a.title)
+    const y = sig(b.place ?? b.title)
+    return [...x].filter((w) => y.has(w)).length >= Math.max(1, Math.min(x.size, y.size))
+  }
+  // The day.
+  let sameTime = false
+  if (a.when && b.when) {
+    if (a.when.slice(0, 10) !== b.when.slice(0, 10)) return false
+    const ma = minutesOf(a.when)
+    const mb = minutesOf(b.when)
+    if (ma !== null && mb !== null && Math.abs(ma - mb) > 120) return false
+    sameTime = ma !== null && ma === mb
+  } else if (a.when || b.when) {
+    const dated = a.when ? a : b
+    const weekly = a.when ? b : a
+    if (!weekdaysOf(weekly.recurring).includes(weekdayOf(dated.when.slice(0, 10)))) return false
+  } else {
+    const da = weekdaysOf(a.recurring)
+    const db = weekdaysOf(b.recurring)
+    if (da.length && db.length && !da.some((d) => db.includes(d))) return false
+  }
+  // The place: different named places are different things — unless it's the same act at the same minute.
+  const venueOverlap = [...va].some((w) => vb.has(w))
+  const venuesDiffer = va.size > 0 && vb.size > 0 && !venueOverlap
+  // The name, without the place's words.
+  const ta = new Set([...sig(a.title)].filter((w) => !va.has(w) && !vb.has(w)))
+  const tb = new Set([...sig(b.title)].filter((w) => !va.has(w) && !vb.has(w)))
+  if (!ta.size || !tb.size) return venueOverlap && !ta.size && !tb.size
+  const shared = [...ta].filter((w) => tb.has(w)).length
+  const named = shared >= Math.min(ta.size, tb.size) || shared / new Set([...ta, ...tb]).size >= 0.5
+  if (!named) return false
+  return !venuesDiffer || sameTime
+}
+
+/** The two as one: the kept one's name, key and answer; the fuller details from either; where each was seen. */
+function mergeOuting(kept, more) {
+  const notes = [...new Set([kept.verify_note, more.verify_note].filter(Boolean).flatMap((n) => n.split(' · ')))]
+  const min = [kept.drive_min, more.drive_min].filter((x) => typeof x === 'number')
+  return {
+    ...kept,
+    when: (kept.when?.length ?? 0) >= (more.when?.length ?? 0) ? kept.when ?? more.when : more.when,
+    recurring: kept.recurring ?? more.recurring ?? null,
+    place: kept.place ?? more.place ?? null, address: kept.address ?? more.address ?? null, url: kept.url ?? more.url ?? null,
+    why: kept.why ?? more.why ?? null, free: kept.free ?? more.free ?? null,
+    drive_min: min.length ? Math.min(...min) : null,
+    verify_note: notes.join(' · ') || null,
+  }
+}
+
+/**
+ * Today's finds folded into what's kept: one that matches a kept outing (any source, any wording) updates that row —
+ * its key, its status, what the family said of it stay; one said no to stays gone; the rest merge among themselves
+ * and come in new. The rows to write.
+ */
+export function foldIn(incoming, existing) {
+  const pool = (existing ?? []).map((r) => ({ ...r }))
+  const touched = new Set()
+  const fresh = []
+  for (const c of incoming ?? []) {
+    const key = c.dedupe_key ?? dedupeKey(c)
+    const hit = pool.find((r) => r.dedupe_key === key || sameOuting(r, c))
+    if (hit) {
+      if (hit.status === 'not_for_us') continue
+      Object.assign(hit, mergeOuting(hit, c))
+      touched.add(hit)
+      continue
+    }
+    const mine = fresh.find((r) => r.dedupe_key === key || sameOuting(r, c))
+    if (mine) Object.assign(mine, mergeOuting(mine, c))
+    else fresh.push({ ...c, dedupe_key: key })
+  }
+  return [...touched, ...fresh]
+}
+
+/**
+ * Alexa's live music, comedy and trivia (Jake, Oct 8: "live music would be cool … comedians, bands, music, even
+ * trivia … local first"): from the calendars — tonight first, then the next week day by day, then the weekly ones (trivia
+ * nights, house bands) by day. Null with none.
+ */
+export function tonightSection(rows, today) {
+  // Anything a calendar lists, whatever it was first kept as (Clematis by Night's band merged into the Scout's own row).
+  const listed = (o) => CALENDAR_KINDS.includes(o.kind) || CALENDARS.some((c) => (o.verify_note ?? '').includes(`on ${c.name}`))
+  const live = (rows ?? []).filter((o) => listed(o) && o.kind !== 'restaurant' && ['new', 'offered', 'saved'].includes(o.status ?? 'new'))
+  const time = (w) => (w.length > 10 ? outingWhen({ when: w }).split(' · ')[1] : null)
+  const at = (o) => `${o.title}${o.place && o.place !== o.title ? ` at ${o.place}` : ''}${o.drive_min ? ` (~${o.drive_min} min)` : ''}${o.why ? ` — ${o.why}` : ''}${o.status === 'saved' ? ' · they saved it' : ''}`
+  const kind = (o) => (CALENDAR_KINDS.includes(o.kind) && o.kind !== 'music' ? `${o.kind}: ` : '')
+  const dated = live.filter((o) => o.when && o.when.slice(0, 10) >= today && o.when.slice(0, 10) <= addDays(today, 7)).sort((a, b) => a.when.localeCompare(b.when))
+  const tonight = dated.filter((o) => o.when.slice(0, 10) === today).slice(0, 14)
+  const week = dated.filter((o) => o.when.slice(0, 10) !== today).slice(0, 24)
+  const weekly = live.filter((o) => !o.when && o.recurring).sort((a, b) => (weekdaysOf(a.recurring)[0] ?? 7) - (weekdaysOf(b.recurring)[0] ?? 7)).slice(0, 24)
+  if (!tonight.length && !week.length && !weekly.length) return null
+  const day = (w) => outingWhen({ when: w }).replace(/^(\w+), /, '$1 ')
+  return [
+    'LIVE MUSIC, COMEDY & TRIVIA (read this morning from local gig and trivia calendars — bars, restaurants and venues within about half an hour; ticketed shows up to an hour): for "who\'s playing tonight", "live music", "a band", "comedy", "trivia", answer from these, local first, two to four with when and where. Nothing that isn\'t here unless search_web finds it right now.',
+    ...(tonight.length ? [`Tonight (${today}):`, ...tonight.map((o) => `- ${time(o.when) ? `${time(o.when)} · ` : ''}${kind(o)}${at(o)}`)] : []),
+    ...(week.length ? ['The next week:', ...week.map((o) => `- ${kind(o)}${day(o.when)} · ${at(o)}`)] : []),
+    ...(weekly.length ? ['Every week:', ...weekly.map((o) => `- ${kind(o)}${o.recurring} · ${at(o)}`)] : []),
+  ].join('\n')
 }
