@@ -2743,6 +2743,12 @@ test('wall: a calm morning is the morning brief — today, the weekend, next mon
   await page.reload()
   await expect(page.getByText(/A quiet stretch/)).toBeVisible()
   await expect(page.getByRole('article', { name: 'The morning paper' })).toHaveCount(0)
+  // Jake, Oct 8: "can I have a button or a secret touch place to go back to the newspaper?" — the date under the clock.
+  await page.getByRole('button', { name: 'Today’s paper' }).click()
+  await expect(page.getByRole('article', { name: 'The morning paper' })).toBeVisible()
+  await expect(page.getByText(/Previewing Morning paper/)).toBeVisible()
+  // On the paper itself, the date is just the date.
+  await expect(page.getByRole('button', { name: 'Today’s paper' })).toHaveCount(0)
 })
 
 // Canvas 72 (Jake, Oct 8: "lets build this three page paper but please include a left right swipe to move between the

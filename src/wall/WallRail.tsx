@@ -1,3 +1,5 @@
+import { useContext } from 'react'
+import { PaperRecall } from './paperRecall'
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { formatWallClock } from './clock'
@@ -26,15 +28,21 @@ export function RailShell({ night = false, children, foot }: { night?: boolean; 
 }
 
 /** The clock at the top of the panel, with a line under it ("Friday, September 25 · 84°", "Friday evening"). */
+
 export function RailClock({ now, size = 'rail', gold = false, children }: { now: Date; size?: 'rail' | 'calm'; gold?: boolean; children?: ReactNode }) {
   const clock = formatWallClock(now)
+  const openPaper = useContext(PaperRecall)
+  const below = size === 'calm' ? 'mt-[30px]' : 'mt-[20px]'
   return (
     <div className="flex shrink-0 flex-col">
       <div className="flex items-baseline gap-[12px]">
         <span className={`font-display font-medium lining-nums ${size === 'calm' ? 'text-wall-numeral' : 'text-wall-clock-rail'} ${gold ? 'text-wall-brass' : ''}`}>{clock.time}</span>
         <span className="text-wall-heading font-semibold text-wall-ink-2">{clock.meridiem}</span>
       </div>
-      {children && <div className={size === 'calm' ? 'mt-[30px]' : 'mt-[20px]'}>{children}</div>}
+      {children && (openPaper
+        // Looks exactly as it did: a tap on it is all that's new.
+        ? <button type="button" aria-label="Today’s paper" onClick={(e) => { e.stopPropagation(); openPaper() }} className={`${below} block w-full cursor-default border-0 bg-transparent p-0 text-left [color:inherit] [font:inherit]`}>{children}</button>
+        : <div className={below}>{children}</div>)}
     </div>
   )
 }

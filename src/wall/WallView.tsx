@@ -22,6 +22,7 @@ import { surpriseSafeChecklist } from './surprise'
 import { NIGHT_IDLE_MS, eveningFocus, eveningKeepsUp, selectPosture, tomorrowLine, tonightByClock, type Posture } from './posture'
 import { briefFacts, fallbackBrief, fallbackWords, paperDate, paperFacts, paperShows, type PaperWords } from './paper'
 import WallPaper from './WallPaper'
+import { PaperRecall } from './paperRecall'
 import type { ScoutPaper } from './useScout'
 import { formatWallDate } from './clock'
 import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
@@ -199,6 +200,14 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setPaperPreviewUntil(0), Math.max(0, paperPreviewUntil - Date.now()))
     return () => window.clearTimeout(timer)
   }, [paperPreviewUntil])
+  // The secret way back to the paper (Jake, Oct 8: "a button or a secret touch place to go back to the newspaper"): the
+  // date under the clock opens it, as the menu's Morning paper does.
+  const openPaper = () => {
+    setDayPreview(null)
+    const until = Date.now() + PREVIEW_MS
+    setPaperPreviewUntil(until)
+    setPreview(auto === 'calm' ? null : { posture: 'calm', until })
+  }
   // A day tapped in the week strip: shown until "Back", or 2 idle minutes.
   const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
   // A touch on Calm wakes the full day until this time (5 idle minutes).
@@ -626,6 +635,8 @@ export default function WallView(props: WallViewProps) {
   const meanwhile = smallJob && todos ? <WallQuietStep item={smallJob} onDone={() => void todos.act({ action: 'done', id: smallJob.id })} /> : null
 
   let face
+  // The paper itself has no way back to itself.
+  let paperOnShow = false
   // The night faces are dark; the corner mark takes their colours (its ink T would vanish on the dark ground).
   let darkFace = false
   // Every face but To do and Coming up has the left panel (canvas 56A, 58), its buttons at its top.
@@ -729,6 +740,7 @@ export default function WallView(props: WallViewProps) {
     const facts = paperFacts(shownToday, members, now, currentWeather)
     const words = paper ?? fallbackWords(facts)
     const nextView = describeNextMove(selectNextMove(shownToday, now), members, now)
+    paperOnShow = true
     face = (
       <WallPaper now={now} facts={facts} words={words}
         brief={words.brief ?? fallbackBrief(facts, briefFacts({ members, week, now, checklist, comingUp: comingUp?.items, todos: todos?.list }))}
@@ -780,6 +792,7 @@ export default function WallView(props: WallViewProps) {
   const nightFace = !comingUpOpen && !todoOpen && evening && (!sameDay(dayOnShow, now) || !picked)
 
   return (
+    <PaperRecall.Provider value={paperOnShow ? null : openPaper}>
     <div
       ref={rootRef}
       className="relative h-full w-full"
@@ -960,5 +973,6 @@ export default function WallView(props: WallViewProps) {
         />
       )}
     </div>
+    </PaperRecall.Provider>
   )
 }
