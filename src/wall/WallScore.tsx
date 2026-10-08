@@ -176,7 +176,8 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
   const showNow = isOnTimeline(now)
   const nowX = xForTime(now)
   // Hide the hour label the "now" time label would sit on top of.
-  const marks = showNow ? HOUR_MARKS.filter((mark) => mark.x < nowX - 20 || mark.x > nowX + 70) : HOUR_MARKS
+  // The hours under the now pill (canvas 71B) step aside for it.
+  const marks = showNow ? HOUR_MARKS.filter((mark) => mark.x < nowX - 115 || mark.x > nowX + 65) : HOUR_MARKS
   const lanes = score?.lanes ?? []
   const labels = useLabelFit(score)
   const at = LANE_GEOMETRY[compact ? 'compact' : fill ? 'tall' : 'full']
@@ -456,16 +457,18 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             className={`pointer-events-none absolute ${linesEnd} top-[32px] bg-wall-ground/60`}
             style={{ left: TRACK_LEFT, width: nowX }}
           />
+          {/* What time it is, at a glance (canvas 71B; Jake, Oct 8: "i need a line on the score to tell what time it
+              is"): a playhead — a bolder line with a soft glow, and "now · 1:40" in a brass pill on the hours row. */}
           <div
             aria-hidden="true"
-            className={`pointer-events-none absolute ${linesEnd} top-[26px] w-[2px] bg-wall-brass-ink`}
-            style={{ left: TRACK_LEFT + nowX - 1 }}
+            className={`pointer-events-none absolute ${linesEnd} top-[26px] w-[3px] bg-wall-brass-ink shadow-[0_0_10px_1px_rgba(122,86,32,0.35)]`}
+            style={{ left: TRACK_LEFT + nowX - 1.5 }}
           />
           <div
-            className="absolute top-[4px] text-wall-label font-bold text-wall-brass-ink lining-nums"
-            style={{ left: TRACK_LEFT + nowX + 8 }}
+            className="absolute top-[0px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-brass-ink px-[14px] py-[4px] text-wall-label font-bold tracking-[0.04em] text-wall-on-pigment shadow-[0_2px_8px_rgba(38,34,29,0.25)] lining-nums"
+            style={{ left: TRACK_LEFT + nowX }}
           >
-            {clock.time}
+            now · {clock.time}
           </div>
         </>
       )}

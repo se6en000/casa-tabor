@@ -265,6 +265,8 @@ export default function WallView(props: WallViewProps) {
 
   const chosen = selectPosture(today, now)
   const auto: Posture = chosen === 'calm' && (busy || Date.now() < awakeUntil) ? 'launch' : chosen
+  // A touch or a conversation wakes the full day (then it drifts back): the morning paper steps aside meanwhile.
+  const woke = busy || Date.now() < awakeUntil
   const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
   const shown = shownPosture(auto, preview, Date.now())
   const evening = shown.posture === 'evening'
@@ -702,7 +704,9 @@ export default function WallView(props: WallViewProps) {
         counts={counts}
       />
     )
-  } else if (shown.posture === 'calm' && shownToday && paperShows({ posture: 'calm', now, dismissedOn: paperPutAway, previewing: paperPreview })) {
+  } else if (shownToday && (paperPreview || (!shown.preview && !woke && (shown.posture === 'calm' || shown.posture === 'launch')))
+    // The morning is the paper's (Jake, Oct 8): only putting it away, a leave within 15 minutes or something at home soon.
+    && paperShows({ posture: shown.posture, now, dismissedOn: paperPutAway, previewing: paperPreview, plan: shownToday })) {
     const facts = paperFacts(shownToday, members, now, currentWeather)
     const words = paper ?? fallbackWords(facts)
     const nextView = describeNextMove(selectNextMove(shownToday, now), members, now)

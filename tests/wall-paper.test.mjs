@@ -43,7 +43,6 @@ test('plain words when nothing stands out', () => {
 test('the paper shows on calm mornings until 11, not after it’s put away; a preview shows it any time', () => {
   const nine = at(25, 9, 0)
   assert.equal(paperShows({ posture: 'calm', now: nine, dismissedOn: null, previewing: false }), true)
-  assert.equal(paperShows({ posture: 'launch', now: nine, dismissedOn: null, previewing: false }), false)
   assert.equal(paperShows({ posture: 'calm', now: at(25, 11, 0), dismissedOn: null, previewing: false }), false)
   assert.equal(paperShows({ posture: 'calm', now: nine, dismissedOn: '2026-09-25', previewing: false }), false)
   assert.equal(paperShows({ posture: 'calm', now: nine, dismissedOn: '2026-09-24', previewing: false }), true)
@@ -118,4 +117,30 @@ test('the brief: a heads-up for what’s coming due; nothing snoozed, however of
   const more = briefFacts({ members, week: [friday], now: at(25, 9, 0), todos })
   assert.deepEqual(more.soon, ['Clean the washing machine (today)', 'Fix the gate latch (in 2 days)'])
   assert.deepEqual(more.quiet, [])
+})
+
+// Jake, Oct 8: "i want the morning paper to show case the morning, can it only get interupted by me dismissing it, or
+// when there is a leave event in 15 mins?" → it comes back once the car's gone; something at home counts too.
+test('the paper holds the morning from 6: only a leave within 15 minutes, something at home soon, or putting it away ends it', () => {
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events })
+  const shows = (h, m, extra = {}) => paperShows({ posture: 'launch', now: at(25, h, m), dismissedOn: null, previewing: false, plan, ...extra })
+  assert.equal(shows(5, 50), false, 'not before 6')
+  assert.equal(shows(6, 30), true, 'the morning rush is the paper’s')
+  assert.equal(shows(7, 9), true, 'sixteen minutes before the 7:25 run')
+  assert.equal(shows(7, 11), false, 'the 7:25 run is fourteen minutes out')
+  assert.equal(shows(7, 27), false, 'just leaving')
+  assert.equal(shows(7, 35), false, 'the 7:42 run is seven minutes out')
+  assert.equal(shows(7, 50), true, 'the car’s gone: back to the paper')
+  assert.equal(shows(10, 59), true)
+  assert.equal(shows(11, 0), false, 'until 11')
+  assert.equal(shows(8, 0, { dismissedOn: '2026-09-25' }), false, 'put away for the day')
+  assert.equal(shows(8, 0, { posture: 'evening' }), false)
+  // Something at home in a quarter of an hour.
+  const call = { id: 'call', title: 'Call with the bank', event_type: 'event', all_day: false, start_time: at(25, 9, 30).toISOString(), end_time: at(25, 10, 0).toISOString(), location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'attendee' }] }
+  const withCall = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, call] })
+  const home = (h, m) => paperShows({ posture: 'launch', now: at(25, h, m), dismissedOn: null, previewing: false, plan: withCall })
+  assert.equal(home(9, 10), true)
+  assert.equal(home(9, 20), false, 'the call is ten minutes out')
+  assert.equal(home(9, 45), false, 'the call is on')
+  assert.equal(home(10, 5), true, 'the call is over')
 })

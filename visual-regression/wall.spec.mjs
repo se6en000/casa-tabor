@@ -1166,6 +1166,8 @@ test('wall: a swipe is ignored while the assistant band is open', async ({ page 
 
 // Board 08a (approved 2026-09-28): an event with nobody on it waits on a "No one yet" row.
 test('wall: an event with nobody on it waits on the "No one yet" row; a tap opens it on Who', async ({ page }) => {
+  // The morning is the paper's (Oct 8); this one is about the Score, so the paper's put away for the day.
+  await page.addInitScript(() => localStorage.setItem('casa.wall.paperPutAway', '2026-09-25'))
   await page.goto('/__wall-fixture?at=2026-09-25T08:09:00&nobody=1')
   const score = page.getByRole('region', { name: "TODAY · WHO'S WHERE" })
   await expect(score.getByText('No one yet')).toBeVisible()
@@ -1921,6 +1923,8 @@ test('wall: a trip deletes from its sheet — after a clear yes, the whole trip 
 })
 
 test('wall: a driving trip — the drive out, away, a car on the tiles', async ({ page }) => {
+  // The morning is the paper's (Oct 8); this one is about the Score, so the paper's put away for the day.
+  await page.addInitScript(() => localStorage.setItem('casa.wall.paperPutAway', '2026-10-13'))
   await page.goto('/__wall-fixture?drive=1&at=2026-10-13T06:05:00')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)

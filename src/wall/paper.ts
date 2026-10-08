@@ -1,6 +1,7 @@
 import { clockTime, placeName } from './header.ts'
 import type { DayPlan, Trip, WallMember } from './engine/types'
 import type { Posture } from './posture'
+import { homeItems } from './headerLead.ts'
 import { packingGroups, type WallChecklistItem } from './packing.ts'
 import type { ComingUpItem } from './comingUp'
 import type { TodoList } from './todos'
@@ -131,9 +132,31 @@ export function fallbackWords(facts: PaperFacts): PaperWords {
 }
 
 /** Whether the calm face is the paper: a calm morning not put away today, or a preview from the menu. */
-export function paperShows(input: { posture: Posture; now: Date; dismissedOn: string | null; previewing: boolean }): boolean {
+/** From when the paper holds the morning (the night face ends at 6). */
+export const PAPER_FROM_HOUR = 6
+/** A departure or something at home this close gives way to the full day (Jake, Oct 8: "a leave event in 15 mins"). */
+const PAPER_GIVES_WAY_MIN = 15
+/** The full day stays this long after a leave-by time, for the leaving itself; then the paper comes back. */
+const LEAVING_MIN = 5
+
+/**
+ * The morning paper's hours (Jake, Oct 8: "i want the morning paper to show case the morning, can it only get interupted
+ * by me dismissing it, or when there is a leave event in 15 mins?"): 6 to 11, whatever the face would otherwise be,
+ * until it's put away; a leave-by time 15 minutes out (until just after it) or something at home starting within 15
+ * minutes (until it's over) gives way to the full day, and once the car's gone or it's done, the paper comes back.
+ * Without a plan (older callers), only the calm face. A preview shows it any time.
+ */
+export function paperShows(input: { posture: Posture; now: Date; dismissedOn: string | null; previewing: boolean; plan?: DayPlan | null }): boolean {
   if (input.previewing) return true
-  return input.posture === 'calm' && input.now.getHours() < PAPER_UNTIL_HOUR && input.dismissedOn !== localDate(input.now)
+  const { now } = input
+  const hour = now.getHours()
+  if (input.posture === 'evening' || hour < PAPER_FROM_HOUR || hour >= PAPER_UNTIL_HOUR || input.dismissedOn === localDate(now)) return false
+  if (input.plan === undefined) return input.posture === 'calm'
+  const t = now.getTime()
+  const soon = PAPER_GIVES_WAY_MIN * 60_000
+  const leaving = (input.plan?.trips ?? []).some((trip) => trip.leaveAt && trip.leaveAt.getTime() - t <= soon && t - trip.leaveAt.getTime() < LEAVING_MIN * 60_000)
+  const atHome = homeItems(input.plan ?? null, now).some((h) => h.start.getTime() - t <= soon)
+  return !leaving && !atHome
 }
 
 export const paperDate = localDate
