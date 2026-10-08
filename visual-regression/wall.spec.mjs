@@ -2862,6 +2862,42 @@ test('wall: a heavy front page scrolls — the cards slim as it goes up and open
   await expect.poll(cardHeight).toBeGreaterThan(150)
 })
 
+// Canvas 77 (Jake, Oct 8: "for the events can i get the option to scan a qr code, or add some kind of action (tell me
+// more, gets the details online and display it?)" → "build it"): a tap opens its card — what to know read from its page,
+// what it doesn't say said so, the QR — and Add to calendar: who's going, when, that day, Add it.
+test('wall: an outing’s card — what to know from its page, the QR, send to our phones, add to the calendar', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  await expect(paper).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await page.keyboard.press('ArrowRight')
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  await paper.getByRole('button', { name: 'Pumpkin Fest' }).click()
+  const card = page.getByRole('dialog', { name: 'Pumpkin Fest on your phone' })
+  await expect(card.getByText('FOR THE FAMILY · SAT, OCT 3 · 11 AM–3 PM')).toBeVisible()
+  await expect(card.getByText('$15 a car, kids under 12 free')).toBeVisible()
+  await expect(card.getByText('NOT ON ITS PAGE')).toBeVisible()
+  await expect(card.getByRole('img', { name: 'QR code: Pumpkin Fest' })).toBeVisible()
+  await expect(card.getByText('Tickets on your phone — point the camera here')).toBeVisible()
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('outing-card.png')
+  await card.getByRole('button', { name: 'Send to our phones' }).click()
+  await expect(card.getByText('Sent to the phones')).toBeVisible()
+  expect(await page.evaluate(() => window.__sent)).toEqual(['Pumpkin Fest'])
+  // Add to calendar: a family one, everyone going.
+  await card.getByRole('button', { name: 'Add to calendar' }).click()
+  for (const name of ['Jake', 'Kelly', 'Liv', 'Emme', 'Owen']) await expect(card.getByRole('button', { name, pressed: true })).toBeVisible()
+  await expect(card.getByText('THAT DAY')).toBeVisible()
+  await card.getByRole('button', { name: 'Owen', pressed: true }).click()
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('outing-card-add.png')
+  await card.getByRole('button', { name: 'Add it' }).click()
+  await expect(card.getByText('On the calendar — Sat, Oct 3, 11 AM')).toBeVisible()
+  const [made] = await page.evaluate(() => window.__created)
+  expect(made).toMatchObject({ title: 'Pumpkin Fest', event_type: 'event', location: 'Harbourside Place', members: ['Jake', 'Kelly', 'Liv', 'Emme'] })
+  expect(made.notes).toContain('Tickets: https://example.org/pumpkin-tickets')
+  await expect(card).toHaveCount(0)
+})
+
 test('wall: the morning paper — plain words until the server’s arrive; gone after 11; previewed from the menu any time', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
   await expect(page.getByRole('article', { name: 'The morning paper' }).getByRole('heading')).toHaveText('An easy Friday.')

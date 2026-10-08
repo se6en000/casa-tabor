@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import type { Outing, TownNews } from '../../supabase/functions/_shared/scout.mjs'
+import { outingLink, outingWhen, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
+import type { OutingDetails } from './outingCard'
 
 export type OutingAnswer = 'saved' | 'not_for_us' | 'new'
 
@@ -12,6 +13,10 @@ export interface ScoutPaper {
   today: string
   /** Save, Not for us, or un-save: shown at once, kept by the Scout (it learns from it). */
   answer?: (id: string, status: OutingAnswer) => void
+  /** What its own page says (canvas 77): read once when its card first opens, kept. */
+  details?: (id: string) => Promise<OutingDetails | null>
+  /** To the family's phones (canvas 77): its name, when and where, and its link. */
+  send?: (o: Outing) => Promise<void>
 }
 
 const KEY = ['scout-list']
@@ -37,5 +42,14 @@ export function useScout(): ScoutPaper | null {
     })
     void supabase.functions.invoke('scout', { body: { action: 'feedback', id, status } })
   }, [qc])
-  return data ? { ...data, answer } : null
+  const details = useCallback(async (id: string) => {
+    const { data: reply } = await supabase.functions.invoke('scout', { body: { action: 'details', id } })
+    return ((reply as { details?: OutingDetails | null } | null)?.details) ?? null
+  }, [])
+  const send = useCallback(async (o: Outing) => {
+    const body = [outingWhen(o), o.place].filter(Boolean).join(' · ')
+    const { error } = await supabase.functions.invoke('send-push-notification', { body: { title: o.title, body: body ? `${body} — from the wall` : 'From the wall', url: outingLink(o), tag: `outing:${o.id}`, data: { url: outingLink(o) } } })
+    if (error) throw error
+  }, [])
+  return data ? { ...data, answer, details, send } : null
 }

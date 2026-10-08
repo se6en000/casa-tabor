@@ -742,3 +742,45 @@ export function keptTwice(rows) {
   }
   return [...away]
 }
+
+// An outing's card (canvas 77; Jake, Oct 8: "tell me more, gets the details online and display it"): what its own page
+// says, read once when the card first opens and kept.
+const DETAIL_LABELS = {
+  event: ['Tickets', 'What’s in it', 'How long', 'For kids', 'Parking', 'Good to know'],
+  restaurant: ['Hours', 'Prices', 'Known for', 'Reservations', 'Good to know'],
+}
+// What a family asks first, said when its page doesn't.
+const ASKED = { event: ['For kids', 'Parking'], restaurant: ['Hours', 'Prices'] }
+const labelsFor = (kind) => (kind === 'restaurant' ? 'restaurant' : 'event')
+
+export function detailsPrompt(o, text) {
+  const labels = DETAIL_LABELS[labelsFor(o.kind)]
+  return `This is the page for "${o.title}"${o.when ? ` (${o.when})` : ''}${o.url ? `, ${o.url}` : ''}. A family is deciding whether to go.
+Only what the page says — never a guess, never general knowledge. Leave a label out entirely when the page doesn't say it (never \"not mentioned\").
+Facts, each one short line (under 20 words), with exactly these labels: ${labels.map((l) => `"${l}"`).join(', ')}.
+Also: "ticket_url" — the link to buy tickets or book, if the page gives one; "ends" — the time it ends as HH:MM (24-hour), if said.
+Answer with only JSON: {"facts": [{"label": "...", "text": "..."}], "ticket_url": "..." or null, "ends": "HH:MM" or null}
+${text ? `The page:\n${String(text).slice(0, 20000)}` : 'Read the page at the link.'}`
+}
+
+/** The answer: known labels only, a line each; what a family asks first and the page didn't say, said. Null if unreadable. */
+export function parseDetails(text, kind) {
+  const s = String(text ?? '')
+  const a = s.indexOf('{')
+  const b = s.lastIndexOf('}')
+  if (a < 0 || b <= a) return null
+  let o
+  try { o = JSON.parse(s.slice(a, b + 1)) } catch { return null }
+  const allowed = DETAIL_LABELS[labelsFor(kind)]
+  const seen = new Set()
+  const facts = (Array.isArray(o?.facts) ? o.facts : [])
+    // "Not mentioned." isn't a fact (the first live read gave it for kids and parking).
+    .filter((f) => f && allowed.includes(f.label) && typeof f.text === 'string' && f.text.trim() && !/^(not (mentioned|specified|stated|listed|given|said)|n\/?a\b|unknown|none\b|no (info|information|mention))/i.test(f.text.trim()) && !seen.has(f.label) && seen.add(f.label))
+    .map((f) => ({ label: f.label, text: f.text.trim().slice(0, 180) }))
+  return {
+    facts,
+    not_said: ASKED[labelsFor(kind)].filter((l) => !seen.has(l)),
+    ticket_url: typeof o?.ticket_url === 'string' && /^https?:\/\//.test(o.ticket_url) ? o.ticket_url : null,
+    ends: typeof o?.ends === 'string' && /^\d{2}:\d{2}$/.test(o.ends) ? o.ends : null,
+  }
+}

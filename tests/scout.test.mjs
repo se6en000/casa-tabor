@@ -472,3 +472,39 @@ test('tonight drops what has already started (an hour in)', async () => {
   const rows = [{ id: 'early', kind: 'music', title: 'early', when: '2026-10-08 17:00', status: 'new' }, { id: 'late', kind: 'music', title: 'late', when: '2026-10-08 21:00', status: 'new' }, { id: 'open', kind: 'music', title: 'open', when: '2026-10-08', status: 'new' }]
   assert.deepEqual(outAndAboutPlan(rows, { today, nowTime: '19:30' }).weekend[0].items.map((o) => o.id), ['open', 'late'])
 })
+
+// Canvas 77 (Jake, Oct 8: "tell me more, gets the details online and display it"): what an outing's own page says — only
+// what it says; what a family asks that it doesn't say is said so (never guessed).
+test('an outing’s page, read: its facts by label, its tickets link and end time; kids and parking said when missing', async () => {
+  const { detailsPrompt, parseDetails } = await import('../supabase/functions/_shared/scout.mjs')
+  const p = detailsPrompt({ kind: 'couple', title: 'Taste of West Palm Beach', when: '2026-10-16 18:00', url: 'https://x' }, 'Taste ... $75 general $130 VIP ... 5-8:30pm')
+  assert.match(p, /Only what the page says/)
+  assert.match(p, /"Tickets".*"What’s in it".*"How long".*"For kids".*"Parking".*"Good to know"/s)
+  assert.match(p, /\$75 general/)
+  const d = parseDetails(JSON.stringify({
+    facts: [
+      { label: 'Tickets', text: '$75 general · $130 VIP (in at 5, a lounge, a gift bag)' },
+      { label: 'How long', text: '6–8:30 PM (VIP from 5)' },
+      { label: 'Good to know', text: 'All proceeds go to the Palm Beach County Food Bank' },
+      { label: 'Horoscope', text: 'nope' },
+      { label: 'For kids', text: '' },
+    ],
+    ticket_url: 'https://tastewestpalmbeach.splashthat.com/', ends: '20:30',
+  }), 'couple')
+  assert.deepEqual(d.facts.map((f) => f.label), ['Tickets', 'How long', 'Good to know'])
+  assert.deepEqual(d.not_said, ['For kids', 'Parking'])
+  assert.equal(d.ticket_url, 'https://tastewestpalmbeach.splashthat.com/')
+  assert.equal(d.ends, '20:30')
+  // A place: hours and prices are what's asked.
+  const r = parseDetails(JSON.stringify({ facts: [{ label: 'Known for', text: 'Gin cocktails' }] }), 'restaurant')
+  assert.deepEqual(r.not_said, ['Hours', 'Prices'])
+  assert.equal(parseDetails('nothing', 'couple'), null)
+})
+
+// The first live read (Oct 8): "For kids: Not mentioned." came back as a fact.
+test('an outing’s page: "not mentioned" is not a fact — it’s not said', async () => {
+  const { parseDetails } = await import('../supabase/functions/_shared/scout.mjs')
+  const d = parseDetails(JSON.stringify({ facts: [{ label: 'For kids', text: 'Not mentioned.' }, { label: 'Parking', text: 'Not specified on the page' }, { label: 'Tickets', text: '$75' }] }), 'couple')
+  assert.deepEqual(d.facts.map((f) => f.label), ['Tickets'])
+  assert.deepEqual(d.not_said, ['For kids', 'Parking'])
+})

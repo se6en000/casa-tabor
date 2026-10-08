@@ -3,14 +3,15 @@
 // keep only what checks out (scout.mjs). The newsletters the family subscribes to (the Palm Beach Post, the city) are
 // mined too. POST { action: 'research', force?, dry_run? } | { action: 'list' } | { action: 'feedback', id, status }
 // | { action: 'news', force?, dry_run? } (the paper's Around town, each morning)
-// | { action: 'calendars', dry_run? } (live music, comedy and trivia from local calendars, each morning).
+// | { action: 'calendars', dry_run? } (live music, comedy and trivia from local calendars, each morning)
+// | { action: 'details', id } (what an outing's own page says, for its card — read once, kept a week).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
-  CALENDARS, CALENDAR_KINDS, calendarReach, foldIn, isBait, keptTwice, notLiveMusic, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
+  CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   parseWeekendBroward, restaurantVerdict, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
@@ -131,6 +132,32 @@ Deno.serve(async (req) => {
     // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
     EdgeRuntime.waitUntil(write().catch((e) => console.error('[scout news]', e)))
     return json({ ok: true, started: true }, 202)
+  }
+
+  if (body.action === 'details') {
+    const { data: o } = await sb.from('outings').select('id, kind, title, "when", url, details, details_at').eq('id', String(body.id ?? '')).maybeSingle()
+    if (!o) return json({ error: 'not found' }, 404)
+    if (o.details && o.details_at && Date.now() - Date.parse(o.details_at) < 7 * 86_400_000) return json({ details: { ...o.details, read_at: o.details_at } })
+    if (!o.url) return json({ details: null })
+    const { data: llmRow } = await sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle()
+    const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+    if (!llm?.api_key) return json({ details: null })
+    // Its page as a browser gets it; a site that turns servers away is read by Google's page reader instead.
+    const page = await fetchPage(o.url)
+    const text = page && page.text.length > 500 ? page.text : null
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: detailsPrompt(o, text) }] }],
+        ...(text ? { generationConfig: { maxOutputTokens: 1200, temperature: 0.1, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } } } : { tools: [{ url_context: {} }], generationConfig: { maxOutputTokens: 1200, temperature: 0.1 } }),
+      }),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+    const answer = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+    const details = parseDetails(answer, o.kind)
+    if (!details) return json({ details: null })
+    const at = new Date().toISOString()
+    await sb.from('outings').update({ details, details_at: at }).eq('id', o.id)
+    return json({ details: { ...details, read_at: at } })
   }
 
   if (body.action === 'calendars') {

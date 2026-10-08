@@ -5,6 +5,10 @@ import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type Pa
 import { RailClock, RailNext, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
 import { useDragSide } from './useSwipeDown'
+import { addArgs, eveningLine, goingFor, leaveBy, ticketsDue, type OutingDetails } from './outingCard'
+import { pigmentStyleFor } from './lanes'
+import { pigmentIndexes } from './score'
+import type { WallEvent, WallMember } from './engine/types'
 import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
@@ -23,6 +27,10 @@ export interface WallPaperProps {
   counts?: ReactNode
   /** Out & about and Around town (canvas 72): with none, the paper is the front page alone. */
   scout?: ScoutPaper | null
+  /** For an outing's Add to calendar (canvas 77): who could go, what's already on, and the wall's own add. */
+  members?: WallMember[]
+  events?: WallEvent[]
+  onAdd?: (args: Record<string, unknown>) => Promise<void>
   onPutAway: () => void
   onAsk?: (say: string) => void
 }
@@ -251,26 +259,167 @@ function TownPage({ news, today, active }: { news: TownNews[]; today: string; ac
   )
 }
 
-/** An outing's card: its QR for the phone (its page, or the place on Google Maps), Save, Not for us. */
-function OutingCard({ o, answer, computer, onClose }: { o: Outing; answer?: ScoutPaper['answer']; computer: boolean; onClose: () => void }) {
+/** "6–8:30 PM", "11 AM–3 PM", or just its start; null without a time. */
+function rangeOf(when: string | null, ends: string | null): string | null {
+  const m = /(\d{2}):(\d{2})$/.exec(when && when.length > 10 ? when : '')
+  if (!m) return null
+  const part = (h: number, min: number) => ({ t: `${h % 12 || 12}${min ? `:${String(min).padStart(2, '0')}` : ''}`, pm: h >= 12 })
+  const a = part(Number(m[1]), Number(m[2]))
+  const e = /^(\d{2}):(\d{2})$/.exec(ends ?? '')
+  if (!e) return `${a.t} ${a.pm ? 'PM' : 'AM'}`
+  const b = part(Number(e[1]), Number(e[2]))
+  return a.pm === b.pm ? `${a.t}–${b.t} ${b.pm ? 'PM' : 'AM'}` : `${a.t} ${a.pm ? 'PM' : 'AM'}–${b.t} ${b.pm ? 'PM' : 'AM'}`
+}
+
+const KIND_LONG: Record<string, string> = { couple: 'For two', family: 'For the family', fitness: 'Get moving', music: 'Live music', comedy: 'Comedy', trivia: 'Trivia night', restaurant: 'A place to try' }
+const readDay = (iso: string | null | undefined, today: string) => {
+  if (!iso) return ''
+  const ymd = new Date(iso).toLocaleDateString('en-CA')
+  return ymd === today ? 'today' : new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/**
+ * An outing's card (canvas 77; Jake, Oct 8: "for the events can i get the option to scan a qr code, or add some kind of
+ * action (tell me more, gets the details online and display it?) … what would a pro UX person suggest" → "build it"):
+ * when and where, why it was picked, what to know — read from its own page as the card opens (once, kept), what its page
+ * doesn't say said so — and the QR for its tickets or page. Add to calendar (who's going, when, leave by, that evening, a
+ * reminder to get tickets), Send to our phones, Save, Ask Alexa, Not for us.
+ */
+function OutingCard({ o, scout, members, events, computer, onAdd, onAsk, onClose }: {
+  o: Outing; scout: ScoutPaper; members: WallMember[]; events: WallEvent[]; computer: boolean
+  onAdd?: (args: Record<string, unknown>) => Promise<void>; onAsk?: (say: string) => void; onClose: () => void
+}) {
+  const [mode, setMode] = useState<'card' | 'add'>('card')
+  const [going, setGoing] = useState<string[]>(() => goingFor(o.kind, members))
+  const [details, setDetails] = useState<OutingDetails | null | 'reading' | 'unread'>(scout.details && o.url ? 'reading' : 'unread')
+  const [remind, setRemind] = useState(true)
+  const [said, setSaid] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (!scout.details || !o.url) return
+    let live = true
+    scout.details(o.id).then((d) => { if (live) setDetails(d ?? 'unread') }).catch(() => { if (live) setDetails('unread') })
+    return () => { live = false }
+  }, [o.id, o.url, scout])
+  const read = typeof details === 'object' ? details : null
   const saved = o.status === 'saved'
+  const day = o.when ? dayShort(o.when.slice(0, 10)) : null
+  const time = timeOf(o.when)
+  const span = rangeOf(o.when, read?.ends ?? null)
+  const kicker = [KIND_LONG[o.kind], day, span ?? o.recurring].filter(Boolean).join(' · ')
+  const evening = Number(o.when?.slice(11, 13) ?? 18) >= 17
+  const where = [o.place !== o.title ? o.place : null, o.address, o.drive_min ? `about ${o.drive_min} min` : null].filter(Boolean).join(' · ')
+  const link = read?.ticket_url ?? outingLink(o)
+  const tickets = ticketsDue(o, read, scout.today)
+  const leave = leaveBy(o)
+  const dated = Boolean(o.when)
+  const pill = 'h-[56px] rounded-full px-[26px] text-wall-body font-semibold'
+
+  const add = async () => {
+    if (!onAdd) return
+    setBusy(true)
+    try {
+      await onAdd(addArgs(o, read, going, members))
+      if (tickets && remind) {
+        const [y, m, d] = tickets.due.split('-').map(Number)
+        const at = new Date(y, m - 1, d, 9, 0)
+        await onAdd({ title: `Get tickets: ${o.title}`, start: at.toISOString(), end: new Date(at.getTime() + 15 * 60_000).toISOString(), event_type: 'reminder', ...(read?.ticket_url ? { notes: `Tickets: ${read.ticket_url}` } : {}) })
+      }
+      if (o.status !== 'saved') scout.answer?.(o.id, 'saved')
+      setSaid(`On the calendar — ${day}${time ? `, ${time}` : ''}`)
+      window.setTimeout(onClose, 1800)
+    } catch (e) {
+      setSaid(e instanceof Error ? e.message : 'That didn’t save. Try again.')
+    }
+    setBusy(false)
+  }
+  const send = async () => {
+    try { await scout.send?.(o); setSaid('Sent to the phones') } catch { setSaid('The phones didn’t take it. Try again.') }
+  }
+
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-wall-ink/30" onClick={onClose}>
-      <div role="dialog" aria-label={`${o.title} on your phone`} onClick={(e) => e.stopPropagation()} className="flex max-w-[860px] items-center gap-[28px] rounded-[24px] bg-wall-on-pigment px-[30px] py-[26px] text-wall-ink shadow-[0_8px_22px_rgba(38,34,29,0.18)]">
-        <Qr text={outingLink(o)} label={`QR code: ${o.title}`} />
-        <div className="flex min-w-0 flex-col gap-[10px]">
-          <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{(KIND_WORD[o.kind] ?? '').toUpperCase()} · ON YOUR PHONE</span>
-          <span className="font-display text-wall-date font-bold leading-tight">{o.title}</span>
-          <span className="text-wall-detail text-wall-ink-2">{outingMeta(o)}</span>
-          {o.why && <span className="text-wall-detail text-wall-ink-2">{o.why}</span>}
-          <span className="text-wall-detail text-wall-ink-2">{o.kind === 'restaurant' ? 'Point your phone’s camera here — Google Maps opens with it.' : 'Point your phone’s camera here — its page opens.'}</span>
-          <div className="flex flex-wrap items-center gap-[12px]">
-            {computer && <a href={outingLink(o)} target="_blank" rel="noreferrer" className="flex h-[52px] items-center rounded-full bg-wall-ink px-[22px] text-wall-detail font-semibold text-wall-on-pigment no-underline">Open its page</a>}
-            {answer && <button type="button" aria-pressed={saved} onClick={() => { answer(o.id, saved ? 'new' : 'saved'); onClose() }} className="h-[52px] rounded-full border border-solid border-wall-ink-2 bg-wall-paper px-[22px] text-wall-detail font-semibold text-wall-ink">{saved ? 'Saved ✓' : 'Save'}</button>}
-            {answer && <button type="button" onClick={() => { answer(o.id, 'not_for_us'); onClose() }} className="h-[52px] rounded-full border border-solid border-wall-rule bg-transparent px-[22px] text-wall-detail text-wall-ink-2">Not for us</button>}
-            <button type="button" onClick={onClose} className="h-[52px] rounded-full border-0 bg-transparent px-[16px] text-wall-detail font-semibold text-wall-ink">Done</button>
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-wall-ink/30 pl-[560px]" onClick={onClose}>
+      <div role="dialog" aria-label={`${o.title} on your phone`} onClick={(e) => e.stopPropagation()} className="flex max-h-[1000px] w-[1240px] flex-col gap-[16px] rounded-[28px] bg-wall-ground-calm px-[48px] py-[40px] text-wall-ink shadow-[0_18px_48px_rgba(38,34,29,0.35)]">
+        <div className="flex items-start justify-between gap-[24px]">
+          <div className="flex min-w-0 flex-col gap-[8px]">
+            <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{kicker.toUpperCase()}</span>
+            <span className="font-display text-wall-title font-semibold leading-[1.02]">{o.title}</span>
+            {where && <span className="text-wall-body text-wall-ink-2">{where}</span>}
+            {o.why && <span className="font-display text-wall-answer italic">“{o.why}”</span>}
           </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[48px] w-[48px] shrink-0 items-center justify-center border-0 bg-transparent p-0 text-wall-date text-wall-ink-2">×</button>
         </div>
+        {mode === 'card' ? (
+          <>
+            <div className="grid grid-cols-[1fr_250px] gap-[40px]">
+              <div className="flex min-w-0 flex-col">
+                <span className="mb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">WHAT TO KNOW{read?.read_at ? ` · READ FROM ITS PAGE ${readDay(read.read_at, scout.today).toUpperCase()}` : ''}</span>
+                {details === 'reading' && <span className="border-0 border-t border-solid border-wall-rule py-[10px] text-wall-body text-wall-ink-2">Reading its page…</span>}
+                {details === 'unread' && <span className="border-0 border-t border-solid border-wall-rule py-[10px] text-wall-body text-wall-ink-2">Couldn’t read its page — the QR opens it on your phone.</span>}
+                {read?.facts.map((f) => (
+                  <div key={f.label} className="grid grid-cols-[200px_1fr] gap-[16px] border-0 border-t border-solid border-wall-rule py-[10px]">
+                    <span className="pt-[3px] text-wall-label font-bold tracking-[0.16em] text-wall-brass-ink">{f.label.toUpperCase()}</span>
+                    <span className="text-wall-body">{f.text}</span>
+                  </div>
+                ))}
+                {read && (read.not_said?.length ?? 0) > 0 && (
+                  <div className="grid grid-cols-[200px_1fr] items-center gap-[16px] border-0 border-t border-solid border-wall-rule py-[6px]">
+                    <span className="text-wall-label font-bold tracking-[0.16em] text-wall-brass-ink">NOT ON ITS PAGE</span>
+                    <span className="flex items-center gap-[10px] text-wall-body">
+                      {read.not_said!.join(', ')}
+                      {onAsk && <button type="button" onClick={() => { onClose(); onAsk(`${o.title}: ${read.not_said!.map((l) => (l === 'For kids' ? 'is it good for kids' : l === 'Parking' ? 'where do we park' : `what about ${l.toLowerCase()}`)).join(', and ')}?`) }} className="h-[44px] border-0 bg-transparent px-[4px] text-wall-body text-wall-ink underline underline-offset-[5px]">ask Alexa</button>}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-center gap-[10px]">
+                <Qr text={link} label={`QR code: ${o.title}`} />
+                <span className="text-center text-wall-detail text-wall-ink-2">{read?.ticket_url ? 'Tickets on your phone — point the camera here' : o.kind === 'restaurant' ? 'Google Maps on your phone — point the camera here' : 'Its page on your phone — point the camera here'}</span>
+              </div>
+            </div>
+            <div className="mt-[6px] flex flex-wrap items-center gap-[14px]">
+              {dated && onAdd && <button type="button" onClick={() => setMode('add')} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>Add to calendar</button>}
+              {computer && <a href={link} target="_blank" rel="noreferrer" className={`${pill} flex items-center border border-solid border-wall-rule bg-wall-paper text-wall-ink no-underline`}>Open its page</a>}
+              {scout.send && <button type="button" onClick={() => void send()} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Send to our phones</button>}
+              {scout.answer && <button type="button" aria-pressed={saved} onClick={() => { scout.answer!(o.id, saved ? 'new' : 'saved'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>{saved ? 'Saved ✓' : 'Save'}</button>}
+              {onAsk && <button type="button" onClick={() => { onClose(); onAsk(`Tell me more about ${o.title}${day ? ` on ${day}` : ''}`) }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Ask Alexa</button>}
+              {said && <span role="status" className="text-wall-body font-semibold text-wall-brass-ink">{said}</span>}
+              {scout.answer && <button type="button" onClick={() => { scout.answer!(o.id, 'not_for_us'); onClose() }} className={`${pill} ml-auto border border-solid border-wall-rule bg-transparent text-wall-ink-2`}>Not for us</button>}
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">ADD TO THE CALENDAR</span>
+            <div className="flex flex-wrap gap-[12px]">
+              {members.filter((m) => m.role === 'parent' || m.role === 'child').filter((m) => m.name !== 'Tabor Family').map((m) => {
+                const on = going.includes(m.id)
+                return (
+                  <button key={m.id} type="button" aria-pressed={on} onClick={() => setGoing((g) => (on ? g.filter((x) => x !== m.id) : [...g, m.id]))}
+                    className={`flex h-[56px] items-center gap-[10px] rounded-full pl-[8px] pr-[20px] text-wall-body font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink-2'}`}>
+                    <span aria-hidden="true" className={`flex h-[40px] w-[40px] items-center justify-center rounded-full font-display text-wall-heading text-wall-on-pigment ${pigmentStyleFor(pigmentIndexes(members).get(m.id) ?? 0).solid}`}>{m.name.slice(0, 1)}</span>
+                    {m.name}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-[6px] grid grid-cols-3 gap-[20px]">
+              <div className="border-0 border-t-2 border-solid border-wall-ink pt-[10px]"><div className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">WHEN</div><div className="font-display text-wall-date font-semibold">{day}{span ? ` · ${span}` : ''}</div></div>
+              <div className="border-0 border-t-2 border-solid border-wall-ink pt-[10px]"><div className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">LEAVE BY</div><div className="font-display text-wall-date font-semibold">{leave ?? 'Worked out once it’s on'}</div></div>
+              <div className="border-0 border-t-2 border-solid border-wall-ink pt-[10px]"><div className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">{evening ? 'THAT EVENING' : 'THAT DAY'}</div><div className="text-wall-body">{eveningLine(o, going, events, members)}</div></div>
+            </div>
+            {tickets && (
+              <button type="button" role="checkbox" aria-checked={remind} onClick={() => setRemind((r) => !r)} className="mt-[6px] flex items-center gap-[14px] rounded-[16px] border-0 bg-wall-paper px-[20px] py-[16px] text-left text-wall-body text-wall-ink">
+                <span aria-hidden="true" className={`flex h-[26px] w-[26px] items-center justify-center rounded-[6px] ${remind ? 'bg-wall-ink text-wall-on-pigment' : 'border-[1.5px] border-solid border-wall-ink-2'}`}>{remind ? '✓' : ''}</span>
+                <span>Remind me to get tickets — <b>{tickets.day}</b>{read?.facts.find((f) => f.label === 'Tickets') ? ` (${read.facts.find((f) => f.label === 'Tickets')!.text})` : ''}</span>
+              </button>
+            )}
+            <div className="mt-[8px] flex items-center gap-[14px]">
+              <button type="button" disabled={busy || going.length === 0} onClick={() => void add()} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment disabled:opacity-60`}>{busy ? 'Adding…' : 'Add it'}</button>
+              <button type="button" onClick={() => setMode('card')} className={`${pill} border border-solid border-wall-rule bg-transparent text-wall-ink-2`}>Back</button>
+              {said && <span role="status" className="text-wall-body font-semibold text-wall-brass-ink">{said}</span>}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -285,7 +434,7 @@ function OutingCard({ o, answer, computer, onClose }: { o: Outing; answer?: Scou
  * and this weekend's best for the two of them), Out & about (the Scout's checked list) and Around town (the news). The
  * front page's words are the server's, written once a day (supabase/functions/morning-paper); until they come, plain ones.
  */
-export default function WallPaper({ now, facts, words, brief, next, nextPigment, counts, scout, onPutAway, onAsk }: WallPaperProps) {
+export default function WallPaper({ now, facts, words, brief, next, nextPigment, counts, scout, members = [], events = [], onAdd, onPutAway, onAsk }: WallPaperProps) {
   const pages = scout ? 3 : 1
   const [page, setPage] = useState(0)
   const pageNow = useRef(0)
@@ -453,7 +602,7 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
           </div>
         </footer>
       </div>
-      {phone && <OutingCard o={phone} answer={scout?.answer} computer={computer} onClose={() => setPhone(null)} />}
+      {phone && scout && <OutingCard o={phone} scout={scout} members={members} events={events} computer={computer} onAdd={onAdd} onAsk={onAsk} onClose={() => setPhone(null)} />}
     </article>
   )
 }

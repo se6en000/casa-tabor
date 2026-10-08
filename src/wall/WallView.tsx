@@ -736,6 +736,9 @@ export default function WallView(props: WallViewProps) {
         nextPigment={nextView?.driverId ? pigments.get(nextView.driverId) ?? null : null}
         counts={counts}
         scout={scout}
+        members={members}
+        events={allEvents as WallEvent[]}
+        onAdd={createEvent}
         onAsk={onAsk ? (say) => onAsk(say) : undefined}
         onPutAway={() => {
           const day = paperDate(now)
