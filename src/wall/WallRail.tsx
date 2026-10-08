@@ -19,7 +19,8 @@ export function RailShell({ night = false, children, foot }: { night?: boolean; 
       className={`wall-evening absolute inset-y-0 left-0 flex w-[560px] flex-col px-[52px] pb-[44px] pt-[128px] font-body text-wall-ink ${night ? 'bg-wall-night-rail' : 'bg-wall-rail'}`}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-      {foot && <div className="flex shrink-0 flex-wrap gap-[8px] pt-[20px]">{foot}</div>}
+      {/* The counts, a quiet ledger under a hairline (canvas 70A). */}
+      {foot && <div className="flex shrink-0 flex-wrap items-baseline gap-x-[28px] gap-y-[4px] border-0 border-t border-solid border-wall-rule pt-[10px]">{foot}</div>}
     </aside>
   )
 }
@@ -55,10 +56,16 @@ export function RailLabel({ children, tone = 'quiet', aside }: { children: React
 }
 
 /**
- * A count at the panel's foot: "1 to decide", "6 to plan", "3 to do". Brass when it asks for something. On To do and
- * Coming up the counts are the way around (canvas 59): "‹ Today" first, and the page you're on filled in.
+ * A count at the panel's foot: "1 to decide", "6 ahead", "3 to do". Brass when it asks for something. On To do and
+ * Ahead the counts are the way around (canvas 59): "‹ Today" first, and the page you're on marked. Canvas 70A (Jake,
+ * Oct 7: "they feel like an after thought can we make them more lux? subtle but like lower case" → "70A please …
+ * lower case as you have it"): no pill — the count a serif numeral, the words lowercase, a brass line under the page.
  */
 export function RailCount({ label, onOpen, tone = 'quiet', ariaLabel, active = false }: { label: string; onOpen: () => void; tone?: 'quiet' | 'brass'; ariaLabel?: string; active?: boolean }) {
+  const back = label.startsWith('‹')
+  const counted = /^(\d+)\s+(.*)$/.exec(label)
+  const words = (back ? label.replace(/^‹\s*/, '') : counted ? counted[2] : label).toLowerCase()
+  const color = tone === 'brass' ? 'text-wall-brass' : 'text-wall-ink'
   return (
     <button
       type="button"
@@ -68,9 +75,12 @@ export function RailCount({ label, onOpen, tone = 'quiet', ariaLabel, active = f
         event.stopPropagation()
         onOpen()
       }}
-      className={`flex h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-solid px-[15px] text-wall-detail font-semibold ${active ? 'border-wall-ink bg-wall-ink text-wall-band' : tone === 'brass' ? 'border-wall-brass bg-transparent text-wall-brass' : 'border-wall-rule bg-transparent text-wall-ink'}`}
+      className={`flex min-h-[48px] shrink-0 items-baseline gap-[8px] whitespace-nowrap border-0 border-b-2 border-solid bg-transparent px-0 pb-[4px] pt-[6px] ${active ? 'border-wall-brass' : 'border-transparent'} ${color}`}
     >
-      {label}
+      {back
+        ? <span aria-hidden="true" className="text-wall-body opacity-70">←</span>
+        : counted && <span className="font-display text-wall-date font-medium leading-none lining-nums">{counted[1]}</span>}
+      <span className={`text-wall-detail font-medium tracking-[0.04em] ${active || tone === 'brass' ? '' : 'opacity-80'}`}>{words}</span>
     </button>
   )
 }
