@@ -31,7 +31,7 @@ Only real, current places and events, with their sources. Short factual notes, n
 
 const list = (label, items, each) => `${label}: ${items.length ? items.map(each).join(' | ') : 'none'}`
 
-export function paperPrompt(facts, sky, more = null, found = null, voice = null) {
+export function paperPrompt(facts, sky, more = null, found = null, voice = null, scout = null) {
   const lines = [
     `Day: ${facts.day}`,
     `On the road today (time · what): ${facts.runs.length ? facts.runs.map((r) => `${r.at} · ${r.text}${r.alert ? ` (${r.alert})` : ''}`).join(' | ') : 'nothing'}`,
@@ -51,7 +51,9 @@ export function paperPrompt(facts, sky, more = null, found = null, voice = null)
   }
   // Holidays and the kids' school breaks ahead, for the weekend, month and way-out columns (Jake, Oct 7).
   if (more) { const ahead = holidaysSection(facts.date, 4); if (ahead) lines.push(ahead.split('\nBe a step ahead')[0]) }
-  if (found) lines.push(`Found on the web this morning (real places and events — use only these for the surprise): ${found}`)
+  // The Scout's list (scout.mjs): each one checked — open, on, within half an hour — with its [id] first.
+  if (scout) lines.push(`Found by the Scout (checked this week: real, on, within half an hour of home; the surprise is one of these):\n${scout}`)
+  else if (found) lines.push(`Found on the web this morning (real places and events — use only these for the surprise): ${found}`)
   return `You write Tabor House's morning brief: the front page on the family's kitchen wall, read over coffee. You have creative freedom (Jake: "surprise me … make it what you think would be a great morning brief"), within the rules below.${voice ? `
 ${voice} Let the aside and the joke sound like her; the logistics stay plain.` : ''}
 
@@ -60,7 +62,7 @@ ${lines.join('\n')}
 Write JSON only:
 {"headline": "...", "turn": "...", "deck": "...", "sky": "...",
  "today": [{"title": "...", "detail": "..."}], "weekend": [...], "month": [...], "wayOut": [...],
- "forgot": {"title": "...", "detail": "..."}, "feature": {"label": "...", "title": "...", "detail": "..."}, "aside": "..."}
+ "forgot": {"title": "...", "detail": "..."}, "feature": {"id": "...", "label": "...", "title": "...", "detail": "..."}, "aside": "..."}
 - headline + turn: the front page's one line, said in two halves — headline the plain first half ("Spirit Day,"), turn the second half set in italic ("and a big weekend coming."). Together at most 12 words; true to the family's facts (the day's real news — never the surprise, never invent a change or a problem). turn may be "" for a one-part headline.
 - deck: one sentence, at most 30 words, on today and what's coming (who drives, the big thing tomorrow).
 - sky: one or two sentences, at most 26 words, on the weather and what it means for the plans.
@@ -69,7 +71,7 @@ Write JSON only:
 - month: 1–3 things two to six weeks out that need real planning (from Coming up and projects): what it is, how far, the first step.
 - wayOut: 1–3 things further out worth starting early. Only from the facts — never invent dates or documents.
 - forgot: the one thing that has gone quietest — a project stuck partway, a to-do put off again and again, a Coming up thing late to start — and why now is a good moment. Null when there's nothing.
-- feature: today's surprise, your choice: a date night at a real place from "Found on the web" (title: the place's name; detail: why it's worth it, and an evening in "The days ahead" that looks free), an outing from "Found on the web" (title: its name; detail: its day and why the kids would like it), or something else that would delight this family. label is two to five words ("Worth a try · date night", "This weekend · outing"). When "Found on the web" names a place or an event, use one of them — a date night or a weekend outing first; something today only when the calendar clearly leaves room for it. Null only when there's nothing real to offer.
+${scout ? `- feature: today's surprise is one from "Found by the Scout" — copy its [id] into feature.id exactly. Lean to the two of them (Jake and Kelly): a date night, a new spot or hidden gem, a free workout, an evening out; a kids' outing only on a weekend when it's a good one. For anything at night, pick an evening "The days ahead" leaves free. title: its name; detail: when and where, and why it's worth it (at most 22 words); label is two to five words ("Date night · hidden gem", "Saturday · free beach yoga", "Friday night · art after dark", "This weekend · for the kids").` : `- feature: today's surprise, your choice: a date night at a real place from "Found on the web" (title: the place's name; detail: why it's worth it, and an evening in "The days ahead" that looks free), an outing from "Found on the web" (title: its name; detail: its day and why the kids would like it), or something else that would delight this family. label is two to five words ("Worth a try · date night", "This weekend · outing"). When "Found on the web" names a place or an event, use one of them — a date night or a weekend outing first; something today only when the calendar clearly leaves room for it. Null only when there's nothing real to offer.`}
 - aside: one witty line for the foot — a gentle joke or wordplay from today's or the week's real facts (two games at once in one park → "Saturday at Ferrin Park: the Taborville Classic."; three school runs before 8 → "Jake, Kelly and Giselle: the morning relay."). Never the weather, never a plain fact or a summary. Kind; never at a child's expense.
 - Each title at most 6 words; each detail at most 22 words.
 - Names exactly as given. Times as written (7:00, 2:13). Days by name ("Saturday"); dates as people say them ("October 3", "in two weeks") — never 2026-10-03.
@@ -104,7 +106,8 @@ export function parsePaperWords(text) {
       turn: clean(raw.turn).slice(0, 80) || null,
       today: lines(raw.today), weekend: lines(raw.weekend), month: lines(raw.month), wayOut: lines(raw.wayOut),
       forgot: line(raw.forgot),
-      feature: feature ? { ...feature, label: capped(raw.feature.label || 'Worth a try', 40) } : null,
+      // The Scout's id, when the surprise is one of its checked ideas (so it's marked offered).
+      feature: feature ? { ...feature, label: capped(raw.feature.label || 'Worth a try', 40), outingId: /^[0-9a-f-]{36}$/i.test(String(raw.feature.id ?? '')) ? String(raw.feature.id) : null } : null,
       aside: calm(raw.aside).slice(0, 160) || null,
     }
   }

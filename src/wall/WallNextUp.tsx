@@ -46,11 +46,15 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, small }: Omit<N
       {member
         ? <span aria-hidden="true" className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none text-wall-on-pigment ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>
         : <span aria-hidden="true" className="w-[28px] shrink-0" />}
-      <span className={`min-w-0 flex-1 truncate text-left text-wall-body ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>
-      {item.tag && !ticked && <span className={`shrink-0 whitespace-nowrap text-wall-detail ${TAG[state]}`}>{item.tag}</span>}
+      {/* Readable in a narrow column (Jake, Oct 8: "overdue next up on the home page is truncated.. cant see what it is"):
+          the title up to two lines, "21 min late" on its own line under it. */}
+      <span className="flex min-w-0 flex-1 flex-col text-left">
+        <span className={`line-clamp-2 text-wall-body leading-tight ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>
+        {item.tag && !ticked && <span className={`whitespace-nowrap text-wall-label ${TAG[state]}`}>{item.tag}</span>}
+      </span>
     </>
   )
-  const shape = `flex ${small ? 'h-[44px]' : 'h-[48px]'} min-w-0 items-center gap-[14px] border-0 bg-transparent p-0 font-body transition-opacity duration-300 ${ticked ? 'opacity-60' : ''}`
+  const shape = `flex ${small ? 'min-h-[44px]' : 'min-h-[48px]'} min-w-0 items-center gap-[14px] border-0 bg-transparent px-0 py-[4px] font-body transition-opacity duration-300 ${ticked ? 'opacity-60' : ''}`
   if (out) {
     return onOpen
       ? <button type="button" aria-label={`${item.title}, ${item.tag}`} onClick={(e) => { e.stopPropagation(); onOpen(item.id) }} className={shape}>{body}</button>

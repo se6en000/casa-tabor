@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { outingsSection } from '../_shared/scout.mjs'
 import { notesOf } from '../_shared/event-notes.mjs'
 import { placeOnCard } from '../_shared/ai-event-edit.mjs'
 import { optionalEnv, requireEnv } from '../_shared/env.mjs'
@@ -437,6 +438,8 @@ function sanitizeIngressText(value: unknown, maxLen = 1800): string | null {
  if (!normalized) return null
  return normalized.slice(0, maxLen)
 }
+
+const todayYmdNY = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
@@ -1046,13 +1049,16 @@ Deno.serve(async (req) => {
     ])
     // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
     // health, therapy and money facts are left out on the wall; they're answered on a phone.
-    const [{ data: privacy }, { data: personaRow }, { data: routineRows }, { data: dayOffRows }] = await Promise.all([
+    // In the order asked (it once read the persona from the routines' answer, the routines from the days off — Oct 8).
+    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle(),
       // The routines (school, work, who has whom) and the days off in the next three weeks (Oct 7).
       sb.from('member_availability_rules').select('member_id, day_of_week, reason').limit(200),
       sb.from('member_availability_exceptions').select('member_id, start_at, note').eq('override_type', 'day_off').gte('start_at', new Date(Date.now() - 86400e3).toISOString()).lt('start_at', new Date(Date.now() + 21 * 86400e3).toISOString()).limit(60),
       // Alexa's character and house notes (canvas 60), from Settings → Alexa's personality and the weekly look back.
       sb.from('settings').select('value').eq('key', PERSONA_KEY).maybeSingle(),
+      // The Scout's checked list (Oct 8): what to suggest when they ask for something to do.
+      sb.from('outings').select('kind, title, "when", recurring, place, drive_min, rating, rating_count, gem, free, why, status').in('status', ['new', 'offered', 'saved']).limit(200),
     ])
     const onWall = String(context?.page ?? '').startsWith('wall')
     const memory = ((memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string; sensitive?: boolean }>)
@@ -1126,7 +1132,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise })
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
     // A photo (a flyer, a schedule) goes to the model with the words; Gemini reads images itself.

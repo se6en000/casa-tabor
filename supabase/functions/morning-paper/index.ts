@@ -6,6 +6,7 @@ import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { PERSONA_KEY, personaForBrief } from '../_shared/house-persona.mjs'
 import { cleanBriefFacts, cleanFacts, paperPrompt, parsePaperWords, searchPrompt, skyFacts } from '../_shared/morning-paper.mjs'
+import { scoutNotes, scoutPicks } from '../_shared/scout.mjs'
 
 // The morning paper (canvas 48a; Jake, Oct 6): the wall sends the day's facts (src/wall/paper.ts) and gets back the
 // headline, the line under it and the sky — written once a day, kept in morning_papers, so every wall and every
@@ -64,10 +65,27 @@ Deno.serve(async (req) => {
     if (config.provider !== 'gemini' || !config.api_key) return json({ words: null, error: 'No model for the paper.' }, 200, correlationId)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.api_key}`
 
-    // The day's surprise, looked up fresh (real places and events only): skipped quietly if search fails.
+    // The day's surprise, from the Scout's checked list (Jake, Oct 8: "they should be legit real things we actually can
+    // do"): open, on, within half an hour; evenings already spoken for left out. Only when the list is empty, a search.
+    let scout: string | null = null
+    let picks: Array<Record<string, any>> = []
+    if (more) {
+      const until = new Date(Date.parse(`${facts.date}T12:00:00Z`) + 10 * 86_400_000).toISOString()
+      const [{ data: outings }, { data: evenings }] = await Promise.all([
+        sb.from('outings').select('*').in('status', ['new', 'saved', 'offered']).limit(300),
+        sb.from('events').select('start_time').is('deleted_at', null).neq('status', 'cancelled').neq('event_type', 'reminder').gte('start_time', `${facts.date}T00:00:00Z`).lt('start_time', until).limit(400),
+      ])
+      const busy: Record<string, boolean> = {}
+      for (const e of (evenings ?? []) as Array<{ start_time: string }>) {
+        const local = new Date(e.start_time).toLocaleString('en-CA', { timeZone: 'America/New_York', hour12: false })
+        if (Number(local.slice(12, 14)) >= 17) busy[local.slice(0, 10)] = true
+      }
+      picks = scoutPicks(outings ?? [], { today: facts.date, busy, n: 4 })
+      if (picks.length) scout = scoutNotes(picks)
+    }
     let found: string | null = null
     let searchError: string | null = null
-    if (more) {
+    if (more && !scout) {
       const area = [home?.value?.city, home?.value?.state].filter(Boolean).join(', ') || 'the family’s town'
       const search = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${config.api_key}`, {
         method: 'POST',
@@ -88,7 +106,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: paperPrompt(facts, sky, more, found, more ? personaForBrief(persona?.value) : null) }] }],
+        contents: [{ parts: [{ text: paperPrompt(facts, sky, more, found, more ? personaForBrief(persona?.value) : null, scout) }] }],
         generationConfig: { maxOutputTokens: more ? 4000 : 400, temperature: 0.8, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: more ? 1024 : 0 } },
       }),
     }, { correlationId })
@@ -97,7 +115,18 @@ Deno.serve(async (req) => {
     const words = parsePaperWords(parts.filter((p) => !p.thought).map((p) => p.text ?? '').join(''))
     if (!words) return json({ words: null, error: 'The paper didn’t come out right.' }, 200, correlationId)
 
-    if (dryRun) return json({ words, kept: false, dryRun: true, sky, found, searchError }, 200, correlationId)
+    // The Scout's pick: its link on the card, and marked offered (not again for three weeks).
+    const norm = (t: unknown) => String(t ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const featured = norm(words.brief?.feature?.title)
+    // By its id; failing that (the writer sometimes leaves it out), by its name.
+    const chosen = (words.brief?.feature?.outingId ? picks.find((p) => p.id === words.brief.feature.outingId) : null)
+      ?? (featured ? picks.find((p) => { const t = norm(p.title); return t && (t.includes(featured) || featured.includes(t)) }) ?? null : null)
+    if (words.brief?.feature) {
+      if (chosen) words.brief.feature = { ...words.brief.feature, url: chosen.url ?? null, kind: chosen.kind }
+      else words.brief.feature = { ...words.brief.feature, outingId: null }
+    }
+    if (dryRun) return json({ words, kept: false, dryRun: true, sky, found, scout, searchError }, 200, correlationId)
+    if (chosen) await sb.from('outings').update({ status: chosen.status === 'saved' ? 'saved' : 'offered', offered_on: facts.date, updated_at: new Date().toISOString() }).eq('id', chosen.id)
     // First one wins (two walls at once): keep it, then read back whichever was kept.
     await sb.from('morning_papers').upsert({ paper_date: facts.date, headline: words.headline, deck: words.deck, sky: words.sky, brief: words.brief ?? null, facts: { ...facts, more }, sky_facts: sky, found, model: writer }, { onConflict: 'paper_date', ignoreDuplicates: true })
     const { data: saved } = await sb.from('morning_papers').select('headline, deck, sky, brief').eq('paper_date', facts.date).maybeSingle()

@@ -80,3 +80,20 @@ test('the brief from the model: four columns of at most three, the forgotten thi
   // The old three-line reply still parses, with no brief.
   assert.equal(parsePaperWords(JSON.stringify({ headline: 'An easy Friday.', deck: '', sky: '' })).brief, undefined)
 })
+
+// The Scout (Jake, Oct 8: "suggesting sunfest this weekend is not good, its not even happening any more"): when the
+// Scout has checked ideas, the surprise is one of them, by its id, so it's marked offered and never comes back soon.
+test('the surprise comes from the Scout’s checked list, named by its id', async () => {
+  const { cleanFacts: cf } = await import('../supabase/functions/_shared/morning-paper.mjs')
+  const facts = cf({ date: '2026-10-08', day: 'Thursday, October 8, 2026', runs: [], away: [], also: [] })
+  const more = { people: ['Jake', 'Kelly'], week: [], comingUp: [], projects: [], quiet: [] }
+  const scout = '[0b5e3c1a-0000-4000-8000-000000000001] couple: Art After Dark · every Friday 5–10 PM · at Norton Museum of Art · free'
+  const prompt = paperPrompt(facts, null, more, null, null, scout)
+  assert.match(prompt, /Found by the Scout/)
+  assert.match(prompt, /Art After Dark/)
+  assert.match(prompt, /feature\.id/)
+  assert.doesNotMatch(prompt, /Found on the web/)
+  const words = parsePaperWords(JSON.stringify({ headline: 'An easy Thursday.', deck: 'Nothing on the road.', sky: 'Warm.', today: [], weekend: [], month: [], wayOut: [], forgot: null, feature: { id: '0b5e3c1a-0000-4000-8000-000000000001', label: 'Friday night · free', title: 'Art After Dark', detail: 'The Norton stays open late with music.' }, aside: null }))
+  assert.equal(words.brief.feature.outingId, '0b5e3c1a-0000-4000-8000-000000000001')
+  assert.equal(parsePaperWords(JSON.stringify({ headline: 'x', deck: '', sky: '', today: [], feature: { id: 'not-an-id', label: 'x', title: 'y', detail: 'z' } })).brief.feature.outingId, null)
+})
