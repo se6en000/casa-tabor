@@ -32,7 +32,7 @@ import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
 import { quietStep, stepForEvent, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { WallNudge, WallQuietStep } from './WallNudge'
-import { comingUpTile, horizonDate, reminderMark, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import { comingUpTile, horizonDate, reminderMark, type AheadProject, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
 import type { ActExtra } from './useComingUp'
 import { setHorizonTopic } from './horizonTopic'
 import WallEvening from './WallEvening'
@@ -125,7 +125,7 @@ export interface WallViewProps {
   /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Coming up (P3.19, board 07a): what needs planning, gift ideas, and the answers to an item. */
-  comingUp?: { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; handled?: HandledItem[]; act: (key: string, action: ComingUpAction, extra?: ActExtra) => Promise<string | null | void>; start?: (key: string) => Promise<string | null>; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
+  comingUp?: { items: ComingUpItem[]; projects?: AheadProject[]; ideas: GiftIdea[]; today: string; handled?: HandledItem[]; act: (key: string, action: ComingUpAction, extra?: ActExtra) => Promise<string | null | void>; start?: (key: string) => Promise<string | null>; editIdea?: (id: string, idea: string | null) => Promise<void> } | null
   /** To do (P3.22, board 09b): Jake's Reminders list, sorted by Casa, and the answers to an item. */
   todos?: { list: TodoList; act: (request: TodoAction) => Promise<void>; useProject?: (id: string | null) => { data?: TodoProjectDetail | null } } | null
   /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 27a/27c). */
@@ -637,6 +637,7 @@ export default function WallView(props: WallViewProps) {
       <WallComingUp
         now={now}
         items={comingUpItems}
+        projects={comingUp.projects ?? []}
         ideas={comingUp.ideas}
         onEditIdea={comingUp.editIdea}
         today={comingUp.today}

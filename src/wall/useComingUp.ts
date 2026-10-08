@@ -2,9 +2,9 @@ import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { onCalendarChange } from '../hooks/useCalendarEvents'
-import type { ComingUpAction, ComingUpItem, GiftIdea, HandledItem } from './comingUp'
+import type { AheadProject, ComingUpAction, ComingUpItem, GiftIdea, HandledItem } from './comingUp'
 
-export interface ComingUpData { items: ComingUpItem[]; ideas: GiftIdea[]; today: string; handled: HandledItem[] }
+export interface ComingUpData { items: ComingUpItem[]; projects: AheadProject[]; ideas: GiftIdea[]; today: string; handled: HandledItem[] }
 
 /** On the Horizon (canvas 63–64): what a ✓ kept (what was done, its event), or a ✕'s "fewer like this". */
 export interface ActExtra { outcome?: { text: string; title: string; date: string; eventId?: string | null; by: 'you' | 'alexa' }; fewer?: boolean; item?: { title: string; kind: string } }
@@ -21,7 +21,7 @@ export function useComingUp({ surface = 'wall' }: { surface?: 'wall' | 'phone' }
     queryFn: async (): Promise<ComingUpData> => {
       const { data, error } = await supabase.functions.invoke('coming-up', { body: { action: 'list' } })
       if (error) throw error
-      return { items: data?.items ?? [], ideas: data?.ideas ?? [], today: String(data?.today ?? ''), handled: data?.handled ?? [] }
+      return { items: data?.items ?? [], projects: data?.projects ?? [], ideas: data?.ideas ?? [], today: String(data?.today ?? ''), handled: data?.handled ?? [] }
     },
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,

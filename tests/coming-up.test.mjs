@@ -383,3 +383,37 @@ test('Ahead marks what is already set: on the calendar, and a reminder for it', 
   assert.equal(aheadMarks([{ key: 'season:cards:2026', kind: 'season', title: 'Christmas cards', date: '2026-12-25' }], xmas)[0].onCalendar, false)
   assert.equal(aheadMarks([{ key: 'r1', kind: 'reminder', title: 'Text Heather a happy birthday message', date: '2026-10-08' }], events)[0].reminder, null)
 })
+
+// Canvas 68–69 (Jake, Oct 7: "for projects, can that be grouped together … vs having them spread out across and mixed
+// in with other items" → "in november if theres no due date" → B, a strip above the timeline): one entry per project.
+test('a project’s steps and target on Ahead are one project: next step, steps done, its target or when its steps fall', async () => {
+  const { groupProjects } = await import('../supabase/functions/_shared/coming-up.mjs')
+  const items = [
+    { key: 'cu-1', kind: 'birthday', title: 'Carl’s birthday', date: '2026-12-02' },
+    { key: 'step:s3', kind: 'project_step', title: 'Order outdoor lights', date: '2026-11-08', projectId: 'p-xmas' },
+    { key: 'step:s4', kind: 'project_step', title: 'Wrap the palms', date: '2026-11-14', projectId: 'p-xmas' },
+    { key: 'season:christmas_lights:2026', kind: 'season', title: 'Christmas lights', date: '2026-11-25', projectId: 'p-xmas' },
+    { key: 'step:h2', kind: 'project_step', title: 'Choose the painter', date: '2026-10-10', projectId: 'p-paint' },
+  ]
+  const projects = [
+    { id: 'p-xmas', title: 'Christmas lights', status: 'active', aim_date: '2026-11-22' },
+    { id: 'p-paint', title: 'Paint the house', status: 'active', aim_date: null },
+  ]
+  const steps = [
+    { id: 's1', project_id: 'p-xmas', title: 'Storage run', grp: 0, position: 0, done_at: '2026-10-01', cal_start: '2026-10-01' },
+    { id: 's2', project_id: 'p-xmas', title: 'Test the lights', grp: 0, position: 1, done_at: '2026-10-02', cal_start: null },
+    { id: 's3', project_id: 'p-xmas', title: 'Order outdoor lights', grp: 0, position: 2, done_at: null, cal_start: '2026-11-08' },
+    { id: 's4', project_id: 'p-xmas', title: 'Wrap the palms', grp: 0, position: 3, done_at: null, cal_start: '2026-11-14' },
+    { id: 'h1', project_id: 'p-paint', title: 'Pick colours', grp: 0, position: 0, done_at: '2026-09-20', cal_start: null },
+    { id: 'h2', project_id: 'p-paint', title: 'Choose the painter', grp: 0, position: 1, done_at: null, cal_start: '2026-10-10' },
+    { id: 'h3', project_id: 'p-paint', title: 'Paint', grp: 0, position: 2, done_at: null, cal_start: '2026-10-24' },
+  ]
+  const { items: rest, projects: grouped } = groupProjects(items, projects, steps)
+  assert.deepEqual(rest.map((i) => i.key), ['cu-1'])
+  // Soonest first.
+  const [paint, xmas] = grouped
+  assert.deepEqual(xmas, { key: 'project:p-xmas', projectId: 'p-xmas', title: 'Christmas lights', done: 2, total: 4, left: 2, next: { title: 'Order outdoor lights', date: '2026-11-08' }, target: '2026-11-22', from: '2026-11-08', to: '2026-11-14', date: '2026-11-22' })
+  // No target: when its steps fall, and its dot at the last of them.
+  assert.equal(paint.target, null)
+  assert.deepEqual([paint.from, paint.to, paint.date, paint.left], ['2026-10-10', '2026-10-24', '2026-10-24', 2])
+})

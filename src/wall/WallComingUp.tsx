@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Bell, CalendarDays, Check, Mic, X } from 'lucide-react'
 import WallKeyboard from './WallKeyboard'
 import { formatWallDate } from './clock'
-import { horizonDate, horizonGroups, horizonPages, horizonTone, ideasByPerson, reminderMark, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
+import { horizonDate, horizonGroups, horizonPages, horizonTone, ideasByPerson, projectWhen, reminderMark, type AheadProject, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
 import type { ActExtra } from './useComingUp'
 import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 
@@ -15,6 +15,8 @@ import { RailClock, RailNav, RailRule, RailShell } from './WallRail'
 export interface WallComingUpProps {
   now: Date
   items: ComingUpItem[]
+  /** Projects, one card each above the timeline (canvas 69B). */
+  projects?: AheadProject[]
   ideas: GiftIdea[]
   /** What was handled, with what was done: the timeline's ✓s. */
   handled?: HandledItem[]
@@ -120,7 +122,7 @@ const STRIP_DAYS = 84
  * happening, so can see the clusters … on touch or mouse over … highlight the week"): a dot a thing on its day, a ✓
  * for one handled; a tap (or the mouse) on a week lights it and its lines; a tap on a ✓ says what was done.
  */
-function HorizonStrip({ items, handled, today, focus, onFocus, onOpenEvent }: { items: ComingUpItem[]; handled: HandledItem[]; today: string; focus: number | null; onFocus: (week: number | null) => void; onOpenEvent?: (id: string) => void }) {
+function HorizonStrip({ items, projects = [], handled, today, focus, onFocus, onOpenEvent }: { items: ComingUpItem[]; projects?: AheadProject[]; handled: HandledItem[]; today: string; focus: number | null; onFocus: (week: number | null) => void; onOpenEvent?: (id: string) => void }) {
   const [shown, setShown] = useState<HandledItem | null>(null)
   const [pinned, setPinned] = useState<number | null>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -152,6 +154,15 @@ function HorizonStrip({ items, handled, today, focus, onFocus, onOpenEvent }: { 
           const dim = focus != null && Math.floor(d / 7) !== focus
           return <span key={i.key} aria-hidden="true" style={{ left: pct(d), top: 60 - n * 16 }} className={`pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 rounded-full ${DOT[tone]} ${dim ? 'opacity-35' : ''}`} />
         })}
+        {/* A project: one bigger dot at its target (or its last step), the steps left in it (canvas 68). */}
+        {projects.map((p) => {
+          if (!p.date || p.left === 0) return null
+          const d = dayOf(p.date)
+          if (d < 0 || d > STRIP_DAYS) return null
+          const dim = focus != null && Math.floor(d / 7) !== focus
+          const size = p.left >= 5 ? 'h-[34px] w-[34px]' : 'h-[30px] w-[30px]'
+          return <span key={p.key} aria-hidden="true" style={{ left: pct(d), top: 66 }} className={`pointer-events-none absolute flex ${size} -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-wall-brass-ink text-wall-label font-bold text-wall-on-pigment ring-[3px] ring-wall-paper ${dim ? 'opacity-35' : ''}`}>{p.left}</span>
+        })}
         {handled.map((h) => {
           const d = dayOf(h.date)
           if (d < -7 || d > STRIP_DAYS) return null
@@ -171,6 +182,7 @@ function HorizonStrip({ items, handled, today, focus, onFocus, onOpenEvent }: { 
       <span className="pointer-events-none absolute right-[24px] top-[12px] flex items-center gap-[14px] text-wall-label text-wall-ink-2">
         <span className="flex items-center gap-[6px]"><span className="h-[11px] w-[11px] rounded-full bg-wall-brass" />coming</span>
         <span className="flex items-center gap-[6px]"><span className="h-[13px] w-[13px] rounded-full border-2 border-solid border-wall-brass-ink" />done</span>
+        {projects.some((p) => p.left > 0) && <span className="flex items-center gap-[6px]"><span className="h-[18px] w-[18px] rounded-full bg-wall-brass-ink" />project · its steps left inside</span>}
       </span>
       {focus != null && <span className="pointer-events-none absolute left-[30px] top-[8px] text-wall-label font-bold tracking-[0.16em] text-wall-brass-ink">{`${label(focus * 7)} – ${label(focus * 7 + 6)}`.toUpperCase()} · {inWeek(focus)} {inWeek(focus) === 1 ? 'THING' : 'THINGS'}</span>}
       {shown && (
@@ -228,7 +240,43 @@ function IdeasSheet({ ideas, onClose, onEdit }: { ideas: GiftIdea[]; onClose: ()
   )
 }
 
-export default function WallComingUp({ now, items, ideas, handled = [], today, onAct, tabs, onTalk, onOpenProject, onOpenTrip, onOpenEvent, onEditIdea }: WallComingUpProps) {
+const PIP = 'inline-block h-[13px] w-[13px] shrink-0 rounded-full'
+
+/**
+ * Projects, apart from the dated things (canvas 69B; Jake, Oct 7: "does the viewer get losts having to dicerpher between
+ * whats coming up from items vs the projects?"): a card each above the timeline — its steps as pips (filled done), its
+ * target or when its steps fall, the next step; a tap opens it. Up to three; the rest are on To do.
+ */
+function ProjectStrip({ projects, onOpen }: { projects: AheadProject[]; onOpen?: (id: string) => void }) {
+  const shown = projects.slice(0, 3)
+  return (
+    <section aria-label="Projects" className="flex h-[130px] shrink-0 items-stretch gap-[16px]">
+      <div className="flex w-[150px] shrink-0 flex-col gap-[8px] pt-[14px]">
+        <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">PROJECTS</span>
+        <span className="text-wall-label text-wall-ink-2">{projects.length} going{projects.length > shown.length ? ` · ${projects.length - shown.length} more on To do` : ' · steps on To do'}</span>
+      </div>
+      {shown.map((p) => (
+        <button key={p.key} type="button" aria-label={`Open project: ${p.title}`} disabled={!onOpen} onClick={(e) => { e.stopPropagation(); onOpen?.(p.projectId) }}
+          className="flex min-w-0 flex-1 flex-col justify-between rounded-[20px] border-[1.5px] border-solid border-wall-brass/40 bg-wall-on-pigment/60 px-[22px] py-[14px] text-left text-wall-ink">
+          <span className="flex items-baseline justify-between gap-[10px]">
+            <span className="truncate font-display text-wall-date font-semibold">{p.title}</span>
+            <span className="shrink-0 whitespace-nowrap text-wall-label font-semibold text-wall-ink-2">{projectWhen(p)}</span>
+          </span>
+          <span className="flex items-center gap-[6px]" aria-label={`${p.done} of ${p.total} steps done`}>
+            {Array.from({ length: Math.min(p.total, 12) }, (_, i) => <span key={i} aria-hidden="true" className={`${PIP} ${i < p.done ? 'bg-wall-brass-ink' : 'border-2 border-solid border-wall-brass-ink'}`} />)}
+            <span className="ml-[6px] text-wall-label font-semibold text-wall-brass-ink">{p.done} of {p.total} steps</span>
+          </span>
+          <span className="flex items-baseline justify-between gap-[12px]">
+            <span className="truncate text-wall-label text-wall-ink-2">{p.next ? `Next: ${p.next.title}${p.next.date ? ` · ${horizonDate(p.next.date)}` : ''}` : 'Every step done'}</span>
+            <span className="shrink-0 text-wall-label font-semibold text-wall-brass-ink">Open ›</span>
+          </span>
+        </button>
+      ))}
+    </section>
+  )
+}
+
+export default function WallComingUp({ now, items, projects = [], ideas, handled = [], today, onAct, tabs, onTalk, onOpenProject, onOpenTrip, onOpenEvent, onEditIdea }: WallComingUpProps) {
   const [ideasOpen, setIdeasOpen] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [focus, setFocus] = useState<number | null>(null)
@@ -237,7 +285,8 @@ export default function WallComingUp({ now, items, ideas, handled = [], today, o
   const [timers] = useState(() => new Map<string, number[]>())
   useEffect(() => () => { for (const list of timers.values()) list.forEach((t) => window.clearTimeout(t)) }, [timers])
   const groups = useMemo(() => horizonGroups(items, today), [items, today])
-  const pages = useMemo(() => horizonPages(groups), [groups])
+  // The projects' strip takes two lines' room from the list (canvas 69B).
+  const pages = useMemo(() => horizonPages(groups, projects.length ? 7 : 9), [groups, projects.length])
   const page = Math.min(pageIndex, Math.max(0, pages.length - 1))
   const columns = pages[page] ?? [[], []]
   const shownBefore = pages.slice(0, page + 1).flat(2).length
@@ -283,6 +332,7 @@ export default function WallComingUp({ now, items, ideas, handled = [], today, o
         <div className="mt-[28px]">
           <RailNav items={[
             ...groups.map((g) => ({ key: g.key, label: g.heading, aside: String(g.items.length), onOpen: pages.length > 1 ? () => setPageIndex(pageOf(g.heading)) : undefined })),
+            ...(projects.length ? [{ key: 'projects', label: 'Projects', aside: String(projects.length) }] : []),
             { key: 'ideas', label: 'Gift ideas', aside: String(ideas.length), onOpen: () => setIdeasOpen(true), ariaLabel: `Gift ideas · ${ideas.length}` },
             ...(more > 0 ? [{ key: 'more', label: 'Next page', aside: `${more} more`, onOpen: () => setPageIndex(page + 1), ariaLabel: `${more} more` }] : more === 0 && page > 0 ? [{ key: 'first', label: 'First page', aside: '', onOpen: () => setPageIndex(0), ariaLabel: 'First page' }] : []),
           ]} />
@@ -309,7 +359,8 @@ export default function WallComingUp({ now, items, ideas, handled = [], today, o
             </div>
           ))}
         </div>
-        <HorizonStrip items={items} handled={handled} today={today} focus={focus} onFocus={setFocus} onOpenEvent={onOpenEvent} />
+        {projects.length > 0 && <ProjectStrip projects={projects} onOpen={onOpenProject} />}
+        <HorizonStrip items={items} projects={projects} handled={handled} today={today} focus={focus} onFocus={setFocus} onOpenEvent={onOpenEvent} />
       </div>
       {ideasOpen && <IdeasSheet ideas={ideas} onEdit={onEditIdea} onClose={() => setIdeasOpen(false)} />}
     </section>

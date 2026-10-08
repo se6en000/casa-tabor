@@ -20,7 +20,7 @@ import type { WallChore } from './engine/chores'
 import { choreDoneKey } from './nextUp'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
-import type { ComingUpItem, GiftIdea } from './comingUp'
+import type { AheadProject, ComingUpItem, GiftIdea } from './comingUp'
 import type { TodoProjectDetail } from './todos'
 import { numbered, PAINT, pstep, summary, useFixtureTodos } from './todoFixture'
 import { WallSpeechContext } from './speechContext'
@@ -87,7 +87,6 @@ const COMING_UP: Array<Omit<ComingUpItem, 'date' | 'pokeOn' | 'daysAway'> & { in
 ]
 // `?comingUp=projects` (P3.23, canvas 10e): a project's dated step on the list, with Open project.
 const COMING_UP_PROJECTS: typeof COMING_UP = [
-  { key: 'step:st-choose', kind: 'project_step', title: 'Choose the painter and book dates', nextStep: 'Paint the house', inDays: 15, pokeIn: 8, late: false, projectId: 'pr-paint' },
   { key: 'season:christmas_lights:2026', kind: 'season', title: 'Christmas lights', nextStep: 'Lights up before Thanksgiving', inDays: 61, pokeIn: 41, late: false, startable: true, plan: { steps: 7, minutes: 685, first: 'Storage unit run: the lights and wreaths' } },
   ...COMING_UP,
 ]
@@ -278,7 +277,12 @@ export default function WallFixturePage() {
   const [ideas, setIdeas] = useState(IDEAS)
   // Ahead's ✓s on the timeline: one handled (by Alexa, linked) in the fixture; a ✓ in the test adds its own (canvas 64).
   const [handled, setHandled] = useState<HandledItem[]>(() => [{ key: 'h-columbus', title: 'Columbus Day', date: ymd(5), text: 'Giselle has them · days off set', eventId: null, by: 'alexa', at: new Date().toISOString() }])
-  const comingUp = { items: comingUpItems, ideas, today: ymd(0), handled,
+  // `?comingUp=projects` (canvas 68–69B): the projects as the server groups them — one card each above the timeline.
+  const projects: AheadProject[] = new URLSearchParams(window.location.search).get('comingUp') === 'projects' ? [
+    { key: 'project:pr-paint', projectId: 'pr-paint', title: 'Paint the house', done: 1, total: 5, left: 4, next: { title: 'Choose the painter and book dates', date: ymd(15) }, target: null, from: ymd(15), to: ymd(29), date: ymd(29) },
+    { key: 'project:pr-xmas', projectId: 'pr-xmas', title: 'Halloween costumes', done: 3, total: 8, left: 5, next: { title: 'Red yarn wig', date: ymd(20) }, target: ymd(36), from: ymd(20), to: ymd(34), date: ymd(36) },
+  ] : []
+  const comingUp = { items: comingUpItems, projects, ideas, today: ymd(0), handled,
     act: async (key: string, action: string, extra?: { outcome?: { text: string; title: string; date: string } }) => {
       const it = comingUpItems.find((i) => i.key === key)
       setComingUpItems((list) => list.filter((i) => i.key !== key))

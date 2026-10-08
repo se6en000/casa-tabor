@@ -1367,12 +1367,19 @@ test('wall: the keyboard’s Say it — words show as they’re heard, and land 
   expect(await plan(page)).toContain('Buy drop cloths')
 })
 
-// A project's dated step on Coming up opens its project (P3.23 step 2, canvas 10e).
-test('wall: Coming up — a project’s dated step, named for its project, opens the project', async ({ page }) => {
+// Projects on Ahead are a card each above the timeline, apart from the dated things (canvas 68–69B; Jake, Oct 7: "for
+// projects, can that be grouped together … vs having them spread out across and mixed in with other items" → "B it is").
+test('wall: Ahead — projects are a card each above the timeline: steps done, next step, target or month; a tap opens it', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:10:00&comingUp=projects')
   await page.getByRole('button', { name: /^Ahead:/ }).click()
-  await expect(page.getByText('Choose the painter and book dates')).toBeVisible()
-  await page.getByRole('button', { name: /^Open project:/ }).first().click()
+  const strip = page.getByRole('region', { name: 'Projects' })
+  await expect(strip.getByText('In October')).toBeVisible()
+  await expect(strip.getByText('Target Sat Oct 31')).toBeVisible()
+  await expect(strip.getByText('1 of 5 steps')).toBeVisible()
+  await expect(strip.getByText(/Next: Choose the painter and book dates · Sat Oct 10/)).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Ahead' }).getByRole('button', { name: /Talk about Choose the painter/ })).toHaveCount(0)
+  await expect(page).toHaveScreenshot('wall-ahead-projects.png')
+  await strip.getByRole('button', { name: 'Open project: Paint the house' }).click()
   await expect(page.getByRole('region', { name: 'Paint the house — project' })).toBeVisible()
   await page.getByRole('button', { name: 'Back to the list' }).click()
   await expect(page.getByRole('region', { name: 'To do', exact: true })).toBeVisible()

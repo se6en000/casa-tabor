@@ -38,6 +38,32 @@ export function reminderMark(reminder: { at: string; allDay: boolean }, now = ne
   const time = reminder.allDay || midnight ? '' : ` ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00 ', ' ')}`
   return `Reminder ${day}${time}`
 }
+/** A project on Ahead, one entry (canvas 68–69): coming-up.mjs groupProjects. */
+export interface AheadProject {
+  key: string
+  projectId: string
+  title: string
+  done: number
+  total: number
+  left: number
+  next: { title: string; date: string | null } | null
+  /** Its aim date (or its season's day); null when none. */
+  target: string | null
+  /** When its open steps fall. */
+  from: string | null
+  to: string | null
+  /** Where its dot sits on the timeline. */
+  date: string | null
+}
+
+const MONTH = (date: string, form: 'long' | 'short') => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: form, timeZone: 'UTC' })
+/** "Target Sun Nov 22"; with no target, when its steps fall (Jake: "or maybe just, 'in november' if theres no due date"). */
+export function projectWhen(p: Pick<AheadProject, 'target' | 'from' | 'to'>): string {
+  if (p.target) return `Target ${horizonDate(p.target)}`
+  if (!p.from || !p.to) return 'No dates yet'
+  return p.from.slice(0, 7) === p.to.slice(0, 7) ? `In ${MONTH(p.from, 'long')}` : `${MONTH(p.from, 'short')} – ${MONTH(p.to, 'short')}`
+}
+
 export interface GiftIdea { id?: string; for_name: string; for_member_id?: string | null; idea: string }
 export type ComingUpAction = 'done' | 'snooze' | 'dismiss'
 

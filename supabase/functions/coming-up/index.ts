@@ -7,7 +7,7 @@
 //   'send_pokes'               → morning push for items whose plan-by day is today, once each (cron coming-up-daily-pokes)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { memberNamed } from '../_shared/family-names.mjs'
-import { aheadMarks, buildComingUp, fewerLikeMatch, handledFromState, SEASONS } from '../_shared/coming-up.mjs'
+import { aheadMarks, buildComingUp, groupProjects, fewerLikeMatch, handledFromState, SEASONS } from '../_shared/coming-up.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -151,7 +151,9 @@ Deno.serve(async (req) => {
       return { ...g, for_name: member?.name ?? g.for_name }
     })
     // What's already set on each line (canvas 66): on the calendar, a reminder for it.
-    if (action === 'list') return json({ items: aheadMarks(items, eventsRes.data ?? []), rules, today, ideas, handled: handledFromState(stateRes.data ?? [], today) })
+    // Projects as one entry each, apart from the dated things (canvas 68–69).
+    const grouped = groupProjects(items, projectsRes.data ?? [], stepsRes.data ?? [])
+    if (action === 'list') return json({ items: aheadMarks(grouped.items, eventsRes.data ?? []), projects: grouped.projects, rules, today, ideas, handled: handledFromState(stateRes.data ?? [], today) })
 
     const push = async (title: string, text: string, tag: string) => {
       const { error } = await sb.functions.invoke('send-push-notification', { body: { title, body: text, url: '/', tag } })

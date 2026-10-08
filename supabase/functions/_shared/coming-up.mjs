@@ -325,3 +325,33 @@ export function aheadMarks(items, events) {
     return { ...item, onCalendar, reminder: reminder ? { id: reminder.id, title: String(reminder.title), at: String(reminder.start_time), allDay: reminder.all_day === true } : null }
   })
 }
+
+/**
+ * Projects on Ahead are one entry each, not their steps one by one (canvas 68–69; Jake, Oct 7: "for projects, can that
+ * be grouped together … vs having them spread out across and mixed in with other items"): the items without any of a
+ * project's steps, targets or season, and for each project in them — its steps done of all, the next one, its target
+ * (its aim date, or its season's day), when its open steps fall (`from`–`to`, for "In October"), and the day its dot sits
+ * on the timeline (the target, else its last open step).
+ */
+export function groupProjects(items, projects, steps) {
+  const ids = [...new Set((items ?? []).filter((i) => i.projectId && (i.kind === 'project_step' || i.kind === 'project_target' || i.kind === 'season')).map((i) => i.projectId))]
+  const rest = (items ?? []).filter((i) => !(i.projectId && ids.includes(i.projectId)))
+  const grouped = ids.map((id) => {
+    const p = (projects ?? []).find((x) => x.id === id)
+    const own = (steps ?? []).filter((s) => s.project_id === id).sort((a, b) => (a.grp ?? 0) - (b.grp ?? 0) || (a.position ?? 0) - (b.position ?? 0))
+    const open = own.filter((s) => !s.done_at)
+    const next = open[0] ?? null
+    const dates = open.map((s) => s.cal_start).filter(Boolean).sort()
+    const season = (items ?? []).find((i) => i.projectId === id && i.kind === 'season')
+    const target = p?.aim_date ?? season?.date ?? null
+    const from = dates[0] ?? null
+    const to = dates[dates.length - 1] ?? null
+    return {
+      key: `project:${id}`, projectId: id, title: String(p?.title ?? season?.title ?? 'A project'),
+      done: own.length - open.length, total: own.length, left: open.length,
+      next: next ? { title: String(next.title), date: next.cal_start ?? null } : null,
+      target, from, to, date: target ?? to ?? from,
+    }
+  }).sort((a, b) => String(a.date ?? '9999').localeCompare(String(b.date ?? '9999')))
+  return { items: rest, projects: grouped }
+}
