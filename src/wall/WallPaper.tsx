@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { QrCode } from 'lucide-react'
-import type { NextMoveView } from './header'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
-import { RailClock, RailNext, RailRule, RailShell } from './WallRail'
+import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
 import { useDragSide } from './useSwipeDown'
 import { addArgs, eveningLine, goingFor, leaveBy, ticketsDue, type OutingDetails } from './outingCard'
@@ -20,9 +19,8 @@ export interface WallPaperProps {
   words: PaperWords
   /** The brief beyond the three lines: the server's, or plain ones from the facts until it arrives. */
   brief: PaperBrief
-  /** The calm faces' NEXT, in the left panel. */
-  next: NextMoveView | null
-  nextPigment: number | null
+  /** The left panel under the clock: today's panel, quiet — when to leave and with whom, nothing else (canvas 79S). */
+  today?: ReactNode
   /** The counts at the foot of the left panel. */
   counts?: ReactNode
   /** Out & about and Around town (canvas 72): with none, the paper is the front page alone. */
@@ -429,12 +427,12 @@ function OutingCard({ o, scout, members, events, computer, onAdd, onAsk, onClose
  * The morning paper (canvas 48a, 58, 72; Jake, Oct 6: "heres what to worry about today, heres what to prepare for the
  * weekend/next week, heres something a month out … surprise me"; Oct 8: "it doesnt have to be just one … couples things,
  * family ideas, health activities … family news with outside news"): on a calm morning, until 11 or until it's put away.
- * The left panel keeps the clock and the next thing; the stage is three pages, turned with a sideways swipe (a finger or
+ * The left panel keeps the clock and one quiet line — when to leave, with whom (canvas 79S); the stage is three pages, turned with a sideways swipe (a finger or
  * the mouse), the arrow keys or the button at the foot — the front page (the headline, four columns, one thing forgotten
  * and this weekend's best for the two of them), Out & about (the Scout's checked list) and Around town (the news). The
  * front page's words are the server's, written once a day (supabase/functions/morning-paper); until they come, plain ones.
  */
-export default function WallPaper({ now, facts, words, brief, next, nextPigment, counts, scout, members = [], events = [], onAdd, onPutAway, onAsk }: WallPaperProps) {
+export default function WallPaper({ now, facts, words, brief, today = null, counts, scout, members = [], events = [], onAdd, onPutAway, onAsk }: WallPaperProps) {
   const pages = scout ? 3 : 1
   const [page, setPage] = useState(0)
   const pageNow = useRef(0)
@@ -501,7 +499,7 @@ export default function WallPaper({ now, facts, words, brief, next, nextPigment,
           <div className="mt-[8px] line-clamp-3 text-wall-detail text-wall-ink-2">{words.sky || facts.weatherNow}</div>
         </RailClock>
         <RailRule />
-        <RailNext view={next} pigmentIndex={nextPigment} />
+        {today}
       </RailShell>
 
       <div className="absolute inset-y-0 left-[560px] right-0 touch-none overflow-hidden" data-no-swipe={pages > 1 ? '' : undefined} {...handlers}>

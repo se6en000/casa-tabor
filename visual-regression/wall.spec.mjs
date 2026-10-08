@@ -223,7 +223,9 @@ test('wall: the week strip shows another day, in the day-ahead layout, and comes
   await week.getByRole('button', { name: /^Saturday, September 26/ }).click()
   await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
   await expect(wall.getByRole('banner').getByText('TOMORROW', { exact: true })).toBeVisible()
-  await expect(wall.getByRole('region', { name: 'First departure' }).getByText('Jake → Ferrin Park Field 1')).toBeVisible()
+  // The panel stays today's, dimmed (canvas 79R); tomorrow's first one out is on its Score.
+  await expect(wall.getByRole('region', { name: 'Next move' }).getByText('NEXT OUT · 7:25 · IN 13 MIN')).toBeVisible()
+  await expect(wall.getByText('Leaves at 11:56')).toBeVisible()
   await expect(week.getByRole('button', { name: /^Saturday, September 26/ })).toHaveAttribute('aria-pressed', 'true')
   await expect(wall).toHaveScreenshot('week-saturday.png')
 
@@ -1242,35 +1244,44 @@ test('wall: swiping past Coming up reaches To do', async ({ page }) => {
 })
 
 // The surface of To do (board 09a): tonight's nudge on the evening face; one small job in a quiet stretch.
-test('wall: tonight\'s timed to-do is in STILL TONIGHT on the evening face; ticked, the card goes and the header is tomorrow\'s (boards 09a, 27c)', async ({ page }) => {
+// Canvas 79R/79S (Jake, Oct 8: "lets unify this experience"): to-dos are the left panel's TO DO on every face.
+test('wall: tonight\'s to-dos are the panel\'s TO DO TONIGHT, late in rust; a tap on the row ticks it, then it goes', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
-  const tonight = page.getByRole('region', { name: 'Still tonight' })
-  const trash = tonight.getByRole('checkbox', { name: '8:00: Trash out to the street, 15 min late' })
-  await expect(trash).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Tonight’s reminder', exact: true })).toHaveCount(0)
+  const todo = page.getByRole('region', { name: 'To do today' })
+  await expect(todo.getByText('TO DO TONIGHT')).toBeVisible()
+  const trash = todo.getByRole('button', { name: /^Trash out to the street/ })
+  await expect(trash).toContainText('late')
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('evening-nudge.png')
   await trash.click()
-  await expect(tonight).toHaveCount(0, { timeout: 8000 })
+  await expect(trash).toHaveAttribute('aria-pressed', 'true')
+  await expect(todo).toHaveCount(0, { timeout: 8000 })
   await expect(page.getByText('TOMORROW', { exact: true }).first()).toBeVisible()
 
-  // By day it's in NEXT UP from four hours ahead, not before.
+  // By day it's in TO DO from four hours ahead, not before.
   await page.goto('/__wall-fixture?at=2026-09-25T15:30:00')
-  await page.getByTestId('wall-fixture').click({ position: { x: 400, y: 600 } })
-  await expect(page.getByRole('region', { name: 'Next up' })).toHaveCount(0)
+  await page.getByTestId('wall-fixture').click({ position: { x: 1200, y: 600 } })
+  await expect(page.getByRole('region', { name: 'Next move' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'To do today' }).getByText(/Trash/)).toHaveCount(0)
 })
 
-test('wall: in a quiet stretch, one small job with Done', async ({ page }) => {
+test('wall: in a quiet stretch, TO DO says how long and offers the quick ones that fit; a tap ticks one', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00')
   // A calm morning is the morning paper first (canvas 48a); put away, the calm face.
   await page.getByRole('button', { name: 'Put it away' }).click()
   await expect(page.getByText(/A quiet stretch/)).toBeVisible()
-  const meanwhile = page.getByRole('region', { name: 'Meanwhile' })
-  await expect(meanwhile.getByText(/MEANWHILE · \d+ MIN/)).toBeVisible()
+  const todo = page.getByRole('region', { name: 'To do today' })
+  await expect(todo.getByText(/^TO DO · \d+ HR FREE$/)).toBeVisible()
+  await expect(todo.getByRole('button')).toHaveCount(2)
+  await expect(todo.getByText('15 min').first()).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Meanwhile' })).toHaveCount(0)
   await page.evaluate(() => document.fonts.ready)
-  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-meanwhile.png')
-  await meanwhile.getByRole('button', { name: 'Done' }).click()
-  await expect(meanwhile.getByText(/MEANWHILE/)).toBeVisible() // the next one that fits takes its place
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-todo.png')
+  const first = todo.getByRole('button').first()
+  const title = (await first.getAttribute('aria-label')) ?? ''
+  await first.click()
+  await expect(todo.getByRole('button', { name: `${title}, done` })).toBeVisible()
+  await expect(todo.getByRole('button', { name: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) })).toHaveCount(0, { timeout: 8000 })
 })
 
 // Step 5 (Jake 2026-09-28): tap into a project to change its steps and target date; tap a to-do to edit it.
@@ -2413,86 +2424,49 @@ test('wall: Alexa’s tidy-up — I have something for you; merge, undo, do all,
 // Canvas 74C1 (Jake, Oct 8: "next up items are still not even readable" → C; "is this an event, a reminder, a get and
 // prep and project? how did it get here"): a card a box, four across with nothing else in the row; what it is above its
 // name, where it came from at its foot; a copy of the same thing says so, and Merge folds it into the first.
-test('wall: NEXT UP cards — what each is and how it got here; a copy merges into the first', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T18:40:00&chores=1&gym=1&nextUpDetail=1')
-  const wall = page.getByTestId('wall-fixture')
-  await page.evaluate(() => document.fonts.ready)
-  await expect(wall.getByRole('region', { name: 'Meanwhile' })).toBeVisible()
-  await page.mouse.click(400, 600)
-  const nextUp = wall.getByRole('region', { name: 'Next up' })
-  await expect(nextUp.getByText('NEXT UP · 4')).toBeVisible()
-  const meds = nextUp.getByRole('article', { name: 'Give Liv her meds' })
-  await expect(meds).toContainText('CHORE · LIV')
-  await expect(meds).toContainText('From the chores')
-  const step = nextUp.getByRole('article', { name: 'Pick colours: 3 sample pots' })
-  await expect(step).toContainText('PROJECT · STEP 4 OF 9')
-  await expect(step).toContainText('Paint the house')
-  await expect(step.getByLabel('Step 4 of 9')).toBeVisible()
-  const cards = nextUp.getByRole('article', { name: 'Trash out to the street' })
-  await expect(cards).toHaveCount(2)
-  await expect(cards.first()).toContainText('REMINDER')
-  await expect(cards.first()).toContainText('By Alexa · Thu 4:26 PM')
-  await expect(cards.nth(1)).toContainText('A copy')
-  await expect(wall).toHaveScreenshot('next-up-cards.png')
-  // Merge: the copy goes; the first stays.
-  await cards.nth(1).getByRole('button', { name: 'Merge' }).click()
-  await expect(cards).toHaveCount(1)
-  await expect(nextUp.getByText('NEXT UP · 3')).toBeVisible()
-  // The tick still ticks.
-  await expect(nextUp.getByRole('checkbox', { name: '8:00: Trash out to the street' })).toBeVisible()
-})
-
-test('wall: NEXT UP — the day’s chores and timed to-dos first in the rail, due soon in brass; a tick crosses it out, then it leaves', async ({ page }) => {
+test('wall: TO DO by day — the chores and timed to-dos due within four hours, in the panel; a tick crosses it out, then it leaves', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T18:40:00&chores=1&gym=1')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  // Calm at 6:40; a touch wakes the full day.
-  await expect(wall.getByRole('region', { name: 'Meanwhile' })).toBeVisible()
-  await page.mouse.click(400, 600)
-  const nextUp = wall.getByRole('region', { name: 'Next up' })
-  await expect(nextUp.getByText('NEXT UP · 2')).toBeVisible()
-  const meds = nextUp.getByRole('checkbox', { name: '7:00 Liv: Give Liv her meds, in 20 min' })
+  const todo = wall.getByRole('region', { name: 'To do today' })
+  await expect(todo.getByText('TO DO TONIGHT')).toBeVisible()
+  const meds = todo.getByRole('button', { name: /^Give Liv her meds/ })
   await expect(meds).toBeVisible()
-  await expect(nextUp.getByRole('checkbox', { name: '8:00: Trash out to the street' })).toBeVisible()
+  await expect(todo.getByRole('button', { name: /^Trash out to the street/ })).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Next up' })).toHaveCount(0)
   await expect(wall).toHaveScreenshot('next-up-day.png')
 
   await meds.click()
-  await expect(meds).toHaveAttribute('aria-checked', 'true')
-  await expect(nextUp.getByText('NEXT UP · 1')).toBeVisible()
+  await expect(meds).toHaveAttribute('aria-pressed', 'true')
   // A moment later it's saved and gone.
-  await expect(meds).toHaveCount(0, { timeout: 8000 })
+  await expect(todo.getByRole('button', { name: /^Give Liv her meds/ })).toHaveCount(0, { timeout: 8000 })
   expect(await page.evaluate(() => window.__choreTicks)).toEqual(['+chore:meds:2026-09-25'])
 })
 
-test('wall: STILL TONIGHT — from 7 PM the wall is tomorrow’s, and what’s left of today is a small column beside tomorrow’s date (28c)', async ({ page }) => {
+test('wall: from 7 PM the stage is tomorrow\'s and the panel stays today\'s — THEN the gym run, TO DO TONIGHT; a second tap takes a tick back', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T19:40:00&chores=1&gym=1')
   const wall = page.getByTestId('wall-fixture')
   await page.evaluate(() => document.fonts.ready)
-  const card = wall.getByRole('region', { name: 'Still tonight' })
-  await expect(card.getByText('STILL TONIGHT')).toBeVisible()
-  // Tomorrow keeps the header (canvas 28c): its date beside the column.
   await expect(wall.getByRole('banner').getByText('Saturday, September 26')).toBeVisible()
-  await expect(card.getByRole('checkbox', { name: '7:00 Liv: Give Liv her meds, 40 min late' })).toBeVisible()
-  await expect(card.getByRole('checkbox', { name: '8:00: Trash out to the street, in 20 min' })).toBeVisible()
-  await expect(card.getByRole('button', { name: 'Kelly at the gym, until 9:30' })).toBeVisible()
-  await expect(wall.getByRole('button', { name: /^Today:/ }).getByText('2 left tonight')).toBeVisible()
-  // The rest of the face is tomorrow's, as before.
   await expect(wall.getByRole('region', { name: "SATURDAY · WHO'S WHERE" })).toBeVisible()
+  // No FIRST OUT in the panel any more: tomorrow's is on its own Score (canvas 79R).
+  await expect(wall.getByRole('region', { name: 'First departure' })).toHaveCount(0)
+  const todo = wall.getByRole('region', { name: 'To do today' })
+  await expect(todo.getByText('TO DO TONIGHT')).toBeVisible()
+  await expect(todo.getByRole('button', { name: /^Give Liv her meds/ })).toContainText('late')
+  await expect(todo.getByRole('button', { name: /^Trash out to the street/ })).toBeVisible()
+  await expect(wall.getByRole('button', { name: /^Today:/ }).getByText('2 left tonight')).toBeVisible()
   await expect(wall).toHaveScreenshot('still-tonight.png')
 
   // A second tap in the moment takes the tick back: nothing is saved.
-  const meds = card.getByRole('checkbox', { name: /Give Liv her meds/ })
+  const meds = todo.getByRole('button', { name: /^Give Liv her meds/ })
   await meds.click()
-  await expect(meds).toHaveAttribute('aria-checked', 'true')
+  await expect(meds).toHaveAttribute('aria-pressed', 'true')
   await meds.click()
-  await expect(meds).toHaveAttribute('aria-checked', 'false')
+  await expect(meds).toHaveAttribute('aria-pressed', 'false')
   await page.waitForTimeout(4500)
   await expect(meds).toBeVisible()
   expect(await page.evaluate(() => window.__choreTicks ?? [])).toEqual([])
-
-  // Kelly's gym opens its sheet.
-  await card.getByRole('button', { name: 'Kelly at the gym, until 9:30' }).click()
-  await expect(wall.getByRole('region', { name: /details$/ })).toBeVisible()
 })
 
 test('wall: today’s header — a one-off at home takes it from a routine run the sitter covers within 45 minutes; THEN is the next three (canvas 29e/29f)', async ({ page }) => {
@@ -2504,17 +2478,17 @@ test('wall: today’s header — a one-off at home takes it from a routine run t
   await expect(header.getByText('Plumber · water heater')).toBeVisible()
   await expect(header.getByText('Jake · 3:15 to 4:15 · about an hour')).toBeVisible()
   const then = wall.getByRole('region', { name: 'Then' })
-  // Giselle's 3:12 pickup, passed over for the plumber, is first under THEN, marked routine.
+  // Giselle's 3:12 pickup, passed over for the plumber, is first under THEN (its time in brass; no "routine" in the panel).
   await expect(then.getByRole('button').first()).toContainText('3:12')
   await expect(then.getByRole('button').first()).toContainText('Pick up Liv')
-  await expect(then.getByRole('button').first()).toContainText('routine')
+  await expect(then.getByRole('button').first()).not.toContainText('routine')
   await expect(wall).toHaveScreenshot('header-home-race.png')
   await header.getByRole('button', { name: 'Details' }).click()
   await expect(wall.getByRole('region', { name: /details$/ })).toBeVisible()
 
   // Earlier the same day: nothing one-off is close, so the next move leads; THEN shows the race coming.
   await page.goto('/__wall-fixture?at=2026-09-25T13:15:00&home=1')
-  await expect(wall.getByRole('region', { name: 'Next move' }).getByText('NEXT MOVE · LEAVE BY 1:50')).toBeVisible()
+  await expect(wall.getByRole('region', { name: 'Next move' }).getByText('NEXT OUT · 1:50 · IN 35 MIN')).toBeVisible()
   await expect(wall.getByRole('region', { name: 'Then' }).getByRole('button')).toHaveCount(3)
   await page.evaluate(() => document.fonts.ready)
   await expect(wall).toHaveScreenshot('header-home-earlier.png')
@@ -2933,22 +2907,20 @@ test('wall: adding to an event — the card lists each get & pack line, and new 
   await expect(wall).toHaveScreenshot('band-adds-notes.png')
 })
 
-// Canvas 78C (Jake, Oct 8: "this could look better" → "nailed it"): nothing else on the road — the left panel says the
-// rest of the evening; Meanwhile and tomorrow sit side by side below, tomorrow in full.
-test('wall: the home stretch — this evening in the left panel; Meanwhile and tomorrow side by side', async ({ page }) => {
+// Canvas 78C → 79R (Jake, Oct 8): nothing else on the road — THEN who comes and goes, TO DO TONIGHT; tomorrow's card below.
+test('wall: the home stretch — THEN Kelly off work, TO DO TONIGHT in the panel; tomorrow\'s card on the stage', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T17:20:00&chores=1')
   await expect(page.getByTestId('wall-fixture')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  const evening = page.getByRole('region', { name: 'This evening' })
-  await expect(evening).toContainText('6:30')
-  await expect(evening).toContainText('Kelly off work')
-  await expect(evening).toContainText('Give Liv her meds')
-  await expect(evening).toContainText('Trash out to the street')
+  await expect(page.getByRole('region', { name: 'Next move' })).toHaveCount(0)
+  const then = page.getByRole('region', { name: 'Then' })
+  await expect(then).toContainText('6:30')
+  await expect(then).toContainText('Kelly off work')
+  const todo = page.getByRole('region', { name: 'To do today' })
+  await expect(todo.getByText('TO DO TONIGHT')).toBeVisible()
+  await expect(todo.getByRole('button')).toHaveCount(2)
   await expect(page.getByText('Nothing else on the road today.')).toHaveCount(1)
-  const meanwhile = await page.getByRole('region', { name: 'Meanwhile' }).boundingBox()
-  const tomorrow = page.getByRole('button', { name: /^Tomorrow:/ })
-  await expect(tomorrow).toContainText('FIRST OUT 11:56')
-  const box = await tomorrow.boundingBox()
-  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) / 2 - ((meanwhile?.y ?? 0) + (meanwhile?.height ?? 0) / 2))).toBeLessThan(20)
+  await expect(page.getByRole('region', { name: 'Meanwhile' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Tomorrow:/ })).toContainText('FIRST OUT 11:56')
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-home-stretch.png')
 })

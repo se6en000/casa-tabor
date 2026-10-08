@@ -6,7 +6,8 @@ import { blankEvent, type EditableEvent } from './editing'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
 import type { DayPlan, Trip, WallEvent, WallMember } from './engine/types'
 import { selectNextMove } from './engine/nextMove'
-import { describeNextMove } from './header'
+import { describeNextMove, type NextMoveView } from './header'
+import { describeHomeLead, selectHeaderLead, thenItems } from './headerLead'
 import type { DayTripState } from './tripState'
 import { decisionsFor, type DecisionAction } from './decisions'
 import { holidayDecisions } from './holidays'
@@ -32,8 +33,7 @@ import WallPersonSheet from './WallPersonSheet'
 import WallCalm from './WallCalm'
 import WallComingUp from './WallComingUp'
 import WallTodos from './WallTodos'
-import { quietStep, stepForEvent, todoTile, tonightNudge, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
-import { WallNudge, WallQuietStep } from './WallNudge'
+import { stepForEvent, todoTile, type TodoAction, type TodoList, type TodoProjectDetail } from './todos'
 import { comingUpTile, horizonDate, reminderMark, type AheadProject, type ComingUpAction, type ComingUpItem, type GiftIdea, type HandledItem } from './comingUp'
 import type { ActExtra } from './useComingUp'
 import { setHorizonTopic } from './horizonTopic'
@@ -52,8 +52,9 @@ import WallTidy from './WallTidy'
 import type { TidyData } from './useTidy'
 import type { ScoreInteraction } from './WallScore'
 import WallNightCalm from './WallNightCalm'
-import { comingHours, eveningHeading, fitNextUp, nextUpItems, outTonight, stillTonight, thisEvening, type NextUpItem } from './nextUp'
-import { NextUpSection, StillTonight, TONIGHT_ROOM } from './WallNextUp'
+import { comingsAndGoings, nextUpItems, type NextUpItem } from './nextUp'
+import { panelThen, panelTodos, quickSteps, todoHeading, type TodoRow } from './todayPanel'
+import WallTodayPanel, { type TodayPanelMode } from './WallTodayPanel'
 
 export interface WallViewProps {
   now: Date
@@ -147,8 +148,6 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 const PAPER_PUT_AWAY_KEY = 'casa.wall.paperPutAway'
 /** A tick crosses the line out this long before it's saved and leaves; a second tap in that time takes it back. */
 const TICK_MS = 4000
-/** How many lines THIS EVENING has room for in the left panel (canvas 78C). */
-const EVENING_ROOM = 5
 const addTo = (key: string) => (set: Set<string>) => new Set(set).add(key)
 const takeFrom = (key: string) => (set: Set<string>) => {
   const next = new Set(set)
@@ -233,7 +232,6 @@ export default function WallView(props: WallViewProps) {
   // A project to open straight away (a Coming up row's "Open project", P3.23).
   const [todoProject, setTodoProject] = useState<string | null>(null)
   // "Later tonight" on a nudge: off the wall for 45 minutes (the watch's reminder is untouched).
-  const [nudgeLater, setNudgeLater] = useState<{ id: string; until: number } | null>(null)
   // "Hide routines" (canvas 16b): remembered on this wall until Show.
   const [routinesHidden, setRoutinesHidden] = useState(readRoutinesHidden)
   // A person's page (canvas 16e), from a tap on their name.
@@ -572,24 +570,48 @@ export default function WallView(props: WallViewProps) {
     }, TICK_MS))
   }
   const rowProps = { members, pigmentOf: (id: string) => pigments.get(id) ?? null, ticked, onTick: tick, onOpen: (id: string) => eventsById.has(id) && setSelectedId(id) }
-  const soonJobs = comingHours(jobs, now)
-  // A copy folded into the first (canvas 74C1, Merge): gone from the card at once; back if it didn't save.
-  const merge = (item: NextUpItem) => {
-    if (!item.copyOf || !todos) return
-    setGone(addTo(item.key))
-    Promise.resolve(todos.act({ action: 'merge', id: item.id, into: item.copyOf })).catch(() => setGone(takeFrom(item.key)))
-  }
-  const nextUp = soonJobs.length > 0 ? (columns: 1 | 2 | 3 | 4) => {
-    const { shown, more } = fitNextUp(soonJobs, columns)
-    return <NextUpSection items={shown} more={more} columns={columns} now={now} onSeeAll={todos ? openTodo : undefined} onMerge={todos ? merge : undefined} {...rowProps} />
-  } : null
-  // Before midnight the evening looks at tomorrow; what's left of today, and who's still out, sit in its header.
-  const tonightJobs = evening && tonightByClock(now) ? stillTonight(jobs, outTonight(shownToday, members, now)) : []
-  const tonightShown = tonightJobs.slice(0, TONIGHT_ROOM)
-  const leftTonight = tonightJobs.filter((item) => item.kind !== 'out').length
-  const stillTonightCard = tonightJobs.length > 0
-    ? <StillTonight rail items={tonightShown} more={tonightJobs.length - tonightShown.length} {...rowProps} />
-    : null
+  // The left panel, the same on every face (canvas 79R/79S; Jake, Oct 8: "lets unify this experience"): today's NEXT
+  // (the next car out, or something at home), TAKE WITH YOU, THEN (to know) and TO DO (a tap on the row ticks it).
+  const todayLead = useMemo(() => selectHeaderLead(shownToday, members, now), [shownToday, members, now])
+  const todayNext = useMemo((): NextMoveView | null => {
+    if (!todayLead) return null
+    if (todayLead.kind === 'move') return describeNextMove(todayLead.move, members, now)
+    const home = describeHomeLead(todayLead.item, todayLead.now, members, now)
+    return { eyebrow: home.eyebrow, urgent: false, driverId: home.whoId, initial: home.initial, title: home.title, detail: home.detail, summary: home.title, what: home.title, how: home.detail, timing: '', leaveTime: null, also: null, ring: home.ring, tripIds: [], departed: false, status: 'upcoming' }
+  }, [todayLead, members, now])
+  const todayThen = useMemo(() => panelThen(thenItems(shownToday, members, todayLead, now, 50), comingsAndGoings(shownToday, members, now)), [shownToday, members, todayLead, now])
+  // What goes with the next move is TAKE WITH YOU in the panel; the rest of today's lists stay on the stage.
+  const { take, rest } = useMemo(() => {
+    const groups = shownToday ? packingGroups(shownToday, checklist, { from: now }).groups : []
+    const eventIds = new Set(todayLead?.kind === 'move' && todayNext ? (shownToday?.trips ?? []).filter((t) => todayNext.tripIds.includes(t.id)).map((t) => t.sourceId) : [])
+    const others = groups.filter((g) => !eventIds.has(g.eventId))
+    const items = others.flatMap((g) => g.items)
+    return { take: groups.filter((g) => eventIds.has(g.eventId)), rest: { groups: others, packed: items.filter((i) => i.checked).length, total: items.length } }
+  }, [shownToday, checklist, now, todayLead, todayNext])
+  const quick = todos ? quickSteps(todos.list, now, move?.leaveAt ?? null, 3) : []
+  const freeMinutes = move?.leaveAt ? Math.round((move.leaveAt.getTime() - now.getTime()) / 60_000) : null
+  // How many to-dos a face has room for: a quiet stretch fills up to three with quick ones; from 5 PM, tonight's only.
+  const TODO_ROOM: Record<TodayPanelMode, { room: number; quickRoom: number }> = { full: { room: 2, quickRoom: 1 }, calm: { room: 3, quickRoom: 3 }, evening: { room: 4, quickRoom: 0 }, quiet: { room: 0, quickRoom: 0 } }
+  const tickRow = (row: TodoRow) => tick(row.job ?? { key: row.key, kind: 'todo', id: row.todoId ?? '', at: now, title: row.title, whoId: null, state: 'later', tag: null, meridiem: null })
+  const todayPanel = (mode: TodayPanelMode, dim = false) => (
+    <WallTodayPanel
+      mode={mode}
+      dim={dim}
+      members={members}
+      pigmentOf={rowProps.pigmentOf}
+      next={todayNext}
+      moveActions={todayLead?.kind === 'home' ? undefined : moveActions}
+      onDetails={todayLead?.kind === 'home' ? () => { if (eventsById.has(todayLead.item.id)) setSelectedId(todayLead.item.id) } : undefined}
+      take={{ groups: take, onToggleItem: toggleChecklist, onSeeAll: () => setPackingOpen(true) }}
+      then={todayThen}
+      onOpenItem={rowProps.onOpen}
+      todo={{ heading: todoHeading(now, mode === 'calm' ? freeMinutes : null), rows: panelTodos(jobs, quick, now, { ...TODO_ROOM[mode], quickRoom: now.getHours() >= 17 ? 0 : TODO_ROOM[mode].quickRoom }).filter((r) => !gone.has(r.key)) }}
+      ticked={ticked}
+      onTick={tickRow}
+    />
+  )
+  // The week strip's "N left tonight" on today.
+  const leftTonight = evening && tonightByClock(now) ? jobs.length : 0
 
   const tomorrowDate = tomorrow?.date ?? null
   // Beside the left panel (canvas 56A) the strip is the seven days; Coming up and To do are counts at the panel's foot.
@@ -623,20 +645,6 @@ export default function WallView(props: WallViewProps) {
   const tomorrowNote = tomorrowText && tomorrowDate
     ? { text: tomorrowText, parts: tomorrowParts(shownTomorrow, checklist, decisionsOn(tomorrowDate).length, now), onOpen: () => showDay(tomorrowDate) }
     : null
-
-  // The surface of To do (board 09a): tonight's nudge on the evening face, one small job in a quiet stretch.
-  const nudgeItem = todos ? tonightNudge(todos.list, now) : null
-  const nudge = nudgeItem && !(nudgeLater?.id === nudgeItem.id && Date.now() < nudgeLater.until) ? nudgeItem : null
-  const tonight = stillTonightCard ? null : (nudge && todos ? (
-    <WallNudge
-      rail
-      item={nudge}
-      onDone={() => void todos.act({ action: 'done', id: nudge.id })}
-      onLater={() => setNudgeLater({ id: nudge.id, until: Date.now() + 45 * 60_000 })}
-    />
-  ) : null)
-  const smallJob = todos ? quietStep(todos.list, now, move?.leaveAt ?? null) : null
-  const meanwhile = smallJob && todos ? <WallQuietStep item={smallJob} onDone={() => void todos.act({ action: 'done', id: smallJob.id })} /> : null
 
   let face
   // The paper itself has no way back to itself.
@@ -705,7 +713,7 @@ export default function WallView(props: WallViewProps) {
     darkFace = true
     const plan = planFor(dayOnShow)
     const lists = plan ? packingGroups(plan, checklist) : null
-    face = <WallNightCalm now={now} members={members} plan={plan} stillTonight={tonightByClock(now) ? stillTonightCard : null} ready={lists ? { packed: lists.packed, total: lists.total, headings: lists.groups.map((g) => g.heading.split(' · ')[0]) } : null} />
+    face = <WallNightCalm now={now} members={members} plan={plan} today={tonightByClock(now) ? todayPanel('evening') : null} packing={lists} onToggleItem={toggleChecklist} />
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
     // The day-ahead face: tomorrow in the evening, or a day tapped in the week strip.
     const plan = planFor(dayOnShow)
@@ -733,8 +741,7 @@ export default function WallView(props: WallViewProps) {
         onSeeAllPacking={() => setPackingOpen(true)}
         week={stageStrip}
         onBack={picked ? () => setDayPreview(null) : undefined}
-        tonight={evening && !picked ? tonight : null}
-        stillTonight={evening && !picked ? stillTonightCard : null}
+        today={todayPanel(evening ? 'evening' : shown.posture === 'launch' ? 'full' : 'calm', Boolean(picked))}
         counts={counts}
       />
     )
@@ -743,13 +750,11 @@ export default function WallView(props: WallViewProps) {
     && paperShows({ posture: shown.posture, now, dismissedOn: paperPutAway, previewing: paperPreview, plan: shownToday })) {
     const facts = paperFacts(shownToday, members, now, currentWeather)
     const words = paper ?? fallbackWords(facts)
-    const nextView = describeNextMove(selectNextMove(shownToday, now), members, now)
     paperOnShow = true
     face = (
       <WallPaper now={now} facts={facts} words={words}
         brief={words.brief ?? fallbackBrief(facts, briefFacts({ members, week, now, checklist, comingUp: comingUp?.items, todos: todos?.list }))}
-        next={nextView}
-        nextPigment={nextView?.driverId ? pigments.get(nextView.driverId) ?? null : null}
+        today={todayPanel('quiet')}
         counts={counts}
         scout={scout}
         members={members}
@@ -765,10 +770,7 @@ export default function WallView(props: WallViewProps) {
         }} />
     )
   } else if (shown.posture === 'calm') {
-    // Nothing else on the road: the rest of today in the left panel (canvas 78C).
-    const lines = thisEvening(jobs, shownToday, members, now)
-    const evening = { heading: eveningHeading(lines, now), lines: lines.slice(0, EVENING_ROOM), more: Math.max(0, lines.length - EVENING_ROOM) }
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} counts={counts} tomorrow={tomorrowNote} meanwhile={meanwhile} evening={evening} pigmentOf={rowProps.pigmentOf} />
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} counts={counts} tomorrow={tomorrowNote} today={todayPanel('calm')} />
   } else {
     // The full day (also Today tapped in the evening).
     face = (
@@ -778,19 +780,17 @@ export default function WallView(props: WallViewProps) {
         plan={shownToday}
         currentWeather={currentWeather}
         interaction={{ ...interaction, marks: marksFor(shownToday?.date) }}
-        moveActions={moveActions}
+        today={todayPanel('full')}
         counts={counts}
-        onOpenItem={(id) => eventsById.has(id) && setSelectedId(id)}
         tomorrow={tomorrowNote}
         week={stageStrip}
         prep={shownToday && toggleChecklist ? {
-          packing: packingGroups(shownToday, checklist, { from: now }),
+          packing: rest,
           decisions: decisionsOn(shownToday.date),
           onAnswer: tripActions ? answer : undefined,
           onToggleItem: toggleChecklist,
           onOpenEvent: (id) => eventsById.has(id) && setSelectedId(id),
           onSeeAll: () => setPackingOpen(true),
-          nextUp,
         } : null}
       />
     )

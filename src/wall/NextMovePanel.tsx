@@ -1,4 +1,5 @@
 import { minutesAway, type NextMoveView } from './header'
+import { nextOutHeading } from './todayPanel'
 import { pigmentStyleFor } from './lanes'
 
 // The ring and title come down a size when THEN sits beside them (canvas 29e), so the title stays whole.
@@ -33,7 +34,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions, onDetails, 
 
   const accent = view.urgent ? 'text-wall-rust' : 'text-wall-ink-2'
   const ring = RING[rail ? 'rail' : compact ? 'compact' : 'full']
-  if (rail) return <RailMove view={view} actions={actions} onDetails={onDetails} accent={accent} ring={ring} />
+  if (rail) return <RailMove view={view} pigmentIndex={pigmentIndex} actions={actions} onDetails={onDetails} accent={accent} ring={ring} />
   const circumference = 2 * Math.PI * ring.radius
   return (
     <section aria-label="Next move" className={`flex min-w-0 flex-1 items-center ${compact ? 'gap-[28px]' : 'gap-[36px]'}`}>
@@ -136,12 +137,13 @@ function Ring({ view, ring, className }: { view: NextMoveView; ring: { size: num
 }
 
 /**
- * The next move in the left panel (canvas 56A). Within the hour it's the eyebrow, then the ring beside the what and
- * how. Further off (Jake, Oct 7: "can that show up when the move is under 60 mins? otherwise show the next move like
- * the morning paper does"): how long in the eyebrow, the leave time big, then who, what and how — the calm faces' NEXT.
+ * The next move in the left panel (canvas 56A, 79R/79S). One heading on every face: "NEXT OUT · 7:25 · IN 13 MIN".
+ * Within the hour, the ring beside the what and how. Further off, just who, what and how — the time is in the heading,
+ * so the panel has one clock (Jake, Oct 8: "this is competing clocks. can we remove the medium leave clock").
  */
-function RailMove({ view, actions, onDetails, accent, ring }: {
+function RailMove({ view, pigmentIndex, actions, onDetails, accent, ring }: {
   view: NextMoveView
+  pigmentIndex: number | null
   actions?: NextMoveActions
   onDetails?: () => void
   accent: string
@@ -149,14 +151,20 @@ function RailMove({ view, actions, onDetails, accent, ring }: {
 }) {
   const away = minutesAway(view)
   const far = away != null && away >= 60 && Boolean(view.leaveTime)
-  const inWords = (m: number) => (m >= 60 ? `in ${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}` : `in ${m} min`)
   return (
     <section aria-label="Next move" className="flex shrink-0 flex-col gap-[16px]">
-      <div className={`text-wall-label font-bold tracking-[0.22em] ${view.urgent ? accent : 'text-wall-brass'}`}>{far ? `NEXT MOVE · ${inWords(away).toUpperCase()}` : view.eyebrow}</div>
+      <div className={`text-wall-label font-bold tracking-[0.22em] ${view.urgent ? accent : 'text-wall-brass'}`}>{nextOutHeading(view)}</div>
       {far ? (
-        <div className="flex min-w-0 flex-col gap-[10px]">
-          <span className="font-display text-wall-headline font-semibold lining-nums">{view.leaveTime}</span>
-          <span className="line-clamp-2 text-balance font-display text-wall-date font-semibold">{view.what ?? view.title}</span>
+        <div className="flex min-w-0 flex-col gap-[8px]">
+          <div className="flex min-w-0 items-center gap-[12px]">
+            <span
+              aria-hidden="true"
+              className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${pigmentIndex == null ? 'border-2 border-dashed border-wall-ink-2 text-wall-ink-2' : `text-wall-on-pigment ${pigmentStyleFor(pigmentIndex).solid}`}`}
+            >
+              {view.initial}
+            </span>
+            <span className="line-clamp-2 text-balance font-display text-wall-rail-title font-semibold">{view.what ?? view.title}</span>
+          </div>
           <span className="line-clamp-2 text-wall-detail text-wall-ink-2">{[view.how ?? view.detail, view.drive].filter(Boolean).join(' · ')}</span>
         </div>
       ) : (

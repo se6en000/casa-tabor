@@ -450,10 +450,6 @@
         "reason": "Family Wall: To do (board 09b, approved 2026-09-28) — Done, Not now, the snooze choices, group headers and Yes/Keep are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
       },
       {
-        "path": "src/wall/WallNudge.tsx",
-        "reason": "Family Wall: tonight's nudge and the quiet-stretch step (board 09a, approved 2026-09-28) — Done and Later tonight are part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 52–64px targets."
-      },
-      {
         "path": "src/wall/WallTodoSheet.tsx",
         "reason": "Family Wall: editing a to-do by touch — title, date, time, Done, Delete (P3.22 step 5, approved 2026-09-28) — part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, 44–52px targets."
       },
@@ -554,10 +550,6 @@
         "reason": "Family Wall: THEN in today's header (canvas 29e/29f) — each of the next three opens its item. Part of the Wall's own component set."
       },
       {
-        "path": "src/wall/WallNextUp.tsx",
-        "reason": "Family Wall: NEXT UP and STILL TONIGHT (canvas 27a, 27c) — a row is a tick (role checkbox) or opens who's out; the To do link. Part of the Wall's own component set."
-      },
-      {
         "path": "src/wall/WallCasaTalk.tsx",
         "reason": "Family Wall: \"Casa wants to talk to you\" (canvas 21a-b) — the quiet line, the band's mic and its answers, part of the Wall's own component set."
       },
@@ -596,6 +588,10 @@
       {
         "path": "src/wall/WallPaper.tsx",
         "reason": "Family Wall morning paper (canvas 48a, 72): page turn, Ask about it, Put it away, and each outing's Phone / Save / Not for us — part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallTodayPanel.tsx",
+        "reason": "Family Wall: the left panel's TO DO (canvas 79R/79S, approved by Jake 2026-10-08 — \"lets unify this experience\") — each row is the tick (64px, the box at its right). Part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens."
       }
     ]
   }

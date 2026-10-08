@@ -135,8 +135,8 @@ export function nextUpItems(plan: DayPlan | null, list: Pick<TodoList, 'nextUp' 
 
 /**
  * Who is still out tonight (canvas 27c, "Kelly at the gym until 9:30"): someone at a place away from home now or
- * later this evening, one line each (the first such block). Not chores, drives or a trip away (the trip has its own
- * marks).
+ * later this evening, one line each (the first such block). Not chores, drives, routines (school's pickup is its own
+ * run) or a trip away (the trip has its own marks).
  */
 export function outTonight(plan: DayPlan | null, members: WallMember[], now: Date): NextUpItem[] {
   if (!plan || !sameDay(plan.date, now)) return []
@@ -144,7 +144,7 @@ export function outTonight(plan: DayPlan | null, members: WallMember[], now: Dat
   const out: NextUpItem[] = []
   for (const member of members) {
     const block = (plan.lanes.get(member.id) ?? [])
-      .filter((s) => s.kind !== 'drive' && !s.chore && !s.travel && s.placeStatus === 'away' && s.end > now && s.start < midnight)
+      .filter((s) => s.kind !== 'drive' && !s.chore && !s.travel && !s.fromRoutine && s.placeStatus === 'away' && s.end > now && s.start < midnight)
       .sort((a, b) => a.start.getTime() - b.start.getTime())[0]
     if (!block) continue
     out.push({
@@ -163,34 +163,27 @@ export function outTonight(plan: DayPlan | null, members: WallMember[], now: Dat
   return out
 }
 
-/** One line of THIS EVENING (canvas 78C): when, what, whose. */
-export interface EveningLine { key: string; at: Date; title: string; whoId: string | null; initial: string; late: boolean; meridiem: string | null }
-
-/** THIS EVENING heading before 4 PM only when every line is from 5 PM on; else LATER TODAY. */
-export function eveningHeading(lines: Pick<EveningLine, 'at'>[], now: Date): string {
-  return now.getHours() >= 16 || lines.every((l) => l.at.getHours() >= 17) ? 'THIS EVENING' : 'LATER TODAY'
-}
+/** A coming or going for THEN (canvas 79R): someone off work, done at a place, or heading out. */
+export interface ComingGoing { key: string; at: Date; title: string; whoId: string }
 
 /**
- * The rest of today on the calm face's left panel when nothing else is on the road (canvas 78C; Jake, Oct 8: "this
- * could look better"): the chores and timed to-dos still to do; whoever's at work, when they're off; and whoever's
- * out — when they're done there, or when they go. In time order.
+ * Who comes and goes the rest of today, to know (canvas 79R; first drawn as 78C's THIS EVENING): whoever's at work,
+ * when they're off ("Kelly off work"); whoever's out, when they're done there, or when they go. In time order.
  */
-export function thisEvening(jobs: NextUpItem[], plan: DayPlan | null, members: WallMember[], now: Date): EveningLine[] {
-  const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? ''
-  const line = (key: string, at: Date, title: string, whoId: string | null, late = false): EveningLine => ({ key, at, title, whoId, initial: nameOf(whoId).charAt(0), late, meridiem: meridiemFor(at, now) })
-  const lines = jobs.map((j) => line(j.key, j.at, j.title, j.whoId, j.state === 'late'))
-  if (plan && sameDay(plan.date, now)) {
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-    for (const member of members) {
-      const work = (plan.lanes.get(member.id) ?? []).find((s) => s.work && s.start <= now && s.end > now && s.end < midnight)
-      if (work) lines.push(line(`work:${member.id}`, work.end, `${member.name} off work`, member.id))
-    }
+export function comingsAndGoings(plan: DayPlan | null, members: WallMember[], now: Date): ComingGoing[] {
+  if (!plan || !sameDay(plan.date, now)) return []
+  const lines: ComingGoing[] = []
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  for (const member of members) {
+    const work = (plan.lanes.get(member.id) ?? []).find((s) => s.work && s.start <= now && s.end > now && s.end < midnight)
+    if (work) lines.push({ key: `work:${member.id}`, at: work.end, title: `${member.name} off work`, whoId: member.id })
   }
-  for (const o of outTonight(plan, members, now)) {
+  // A place someone's driven to is a run — NEXT or THEN says it already.
+  const runs = new Set(plan.trips.map((t) => t.sourceId))
+  for (const o of outTonight(plan, members, now).filter((o) => !runs.has(o.id))) {
+    const name = members.find((m) => m.id === o.whoId)?.name ?? ''
     const there = o.at.getTime() <= now.getTime()
-    const at = there && o.until ? o.until : o.at
-    lines.push(line(o.key, at, there ? `${nameOf(o.whoId)} done at ${o.title.slice(nameOf(o.whoId).length + 4)}` : `${o.title} ${o.tag ?? ''}`.trim(), o.whoId))
+    lines.push({ key: o.key, at: there && o.until ? o.until : o.at, title: there ? `${name} done at ${o.title.slice(name.length + 4)}` : `${o.title} ${o.tag ?? ''}`.trim(), whoId: o.whoId as string })
   }
   return lines.sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
 }
@@ -201,27 +194,10 @@ function placeWords(label: string): string {
   return /^[a-z]/.test(name) || /^(gym|office|work|school|church|practice|pool|park|library|store|beach|doctor|dentist)$/i.test(name) ? `the ${name.toLowerCase()}` : name
 }
 
-/** Still tonight: the to-dos first by time, with whoever's out placed among them by when they went. */
-export function stillTonight(todo: NextUpItem[], out: NextUpItem[]): NextUpItem[] {
-  return [...todo, ...out].sort((a, b) => a.at.getTime() - b.at.getTime() || (a.kind === 'out' ? 1 : 0) - (b.kind === 'out' ? 1 : 0))
-}
-
 /** By day NEXT UP looks this far ahead (the coming hours); late ones stay until ticked. */
 export const AHEAD_MS = 4 * 3_600_000
 
 /** What NEXT UP shows on the full day: late, or due within the next four hours (8 PM's trash from 4 PM, not at 7 AM). */
 export function comingHours(items: NextUpItem[], now: Date): NextUpItem[] {
   return items.filter((i) => i.state === 'late' || i.at.getTime() - now.getTime() <= AHEAD_MS)
-}
-
-/** How many fit: two rows a column; `columns` across. The rest are "+N later". */
-export function fitNextUp<T>(items: T[], columns: number): { shown: T[]; more: number } {
-  // One card a box (canvas 74C1).
-  const room = Math.max(1, columns)
-  return items.length <= room ? { shown: items, more: 0 } : { shown: items.slice(0, room), more: items.length - room }
-}
-
-/** How many of the rail's four boxes NEXT UP takes (canvas 74C1): what get & pack (two) and a decision (one) don't. */
-export function nextUpBoxes({ packing, deciding }: { packing: boolean; deciding: boolean }): 1 | 2 | 3 | 4 {
-  return Math.max(1, 4 - (packing ? 2 : 0) - (deciding ? 1 : 0)) as 1 | 2 | 3 | 4
 }

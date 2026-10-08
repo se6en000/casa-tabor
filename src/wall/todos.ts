@@ -112,29 +112,6 @@ export const GROUPS = [
   { key: 'later', label: 'Later' },
 ] as const
 
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const NUDGE_LEAD_MS = 2 * 60 * 60_000
-
-/** Tonight's nudge (board 09a): a nudge due today, from two hours before its time until done or the day ends. */
-export function tonightNudge(list: Pick<TodoList, 'nextUp' | 'groups'>, now: Date): TodoItem | null {
-  const today = localDay(now)
-  const all = [...list.nextUp, ...list.groups.nudge]
-  return all
-    .filter((i) => i.shape === 'nudge' && i.dueAt && !i.snoozedUntil)
-    .filter((i) => localDay(new Date(i.dueAt!)) === today && now.getTime() >= new Date(i.dueAt!).getTime() - NUDGE_LEAD_MS)
-    .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())[0] ?? null
-}
-
-/**
- * In a quiet stretch (board 09a): one small job from Next up that fits before the next move, with
- * ten minutes to spare — never more than half an hour, so it stays a quick win.
- */
-export function quietStep(list: Pick<TodoList, 'nextUp'>, now: Date, until: Date | null): TodoItem | null {
-  const room = until ? (until.getTime() - now.getTime()) / 60_000 - 10 : Infinity
-  // Quick ones only: Done here finishes the whole thing (a fix's next step isn't the fix).
-  return list.nextUp.find((i) => i.shape === 'quick' && i.minutes != null && i.minutes <= Math.min(room, 30)) ?? null
-}
-
 /** The time part of a to-do, or null: a date with no time is stored at 5 PM (as the iOS sync does). */
 export function timeOf(item: Pick<TodoItem, 'dueAt' | 'due'>): string | null {
   if (!item.due || !item.dueAt) return null

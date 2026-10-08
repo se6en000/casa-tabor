@@ -23,20 +23,10 @@ test('the folded groups, in order', () => {
 })
 
 // Board 09a: the surface — tonight's nudge on the evening face, one small step in a quiet stretch.
-import { tonightNudge, quietStep } from '../src/wall/todos.ts'
+import { quickSteps } from '../src/wall/todayPanel.ts'
+const quietStep = (list, now, until) => quickSteps(list, now, until, 1)[0] ?? null
 const at = (h, m = 0) => new Date(2026, 8, 28, h, m)
 const listWith = (nextUp = [], nudge = []) => ({ nextUp, groups: { quick: [], fix: [], nudge, dated: [], unsorted: [] }, projects: [], suggestions: [] })
-
-test('tonight\'s nudge: from two hours before its time until it\'s done or the day ends', () => {
-  const trash = item('trash', { shape: 'nudge', title: 'Trash out to the street', dueAt: at(20).toISOString(), due: '2026-09-28' })
-  const debris = item('debris', { shape: 'nudge', title: 'Landscaping debris out', dueAt: new Date(2026, 8, 29, 21).toISOString(), due: '2026-09-29' })
-  const list = listWith([], [debris, trash])
-  assert.equal(tonightNudge(list, at(17, 59)), null, 'too early')
-  assert.equal(tonightNudge(list, at(18, 0)).id, 'trash')
-  assert.equal(tonightNudge(list, at(23, 30)).id, 'trash', 'still up if not done')
-  assert.equal(tonightNudge(listWith([], [debris]), at(20)), null, 'tomorrow\'s waits')
-  assert.equal(tonightNudge(listWith([], [{ ...trash, snoozedUntil: '2026-09-29' }]), at(20)), null, 'snoozed')
-})
 
 test('a quiet stretch offers one small job that fits, with room to spare', () => {
   const list = listWith([

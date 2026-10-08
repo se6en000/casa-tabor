@@ -3,6 +3,8 @@ import type { DayPlan, WallMember } from './engine/types'
 import { selectNextMove } from './engine/nextMove'
 import { describeNextMove } from './header'
 import { forecastLine } from './posture'
+import type { PackingGroup, WallChecklistItem } from './packing'
+import { GetReady } from './WallPrep'
 import { RailClock, RailRule, RailShell } from './WallRail'
 
 // A night Calm (canvas 36a/36b; Jake, Oct 2: "does calm view have a night time version? that it could auto switch after
@@ -12,14 +14,16 @@ import { RailClock, RailRule, RailShell } from './WallRail'
 // the full evening (WallView). Canvas 56A calm at night: the left panel keeps the gold clock and what's still due
 // tonight; the stage is one glance at tomorrow — the date, the first one out, how ready it is.
 
-export default function WallNightCalm({ now, members, plan, stillTonight = null, ready = null }: {
+export default function WallNightCalm({ now, members, plan, today = null, packing = null, onToggleItem }: {
   now: Date
   members: WallMember[]
   /** The day ahead: tomorrow before midnight, the day just begun after it. */
   plan: DayPlan | null
-  stillTonight?: ReactNode
-  /** Tomorrow's lists: how many are done, and the events they're for. */
-  ready?: { packed: number; total: number; headings: string[] } | null
+  /** Today's panel (WallTodayPanel): what's still to do tonight. */
+  today?: ReactNode
+  /** Tomorrow's lists — the same GET READY cards as everywhere (canvas 79R; it was a bar here). */
+  packing?: { groups: PackingGroup[]; packed: number; total: number } | null
+  onToggleItem?: (item: WallChecklistItem) => void
 }) {
   const late = now.getHours() < 6
   // A day that hasn't started reads from its start ("Leave 11:56").
@@ -41,10 +45,10 @@ export default function WallNightCalm({ now, members, plan, stillTonight = null,
         <RailClock now={now} size="calm" gold>
           <div className="font-display text-wall-quote italic text-wall-ink-2">{when}</div>
         </RailClock>
-        {!late && stillTonight && (
+        {!late && today && (
           <>
             <RailRule />
-            {stillTonight}
+            {today}
           </>
         )}
       </RailShell>
@@ -70,16 +74,10 @@ export default function WallNightCalm({ now, members, plan, stillTonight = null,
         ) : (
           <span className="mt-[16px] font-display text-wall-move font-semibold italic text-wall-ink-2">Nothing on the road</span>
         )}
-        {!late && ready && ready.total > 0 && (
+        {!late && packing && packing.total > 0 && (
           <>
             <div className="my-[40px] h-px bg-wall-rule" />
-            <section aria-label="Get ready" className="flex max-w-[620px] flex-col">
-              <span className="text-wall-label font-bold tracking-[0.22em] text-wall-ink-2">GET READY · {ready.packed} OF {ready.total} DONE</span>
-              <div aria-hidden="true" className="mt-[18px] h-[8px] overflow-hidden rounded-full bg-wall-rule">
-                <div className="h-full rounded-full bg-wall-brass" style={{ width: `${Math.round((ready.packed / ready.total) * 100)}%` }} />
-              </div>
-              {ready.headings.length > 0 && <span className="mt-[16px] truncate text-wall-body text-wall-ink-2">{ready.headings.join(' · ')}</span>}
-            </section>
+            <GetReady packing={packing} cards={3} lines={3} onToggleItem={onToggleItem} />
           </>
         )}
       </div>

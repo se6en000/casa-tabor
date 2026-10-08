@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDayPlan } from '../src/wall/engine/dayPlan.ts'
-import { choreDoneKey, comingHours, eveningHeading, fitNextUp, nextUpItems, outTonight, stillTonight, tagFor, thisEvening, todoTimeToday } from '../src/wall/nextUp.ts'
+import { choreDoneKey, comingHours, comingsAndGoings, nextUpItems, outTonight, tagFor, todoTimeToday } from '../src/wall/nextUp.ts'
 import { events, members, routines } from './fixtures/wall-day-2026-09-25.mjs'
 
 // Canvas 27a / 27c (Jake, 2026-10-01, approved): today's chores and timed to-dos as NEXT UP by day, and from 7 PM,
@@ -50,28 +50,11 @@ test('next up: the same job as a Reminder and a chore, at the same minute, is on
   assert.deepEqual(items.map((i) => i.title), ['Take meds', 'Trash to the street'])
 })
 
-test('still tonight: Kelly at the gym until 9:30 sits among the to-dos by when she went', () => {
+test('out tonight: Kelly at the gym until 9:30', () => {
   const out = outTonight(plan, members, at(19, 40))
   assert.deepEqual(out.map((i) => [i.title, i.tag, i.whoId]), [['Kelly at the gym', 'until 9:30', 'kelly']])
-  const all = stillTonight(nextUpItems(plan, null, new Set(), at(19, 40)), out)
-  assert.deepEqual(all.map((i) => i.title), ['Take meds', 'Kelly at the gym', 'Trash to the street'])
-  // Home again: off the card.
+  // Home again: off the list.
   assert.deepEqual(outTonight(plan, members, at(21, 45)), [])
-})
-
-// Canvas 74C1: one card a box — four across with nothing else in the row, fewer beside get & pack or a decision.
-test('next up fits a card a box; the rest are "+N later"', () => {
-  assert.deepEqual(fitNextUp([1, 2, 3, 4, 5], 4), { shown: [1, 2, 3, 4], more: 1 })
-  assert.deepEqual(fitNextUp([1, 2, 3], 2), { shown: [1, 2], more: 1 })
-  assert.deepEqual(fitNextUp([1], 4), { shown: [1], more: 0 })
-})
-
-test('next up gets the boxes nothing else needs', async () => {
-  const { nextUpBoxes } = await import('../src/wall/nextUp.ts')
-  assert.equal(nextUpBoxes({ packing: false, deciding: false }), 4)
-  assert.equal(nextUpBoxes({ packing: false, deciding: true }), 3)
-  assert.equal(nextUpBoxes({ packing: true, deciding: false }), 2)
-  assert.equal(nextUpBoxes({ packing: true, deciding: true }), 1)
 })
 
 test('next up by day: the coming four hours and anything late — not 8 PM’s trash at 7 AM', () => {
@@ -108,25 +91,14 @@ test('Next up cards: what it is, and how it got here', async () => {
   assert.equal(originLine(null, null, now), null)
 })
 
-// Canvas 78C (Jake, Oct 8: "this could look better" → "nailed it"): nothing else on the road, the left panel says the rest of the evening.
-test('this evening: off work, the chores and to-dos, and who goes out — in time order, with whose', () => {
+// Canvas 79R (THEN, to know): who comes and goes the rest of today — off work, done at a place, heading out.
+test('comings and goings: off work; a place someone drives to is a run (THEN has it), not another line', () => {
   const work = { key: 'work-hours', memberId: 'kelly', title: 'Work', routineType: 'work', venueName: '', venueAddress: '', daysOfWeek: [1, 2, 3, 4, 5], startLocal: '07:30', endLocal: '18:30', dayOverrides: [], dropoffDriverName: '', pickupDriverName: '', enabled: true }
   const day = buildDayPlan({ date: FRIDAY, members, routines: [...routines, work], events: [...events, gym], chores })
-  const now = at(17, 20)
-  const lines = thisEvening(nextUpItems(day, null, new Set(), now), day, members, now)
-  assert.deepEqual(lines.map((l) => [l.at.getHours() * 100 + l.at.getMinutes(), l.title, l.initial]), [
-    [1830, 'Kelly off work', 'K'],
-    [1900, 'Kelly at the gym until 9:30', 'K'],
-    ...lines.filter((l) => l.key.startsWith('chore:')).map((l) => [l.at.getHours() * 100 + l.at.getMinutes(), l.title, l.initial]),
-  ].sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1])))
-  assert.equal(eveningHeading(lines, now), 'THIS EVENING')
-  // At the gym: when she's done there.
-  const later = thisEvening([], day, members, at(19, 40))
-  assert.deepEqual(later.map((l) => l.title), ['Kelly done at the gym'])
-})
-
-test('this evening is "later today" in the early afternoon unless it all starts from 5', () => {
-  assert.equal(eveningHeading([{ at: at(15, 0) }, { at: at(19, 0) }], at(13, 0)), 'LATER TODAY')
-  assert.equal(eveningHeading([{ at: at(18, 30) }], at(13, 0)), 'THIS EVENING')
-  assert.equal(eveningHeading([{ at: at(16, 30) }], at(16, 5)), 'THIS EVENING')
+  assert.ok(day.trips.some((t) => t.sourceId === 'kelly-gym'), 'the gym is a run')
+  assert.deepEqual(comingsAndGoings(day, members, at(17, 20)).map((l) => [l.at.getHours() * 100 + l.at.getMinutes(), l.title, l.whoId]), [[1830, 'Kelly off work', 'kelly']])
+  assert.deepEqual(comingsAndGoings(day, members, at(19, 40)), [])
+  assert.deepEqual(comingsAndGoings(day, members, at(21, 45)), [])
+  // School is a routine — its pickup is the run in THEN, not another line.
+  assert.ok(comingsAndGoings(day, members, at(9)).every((l) => !/School|Public/.test(l.title)))
 })

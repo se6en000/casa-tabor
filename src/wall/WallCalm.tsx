@@ -1,12 +1,10 @@
 import { useMemo, type ReactNode } from 'react'
 import { formatWallDate } from './clock'
-import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
-import { describeNextMove, weatherLine } from './header'
+import { weatherLine } from './header'
 import { pigmentStyleFor } from './lanes'
 import { calmHeadline } from './posture'
-import type { EveningLine } from './nextUp'
-import { RailClock, RailEvening, RailNext, RailRule, RailShell } from './WallRail'
+import { RailClock, RailRule, RailShell } from './WallRail'
 import { TomorrowCard, type TomorrowNote } from './WallTomorrowNote'
 import { buildScore, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
@@ -35,24 +33,19 @@ export interface WallCalmProps {
   counts?: ReactNode
   /** Tomorrow speaking up in the afternoon. */
   tomorrow?: TomorrowNote | null
-  /** One small job for the quiet stretch (P3.22, board 09a). */
-  meanwhile?: ReactNode
-  /** The rest of today, for the left panel when nothing else is on the road (canvas 78C). */
-  evening?: { heading: string; lines: EveningLine[]; more: number } | null
-  pigmentOf?: (memberId: string) => number | null
+  /** The left panel under the clock — today's NEXT, THEN, TO DO (WallTodayPanel; a quiet stretch's to-dos are there). */
+  today?: ReactNode
 }
 
 /**
- * The calm posture (board 02b, canvas 56A calm by day): the left panel keeps the clock and the next thing — or, with
- * nothing else on the road, the rest of the evening (canvas 78C); the stage is one quiet sentence and who's where, each
- * person with a thread of their day; a small job and tomorrow sit side by side below.
+ * The calm posture (board 02b, canvas 56A calm by day): the left panel keeps the clock and today's panel (canvas 79S —
+ * in a quiet stretch its TO DO says how long and offers what fits); the stage is one quiet sentence and who's where,
+ * each person with a thread of their day; tomorrow's card below in the afternoon.
  */
-export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, counts, tomorrow = null, meanwhile = null, evening = null, pigmentOf = () => null }: WallCalmProps) {
+export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, counts, tomorrow = null, today = null }: WallCalmProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
-  const next = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
   const weather = weatherLine(currentWeather, plan, now)
   const lanes = score?.lanes ?? []
-  const nextPigment = lanes.find((lane) => lane.member.id === next?.driverId)?.pigmentIndex ?? null
 
   return (
     <div className="relative h-full w-full bg-wall-ground-calm font-body text-wall-ink">
@@ -62,9 +55,7 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
           {weather && <div className="mt-[6px] text-wall-detail text-wall-ink-2">{weather}</div>}
         </RailClock>
         <RailRule />
-        {!next && evening && evening.lines.length > 0
-          ? <RailEvening heading={evening.heading} lines={evening.lines} more={evening.more} pigmentOf={pigmentOf} />
-          : <RailNext view={next} pigmentIndex={nextPigment} />}
+        {today}
       </RailShell>
 
       <div className="absolute inset-y-0 left-[560px] right-0 flex flex-col px-[72px] pb-[56px] pt-[84px]">
@@ -120,12 +111,8 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
           )}
         </div>
 
-        {(meanwhile || tomorrow) && (
-          <div className={`mt-auto grid shrink-0 gap-[24px] ${meanwhile && tomorrow ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {meanwhile && <div className="flex min-w-0 items-center rounded-[20px] bg-wall-paper px-[30px] py-[24px] shadow-[0_1px_0_rgba(38,34,29,0.06),0_8px_22px_rgba(38,34,29,0.12)]">{meanwhile}</div>}
-            {tomorrow && <div className="flex min-w-0"><TomorrowCard note={tomorrow} /></div>}
-          </div>
-        )}
+        {/* Tomorrow speaking up in the afternoon: its one home before the evening shows tomorrow itself (canvas 79R). */}
+        {tomorrow && <div className="mt-auto flex w-1/2 min-w-0 shrink-0 self-end"><TomorrowCard note={tomorrow} /></div>}
       </div>
     </div>
   )

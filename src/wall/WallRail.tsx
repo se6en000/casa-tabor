@@ -3,11 +3,7 @@ import { PaperRecall } from './paperRecall'
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { formatWallClock } from './clock'
-import type { NextMoveView } from './header'
-import { pigmentStyleFor } from './lanes'
 import type { PackingGroup, WallChecklistItem } from './packing'
-import type { EveningLine } from './nextUp'
-import { nextInWords } from './posture'
 
 // The left panel (canvas 56A; Jake, Oct 6: "OK I love this!" → "yup, its a go"). Every face keeps the same panel down
 // the left in the same place: the buttons at its top, then now — the clock, the next move, what to take, what's
@@ -175,57 +171,6 @@ export function TakeWithYou({ groups, onToggleItem, onSeeAll, room = 4 }: {
           </button>
         )}
       </div>
-    </section>
-  )
-}
-
-/** THIS EVENING on the calm face when nothing else is on the road (canvas 78C): the rest of today, a line each. */
-export function RailEvening({ heading, lines, more, pigmentOf }: { heading: string; lines: EveningLine[]; more: number; pigmentOf: (id: string) => number | null }) {
-  return (
-    <section aria-label={heading === 'THIS EVENING' ? 'This evening' : 'Later today'} className="flex shrink-0 flex-col">
-      <RailLabel tone="brass" aside={more > 0 ? `+${more} later` : undefined}>{heading}</RailLabel>
-      <div className="mt-[10px] flex flex-col">
-        {lines.map((line, i) => {
-          const pigment = line.whoId ? pigmentOf(line.whoId) : null
-          const clock = formatWallClock(line.at)
-          return (
-            <div key={line.key} className={`flex min-w-0 items-center gap-[16px] py-[14px] ${i ? 'border-0 border-t border-solid border-wall-rule' : ''}`}>
-              <span className={`w-[74px] shrink-0 font-display text-wall-date lining-nums ${line.late ? 'text-wall-rust' : ''}`}>
-                {clock.time}{line.meridiem && <span className="text-wall-label text-wall-ink-2"> {line.meridiem}</span>}
-              </span>
-              <span
-                aria-hidden="true"
-                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${pigment == null ? 'border-2 border-solid border-wall-rule' : `text-wall-on-pigment ${pigmentStyleFor(pigment).solid}`}`}
-              >
-                {pigment == null ? '' : line.initial}
-              </span>
-              <span className="min-w-0 truncate font-display text-wall-heading">{line.title}</span>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-/** NEXT on the calm faces (canvas 56A calm, 58): how long, the time big, who, and how — or a quiet line when nothing's left. */
-export function RailNext({ view, pigmentIndex }: { view: NextMoveView | null; pigmentIndex: number | null }) {
-  if (!view) return <div className="font-display text-wall-date italic text-wall-ink-2">Nothing else on the road today.</div>
-  const inWords = nextInWords(view)
-  return (
-    <section aria-label="Next" className="flex shrink-0 flex-col">
-      <RailLabel tone="brass">NEXT{inWords ? ` · ${inWords.toUpperCase()}` : ''}</RailLabel>
-      {view.leaveTime && <span className="mt-[16px] font-display text-wall-headline font-semibold lining-nums">{view.leaveTime}</span>}
-      <div className="mt-[16px] flex min-w-0 items-center gap-[12px]">
-        <span
-          aria-hidden="true"
-          className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold ${pigmentIndex == null ? 'border-2 border-dashed border-wall-ink-2 text-wall-ink-2' : `text-wall-on-pigment ${pigmentStyleFor(pigmentIndex).solid}`}`}
-        >
-          {view.initial}
-        </span>
-        <span className="line-clamp-2 font-display text-wall-date font-semibold">{view.what ?? view.title}</span>
-      </div>
-      <div className="mt-[10px] line-clamp-2 text-wall-detail text-wall-ink-2">{view.how ?? view.detail}</div>
     </section>
   )
 }
