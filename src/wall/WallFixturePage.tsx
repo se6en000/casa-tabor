@@ -286,7 +286,7 @@ export default function WallFixturePage() {
     answer: (id, status) => setOutings((list) => (status === 'not_for_us' ? list.filter((o) => o.id !== id) : list.map((o) => (o.id === id ? { ...o, status } : o)))),
   } : null
   const [comingUpItems, setComingUpItems] = useState<ComingUpItem[]>(() => ({ live: COMING_UP_LIVE, projects: COMING_UP_PROJECTS }[new URLSearchParams(window.location.search).get('comingUp') ?? ''] ?? COMING_UP).map(({ inDays, pokeIn, ...rest }) => ({ ...rest, date: ymd(inDays), pokeOn: ymd(pokeIn), daysAway: inDays })))
-  const { todos, setProjects, setTodoList } = useFixtureTodos({ stepEvent: STEP_EVENT, twoInside: new URLSearchParams(window.location.search).get('twoInside') === '1', closedInside: new URLSearchParams(window.location.search).get('closedInside') === '1' })
+  const { todos, setProjects, setTodoList } = useFixtureTodos({ stepEvent: STEP_EVENT, twoInside: new URLSearchParams(window.location.search).get('twoInside') === '1', closedInside: new URLSearchParams(window.location.search).get('closedInside') === '1', detail: new URLSearchParams(window.location.search).get('nextUpDetail') === '1' })
   // A season started (canvas 11c): this year's project from the same starter plan the server uses.
   const start = async (key: string) => {
     const [, id, year] = key.split(':')

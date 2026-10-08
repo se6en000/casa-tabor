@@ -417,6 +417,12 @@ Deno.serve(async (req) => {
   const lane = normalizeOptionalText(laneRaw, 80) ?? 'tool_action'
   const deviceId = normalizeOptionalText(deviceIdRaw, 160)
   const clientTraceSource = normalizeOptionalText(clientTraceSourceRaw, 80)
+  // How it got here (canvas 74C1; Jake, Oct 8: "is this an event, a reminder … how did it get here"): what asked for it —
+  // Alexa on the wall or a phone ("wall-band-confirmation"), a hand on the add sheet ("phone-add-sheet"), a scan — kept
+  // on what was made. The columns were added in June and never written until now.
+  const stampOrigin = (id: string) => sb.from('events').update({
+    ai_origin_lane: clientTraceSource ?? lane, ai_origin_action_id: normalizeOptionalText(actionId, 200), ai_origin_device_id: deviceId, ai_origin_trace_id: cid ?? null,
+  }).eq('id', id).is('ai_origin_lane', null).then(() => undefined, () => undefined)
   const confirmedByUser = confirmedByUserRaw === true
   const appendActionTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
     sb.from('ai_drawer_debug_events').insert({
@@ -897,6 +903,7 @@ Deno.serve(async (req) => {
         throw new Error(error?.message ?? 'Event create was not confirmed by the database')
       }
       const event = { id: bundle.event_id as string, updated_at: bundle.updated_at as string }
+      await stampOrigin(event.id)
       // Who drives, when the card said (a parent going to their own thing, 2026-09-30): both legs.
       if (typeof args.driver_name === 'string' && args.driver_name.trim()) {
         const { data: family } = await sb.from('family_members').select('id, name, full_name')
@@ -1748,6 +1755,7 @@ Deno.serve(async (req) => {
       const due = typeof args.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.due) ? args.due : null
       const { data, error } = await sb.rpc('todo_add', { p_title: title, p_due: due })
       if (error) throw new Error(error.message)
+      if (data) await stampOrigin(String(data))
       // Its notes (canvas 65): what Alexa kept with it, or an email's specifics.
       const todoNotes = normalizeOptionalText(args.notes, 2000)
       if (todoNotes && data) await sb.from('events').update({ description: todoNotes }).eq('id', String(data))

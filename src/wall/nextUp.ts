@@ -26,6 +26,44 @@ export interface NextUpItem {
   until?: Date
   /** "AM"/"PM" when it's in the other half of the day from now (8 AM's to-do on the evening card), else null. */
   meridiem: string | null
+  /** A to-do's kind, project, how it got here and whether it's a copy (canvas 74C1; from the server's list). */
+  todoKind?: 'reminder' | 'step'
+  project?: { id: string; title: string | null; step: number | null; of: number | null } | null
+  origin?: TodoOrigin | null
+  copyOf?: string | null
+}
+
+export interface TodoOrigin { via: 'alexa' | 'hand' | 'email' | 'scan' | 'project' | null; where: 'wall' | 'phone' | null; text: string | null; at: string | null }
+
+/** The small capitals above a card's name (canvas 74C1): "Reminder", "Project · step 2 of 5", "Chore · Jake", "Out". */
+export function cardKind(item: Pick<NextUpItem, 'kind'> & Partial<Pick<NextUpItem, 'todoKind' | 'project'>>, whoName: string | null = null): string {
+  if (item.kind === 'chore') return whoName ? `Chore · ${whoName}` : 'Chore'
+  if (item.kind === 'out') return 'Out'
+  if (item.todoKind === 'step') return item.project?.step && item.project.of ? `Project · step ${item.project.step} of ${item.project.of}` : 'Project step'
+  return 'Reminder'
+}
+
+/** When, as the card's foot says it (short — the foot is one line): "7:17 AM" today, "Wed 4:26 PM" this week, else "Oct 1". */
+function whenSaid(iso: string, now: Date): string {
+  const d = new Date(iso)
+  const clock = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000)
+  if (days === 0) return clock
+  if (days >= 1 && days < 7) return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${clock}`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** How it got here, at a card's foot (canvas 74C1): Alexa, a hand, an email, a scan, its project — or just when. */
+export function originLine(origin: TodoOrigin | null | undefined, projectTitle: string | null, now: Date): string | null {
+  if (!origin) return null
+  const when = origin.at ? whenSaid(origin.at, now) : null
+  const tail = when ? ` · ${when}` : ''
+  if (origin.via === 'alexa') return `By Alexa${origin.where === 'phone' ? ' on a phone' : ''}${tail}`
+  if (origin.via === 'hand') return `Added on ${origin.where === 'phone' ? 'a phone' : 'the wall'}${tail}`
+  if (origin.via === 'email') return origin.text
+  if (origin.via === 'scan') return `Scanned${tail}`
+  if (origin.via === 'project') return projectTitle
+  return when ? `Added ${when}` : null
 }
 
 /** Due within this long is "soon" (brass). */
@@ -86,7 +124,10 @@ export function nextUpItems(plan: DayPlan | null, list: Pick<TodoList, 'nextUp' 
       if (!at || done.has(key)) continue
       const mine = words(item.title)
       if (items.some((c) => c.kind === 'chore' && c.at.getTime() === at.getTime() && [...words(c.title)].some((w) => mine.has(w)))) continue
-      items.push({ key, kind: 'todo', id: item.id, at, title: item.title, whoId: null, state: stateAt(at, now), tag: tagFor(at, now), meridiem: meridiemFor(at, now) })
+      items.push({
+        key, kind: 'todo', id: item.id, at, title: item.stepTitle ?? item.title, whoId: null, state: stateAt(at, now), tag: tagFor(at, now), meridiem: meridiemFor(at, now),
+        todoKind: item.kind, project: item.project ?? null, origin: item.origin ?? null, copyOf: item.copyOf ?? null,
+      })
     }
   }
   return items.sort((a, b) => a.at.getTime() - b.at.getTime() || a.title.localeCompare(b.title))
@@ -143,6 +184,12 @@ export function comingHours(items: NextUpItem[], now: Date): NextUpItem[] {
 
 /** How many fit: two rows a column; `columns` across. The rest are "+N later". */
 export function fitNextUp<T>(items: T[], columns: number): { shown: T[]; more: number } {
-  const room = columns * 2
+  // One card a box (canvas 74C1).
+  const room = Math.max(1, columns)
   return items.length <= room ? { shown: items, more: 0 } : { shown: items.slice(0, room), more: items.length - room }
+}
+
+/** How many of the rail's four boxes NEXT UP takes (canvas 74C1): what get & pack (two) and a decision (one) don't. */
+export function nextUpBoxes({ packing, deciding }: { packing: boolean; deciding: boolean }): 1 | 2 | 3 | 4 {
+  return Math.max(1, 4 - (packing ? 2 : 0) - (deciding ? 1 : 0)) as 1 | 2 | 3 | 4
 }

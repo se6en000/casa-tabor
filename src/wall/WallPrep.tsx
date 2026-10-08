@@ -153,7 +153,7 @@ export interface PrepRailProps {
   onOpenEvent?: (eventId: string) => void
   onSeeAll?: () => void
   /** NEXT UP (canvas 27a), the first box on today's face: the day's chores and timed to-dos, and how many boxes it takes. */
-  nextUp?: { node: ReactNode; columns: 1 | 2 } | null
+  nextUp?: { node: ReactNode; columns: 1 | 2 | 3 | 4 } | null
   /** Beside the left panel (canvas 56A): a set height under lanes that take the rest, rather than sharing it. */
   fixed?: boolean
 }

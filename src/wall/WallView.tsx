@@ -552,9 +552,15 @@ export default function WallView(props: WallViewProps) {
   }
   const rowProps = { members, pigmentOf: (id: string) => pigments.get(id) ?? null, ticked, onTick: tick, onOpen: (id: string) => eventsById.has(id) && setSelectedId(id) }
   const soonJobs = comingHours(jobs, now)
-  const nextUp = soonJobs.length > 0 ? (columns: 1 | 2) => {
+  // A copy folded into the first (canvas 74C1, Merge): gone from the card at once; back if it didn't save.
+  const merge = (item: NextUpItem) => {
+    if (!item.copyOf || !todos) return
+    setGone(addTo(item.key))
+    Promise.resolve(todos.act({ action: 'merge', id: item.id, into: item.copyOf })).catch(() => setGone(takeFrom(item.key)))
+  }
+  const nextUp = soonJobs.length > 0 ? (columns: 1 | 2 | 3 | 4) => {
     const { shown, more } = fitNextUp(soonJobs, columns)
-    return <NextUpSection items={shown} more={more} columns={columns} onSeeAll={todos ? openTodo : undefined} {...rowProps} />
+    return <NextUpSection items={shown} more={more} columns={columns} now={now} onSeeAll={todos ? openTodo : undefined} onMerge={todos ? merge : undefined} {...rowProps} />
   } : null
   // Before midnight the evening looks at tomorrow; what's left of today, and who's still out, sit in its header.
   const tonightJobs = evening && tonightByClock(now) ? stillTonight(jobs, outTonight(shownToday, members, now)) : []

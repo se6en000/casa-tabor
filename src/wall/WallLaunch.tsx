@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { formatWallDate } from './clock'
+import { nextUpBoxes } from './nextUp'
 import { describeNextMove, minutesAway, weatherLine, type NextMoveView } from './header'
 import { describeHomeLead, selectHeaderLead, thenItems } from './headerLead'
 import WallThen from './WallThen'
@@ -44,7 +45,7 @@ export interface WallLaunchProps {
     onOpenEvent?: (eventId: string) => void
     onSeeAll?: () => void
     /** NEXT UP (canvas 27a): the day's chores and timed to-dos, drawn across one box or two; null when there are none. */
-    nextUp?: ((columns: 1 | 2) => ReactNode) | null
+    nextUp?: ((columns: 1 | 2 | 3 | 4) => ReactNode) | null
   } | null
 }
 
@@ -87,8 +88,8 @@ export default function WallLaunch({ now, members, plan, currentWeather, interac
   const prepping = packing || Boolean(prep?.nextUp)
   // Today's list takes the room the TOMORROW note would use; tomorrow's own list is on the evening face.
   const tomorrow = packing ? null : tomorrowNote
-  // NEXT UP takes two boxes, or one beside a get & pack list.
-  const nextUpColumns: 1 | 2 = packing ? 1 : 2
+  // NEXT UP takes the boxes nothing else needs (canvas 74C1): four cards, fewer beside get & pack or a decision.
+  const nextUpColumns = nextUpBoxes({ packing, deciding: (prep?.decisions.length ?? 0) > 0 })
 
   return (
     <div className="relative h-full w-full bg-wall-ground font-body text-wall-ink">

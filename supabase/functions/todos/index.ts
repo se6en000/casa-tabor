@@ -19,6 +19,7 @@
 //   'update' with { id, patch }    → a to-do's title and date/time (todo_update); 'delete' → todo_delete
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { buildTodoList } from '../_shared/todos.mjs'
+import { addNotes, notesOf } from '../_shared/event-notes.mjs'
 import { buildSortPrompt, parseSortResult } from '../_shared/todo-sort.mjs'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { PRIMARY_GEMINI_MODEL, resolveProductionGeminiModel } from '../_shared/llm-model-policy.mjs'
@@ -201,6 +202,20 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message)
       return json({ ok: true })
     }
+    // A copy folded into the first (canvas 74C1, Merge): its notes go with it, then it goes.
+    if (action === 'merge') {
+      const into = typeof b.into === 'string' ? b.into : null
+      if (!id || !into || id === into) return json({ error: 'id and into required' }, 400)
+      const { data: rows } = await sb.from('events').select('id, description').in('id', [id, into])
+      const copy = rows?.find((x) => x.id === id)
+      const keep = rows?.find((x) => x.id === into)
+      if (!copy || !keep) return json({ error: 'not found' }, 404)
+      const extra = notesOf(copy.description).split('\n').map((l) => l.trim()).filter(Boolean).filter((l) => !notesOf(keep.description).includes(l))
+      if (extra.length) await sb.from('events').update({ description: addNotes(keep.description, extra), updated_at: now.toISOString() }).eq('id', into)
+      const { error } = await sb.rpc('todo_delete', { p_id: id })
+      if (error) throw new Error(error.message)
+      return json({ ok: true })
+    }
     if (action === 'delete') {
       if (!id) return json({ error: 'id required' }, 400)
       const { error } = await sb.rpc('todo_delete', { p_id: id })
@@ -236,7 +251,7 @@ Deno.serve(async (req) => {
 
     // list
     const [remindersRes, detailsRes, projectsRes, stepsRes, prepRes] = await Promise.all([
-      sb.from('events').select('id, title, status, has_due_date, start_time, created_at, deleted_at, description')
+      sb.from('events').select('id, title, status, has_due_date, start_time, created_at, deleted_at, description, ai_origin_lane')
         .eq('event_type', 'reminder').eq('record_kind', 'single').is('deleted_at', null).neq('status', 'cancelled')
         .order('created_at').limit(500),
       sb.from('todo_details').select('event_id, shape, minutes, cost_cents, next_step, needs, snoozed_until, snooze_count, project_id, sorted_by, suggestion'),

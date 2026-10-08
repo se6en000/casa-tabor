@@ -5,7 +5,7 @@
 // checked). The rest folds by kind: quick ones, fixes, nudges, dated (they live on Coming up), and
 // "Not sure" for anything Casa couldn't sort. Projects show as progress and their current step.
 
-import { notesOf } from './event-notes.mjs'
+import { notesOf, notesSource } from './event-notes.mjs'
 import { leadDays, todoStage } from './todo-stage.mjs'
 
 const TZ = 'America/New_York'
@@ -21,10 +21,37 @@ const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.pa
 /**
  * @param {{ reminders: any[], details: Record<string, any>, projects: any[], steps: any[], today: string }} input
  */
+/**
+ * How a to-do got here (canvas 74C1; Jake, Oct 8: "how did it get here"): Alexa (on the wall or a phone), a hand on the
+ * add sheet, a scan, an email (its tag in the notes), a project's step — or, unrecorded (before Oct 8), just when.
+ */
+export function originOf(r, isStep = false) {
+  const lane = String(r.ai_origin_lane ?? '')
+  const where = /wall/.test(lane) ? 'wall' : /phone/.test(lane) ? 'phone' : null
+  const email = notesSource(r.description)
+  const via = /confirmation|assistant|voice/.test(lane) ? 'alexa' : /add-sheet/.test(lane) ? 'hand' : /scan/.test(lane) ? 'scan'
+    : email ? 'email' : isStep ? 'project' : null
+  return { via, where, text: via === 'email' ? email.text : null, at: r.created_at ?? null }
+}
+
 export function buildTodoList({ reminders, details, projects = [], steps = [], today }) {
   const soon = plusDays(today, 3)
   // A project step's day is the one it's planned on (Christmas lights' storage unit run, Nov 7).
   const stepDay = new Map((steps ?? []).filter((st) => st.reminder_event_id && st.cal_start).map((st) => [st.reminder_event_id, String(st.cal_start).slice(0, 10)]))
+  // What a step is and how far its project is (canvas 74C1): "Project · step 2 of 5".
+  const projectTitle = new Map((projects ?? []).map((p) => [p.id, p.title]))
+  const stepOf = new Map()
+  for (const st of steps ?? []) {
+    if (!st.reminder_event_id) continue
+    const mine = (steps ?? []).filter((x) => x.project_id === st.project_id && !x.child_project_id).sort((a, b) => (a.grp ?? 0) - (b.grp ?? 0) || (a.position ?? 0) - (b.position ?? 0))
+    stepOf.set(st.reminder_event_id, { id: st.project_id, title: projectTitle.get(st.project_id) ?? null, step: mine.findIndex((x) => x.id === st.id) + 1, of: mine.length })
+  }
+  // The same thing twice (two copies of "Look into box character project" at 9:17, Oct 8): the later one is the copy.
+  const sameKey = (r) => `${String(r.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${r.has_due_date ? new Date(r.start_time).toISOString() : ''}`
+  const firstOf = new Map()
+  for (const r of [...(reminders ?? [])].filter((r) => r.status !== 'cancelled' && !r.deleted_at).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) {
+    if (!firstOf.has(sameKey(r))) firstOf.set(sameKey(r), r.id)
+  }
   const items = (reminders ?? [])
     .filter((r) => r.status !== 'cancelled' && !r.deleted_at)
     .map((r) => {
@@ -64,6 +91,15 @@ export function buildTodoList({ reminders, details, projects = [], steps = [], t
         // Details kept with it (a reminder Alexa made with "three text ideas"), for the morning paper and its sheet.
         // What people wrote (canvas 65), never the house's tags or Google's details block.
         notes: notesOf(r.description).slice(0, 1200) || null,
+        // What it is and how it got here (canvas 74C1).
+        kind: d.project_id || stepOf.has(r.id) ? 'step' : 'reminder',
+        project: stepOf.get(r.id) ?? (d.project_id ? { id: d.project_id, title: projectTitle.get(d.project_id) ?? null, step: null, of: null } : null),
+        stepTitle: (() => {
+          const pt = (stepOf.get(r.id) ?? {}).title ?? projectTitle.get(d.project_id)
+          return pt && String(r.title).startsWith(`${pt}: `) ? String(r.title).slice(pt.length + 2) : null
+        })(),
+        origin: originOf(r, d.project_id || stepOf.has(r.id)),
+        copyOf: firstOf.get(sameKey(r)) !== r.id ? firstOf.get(sameKey(r)) ?? null : null,
         score,
       }
     })

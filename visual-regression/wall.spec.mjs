@@ -2379,6 +2379,38 @@ test('wall on a computer: text is typed in place — a step’s title, a new ste
   await expect(page.getByRole('region', { name: 'Keyboard' })).toHaveCount(0)
 })
 
+// Canvas 74C1 (Jake, Oct 8: "next up items are still not even readable" → C; "is this an event, a reminder, a get and
+// prep and project? how did it get here"): a card a box, four across with nothing else in the row; what it is above its
+// name, where it came from at its foot; a copy of the same thing says so, and Merge folds it into the first.
+test('wall: NEXT UP cards — what each is and how it got here; a copy merges into the first', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T18:40:00&chores=1&gym=1&nextUpDetail=1')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await expect(wall.getByRole('region', { name: 'Meanwhile' })).toBeVisible()
+  await page.mouse.click(400, 600)
+  const nextUp = wall.getByRole('region', { name: 'Next up' })
+  await expect(nextUp.getByText('NEXT UP · 4')).toBeVisible()
+  const meds = nextUp.getByRole('article', { name: 'Give Liv her meds' })
+  await expect(meds).toContainText('CHORE · LIV')
+  await expect(meds).toContainText('From the chores')
+  const step = nextUp.getByRole('article', { name: 'Pick colours: 3 sample pots' })
+  await expect(step).toContainText('PROJECT · STEP 4 OF 9')
+  await expect(step).toContainText('Paint the house')
+  await expect(step.getByLabel('Step 4 of 9')).toBeVisible()
+  const cards = nextUp.getByRole('article', { name: 'Trash out to the street' })
+  await expect(cards).toHaveCount(2)
+  await expect(cards.first()).toContainText('REMINDER')
+  await expect(cards.first()).toContainText('By Alexa · Thu 4:26 PM')
+  await expect(cards.nth(1)).toContainText('A copy')
+  await expect(wall).toHaveScreenshot('next-up-cards.png')
+  // Merge: the copy goes; the first stays.
+  await cards.nth(1).getByRole('button', { name: 'Merge' }).click()
+  await expect(cards).toHaveCount(1)
+  await expect(nextUp.getByText('NEXT UP · 3')).toBeVisible()
+  // The tick still ticks.
+  await expect(nextUp.getByRole('checkbox', { name: '8:00: Trash out to the street' })).toBeVisible()
+})
+
 test('wall: NEXT UP — the day’s chores and timed to-dos first in the rail, due soon in brass; a tick crosses it out, then it leaves', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T18:40:00&chores=1&gym=1')
   const wall = page.getByTestId('wall-fixture')

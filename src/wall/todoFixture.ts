@@ -113,10 +113,31 @@ const CLOSED_REASON = 'Mario’s doing it with the painting'
 const PAINT_CLOSED: TodoProjectDetail = { ...PAINT, steps: PAINT.steps.map((st) => (st.id === 'st-stucco' ? { ...st, done_at: '2026-09-25T12:00:00Z', child: { ...st.child!, status: 'dropped', closed_reason: CLOSED_REASON } } : st)) }
 const STUCCO_CLOSED: TodoProjectDetail = { ...STUCCO, project: { ...STUCCO.project, status: 'dropped', closed_reason: CLOSED_REASON } }
 
-export function useFixtureTodos({ stepEvent = false, twoInside = false, closedInside = false }: { stepEvent?: boolean; twoInside?: boolean; closedInside?: boolean } = {}) {
+/**
+ * `?nextUpDetail=1` (canvas 74C1): Next up's cards with what each is and how it got here — the trash nudge Alexa added on
+ * the wall, a second copy of it at the same time, and a Paint the house step planned for tonight.
+ */
+function withDetail(list: TodoList): TodoList {
+  const trash = list.groups.nudge.find((i) => i.id === 'td-trash')
+  if (!trash) return list
+  const alexa = { ...trash, kind: 'reminder' as const, origin: { via: 'alexa' as const, where: 'wall' as const, text: null, at: new Date(2026, 8, 24, 16, 26).toISOString() }, copyOf: null }
+  const copy = { ...alexa, id: 'td-trash-copy', origin: { via: null, where: null, text: null, at: new Date(2026, 8, 24, 16, 28).toISOString() }, copyOf: 'td-trash' }
+  const step = todoItem('td-paint-step', 'Paint the house: Pick colours: 3 sample pots', {
+    shape: 'nudge', minutes: 20, due: '2026-09-25', dueAt: new Date(2026, 8, 25, 19, 30).toISOString(),
+  })
+  return {
+    ...list,
+    groups: {
+      ...list.groups,
+      nudge: [alexa, copy, { ...step, kind: 'step', project: { id: 'pr-paint', title: 'Paint the house', step: 4, of: 9 }, stepTitle: 'Pick colours: 3 sample pots', origin: { via: 'project', where: null, text: null, at: null } }, ...list.groups.nudge.filter((i) => i.id !== 'td-trash')],
+    },
+  }
+}
+
+export function useFixtureTodos({ stepEvent = false, twoInside = false, closedInside = false, detail = false }: { stepEvent?: boolean; twoInside?: boolean; closedInside?: boolean; detail?: boolean } = {}) {
   const STEP_EVENT = stepEvent
   const [todoList, setTodoList] = useState<TodoList>(() => ({
-    ...TODOS,
+    ...(detail ? withDetail(TODOS) : TODOS),
     projects: closedInside ? [PAINT_CLOSED, HALLOWEEN, FLOOR].map(summary) : twoInside ? [PAINT_TWO, HALLOWEEN].map(summary) : STEP_EVENT ? SHELF.map((p) => (p.id === 'pr-paint' ? { ...p, detail: { ...p.detail, steps: p.detail.steps.map((st) => (st.id === 'st-colours' ? { ...st, cal_start: '2026-09-25', cal_event_id: 'ev-colours' } : st)) } } : p)) : SHELF,
     // A dated step whose day has passed, asked about.
     pastSteps: STEP_EVENT ? [{ id: 'hw-yard', projectId: 'pr-halloween', project: 'Halloween decorations', title: 'The yard: tombstones and the fog machine', date: '2026-09-24', start: '2026-09-24' }] : [],

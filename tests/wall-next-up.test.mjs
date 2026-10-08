@@ -59,10 +59,19 @@ test('still tonight: Kelly at the gym until 9:30 sits among the to-dos by when s
   assert.deepEqual(outTonight(plan, members, at(21, 45)), [])
 })
 
-test('next up fits two rows a column; the rest are "+N later"', () => {
-  assert.deepEqual(fitNextUp([1, 2, 3, 4, 5], 2), { shown: [1, 2, 3, 4], more: 1 })
-  assert.deepEqual(fitNextUp([1, 2, 3], 1), { shown: [1, 2], more: 1 })
-  assert.deepEqual(fitNextUp([1], 2), { shown: [1], more: 0 })
+// Canvas 74C1: one card a box — four across with nothing else in the row, fewer beside get & pack or a decision.
+test('next up fits a card a box; the rest are "+N later"', () => {
+  assert.deepEqual(fitNextUp([1, 2, 3, 4, 5], 4), { shown: [1, 2, 3, 4], more: 1 })
+  assert.deepEqual(fitNextUp([1, 2, 3], 2), { shown: [1, 2], more: 1 })
+  assert.deepEqual(fitNextUp([1], 4), { shown: [1], more: 0 })
+})
+
+test('next up gets the boxes nothing else needs', async () => {
+  const { nextUpBoxes } = await import('../src/wall/nextUp.ts')
+  assert.equal(nextUpBoxes({ packing: false, deciding: false }), 4)
+  assert.equal(nextUpBoxes({ packing: false, deciding: true }), 3)
+  assert.equal(nextUpBoxes({ packing: true, deciding: false }), 2)
+  assert.equal(nextUpBoxes({ packing: true, deciding: true }), 1)
 })
 
 test('next up by day: the coming four hours and anything late — not 8 PM’s trash at 7 AM', () => {
@@ -77,4 +86,24 @@ test('next up by day: the coming four hours and anything late — not 8 PM’s t
 test('next up: the half of the day is said when it isn’t now’s — 8 AM’s to-do on the evening card', () => {
   const items = nextUpItems(plan, list([todo('olivia', 'Work on Olivia’s dedication page', at(8))]), new Set(), at(21, 40))
   assert.deepEqual(items.map((i) => [i.title, i.meridiem]), [['Work on Olivia’s dedication page', 'AM'], ['Take meds', null], ['Trash to the street', null]])
+})
+
+// Canvas 74C1 (Jake, Oct 8: "is this an event, a reminder, a get and prep and project? how did it get here"): each card
+// says what it is above its name and where it came from at its foot.
+test('Next up cards: what it is, and how it got here', async () => {
+  const { cardKind, originLine } = await import('../src/wall/nextUp.ts')
+  const now = new Date(2026, 9, 8, 11, 43)
+  assert.equal(cardKind({ kind: 'todo', todoKind: 'reminder' }), 'Reminder')
+  assert.equal(cardKind({ kind: 'todo', todoKind: 'step', project: { step: 2, of: 5 } }), 'Project · step 2 of 5')
+  assert.equal(cardKind({ kind: 'todo', todoKind: 'step', project: { step: null, of: null } }), 'Project step')
+  assert.equal(cardKind({ kind: 'chore' }, 'Jake'), 'Chore · Jake')
+  assert.equal(cardKind({ kind: 'out' }), 'Out')
+  const at = (d, h, m) => new Date(2026, 9, d, h, m).toISOString()
+  assert.equal(originLine({ via: 'alexa', where: 'wall', text: null, at: at(8, 7, 17) }, null, now), 'By Alexa · 7:17 AM')
+  assert.equal(originLine({ via: 'alexa', where: 'phone', text: null, at: at(7, 16, 26) }, null, now), 'By Alexa on a phone · Wed 4:26 PM')
+  assert.equal(originLine({ via: 'hand', where: 'wall', text: null, at: at(6, 9, 0) }, null, now), 'Added on the wall · Tue 9:00 AM')
+  assert.equal(originLine({ via: 'email', where: null, text: 'From Palm Beach Public’s email · Oct 6', at: at(6, 9, 0) }, null, now), 'From Palm Beach Public’s email · Oct 6')
+  assert.equal(originLine({ via: 'project', where: null, text: null, at: at(1, 9, 0) }, 'Install Tesla charger in garage', now), 'Install Tesla charger in garage')
+  assert.equal(originLine({ via: null, where: null, text: null, at: at(1, 9, 0) }, null, now), 'Added Oct 1')
+  assert.equal(originLine(null, null, now), null)
 })

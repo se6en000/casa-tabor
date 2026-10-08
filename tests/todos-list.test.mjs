@@ -200,3 +200,37 @@ test('project steps: on the card, not Next up — unless planned for a day that�
   assert.ok(ids(oct31.nextUp).includes('lights-1'), 'a week before its day, after Halloween')
   assert.ok(oct31.projects.some((p) => p.title === 'Christmas lights'))
 })
+
+// Canvas 74C1 (Jake, Oct 8: "is this an event, a reminder, a get and prep and project? how did it get here"): each one
+// says what it is and where it came from; a second copy of the same thing at the same time says so.
+test('each to-do says what it is — a reminder or a project’s step (which, how far) — and how it got here', () => {
+  const rs = [
+    r('alexa', 'Look into box character project', { has_due_date: true, start_time: '2026-09-28T13:17:00Z', created_at: '2026-09-28T11:17:10Z', ai_origin_lane: 'wall-band-confirmation' }),
+    r('copy', 'Look into box character project', { has_due_date: true, start_time: '2026-09-28T13:17:00Z', created_at: '2026-09-28T11:19:18Z' }),
+    r('phone', 'Pick up dry cleaning', { created_at: '2026-09-27T20:00:00Z', ai_origin_lane: 'phone-add-sheet' }),
+    r('mail', 'Send the field trip form', { description: 'Sign and return.\nTabor House · from Palm Beach Public’s email · Sep 26 · https://mail.google.com/mail/#all/abc' }),
+    r('step', 'Install Tesla charger in garage: Order Tesla Wall Connector', { has_due_date: true, start_time: '2026-09-28T19:00:00Z', created_at: '2026-09-21T23:45:00Z' }),
+    r('plain', 'Thing', { created_at: '2026-09-20T12:00:00Z' }),
+  ]
+  const ds = { alexa: d('quick'), copy: d('quick'), phone: d('quick'), mail: d('quick'), step: d('project', { project_id: 'tesla' }), plain: d('quick') }
+  const projects = [{ id: 'tesla', title: 'Install Tesla charger in garage', status: 'active' }]
+  const steps = [
+    { id: 's1', project_id: 'tesla', grp: 0, position: 0, title: 'Get quotes', done_at: '2026-09-25T00:00:00Z', reminder_event_id: null },
+    { id: 's2', project_id: 'tesla', grp: 0, position: 1, title: 'Order Tesla Wall Connector', done_at: null, reminder_event_id: 'step' },
+    { id: 's3', project_id: 'tesla', grp: 0, position: 2, title: 'Book the electrician', done_at: null, reminder_event_id: null },
+  ]
+  const list = buildTodoList({ reminders: rs, details: ds, projects, steps, today })
+  const all = Object.fromEntries([...list.nextUp, ...Object.values(list.groups).flat()].map((i) => [i.id, i]))
+  assert.deepEqual(all.alexa.origin, { via: 'alexa', where: 'wall', text: null, at: '2026-09-28T11:17:10Z' })
+  assert.equal(all.alexa.kind, 'reminder')
+  assert.equal(all.alexa.copyOf, null)
+  assert.equal(all.copy.copyOf, 'alexa') // the later one is the copy
+  assert.deepEqual([all.phone.origin.via, all.phone.origin.where], ['hand', 'phone'])
+  assert.deepEqual([all.mail.origin.via, all.mail.origin.text], ['email', 'From Palm Beach Public’s email · Sep 26'])
+  assert.equal(all.step.kind, 'step')
+  assert.deepEqual(all.step.project, { id: 'tesla', title: 'Install Tesla charger in garage', step: 2, of: 3 })
+  assert.equal(all.step.origin.via, 'project')
+  // Its name without the project's in front ("Order Tesla Wall Connector").
+  assert.equal(all.step.stepTitle, 'Order Tesla Wall Connector')
+  assert.deepEqual([all.plain.origin.via, all.plain.origin.at], [null, '2026-09-20T12:00:00Z'])
+})

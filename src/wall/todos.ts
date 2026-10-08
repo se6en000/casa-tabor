@@ -25,6 +25,14 @@ export interface TodoItem {
   stage?: 'snoozed' | 'overdue' | 'due' | 'heads_up' | 'quiet' | 'undated'
   projectId: string | null
   suggestion: { kind: 'merge' | 'done' | 'shopping'; with?: string; reason?: string } | null
+  /** What it is and how it got here (canvas 74C1), from the server's list. */
+  kind?: 'reminder' | 'step'
+  project?: { id: string; title: string | null; step: number | null; of: number | null } | null
+  /** A step's name without its project's in front. */
+  stepTitle?: string | null
+  origin?: import('./nextUp').TodoOrigin | null
+  /** The first of two copies of the same thing at the same time. */
+  copyOf?: string | null
 }
 export interface TodoProject {
   id: string; title: string; done: number; total: number; next: string | null; nextEventId: string | null; aimDate: string | null
@@ -46,6 +54,8 @@ export interface TodoList {
 }
 export type TodoAction =
   | { action: 'done' | 'accept' | 'dismiss' | 'delete'; id: string }
+  /** A copy folded into the first (canvas 74C1): its notes go with it. */
+  | { action: 'merge'; id: string; into: string }
   | { action: 'snooze'; id: string; days: number }
   /** A to-do's title and date/time: due "YYYY-MM-DD" or null (no date); time "HH:MM" or null (no time). */
   | { action: 'update'; id: string; patch: { title?: string; due?: string | null; time?: string | null } }

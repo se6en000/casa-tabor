@@ -1,9 +1,9 @@
-import { Check, ChevronRight, MapPin } from 'lucide-react'
+import { Check, ChevronRight, Clock, Copy, Hand, ListChecks, Mail, MapPin, Mic, Repeat, ScanLine } from 'lucide-react'
 import { formatWallClock } from './clock'
 import type { WallMember } from './engine/types'
 import { pigmentStyleFor } from './lanes'
 import { SectionHeading } from './WallPrep'
-import type { NextUpItem } from './nextUp'
+import { cardKind, originLine, type NextUpItem } from './nextUp'
 
 // The day's small timed jobs (canvas 27a, 28c): NEXT UP, the first slot of the full day's rail, and STILL TONIGHT,
 // a small column beside tomorrow's date in the evening header. One quiet line for both (Jake, Oct 1: the brass card
@@ -20,6 +20,8 @@ export interface NextUpRowsProps {
   onTick: (item: NextUpItem) => void
   /** Someone out: opens what they're at. */
   onOpen?: (id: string) => void
+  /** A copy folded into the first (canvas 74C1). */
+  onMerge?: (item: NextUpItem) => void
 }
 
 const TIME = { late: 'text-wall-rust', soon: 'text-wall-ink', later: 'text-wall-ink' } as const
@@ -74,20 +76,86 @@ function Row({ item, members, pigmentOf, ticked, onTick, onOpen, small }: Omit<N
   )
 }
 
-/** Two rows a column, read down then across. */
-function Rows({ items, columns, ...rest }: NextUpRowsProps & { columns: number }) {
+const ORIGIN_ICON = { alexa: Mic, hand: Hand, email: Mail, scan: ScanLine, project: ListChecks } as const
+
+/**
+ * One thing in NEXT UP, as a card (canvas 74C1; Jake, Oct 8: "next up items are still not even readable" → C, then "is
+ * this an event, a reminder, a get and prep and project? how did it get here"): the tick, the time and how soon; what it
+ * is in small capitals; its whole name; a project step's progress; at the foot, where it came from — and a copy of the
+ * same thing says so, with Merge.
+ */
+function Card({ item, members, pigmentOf, ticked, onTick, onOpen, onMerge, now }: Omit<NextUpRowsProps, 'items' | 'ticked'> & { item: NextUpItem; ticked: boolean; now: Date }) {
+  const member = item.whoId ? members.find((m) => m.id === item.whoId) ?? null : null
+  const out = item.kind === 'out'
+  const state = ticked ? 'later' : item.state
+  const step = item.todoKind === 'step'
+  const copy = Boolean(item.copyOf) && !ticked
+  const foot = copy ? 'A copy'
+    : item.kind === 'todo' ? originLine(item.origin, item.project?.title ?? null, now)
+    : item.kind === 'chore' ? 'From the chores' : null
+  const Icon = copy ? Copy : item.kind === 'chore' ? Repeat : item.origin?.via ? ORIGIN_ICON[item.origin.via] : Clock
+  const clock = `${formatWallClock(item.at).time}${item.meridiem ? ` ${item.meridiem}` : ''}`
+  const progress = step && item.project?.step && item.project.of ? item.project : null
   return (
-    <div className={`grid grid-flow-col ${items.length > 1 ? 'grid-rows-2' : 'grid-rows-1'} ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-x-[48px] gap-y-[2px]`}>
-      {items.map((item) => <Row key={item.key} item={item} small={false} {...rest} ticked={rest.ticked.has(item.key)} />)}
-    </div>
+    <article aria-label={item.title} className={`flex h-full min-w-0 flex-col gap-[6px] rounded-[16px] bg-wall-paper px-[20px] pb-[14px] pt-[10px] font-body transition-opacity duration-300 ${state === 'late' ? 'ring-[1.5px] ring-inset ring-wall-rust' : ''} ${ticked ? 'opacity-60' : ''}`}>
+      <div className="flex items-center gap-[10px]">
+        {out
+          ? <MapPin aria-hidden="true" size={22} strokeWidth={1.6} className="shrink-0 text-wall-ink-2" />
+          : (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={ticked}
+              aria-label={`${clock}${member ? ` ${member.name}` : ''}: ${item.title}${item.tag ? `, ${item.tag}` : ''}`}
+              onClick={(e) => { e.stopPropagation(); onTick(item) }}
+              className="-ml-[10px] flex h-[44px] w-[44px] shrink-0 items-center justify-center border-0 bg-transparent p-0"
+            >
+              <span aria-hidden="true" className={`flex h-[24px] w-[24px] items-center justify-center rounded-[6px] border-[1.5px] border-solid ${ticked ? 'border-wall-ink bg-wall-ink text-wall-ground' : BOX[state]}`}>
+                {ticked && <Check size={18} strokeWidth={3} />}
+              </span>
+            </button>
+          )}
+        <span className={`whitespace-nowrap text-wall-heading font-semibold tabular-nums lining-nums ${out || ticked ? 'text-wall-ink-2' : TIME[state]}`}>
+          {formatWallClock(item.at).time}
+          {item.meridiem && <span className="ml-[4px] text-wall-label font-semibold">{item.meridiem}</span>}
+        </span>
+        {member && <span aria-hidden="true" className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-display text-wall-label font-bold leading-none text-wall-on-pigment ${pigmentStyleFor(pigmentOf(member.id) ?? 0).solid}`}>{member.name.slice(0, 1)}</span>}
+        {item.tag && !ticked && <span className={`ml-auto whitespace-nowrap text-wall-label font-semibold ${TAG[state]}`}>{item.tag}</span>}
+      </div>
+      <span className={`truncate text-wall-label font-bold tracking-[0.16em] ${step ? 'text-wall-brass-ink' : 'text-wall-ink-2'}`}>{cardKind(item, member?.name ?? null).toUpperCase()}</span>
+      {out && onOpen
+        ? <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(item.id) }} className="line-clamp-3 border-0 bg-transparent p-0 text-left font-display text-wall-answer font-semibold leading-[1.1] text-wall-ink">{item.title}</button>
+        : <span className={`line-clamp-3 font-display text-wall-answer font-semibold leading-[1.1] ${ticked ? 'text-wall-ink-2 line-through' : 'text-wall-ink'}`}>{item.title}</span>}
+      {progress && (
+        <div aria-label={`Step ${progress.step} of ${progress.of}`} className="flex gap-[4px]">
+          {Array.from({ length: progress.of ?? 0 }, (_, k) => (
+            <span key={k} className={`h-[5px] flex-1 rounded-full ${k < (progress.step ?? 0) - 1 ? 'bg-wall-brass' : k === (progress.step ?? 0) - 1 ? 'bg-wall-brass-ink' : 'bg-wall-rule'}`} />
+          ))}
+        </div>
+      )}
+      {foot && (
+        <div className="mt-auto flex min-w-0 items-center gap-[8px] border-0 border-t border-solid border-wall-rule pt-[8px] text-wall-detail text-wall-ink-2">
+          <Icon aria-hidden="true" size={17} strokeWidth={1.8} className={`shrink-0 ${copy ? 'text-wall-rust' : ''}`} />
+          <span className="min-w-0 truncate">{foot}</span>
+          {copy && onMerge && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); onMerge(item) }} className="ml-auto h-[44px] shrink-0 rounded-full border border-solid border-wall-rust bg-transparent px-[16px] text-wall-detail font-semibold text-wall-rust">
+              Merge
+            </button>
+          )}
+        </div>
+      )}
+    </article>
   )
 }
 
-/** NEXT UP in the full day's rail (canvas 27a): one or two columns of two. */
-export function NextUpSection({ items, more, columns, onSeeAll, ...rest }: NextUpRowsProps & { more: number; columns: 1 | 2; onSeeAll?: () => void }) {
+const CARD_COLS = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' } as const
+const SPAN = { 1: '', 2: 'col-span-2', 3: 'col-span-3', 4: 'col-span-4' } as const
+
+/** NEXT UP in the full day's rail (canvas 27a, 74C1): a card a box, as many boxes as the row has free. */
+export function NextUpSection({ items, more, columns, onSeeAll, now, ...rest }: NextUpRowsProps & { more: number; columns: 1 | 2 | 3 | 4; onSeeAll?: () => void; now: Date }) {
   const count = items.filter((i) => !rest.ticked.has(i.key)).length + more
   return (
-    <section aria-label="Next up" className={`flex min-w-0 flex-col ${columns === 2 ? 'col-span-2' : ''}`}>
+    <section aria-label="Next up" className={`flex min-h-0 min-w-0 flex-col ${SPAN[columns]}`}>
       <SectionHeading
         action={(more > 0 || onSeeAll) && (
           <span className="flex items-center gap-[10px] text-wall-detail text-wall-ink-2">
@@ -102,11 +170,8 @@ export function NextUpSection({ items, more, columns, onSeeAll, ...rest }: NextU
       >
         NEXT UP · {count}
       </SectionHeading>
-      <div className="border-0 border-t border-solid border-wall-rule pt-[8px]">
-        {/* Two or fewer read as one column, at about one box's width. */}
-        <div className={items.length > 2 ? '' : 'max-w-[560px]'}>
-          <Rows items={items} columns={items.length > 2 ? columns : 1} {...rest} />
-        </div>
+      <div className={`mt-[6px] grid min-h-0 flex-1 gap-[20px] ${CARD_COLS[columns]}`}>
+        {items.map((item) => <Card key={item.key} item={item} now={now} {...rest} ticked={rest.ticked.has(item.key)} />)}
       </div>
     </section>
   )
