@@ -22,6 +22,7 @@ for (const moment of MOMENTS) {
 }
 
 test('wall: a touch on Calm wakes the full day; faces are previewed from the MT menu; the menu opens the rest of the app', async ({ page }) => {
+  await page.clock.install()
   await page.goto('/__wall-fixture?at=2026-09-25T11:40:00')
   const wall = page.getByTestId('wall-fixture')
   await expect(wall.getByText('A quiet stretch until 1:50.')).toBeVisible()
@@ -35,16 +36,21 @@ test('wall: a touch on Calm wakes the full day; faces are previewed from the MT 
   await wall.getByRole('button', { name: 'Open menu' }).click()
   await expect(wall.getByRole('link', { name: 'Calendar' })).toBeVisible()
   await wall.getByRole('button', { name: 'Evening' }).click()
-  await expect(wall.getByText(/Previewing Evening · back to Full day on its own/)).toBeVisible()
+  await expect(wall.getByText(/Previewing Evening · Menu › Back to the Wall/)).toBeVisible()
   await expect(wall.getByRole('banner').getByText('TOMORROW', { exact: true })).toBeVisible()
+  // It stays (Jake, Oct 8: "dont have a screen go back when i press a face"): past the old two minutes, and through a tap.
+  await page.clock.fastForward('05:00')
+  await wall.click({ position: { x: 1700, y: 1060 } })
+  await expect(wall.getByText(/Previewing Evening/)).toBeVisible()
 
   await wall.getByRole('button', { name: 'Open menu' }).click()
   await wall.getByRole('button', { name: 'Back to the Wall' }).click()
   await expect(wall.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
 
 // Jake, Oct 8: "can i get a menu option for evening calm … id like to cycle through all the landing screens while testing".
-test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as the evening shows it); a tap ends it', async ({ page }) => {
+test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as the evening shows it); it stays until Back to the Wall', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T14:00:00')
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'Open menu' }).click()
@@ -54,6 +60,9 @@ test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as 
   await expect(night).toBeVisible()
   await expect(night.getByText('Saturday, September 26')).toBeVisible()
   await page.mouse.click(1200, 600)
+  await expect(wall.getByLabel('Night')).toBeVisible()
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  await wall.getByRole('button', { name: 'Back to the Wall' }).click()
   await expect(wall.getByLabel('Night')).toHaveCount(0)
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })

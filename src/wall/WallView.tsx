@@ -26,7 +26,7 @@ import WallPaper from './WallPaper'
 import { PaperRecall } from './paperRecall'
 import type { ScoutPaper } from './useScout'
 import { formatWallDate } from './clock'
-import { PREVIEW_MS, shownPosture, type PreviewState } from './preview'
+import { PINNED, PREVIEW_MS, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
 import WallPersonSheet from './WallPersonSheet'
@@ -199,6 +199,7 @@ export default function WallView(props: WallViewProps) {
   const paperPreview = Date.now() < paperPreviewUntil
   useEffect(() => {
     if (!paperPreviewUntil) return
+    if (paperPreviewUntil === PINNED) return
     const timer = window.setTimeout(() => setPaperPreviewUntil(0), Math.max(0, paperPreviewUntil - Date.now()))
     return () => window.clearTimeout(timer)
   }, [paperPreviewUntil])
@@ -210,6 +211,7 @@ export default function WallView(props: WallViewProps) {
   const nightPreview = Date.now() < nightPreviewUntil
   useEffect(() => {
     if (!nightPreviewUntil) return
+    if (nightPreviewUntil === PINNED) return
     const timer = window.setTimeout(() => setNightPreviewUntil(0), Math.max(0, nightPreviewUntil - Date.now()))
     return () => window.clearTimeout(timer)
   }, [nightPreviewUntil])
@@ -217,7 +219,7 @@ export default function WallView(props: WallViewProps) {
   // date under the clock opens it, as the menu's Morning paper does.
   const openPaper = () => {
     setDayPreview(null)
-    const until = Date.now() + PREVIEW_MS
+    const until = PINNED
     setPaperPreviewUntil(until)
     setPreview(auto === 'calm' ? null : { posture: 'calm', until })
   }
@@ -325,7 +327,7 @@ export default function WallView(props: WallViewProps) {
 
   // Drop the preview exactly when it lapses (the minute clock alone could keep it up to a minute longer).
   useEffect(() => {
-    if (!preview) return
+    if (!preview || preview.until === PINNED) return
     const timer = window.setTimeout(() => setPreview(null), Math.max(0, preview.until - Date.now()))
     return () => window.clearTimeout(timer)
   }, [preview])
@@ -536,9 +538,11 @@ export default function WallView(props: WallViewProps) {
   const nightSettled = evening && !shown.preview && !picked && !busy && !overlay && !selected && !comingUpOpen && !todoOpen
     && !menuOpen && !adding && !personId && !tripKey && !decisionsOpen && !packingOpen
     && idle && !eveningKeepsUp(shownToday, now)
-  const openComingUp = () => { setDayPreview(null); setTodoUntil(0); setComingUpUntil(Date.now() + PREVIEW_MS) }
-  const openTodo = () => { setDayPreview(null); setComingUpUntil(0); setTodoProject(null); setTodoUntil(Date.now() + PREVIEW_MS) }
+  const endPreviews = () => { setPreview(null); setPaperPreviewUntil(0); setNightPreviewUntil(0) }
+  const openComingUp = () => { endPreviews(); setDayPreview(null); setTodoUntil(0); setComingUpUntil(Date.now() + PREVIEW_MS) }
+  const openTodo = () => { endPreviews(); setDayPreview(null); setComingUpUntil(0); setTodoProject(null); setTodoUntil(Date.now() + PREVIEW_MS) }
   const showDay = (date: Date) => {
+    endPreviews()
     setComingUpUntil(0)
     setTodoUntil(0)
     setDayPreview(sameDay(date, autoDay) ? null : { date, until: Date.now() + PREVIEW_MS })
@@ -817,7 +821,7 @@ export default function WallView(props: WallViewProps) {
       ref={rootRef}
       className="relative h-full w-full"
       // A tap that nothing else handled (a person, a count, a block stop it) wakes Calm; once awake, any touch keeps it awake.
-      onClick={() => { setAwakeUntil(Date.now() + WAKE_MS); setNightPreviewUntil(0) }}
+      onClick={() => setAwakeUntil(Date.now() + WAKE_MS)}
       onPointerDownCapture={() => {
         setIdle(false)
         setTouches((n) => n + 1)
@@ -868,7 +872,7 @@ export default function WallView(props: WallViewProps) {
       )}
       {(shown.preview || paperPreview || nightPreview) && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
-          Previewing {nightPreview ? 'Night calm' : paperPreview ? 'Morning paper' : POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
+          Previewing {nightPreview ? 'Night calm' : paperPreview ? 'Morning paper' : POSTURE_NAMES[shown.posture]} · Menu › Back to the Wall
         </div>
       )}
       {selected && (
@@ -981,11 +985,15 @@ export default function WallView(props: WallViewProps) {
         <WallMenu
           side={railFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
+          onBack={() => { endPreviews(); setDayPreview(null); setMenuOpen(false) }}
           onFireplace={() => { setMenuOpen(false); setFireplace(true) }}
           onPreview={(face) => {
             setDayPreview(null)
-            // The morning paper is a calm face (any time of day, from the menu).
-            const until = Date.now() + PREVIEW_MS
+            setComingUpUntil(0)
+            setTodoUntil(0)
+            // The morning paper is a calm face (any time of day, from the menu). A face picked here stays until another
+            // page or Back to the Wall (Jake, Oct 8: "dont have a screen go back when i press a face").
+            const until = PINNED
             setPaperPreviewUntil(face === 'paper' ? until : 0)
             setNightPreviewUntil(face === 'night' ? until : 0)
             if (face === 'night') { setPreview(null); setMenuOpen(false); return }

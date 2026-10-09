@@ -4,6 +4,8 @@ import type { Posture } from './posture.ts'
 // 2 minutes it goes back to the face that fits the time of day.
 
 export const PREVIEW_MS = 2 * 60_000
+/** A face picked from the menu: no lapse — until another page or Back to the Wall (Jake, Oct 8). */
+export const PINNED = Number.POSITIVE_INFINITY
 const ORDER: Posture[] = ['calm', 'launch', 'evening']
 
 export interface PreviewState {
