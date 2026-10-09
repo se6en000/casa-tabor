@@ -61,7 +61,7 @@ test('guide: the AI\'s one look keeps only real numbers, once each; the rows are
   assert.equal(rows[0].ask_after, now.toISOString())
 })
 
-test('guide: what to ask now — open, not put off, the last three days, oldest first; the phone only its own', () => {
+test('guide: what to ask now — open, not put off, the last week, oldest first; the phone only its own', () => {
   const now = new Date('2026-10-04T08:00:00-04:00')
   const row = (id, member_id, visited_at, extra = {}) => ({ id, event_id: id, member_id, title: id, place: id, visited_at, status: 'ask', ask_after: '2026-10-04T06:00:00-04:00', ...extra })
   const rows = [
@@ -69,7 +69,7 @@ test('guide: what to ask now — open, not put off, the last three days, oldest 
     row('friday', 'k', '2026-10-02T19:00:00-04:00'),
     row('rated', 'j', '2026-10-03T12:00:00-04:00', { status: 'rated' }),
     row('later', 'j', '2026-10-03T12:00:00-04:00', { ask_after: '2026-10-05T07:00:00-04:00' }),
-    row('old', 'j', '2026-09-29T19:00:00-04:00'),
+    row('old', 'j', '2026-09-26T19:00:00-04:00'),
     row('tonight', 'j', '2026-10-04T19:00:00-04:00'),
   ]
   assert.deepEqual(ratingsToAsk(rows, now).map((r) => r.id), ['friday', 'saturday'])

@@ -88,8 +88,8 @@ Deno.serve(async (req) => {
 
   if (body.action === 'rate_ask') {
     // The morning after (canvas 85C): the last two days' outings on the calendar, asked about in Something for you.
-    // A dry run may look further back (to try it on a real outing); the morning's run is the last two days.
-    const back = body.dry_run ? Math.min(14, Math.max(2, Number(body.days) || 2)) : 2
+    // The morning's run is the last two days; a dry run or a forced one may look further back (a week at most to keep).
+    const back = body.dry_run || body.force ? Math.min(7, Math.max(2, Number(body.days) || 2)) : 2
     const find = async () => {
       const [{ data: homeRow }, { data: llmRow }, { data: events }] = await Promise.all([
         sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),

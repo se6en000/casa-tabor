@@ -9,8 +9,8 @@ export const STAND_OUT = [
   ['loud', 'Too loud'], ['pricey', 'Too pricey'], ['crowded', 'Too crowded'], ['slow', 'Slow service'],
 ]
 export const GO_BACK = [['soon', 'Yes, soon'], ['someday', 'Someday'], ['once', 'Once was enough']]
-/** How many days after an outing it's still worth asking. */
-export const ASK_DAYS = 3
+/** How many days after an outing it's still worth asking (a week: the wall isn't always walked past). */
+export const ASK_DAYS = 7
 
 // Not an outing: the runs, the routine, the appointments and the errands — a calendar is mostly these.
 const NOT_AN_OUTING = /\b(drop[ -]?offs?|pick[ -]?ups?|pickup|school|practices?|gym|workouts?|work out|yoga|pilates|fitness|tutor\w*|lessons?|class(es)?|meetings?|conference|appointments?|orthodont\w*|dentist|doctors?|dr\.?|clinic|hospital|salon|haircut|groom\w*|vet|delivery|install\w*|repairs?|quotes?|flight|airport|strings|violin|piano|batting|softball|baseball|soccer|assessment|field trip|showcase|recital|rehearsal|tryouts?|errands?|walgreens|cvs|publix|costco|dmv|bank|watches|stay with)\b/i
