@@ -87,6 +87,11 @@ export default function PhoneTaste({ onClose, useTaste = useGuideTaste }: { onCl
           </form>
         </div>
         <div className={card}>
+          <div className={label}>MUSIC YOU’D GO SEE · EVEN NOT KNOWING THE BAND</div>
+          <Chips name="music you’d go see" items={taste.genres} onChange={(genres) => change({ genres })} dark={false} />
+          <div className="text-phone-detail text-wall-ink-2">Names you’d know and tributes always show; a few local bands in these, nearest first.</div>
+        </div>
+        <div className={card}>
           <div className={label}>GAME DAYS · A BAR WITH THE GAME ON</div>
           <Chips name="game days" items={taste.teams} onChange={(teams) => change({ teams })} dark={false} />
         </div>

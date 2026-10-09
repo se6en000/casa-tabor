@@ -123,6 +123,21 @@ test('share-in: a Google Maps share is a place — iOS\'s "(null)" off the link,
   assert.deepEqual(mapsPlaceOf('https://maps.google.com/?q=Loco+West+Palm+Beach,+840+N+Railroad+Ave,+West+Palm+Beach,+FL+33401&ftid=0x88d8d7f6b97568e1:0xbc8a2afe81998028&entry=gps'), { name: 'Loco West Palm Beach', query: 'Loco West Palm Beach, 840 N Railroad Ave, West Palm Beach, FL 33401' })
   assert.deepEqual(mapsPlaceOf('https://www.google.com/maps/place/Grato/@26.69,-80.05,17z'), { name: 'Grato', query: 'Grato' })
   assert.equal(mapsPlaceOf('https://maps.app.goo.gl/gGJXLUSWM6ehJ8zM7'), null)
+  // Mary Lou's (Oct 9), as a server abroad may reach it: Google's cookie page with the place in "continue".
+  assert.deepEqual(mapsPlaceOf(`https://consent.google.com/ml?continue=${encodeURIComponent("https://maps.google.com/?q=Mary+Lou's,+250+Southern+Blvd,+West+Palm+Beach,+FL+33405&ftid=0x1")}&gl=DE`), { name: 'Mary Lou\'s', query: 'Mary Lou\'s, 250 Southern Blvd, West Palm Beach, FL 33405' })
   assert.equal(mapsPlaceOf('https://www.google.com/maps?q=26.69,-80.05'), null)
   assert.equal(shareReply({ kind: 'place', found: true, already: true, name: 'Loco West Palm Beach', town: 'West Palm Beach', minutes: 7 }), 'Loco West Palm Beach is already in Places worth trying — West Palm Beach, 7 min.')
+})
+
+test('venue sorter: a busy night leads with what they asked for more of, tributes, cover-band venues; a skipped venue is gone', async () => {
+  const { bandRank, venueKey, parseVenues, outAndAboutPlan } = await import('../supabase/functions/_shared/scout.mjs')
+  assert.equal(venueKey('The Funky Biscuit'), venueKey('Funky Biscuit'))
+  assert.ok(bandRank({ title: 'The Long Run, Tribute to The Eagles', venue_kind: 'original' }) < bandRank({ title: 'Max Markwell', venue_kind: 'cover' }))
+  assert.ok(bandRank({ title: 'Big City', venue_kind: 'cover' }) < bandRank({ title: 'Sean Hanley', venue_kind: 'original' }))
+  assert.equal(bandRank({ title: 'x', venue_kind: 'skip' }), 99)
+  assert.deepEqual([...parseVenues('[{"i":0,"kind":"original","note":"blues and jam club"},{"i":5,"kind":"cover"}]', 2)], [[0, { kind: 'original', note: 'blues and jam club' }]])
+  const gig = (title, at, venue_kind) => ({ kind: 'music', status: 'new', title, when: `2026-10-09 ${at}`, venue_kind })
+  const night = outAndAboutPlan([gig('Original 1', '18:00', 'original'), gig('Original 2', '18:30', 'original'), gig('Cover 1', '21:00', 'cover'), gig('Skipped', '19:00', 'skip'), ...Array.from({ length: 8 }, (_, i) => gig(`Cover ${i + 2}`, `2${i % 4}:1${i}`, 'cover'))], { today: '2026-10-09' }).weekend[0]
+  assert.ok(!night.items.some((o) => o.title === 'Skipped'))
+  assert.ok(!night.items.some((o) => o.title.startsWith('Original')), 'the original-music club\'s acts sink below the fold on a busy night')
 })

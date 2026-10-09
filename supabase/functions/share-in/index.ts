@@ -227,6 +227,17 @@ Deno.serve(async (req) => {
       if (!next) break
       at = new URL(next, at).toString()
     }
+    // Still nothing: the page itself, followed all the way (its address, or its og card, names the place).
+    if (!mapsPlace) {
+      const r = await fetch(link, { redirect: 'follow', headers: { 'user-agent': BROWSER_UA, 'accept-language': 'en-US,en' }, signal: AbortSignal.timeout(7000) }).catch(() => null)
+      mapsPlace = r ? mapsPlaceOf(r.url) : null
+      if (!mapsPlace && r?.ok) {
+        const f = linkFacts((await r.text()).slice(0, 600_000))
+        const name = f.title?.replace(/\s*[-·–]\s*Google Maps\s*$/i, '').trim()
+        if (name && !/^Google Maps$/i.test(name)) mapsPlace = { name: name.split(',')[0].trim(), query: [name, f.description].filter(Boolean).join(', ') }
+      }
+    }
+    received.push({ maps: mapsPlace?.query ?? null, reached: at.slice(0, 200) })
   }
 
   // 1. The link: what a server can see of it (a post's caption and picture, a page's card and declared events).

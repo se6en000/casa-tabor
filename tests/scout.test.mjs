@@ -407,10 +407,12 @@ test('Out & about: For the two of you mixes the best evening out with the best g
 // planning". Out & about by when: tonight and the weekend by day, next week, further out, every week, and places.
 test('Out & about by when: tonight & the weekend by day, next week, further out, every week by day, places', async () => {
   const { outAndAboutPlan } = await import('../supabase/functions/_shared/scout.mjs')
-  const g = (id, kind, when, extra = {}) => ({ id, kind, title: id, when, recurring: null, status: 'new', ...extra })
+  const g = (id, kind, when, extra = {}) => ({ id, kind, title: id, when, recurring: null, status: 'new', ...(kind === 'music' ? { act: { standing: 'star' } } : {}), ...extra })
+  // Friday's eight bands (Oct 9): two names they'd know, four local acts in their genres (the nearest three shown), two others.
+  const fri = ['star', 'star', 'liked', 'liked', 'liked', 'liked', 'local', 'local']
   const rows = [
     g('tonight-band', 'music', '2026-10-08 20:00'), g('open-mic', 'comedy', '2026-10-08 20:00'),
-    ...Array.from({ length: 8 }, (_, i) => g(`fri-band-${i}`, 'music', `2026-10-09 ${String(17 + (i % 5)).padStart(2, '0')}:00`)),
+    ...Array.from({ length: 8 }, (_, i) => g(`fri-band-${i}`, 'music', `2026-10-09 ${String(17 + (i % 5)).padStart(2, '0')}:00`, { act: { standing: fri[i] }, drive_min: 10 + i })),
     g('pumpkin', 'family', '2026-10-10 11:00'), g('jazz', 'couple', '2026-10-10 19:00'),
     g('tue-wine', 'couple', '2026-10-13 19:00'), g('harbourfest', 'family', '2026-10-16 16:00'),
     g('seagulls', 'music', '2026-11-06 19:30', { free: false }), g('fright', 'family', '2026-10-29 18:00'),
@@ -424,8 +426,8 @@ test('Out & about by when: tonight & the weekend by day, next week, further out,
   // Thursday: tonight, Fri, Sat, Sun.
   assert.deepEqual(p.weekend.map((d) => d.label), ['Tonight', 'Friday', 'Saturday', 'Sunday'])
   assert.deepEqual(p.weekend[0].items.map((o) => o.id), ['open-mic', 'tonight-band'])
-  // A busy night's bands: the first few, and how many more.
-  assert.equal(p.weekend[1].items.length, 5)
+  // A busy night's bands: every name they'd know, three local ones in their genres (nearest), and how many more.
+  assert.deepEqual(p.weekend[1].items.map((o) => o.id).sort(), ['fri-band-0', 'fri-band-1', 'fri-band-2', 'fri-band-3', 'fri-band-4'])
   assert.equal(p.weekend[1].more, 3)
   // What's for the two of you or the family leads its day.
   assert.deepEqual(p.weekend[2].items.map((o) => o.id), ['pumpkin', 'jazz'])
@@ -469,7 +471,8 @@ test('Around town: up to eight a section, each with its own date; the dates to k
 
 test('tonight drops what has already started (an hour in)', async () => {
   const { outAndAboutPlan } = await import('../supabase/functions/_shared/scout.mjs')
-  const rows = [{ id: 'early', kind: 'music', title: 'early', when: '2026-10-08 17:00', status: 'new' }, { id: 'late', kind: 'music', title: 'late', when: '2026-10-08 21:00', status: 'new' }, { id: 'open', kind: 'music', title: 'open', when: '2026-10-08', status: 'new' }]
+  const act = { standing: 'star' }
+  const rows = [{ id: 'early', kind: 'music', title: 'early', when: '2026-10-08 17:00', status: 'new', act }, { id: 'late', kind: 'music', title: 'late', when: '2026-10-08 21:00', status: 'new', act }, { id: 'open', kind: 'music', title: 'open', when: '2026-10-08', status: 'new', act }]
   assert.deepEqual(outAndAboutPlan(rows, { today, nowTime: '19:30' }).weekend[0].items.map((o) => o.id), ['open', 'late'])
 })
 
@@ -590,4 +593,25 @@ test('Ticketmaster: a run of nights is one line; past 70 minutes only a big room
   const miami = { lat: 25.7814, lng: -80.187 }
   assert.equal(calendarReach({ place: 'Kaseya Center', at: miami, ticketed: true, major: true }, home).ok, true)
   assert.equal(calendarReach({ place: 'LIV Nightclub Miami', at: miami, ticketed: true, major: true }, home).ok, false)
+})
+
+// Jake, Oct 9: "i just dont want to see a bunch of stuff I have no idea about" — "like a reggae band, i may want to see
+// no matter what". The real week's lookups: names he'd know and tributes always; local acts in his genres a few a night.
+test('the acts: a name they\'d know or a tribute always shows; a local act in their genres is liked; the rest is local', async () => {
+  const { actStanding, genreLiked, actKey, parseActs } = await import('../supabase/functions/_shared/scout.mjs')
+  const genres = ['Pop', 'Rock', 'Classic rock', 'Reggae / island', 'Yacht rock']
+  assert.equal(actStanding({ known: 'yes', plays: 'originals', genre: 'alternative rock' }, genres), 'star', 'Edwin McCain, at the Funky Biscuit')
+  assert.equal(actStanding({ known: 'no', plays: 'tribute', genre: 'soft rock' }, genres), 'star', 'Toast — The Best of Bread')
+  assert.equal(actStanding({ known: 'no', plays: 'originals', genre: 'island reggae' }, genres), 'liked', 'Casey Turner at Guanabanas')
+  assert.equal(actStanding({ known: 'no', plays: 'covers', genre: 'rock/dance' }, genres), 'liked', 'Big City at the Bungalow')
+  assert.equal(actStanding({ known: 'no', plays: 'covers', genre: 'country' }, genres), 'local', 'SnapBack')
+  assert.equal(actStanding({ known: 'no', plays: 'unknown', genre: null }, genres), 'local', 'Max Markwell — nothing online')
+  assert.equal(actStanding(null, genres), 'local')
+  assert.equal(actStanding({ known: 'maybe', plays: 'originals', genre: 'jam' }, genres), 'local', 'Crazy Fingers — known to fans, not to him')
+  assert.equal(actStanding({ known: 'maybe', plays: 'originals', genre: 'rock' }, genres), 'liked', 'Jonny Edwards — rock, so a local he might like')
+  assert.ok(genreLiked('yacht rock', ['Yacht rock']))
+  assert.ok(!genreLiked('salsa', genres))
+  assert.equal(actKey('Camilo - USA 2026 Tour'), 'camilo')
+  assert.equal(actKey('Jefferson Starship Runaway Again Tour 2026'), 'jefferson starship runaway again tour 2026')
+  assert.deepEqual([...parseActs('[{"i":0,"known":"yes","plays":"tribute","of":"The Eagles","genre":"Classic Rock"}]', 1)], [[0, { known: 'yes', plays: 'tribute', of: 'The Eagles', genre: 'classic rock' }]])
 })

@@ -301,7 +301,7 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace }: { scout: ScoutPape
               <span className="mb-[2px] mt-[10px] font-display text-wall-date font-semibold">{d.label} <span className="text-wall-ink-2">{d.label === 'Tonight' ? '' : dayShort(d.day).replace(/^\w+, /, '')}</span></span>
               {d.items.length === 0 && <span className="border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing found yet.</span>}
               {d.items.map((o) => <Entry key={o.id} o={o} chip={[timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}
-              {d.more > 0 && <span className="pt-[6px] text-wall-detail text-wall-ink-2">+{d.more} more {d.more === 1 ? 'band' : 'bands'} — ask Alexa</span>}
+              {d.more > 0 && <span className="pt-[6px] text-wall-detail text-wall-ink-2">+{d.more} local {d.more === 1 ? 'band' : 'bands'} — ask Alexa</span>}
             </div>
           ))}
         </div>

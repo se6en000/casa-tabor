@@ -798,7 +798,6 @@ export function tonightSection(rows, today) {
   ].join('\n')
 }
 
-const BUSY_NIGHT = 5
 const LATER_DAYS = 42
 
 /**
@@ -807,6 +806,7 @@ const LATER_DAYS = 42
  * busy night the first few bands and how many more), next week, further out (six weeks), every week
  * (by its first day), and places. Never one said no to, never a past one.
  */
+const LIKED_A_NIGHT = 3
 export function outAndAboutPlan(rows, { today, nowTime = null }) {
   // Tonight's that started over an hour ago are over.
   const [nh, nm] = nowTime ? nowTime.split(':').map(Number) : [0, 0]
@@ -825,14 +825,21 @@ export function outAndAboutPlan(rows, { today, nowTime = null }) {
     // In time order; the bands after what's for the two of you or the family (a busy night's bands are many).
     const all = dated.filter((o) => o.when.slice(0, 10) === day)
     const lead = all.filter((o) => o.kind !== 'music')
-    const bands = all.filter((o) => o.kind === 'music')
-    const room = Math.max(0, BUSY_NIGHT - lead.length)
-    return { day, label: day === today ? 'Tonight' : DAYS[new Date(`${day}T12:00:00Z`).getUTCDay()].replace(/^./, (c) => c.toUpperCase()), items: [...lead, ...bands.slice(0, room)], more: Math.max(0, bands.length - room) }
+    // The bands (Jake, Oct 9: "i just dont want to see a bunch of stuff I have no idea about"): every name they'd know and
+    // every tribute; then a few local acts in a genre they love, nearest first; the rest one line. A skipped venue: none.
+    const music = all.filter((o) => o.kind === 'music' && o.venue_kind !== 'skip')
+    const stars = music.filter((o) => o.act?.standing === 'star')
+    const liked = music.filter((o) => o.act?.standing === 'liked').sort((a, b) => (a.drive_min ?? 99) - (b.drive_min ?? 99)).slice(0, LIKED_A_NIGHT)
+    const bands = [...stars, ...liked]
+    const room = bands.length
+    return { day, label: day === today ? 'Tonight' : DAYS[new Date(`${day}T12:00:00Z`).getUTCDay()].replace(/^./, (c) => c.toUpperCase()), items: [...lead, ...bands.sort((a, b) => a.when.localeCompare(b.when))], more: music.length - bands.length }
   }
   const weekend = weekendDays.map(byDay)
   const nextSunday = addDays(sunday, 7)
-  const nextWeek = dated.filter((o) => o.when.slice(0, 10) > sunday && o.when.slice(0, 10) <= nextSunday)
-  const later = dated.filter((o) => o.when.slice(0, 10) > nextSunday && o.when.slice(0, 10) <= addDays(today, LATER_DAYS))
+  // Past the weekend, the bands are the ones they'd know (and tributes); the rest are in Everything › Music.
+  const ahead = (o) => o.kind !== 'music' || o.act?.standing === 'star'
+  const nextWeek = dated.filter((o) => o.when.slice(0, 10) > sunday && o.when.slice(0, 10) <= nextSunday && ahead(o))
+  const later = dated.filter((o) => o.when.slice(0, 10) > nextSunday && o.when.slice(0, 10) <= addDays(today, LATER_DAYS) && ahead(o))
   const firstDay = (o) => { const d = weekdaysOf(o.recurring); return d.length ? (d[0] + 6) % 7 : 7 }
   const weekly = live.filter((o) => !o.when && o.kind !== 'restaurant' && o.recurring).sort((a, b) => firstDay(a) - firstDay(b))
   const places = live.filter((o) => o.kind === 'restaurant').sort((a, b) => Number(b.status === 'saved') - Number(a.status === 'saved') || Number(Boolean(b.gem)) - Number(Boolean(a.gem)) || (b.rating ?? 0) - (a.rating ?? 0))
@@ -944,4 +951,109 @@ export function outFiltered(rows, { what = 'all', who = 'any', when = 'all', tod
 export function outCounts(rows, pick, which) {
   const choices = which === 'what' ? OUT_WHAT : which === 'who' ? OUT_WHO : outWhenChoices(pick.today)
   return Object.fromEntries(choices.map(([id]) => [id, outFiltered(rows, { ...pick, [which]: id }).length]))
+}
+
+// ── The venue sorter (Jake, Oct 9: "most venues that have cover bands tend to only hire cover bands") ──────────────
+/** One venue, however a calendar spells it ("The Funky Biscuit", "Funky Biscuit"). */
+export function venueKey(name) {
+  return String(name ?? '').toLowerCase().replace(/&/g, ' and ').replace(/[’'`]/g, '').replace(/\b(the|at)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+/** The question for a batch of venues (Google Search on): what each one books. */
+export function venuePrompt(names) {
+  return `These are live-music venues in South Florida (Palm Beach and Broward counties, some Miami). Search Google for each and say what it mostly books:
+- "cover": a bar, restaurant or club whose bands play covers — cover bands, party bands, tribute bands, solo or duo acoustic covers.
+- "concert": a theater, arena, amphitheater or concert hall for touring national acts and big names.
+- "original": a club or listening room mostly for original music — local or touring blues, jam, jazz, indie, rock or singer-songwriters playing their own songs.
+- "mixed": a real mix, or you can't tell.
+${names.map((n, i) => `${i}. ${n}`).join('\n')}
+Answer with only JSON: [{"i": 0, "kind": "cover" | "concert" | "original" | "mixed", "note": "why, in under 12 words"}]`
+}
+
+/** The answer, checked: index → kind and why. */
+export function parseVenues(text, count) {
+  const m = String(text ?? '').match(/\[[\s\S]*\]/)
+  let list = []
+  try { list = m ? JSON.parse(m[0]) : [] } catch { list = [] }
+  const out = new Map()
+  for (const v of Array.isArray(list) ? list : []) {
+    const i = Number(v?.i)
+    if (!Number.isInteger(i) || i < 0 || i >= count) continue
+    out.set(i, { kind: ['cover', 'concert', 'original', 'mixed'].includes(v.kind) ? v.kind : 'mixed', note: typeof v.note === 'string' ? v.note.slice(0, 120) : null })
+  }
+  return out
+}
+
+/** The kind a gig carries: the family's word first (more / less / skip), else the venue's. */
+export const venueKindOf = (v) => v?.family ?? v?.kind ?? null
+
+/** How a busy night's bands are ordered: what they asked for more of, tributes, cover-band venues, concert rooms, the
+ * rest, original-music clubs, then less of; skipped venues not at all. Then by time. */
+export function bandRank(o) {
+  const k = o.venue_kind
+  if (k === 'skip') return 99
+  if (k === 'more') return 0
+  if (/\btribute\b|\bexperience\b|\bsalute to\b|\bthe music of\b/i.test(o.title ?? '')) return 1
+  return { cover: 2, concert: 3, mixed: 4, original: 6, less: 7 }[k] ?? 5
+}
+
+// ── The acts (Jake, Oct 9: "i just dont want to see a bunch of stuff I have no idea about"; "like a reggae band, i may
+// want to see no matter what"): each act looked up once — known or not, covers or originals, its genre.
+export function actKey(title) {
+  return String(title ?? '').toLowerCase().replace(/\s*[-–—|]\s*(usa |world |north american |us )?(\d{4} )?tour.*$/i, '').replace(/[’'`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+export function actPrompt(acts) {
+  return `These acts are playing live in South Florida soon (name — venue). Search Google for each and say:
+- "known": would most Americans aged 35–50 recognize the name? "yes" (a famous artist or band, or a tribute to one), "maybe" (a known name to fans of the genre), or "no" (a local or regional act).
+- "plays": "tribute" (a tribute to one artist — say whom in "of"), "covers" (a cover, party or wedding band, or a solo or duo playing covers), "originals" (their own songs), or "unknown".
+- "genre": one or two words (classic rock, reggae, country, blues, jam, jazz, yacht rock, Latin, indie rock, hip hop, singer-songwriter, dance/party…), or "unknown".
+${acts.map((a, i) => `${i}. ${a.title}${a.place ? ` — ${a.place}` : ''}`).join('\n')}
+Answer with only JSON: [{"i": 0, "known": "yes" | "maybe" | "no", "plays": "tribute" | "covers" | "originals" | "unknown", "of": "the artist a tribute is to, else null", "genre": "..."}]
+Say "unknown" rather than guess.`
+}
+
+export function parseActs(text, count) {
+  const m = String(text ?? '').match(/\[[\s\S]*\]/)
+  let list = []
+  try { list = m ? JSON.parse(m[0]) : [] } catch { list = [] }
+  const out = new Map()
+  for (const a of Array.isArray(list) ? list : []) {
+    const i = Number(a?.i)
+    if (!Number.isInteger(i) || i < 0 || i >= count) continue
+    out.set(i, {
+      known: ['yes', 'maybe', 'no'].includes(a.known) ? a.known : 'no',
+      plays: ['tribute', 'covers', 'originals', 'unknown'].includes(a.plays) ? a.plays : 'unknown',
+      of: typeof a.of === 'string' && a.of.trim() && a.of !== 'null' ? a.of.trim().slice(0, 60) : null,
+      genre: typeof a.genre === 'string' && a.genre.trim() && a.genre !== 'unknown' ? a.genre.trim().toLowerCase().slice(0, 40) : null,
+    })
+  }
+  return out
+}
+
+/** A genre they named, as words a lookup may give ("Reggae / island" → reggae, island, ska…). */
+const GENRE_WORDS = [
+  [/reggae|island/i, /reggae|island|ska\b|calypso|soca|dub\b/i],
+  [/yacht|soft rock/i, /yacht|soft rock/i],
+  [/classic rock/i, /classic rock|southern rock|70s|80s/i],
+  [/country/i, /country|americana|southern/i],
+  [/blues|funk|soul/i, /blues|funk|soul|r&b|motown/i],
+  [/^rock$/i, /rock/i],
+  [/^pop$/i, /\bpop\b/i],
+]
+export function genreLiked(genre, genres) {
+  if (!genre) return false
+  return (genres ?? []).some((g) => {
+    const hit = GENRE_WORDS.find(([name]) => name.test(g))
+    return hit ? hit[1].test(genre) : String(genre).toLowerCase().includes(String(g).toLowerCase())
+  })
+}
+
+/** Where an act stands for them: a name they'd know or a tribute ("star", always shown), local in a genre they love
+ * ("liked", a few a night), or the rest ("local", one line). */
+export function actStanding(act, genres) {
+  if (!act) return 'local'
+  // A clear yes (Ricky Martin, Boz Scaggs) or a tribute; "known to fans" (Avalon, Crazy Fingers) earns it by genre, like a local.
+  if (act.known === 'yes' || act.plays === 'tribute') return 'star'
+  return genreLiked(act.genre, genres) ? 'liked' : 'local'
 }

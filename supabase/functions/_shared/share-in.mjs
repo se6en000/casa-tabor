@@ -213,6 +213,9 @@ export function datesToAsk(items, events, todayYmd) {
 export function mapsPlaceOf(url) {
   let u
   try { u = new URL(url) } catch { return null }
+  // Google's cookie page from a server abroad (consent.google.com?continue=<the maps address>): the place is in it.
+  const onward = u.searchParams.get('continue')
+  if (onward && /consent\.google\./.test(u.hostname)) return mapsPlaceOf(onward)
   if (!/(^|\.)google\.[a-z.]+$/.test(u.hostname) || !/maps|^\/$/.test(u.pathname + (u.hostname.startsWith('maps.') ? 'maps' : ''))) return null
   const plus = (t) => decodeURIComponent(String(t).replace(/\+/g, ' ')).trim()
   const q = u.searchParams.get('q') ?? u.searchParams.get('query')

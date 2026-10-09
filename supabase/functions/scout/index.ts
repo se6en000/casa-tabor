@@ -15,6 +15,7 @@ import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   MAJOR_AHEAD_DAYS, collapseRuns, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
+  venueKey, venuePrompt, parseVenues, venueKindOf, actKey, actPrompt, parseActs, actStanding,
 } from '../_shared/scout.mjs'
 import {
   GUIDE_AREAS, TASTE_KEY, buzzPrompt, curatePrompt, guideLabels, guideScore, guideShelves, heardLine, parseBuzz, parseCurate, parseRateAsk, placeVerdict,
@@ -76,7 +77,19 @@ Deno.serve(async (req) => {
   if (body.action === 'list') {
     // Today on (and the weekly ones), soonest first — the big rooms add hundreds (Ticketmaster, four months out).
     const { data } = await sb.from('outings').select('*').in('status', ['new', 'offered', 'saved']).or(`when.is.null,when.gte.${today}`).order('when', { ascending: true, nullsFirst: false }).limit(1500)
-    const live = (data ?? []).filter((o: { when: string | null }) => !o.when || o.when.slice(0, 10) >= today)
+    const found = (data ?? []).filter((o: { when: string | null }) => !o.when || o.when.slice(0, 10) >= today)
+    // Each gig its act (Oct 9): would they know it, what it plays, and where it stands for them (their genres).
+    const [{ data: acts }, { data: tasteRow }] = await Promise.all([
+      sb.from('music_acts').select('act_key, known, plays, tribute_of, genre').limit(5000),
+      sb.from('settings').select('value').eq('key', TASTE_KEY).maybeSingle(),
+    ])
+    const genres = tasteOf(tasteRow?.value).genres
+    const byKey = new Map(((acts ?? []) as Array<{ act_key: string; known: string; plays: string; tribute_of: string | null; genre: string | null }>).map((a) => [a.act_key, a]))
+    const live = found.map((o: Record<string, any>) => {
+      if (o.kind !== 'music') return o
+      const a = byKey.get(actKey(o.title))
+      return { ...o, act: a ? { known: a.known, plays: a.plays, of: a.tribute_of, genre: a.genre, standing: actStanding(a, genres) } : { standing: actStanding(null, genres) } }
+    })
     // The paper's third page: the latest morning's news (a day or two old at most).
     const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date, on_date')
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
@@ -355,6 +368,85 @@ Deno.serve(async (req) => {
     return json({ details: { ...details, read_at: at } })
   }
 
+  // The venue sorter (Jake, Oct 9): each live-music venue looked up once (Google Search), then every gig carries its
+  // venue's kind — or the family's word on it (more / less / skip).
+  const sortVenues = async (max = 60) => {
+    const [{ data: gigs }, { data: venues }, { data: llmRow }] = await Promise.all([
+      sb.from('outings').select('place').eq('kind', 'music').in('status', ['new', 'offered', 'saved']).not('place', 'is', null).limit(2000),
+      sb.from('music_venues').select('name_key, name, kind, family'),
+      sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+    ])
+    const known = new Map(((venues ?? []) as Array<{ name_key: string; name: string; kind: string; family: string | null }>).map((v) => [v.name_key, v]))
+    const names = new Map<string, string>()
+    for (const g of (gigs ?? []) as Array<{ place: string }>) if (!names.has(venueKey(g.place))) names.set(venueKey(g.place), g.place)
+    const fresh = [...names.entries()].filter(([k]) => k && !known.has(k)).slice(0, max)
+    const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+    let looked = 0
+    if (fresh.length && llm?.api_key) {
+      const batches = Array.from({ length: Math.ceil(fresh.length / 15) }, (_, i) => fresh.slice(i * 15, i * 15 + 15))
+      await inBatches(batches, 3, async (batch) => {
+        const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: venuePrompt(batch.map(([, n]) => n)) }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 2500, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } } }),
+        }, { callPurpose: 'music-venues' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+        const text = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+        const got = parseVenues(text, batch.length)
+        const rows = batch.map(([key, name], i) => ({ name_key: key, name, kind: got.get(i)?.kind ?? 'mixed', note: got.get(i)?.note ?? null, checked_at: new Date().toISOString() })).filter((_, i) => got.has(i))
+        looked += rows.length
+        if (rows.length) await sb.from('music_venues').upsert(rows, { onConflict: 'name_key' })
+        for (const r of rows) known.set(r.name_key, { ...r, family: null })
+      })
+    }
+    // Every gig its venue's kind.
+    const byKind = new Map<string, string[]>()
+    for (const [key, place] of names) {
+      const kind = venueKindOf(known.get(key))
+      if (kind) byKind.set(kind, [...(byKind.get(kind) ?? []), place])
+    }
+    for (const [kind, places] of byKind) {
+      for (let i = 0; i < places.length; i += 100) await sb.from('outings').update({ venue_kind: kind }).eq('kind', 'music').in('place', places.slice(i, i + 100))
+    }
+    return { venues: names.size, looked, kinds: Object.fromEntries([...byKind].map(([k, v]) => [k, v.length])) }
+  }
+  // The acts (Jake, Oct 9): each upcoming act looked up once — would they know it, covers or originals or a tribute,
+  // its genre — four at a time, fifteen to a search.
+  const sortActs = async (max = 45, dryRun = false) => {
+    const [{ data: gigs }, { data: acts }, { data: llmRow }] = await Promise.all([
+      sb.from('outings').select('title, place, "when"').eq('kind', 'music').in('status', ['new', 'offered', 'saved']).gte('when', today).lte('when', addDays(today, 42)).order('when').limit(2000),
+      sb.from('music_acts').select('act_key'),
+      sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+    ])
+    const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+    if (!llm?.api_key) return { looked: 0 }
+    const have = new Set(((acts ?? []) as Array<{ act_key: string }>).map((a) => a.act_key))
+    const todo: Array<{ key: string; title: string; place: string | null }> = []
+    for (const g of (gigs ?? []) as Array<{ title: string; place: string | null }>) {
+      const key = actKey(g.title)
+      if (key && !have.has(key) && !todo.some((t) => t.key === key)) todo.push({ key, title: g.title, place: g.place })
+    }
+    const batch = todo.slice(0, max)
+    const batches = Array.from({ length: Math.ceil(batch.length / 15) }, (_, i) => batch.slice(i * 15, i * 15 + 15))
+    const out: Array<Record<string, unknown>> = []
+    await inBatches(batches, 4, async (b) => {
+      const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: actPrompt(b) }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 3000, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } } }),
+      }, { callPurpose: 'music-acts' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+      const text = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+      const got = parseActs(text, b.length)
+      const rows = b.flatMap((a, i) => { const g = got.get(i); return g ? [{ act_key: a.key, title: a.title, known: g.known, plays: g.plays, tribute_of: g.of, genre: g.genre, checked_at: new Date().toISOString() }] : [] })
+      out.push(...rows)
+      if (rows.length && !dryRun) await sb.from('music_acts').upsert(rows, { onConflict: 'act_key' })
+    })
+    return { waiting: todo.length, looked: out.length, ...(dryRun ? { out } : {}) }
+  }
+  if (body.action === 'acts') {
+    try { return json(await sortActs(Number(body.max ?? 45), Boolean(body.dry_run))) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+  }
+  if (body.action === 'venues') {
+    try { return json(await sortVenues()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+  }
+
   if (body.action === 'calendars') {
     const read = async () => {
       const [{ data: homeRow }, { data: known }] = await Promise.all([
@@ -455,7 +547,9 @@ Deno.serve(async (req) => {
       await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).lt('when', today).in('status', ['new', 'offered', 'saved'])
       await sb.from('outings').update({ status: 'expired', updated_at: new Date().toISOString() }).in('kind', CALENDAR_KINDS).is('when', null)
         .lt('verified_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).in('status', ['new', 'offered'])
-      return { found: found.length, written: rows.length, twice: twice.length, log }
+      const venues = await sortVenues(30).catch((e) => ({ error: String(e) }))
+      const acts = await sortActs(45).catch((e) => ({ error: String(e) }))
+      return { found: found.length, written: rows.length, twice: twice.length, venues, acts, log }
     }
     try { return json(await read()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
   }

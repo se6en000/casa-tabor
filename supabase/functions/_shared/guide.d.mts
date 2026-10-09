@@ -41,6 +41,7 @@ export interface GuideTaste {
   tryFirst: string[]
   places: Array<{ name: string; note?: string }>
   teams: string[]
+  genres: string[]
   reachMin: number
 }
 export const TASTE_KEY: string

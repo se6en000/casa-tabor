@@ -121,6 +121,8 @@ export const DEFAULT_TASTE = {
   tryFirst: ['Escape rooms'],
   places: [{ name: 'Mr B’s' }, { name: 'Blind Monk' }, { name: 'French Grill', note: 'Northwood, West Palm' }, { name: 'Blue Door', note: 'West Palm' }],
   teams: ['Florida', 'Miami'],
+  // Music they'd go see even not knowing the band (Jake, Oct 9).
+  genres: ['Pop', 'Rock', 'Classic rock', 'Reggae / island', 'Yacht rock'],
   reachMin: 45,
 }
 
@@ -136,6 +138,7 @@ export function tasteOf(saved) {
     tryFirst: list(s.tryFirst, DEFAULT_TASTE.tryFirst),
     places,
     teams: list(s.teams, DEFAULT_TASTE.teams),
+    genres: list(s.genres, DEFAULT_TASTE.genres),
     reachMin: REACH_CHOICES.some(([m]) => m === s.reachMin) ? s.reachMin : DEFAULT_TASTE.reachMin,
   }
 }
