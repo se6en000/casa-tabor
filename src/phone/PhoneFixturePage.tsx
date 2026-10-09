@@ -30,6 +30,7 @@ import { tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
 import { buildTrips } from '../wall/engine/travel'
 import { decisionsFor } from '../wall/decisions'
 import { casaTopic, type CasaTalkState } from '../wall/casaTalk'
+import { useFixtureHowWasIt, useFixtureTaste } from '../wall/howWasItFixture'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -129,6 +130,7 @@ function PhoneFixturePageInner() {
   const params = new URLSearchParams(window.location.search)
   const now = new Date(params.get('at') ?? '2026-09-25T07:12:00')
   const viewerId = params.get('viewer') ?? 'jake-id'
+  const howWasIt = useFixtureHowWasIt(now, viewerId)
   // To do on Jake's phone (P3.22 step 7): the same list and projects as the wall's fixture.
   const { todos } = useFixtureTodos({ stepEvent: params.get('stepEvent') === '1', closedInside: params.get('closedInside') === '1' })
   const ask = params.get('ask')
@@ -196,6 +198,7 @@ function PhoneFixturePageInner() {
                 setChoreDone((was) => { const next = new Set(was); if (done) next.add(key); else next.delete(key); return next })
               }}
               useEmailSettingsHook={fixtureEmailSettings}
+              useTasteHook={useFixtureTaste}
               now={now}
               viewerId={viewerId}
               members={members as WallMember[]}
@@ -261,6 +264,7 @@ function PhoneFixturePageInner() {
               )}
               contacts={CONTACTS as never}
               places={PLACES as never}
+              howWasIt={howWasIt}
               casaTalk={{ topic, snooze: async (key, until) => setTalkState((was) => ({ ...was, snoozed: { ...was.snoozed, [key]: until.toISOString() } })) }}
               tripActions={{
                 dismiss: async (date, key) => setTripState((s) => withDismissed(s, date, key)),

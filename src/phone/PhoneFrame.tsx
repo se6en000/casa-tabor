@@ -15,6 +15,7 @@ import { setChoreDone, useChoreDone } from '../wall/useChoreDone'
 import { useTodoProject, useTodoProjectsAhead, useTodos } from '../wall/useTodos'
 import { addChecklistItem, toggleChecklistItem, useEventChecklist } from '../wall/useWallChecklist'
 import { saveEventNotes } from '../wall/saveNotes'
+import { useHowWasIt } from '../wall/useHowWasIt'
 import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
 import type { FamilyMember } from '../types'
@@ -80,6 +81,7 @@ export default function PhoneFrame() {
   const [aroundDay, setAroundDay] = useState<Date | null>(null)
   const onFocusDay = useCallback((date: Date | null) => setAroundDay((was) => (was?.toDateString() === date?.toDateString() ? was : date)), [])
   const { now, members, week, allEvents, aroundEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom, chores } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' }, aroundDay)
+  const howWasIt = useHowWasIt(now, profile?.memberId ?? null)
   const choreDone = useChoreDone(now)
   // The assistant's card is told from the same engine as the wall's (board 06e).
   const planDay = useCallback(
@@ -134,6 +136,7 @@ export default function PhoneFrame() {
       // A hand-off shows at once (the sheet doesn't wait); one that can't be saved says so.
       tripActions={{ ...tripActions, handOff: (trip, driverId, date) => tripActions.handOff(trip, driverId, date).then(() => undefined, () => setNotice(`Couldn’t hand off “${trip.title}”. Try it again.`)) }}
       casaTalk={{ topic, snooze: (key, until) => talk.save({ snoozed: { [key]: until.toISOString() } }) }}
+      howWasIt={howWasIt}
       onToggleItem={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)}
       onAddItem={(eventId, label) => addChecklistItem(queryClient, eventId, label)}
       onSaveNotes={(event, notes) => saveEventNotes(queryClient, event, notes)}

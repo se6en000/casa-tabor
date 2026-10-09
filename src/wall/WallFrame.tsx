@@ -27,6 +27,7 @@ import { toImages } from './toImages'
 import { useMorningPaper } from './useMorningPaper'
 import { useScout } from './useScout'
 import { useTidy } from './useTidy'
+import { useHowWasIt } from './useHowWasIt'
 import { briefFacts } from './paper'
 import type { TypedImage } from './typeLine'
 
@@ -122,6 +123,7 @@ export default function WallFrame() {
   const paper = useMorningPaper(today, members, now, currentWeather, () => (comingUp.data && todos.data ? briefFacts({ members, week, now, checklist, comingUp: comingUp.data.items, todos: todos.data }) : undefined))
   const scout = useScout()
   const tidy = useTidy()
+  const howWasIt = useHowWasIt(now)
   // Start typing (or paste) anywhere on a computer (canvas 22c).
   const pasteFiles = useCallback((files: File[]) => {
     void toImages(files).then((images) => {
@@ -142,5 +144,5 @@ export default function WallFrame() {
       if (error) throw error
     },
   }), [talk])
-  return <><WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} saveNotes={(event, notes) => saveEventNotes(queryClient, event, notes)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} choreDone={choreDone} tickChore={(id, date, done) => setChoreDone(queryClient, id, date, done)} paper={paper} scout={scout} tidy={tidy} />{quick}</>
+  return <><WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={review ?? band} busy={Boolean(review) || (bandOpen && talking)} emailCount={email.data?.count ?? 0} onOpenEmail={() => { setBandOpen(false); setEmailOpen(true) }} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} aroundEvents={aroundEvents} onFocusDay={onFocusDay} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} saveTravel={saveTravel} travelTrips={travel} chores={chores} saveChore={(chore) => saveChore(queryClient, chore)} deleteChore={(id) => deleteChore(queryClient, id)} addChecklist={(eventId, label) => addChecklistItem(queryClient, eventId, label)} saveNotes={(event, notes) => saveEventNotes(queryClient, event, notes)} useEventItems={useEventChecklist} createEvent={createEvent} comingUp={comingUp.data ? { ...comingUp.data, act: comingUp.act, start: comingUp.start, editIdea: comingUp.editIdea } : null} todos={todos.data ? { list: todos.data, act: todos.act } : null} casaTalk={casaTalk} choreDone={choreDone} tickChore={(id, date, done) => setChoreDone(queryClient, id, date, done)} paper={paper} scout={scout} tidy={tidy} howWasIt={howWasIt} />{quick}</>
 }

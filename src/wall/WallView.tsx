@@ -49,6 +49,8 @@ import { casaTopic, pushMessage, pushNow, snoozeUntil, type TalkAnswer } from '.
 import type { CasaTalkProps } from './useCasaTalk'
 import WallCasaTalk, { CallingPill, CasaCalling } from './WallCasaTalk'
 import WallTidy from './WallTidy'
+import WallHowWasIt from './WallHowWasIt'
+import type { HowWasItData } from './useHowWasIt'
 import type { TidyData } from './useTidy'
 import type { ScoreInteraction } from './WallScore'
 import WallNightCalm from './WallNightCalm'
@@ -143,6 +145,8 @@ export interface WallViewProps {
   scout?: ScoutPaper | null
   /** Alexa's tidy-up (canvas 75): "I have something for you". */
   tidy?: TidyData | null
+  /** "How was it?" the morning after an outing (canvas 85C): Something for you, when nothing else is asking. */
+  howWasIt?: HowWasItData | null
 }
 
 const NO_TICKS: ReadonlySet<string> = new Set()
@@ -183,7 +187,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null, scout = null, tidy = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], aroundEvents = null, onFocusDay, emailCount = 0, onOpenEmail, deleteEvent, toggleChecklist, saveTravel, travelTrips = [], chores = [], saveChore, deleteChore, addChecklist, saveNotes, useEventItems, createEvent, comingUp = null, todos = null, busy = false, casaTalk = null, choreDone = NO_TICKS, tickChore, paper = null, scout = null, tidy = null, howWasIt = null } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   // Ticked a moment ago (crossed out), and ticked and saved (gone until the data says so).
@@ -527,8 +531,12 @@ export default function WallView(props: WallViewProps) {
   // for you'"): the pill and the glowing mic when she has something and nothing else is asking.
   const [tidyOpen, setTidyOpen] = useState(false)
   const tidyCalling = !calling && !overlay && !tidyOpen && (tidy?.open.length ?? 0) > 0
-  const openTidy = () => setTidyOpen(true)
-  const micAsk = calling ? openTalk : tidyCalling ? openTidy : onAsk
+  // After the tidy-up, "How was it?" (canvas 85C): the same pill, the band of its own.
+  const [rateOpen, setRateOpen] = useState(false)
+  const rateCalling = !calling && !tidyCalling && !overlay && !tidyOpen && !rateOpen && (howWasIt?.open.length ?? 0) > 0
+  const openTidy = () => (tidyCalling ? setTidyOpen(true) : setRateOpen(true))
+  const somethingCalling = tidyCalling || rateCalling
+  const micAsk = calling ? openTalk : somethingCalling ? openTidy : onAsk
   const decisionsOn = (date: Date) => stripDecisions.filter((d) => sameDay(d.date, date))
   // The timer above closes it after 2 idle minutes, so render only asks whether it's open.
   const comingUpOpen = Boolean(comingUp) && comingUpUntil > 0
@@ -836,18 +844,18 @@ export default function WallView(props: WallViewProps) {
         !(nightSettled && now.getHours() < 6) && (
           <div className={`wall-evening absolute left-[52px] top-[40px] z-10 flex items-center gap-[14px] ${nightSettled ? 'opacity-60' : ''}`}>
             <MenuButton onOpen={openMenu} />
-            {onAsk && <MicButton onDark onAsk={micAsk ?? onAsk} calling={Boolean(calling) || tidyCalling} />}
+            {onAsk && <MicButton onDark onAsk={micAsk ?? onAsk} calling={Boolean(calling) || somethingCalling} />}
             {createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} />}
             {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="ml-[4px]" />}
-            {tidyCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="ml-[4px]" />}
+            {somethingCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="ml-[4px]" />}
           </div>
         )
       ) : (
         <>
           {!(nightSettled && now.getHours() < 6) && <MenuButton onOpen={openMenu} className={`absolute right-[44px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
-          {!(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={micAsk ?? onAsk} calling={Boolean(calling) || tidyCalling} className="absolute right-[108px] top-[38px]" />}
+          {!(nightSettled && now.getHours() < 6) && onAsk && <MicButton onAsk={micAsk ?? onAsk} calling={Boolean(calling) || somethingCalling} className="absolute right-[108px] top-[38px]" />}
           {calling && <CasaCalling topic={calling.topic} onOpen={openTalk} className="absolute right-[256px] top-[44px]" />}
-          {tidyCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="absolute right-[256px] top-[44px]" />}
+          {somethingCalling && <CallingPill label="I have something for you" onOpen={openTidy} className="absolute right-[256px] top-[44px]" />}
           {!(nightSettled && now.getHours() < 6) && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className={`absolute right-[184px] top-[44px] ${darkFace ? 'wall-evening' : ''}`} />}
         </>
       )}
@@ -869,6 +877,9 @@ export default function WallView(props: WallViewProps) {
       )}
       {tidyOpen && tidy && !overlay && !selected && !handOff && (
         <WallTidy tidy={tidy} onClose={() => setTidyOpen(false)} onTalk={() => { setTidyOpen(false); onAsk?.('What’s the something you have for me?') }} />
+      )}
+      {rateOpen && howWasIt && !overlay && !selected && !handOff && (
+        <WallHowWasIt data={howWasIt} now={now} nameOf={(id) => members.find((m) => m.id === id)?.name ?? 'you'} onClose={() => setRateOpen(false)} onTalk={() => { setRateOpen(false); onAsk?.() }} />
       )}
       {(shown.preview || paperPreview || nightPreview) && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">

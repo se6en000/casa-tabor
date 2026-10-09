@@ -3004,3 +3004,32 @@ test('wall: the home stretch — THEN Kelly off work, TO DO TONIGHT in the panel
   await expect(page.getByRole('button', { name: /^Tomorrow:/ })).toContainText('FIRST OUT 11:56')
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('calm-home-stretch.png')
 })
+
+// "How was it?" (canvas 85C; Jake, Oct 9): the morning after an outing on the calendar, in Something for you — stars,
+// go back?, what stood out; one person at a time, the next one after Done; Not now asks again tomorrow.
+test('wall: How was it? — the morning after Mr B’s, in Something for you; stars, go back, what stood out; then the next person', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-26T08:10:00&rate=1')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await page.mouse.click(400, 600)
+  await wall.getByRole('button', { name: 'I have something for you' }).click()
+  const band = wall.getByRole('region', { name: 'How was it' })
+  await expect(band.getByText('HOW WAS IT · LAST NIGHT')).toBeVisible()
+  await expect(band.getByText('How was Mr B’s last night, Jake?')).toBeVisible()
+  await expect(band.getByText('Kelly’s next — here or on the phone')).toBeVisible()
+  await expect(band.getByRole('button', { name: 'Done' })).toBeDisabled()
+  await band.getByRole('button', { name: '5 stars' }).click()
+  await band.getByRole('button', { name: 'Yes, soon' }).click()
+  await band.getByRole('button', { name: 'The vibe' }).click()
+  await band.getByRole('button', { name: 'The drinks' }).click()
+  await expect(wall).toHaveScreenshot('how-was-it-band.png')
+  await band.getByRole('button', { name: 'Done' }).click()
+  expect(await page.evaluate(() => window.__rated)).toEqual(['jake-id:5:soon:vibe+drinks'])
+  // Kelly's, fresh.
+  await expect(band.getByText('How was Mr B’s last night, Kelly?')).toBeVisible()
+  await expect(band.getByRole('button', { name: 'Done' })).toBeDisabled()
+  await band.getByRole('button', { name: 'Not now' }).click()
+  await expect(band).toHaveCount(0)
+  expect(await page.evaluate(() => window.__rated)).toEqual(['jake-id:5:soon:vibe+drinks', 'kelly:later'])
+  await expect(wall.getByRole('button', { name: 'I have something for you' })).toHaveCount(0)
+})

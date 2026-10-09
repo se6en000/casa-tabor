@@ -4,7 +4,8 @@
 // mined too. POST { action: 'research', force?, dry_run? } | { action: 'list' } | { action: 'feedback', id, status }
 // | { action: 'news', force?, dry_run? } (the paper's Around town, each morning)
 // | { action: 'calendars', dry_run? } (live music, comedy and trivia from local calendars, each morning)
-// | { action: 'details', id } (what an outing's own page says, for its card — read once, kept a week).
+// | { action: 'details', id } (what an outing's own page says, for its card — read once, kept a week)
+// | { action: 'rate_ask', dry_run? } (the local guide: yesterday's outings, asked about in Something for you, each morning).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
@@ -14,6 +15,7 @@ import {
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   MAJOR_AHEAD_DAYS, collapseRuns, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
+import { parseRateAsk, rateAskPrompt, rateCandidates, rateRows } from '../_shared/guide.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -63,7 +65,7 @@ async function inBatches<T, R>(items: T[], size: number, fn: (x: T) => Promise<R
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
-  const body = await req.json().catch(() => ({})) as { action?: string; force?: boolean; dry_run?: boolean; id?: string; status?: string; lanes?: number[] }
+  const body = await req.json().catch(() => ({})) as { action?: string; force?: boolean; dry_run?: boolean; days?: number; id?: string; status?: string; lanes?: number[] }
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const today = ymdNY()
 
@@ -82,6 +84,53 @@ Deno.serve(async (req) => {
     if (!body.id || !['saved', 'not_for_us', 'been', 'new'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
     const { error } = await sb.from('outings').update({ status: body.status, updated_at: new Date().toISOString() }).eq('id', body.id)
     return error ? json({ error: error.message }, 500) : json({ ok: true })
+  }
+
+  if (body.action === 'rate_ask') {
+    // The morning after (canvas 85C): the last two days' outings on the calendar, asked about in Something for you.
+    // A dry run may look further back (to try it on a real outing); the morning's run is the last two days.
+    const back = body.dry_run ? Math.min(14, Math.max(2, Number(body.days) || 2)) : 2
+    const find = async () => {
+      const [{ data: homeRow }, { data: llmRow }, { data: events }] = await Promise.all([
+        sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+        sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+        sb.from('events').select('id, title, start_time, all_day, event_type, status, location_name, address, leg_type, recurrence_master_id, record_kind, event_members(family_member:family_members(id, name, role))')
+          .gte('start_time', new Date(Date.now() - (back + 1) * 86_400_000).toISOString()).lt('start_time', new Date().toISOString()).limit(600),
+      ])
+      const past = ((events ?? []) as Array<Record<string, unknown>>)
+        .filter((e) => ymdNY(new Date(String(e.start_time))) < today && ymdNY(new Date(String(e.start_time))) >= addDays(today, -back))
+        .map((e) => ({
+          ...e,
+          recurring: Boolean(e.recurrence_master_id) || e.record_kind === 'occurrence',
+          members: ((e.event_members ?? []) as Array<{ family_member: { id: string; name: string; role: string } | null }>).map((m) => m.family_member).filter(Boolean),
+        }))
+      const candidates = rateCandidates(past, { home: homeRow?.value?.address ?? null })
+      if (!candidates.length) return { candidates: 0, asked: 0 }
+      const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+      if (!llm?.api_key) throw new Error('AI not configured')
+      const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: rateAskPrompt(candidates) }] }],
+          generationConfig: { maxOutputTokens: 200, temperature: 0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }, { callPurpose: 'guide-rate-ask' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      const text = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+      const kept = parseRateAsk(text, candidates.length)
+      const rows = rateRows(candidates, kept)
+      if (body.dry_run) return { candidates: candidates.map((c) => `${c.title} @ ${c.place}`), kept: kept.map((i) => candidates[i].title), rows: rows.length }
+      if (rows.length) {
+        const { error } = await sb.from('outing_ratings').upsert(rows, { onConflict: 'event_id,member_id', ignoreDuplicates: true })
+        if (error) throw new Error(error.message)
+      }
+      return { candidates: candidates.length, asked: rows.length }
+    }
+    if (body.dry_run) {
+      try { return json(await find()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+    }
+    // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+    EdgeRuntime.waitUntil(find().then((r) => console.log('[scout rate_ask]', JSON.stringify(r))).catch((e) => console.error('[scout rate_ask]', e)))
+    return json({ ok: true, started: true }, 202)
   }
 
   if (body.action === 'news') {

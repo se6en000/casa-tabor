@@ -40,6 +40,7 @@ import { toImages } from './toImages'
 import type { TypedImage } from './typeLine'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
+import { useFixtureHowWasIt } from './howWasItFixture'
 
 // School, and the parents' work hours (canvas 16a).
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
@@ -305,6 +306,7 @@ export default function WallFixturePage() {
         : null),
     send: async (o) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(o.title) },
   } : null
+  const howWasIt = useFixtureHowWasIt(now)
   const [tidyOpen, setTidyOpen] = useState<TidySuggestion[]>(TIDY_OPEN)
   const tidy: TidyData | null = new URLSearchParams(window.location.search).get('tidy') === '1' ? {
     open: tidyOpen, through: ymd(3),
@@ -375,7 +377,7 @@ export default function WallFixturePage() {
     <Route path="*" element={
     <WallSpeechContext.Provider value={useFixtureSpeech}>
     <div data-testid="wall-fixture" className="relative h-[1080px] w-[1920px]">
-      <WallView paper={PAPER ? ((window as unknown as { __paperWords?: typeof PAPER_WORDS }).__paperWords ?? PAPER_WORDS) : null} scout={scout} tidy={tidy} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView paper={PAPER ? ((window as unknown as { __paperWords?: typeof PAPER_WORDS }).__paperWords ?? PAPER_WORDS) : null} scout={scout} tidy={tidy} howWasIt={howWasIt} now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines} dayOffs={dayOffs} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} aroundEvents={evs} openRequest={openRequest} emailCount={emailOn ? emailData.count : 0} onOpenEmail={emailOn ? () => setEmailOpen(true) : undefined} onAsk={(say) => { (window as unknown as { __asked?: string | null }).__asked = typeof say === 'string' ? say : null }} overlay={review ?? band} busy={Boolean(review) || (Boolean(band) && talking)} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => { ((window as unknown as { __created?: Record<string, unknown>[] }).__created ??= []).push(args); setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),
