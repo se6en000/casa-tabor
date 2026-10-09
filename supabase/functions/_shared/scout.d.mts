@@ -38,3 +38,4 @@ export function isTouring(o: Outing): boolean
 export function outWhenChoices(today: string): string[][]
 export function outFiltered(rows: Outing[] | null | undefined, pick: { what?: string; who?: string; when?: string; today: string }): Outing[]
 export function outCounts(rows: Outing[] | null | undefined, pick: { what: string; who: string; when: string; today: string }, which: 'what' | 'who' | 'when'): Record<string, number>
+export function isBigRoom(place: string | null | undefined): boolean

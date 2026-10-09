@@ -210,6 +210,13 @@ function OutPickers({ rows, today, pick, setPick }: { rows: Outing[]; today: str
 }
 
 const NO_PICK: OutPick = { what: 'all', who: 'any', when: 'all' }
+/** Next week and further out show this many on the whole page; the rest are a tap away (the big rooms add hundreds). */
+const CALM_ROOM = 12
+
+function MorePicked({ n, onPick }: { n: number; onPick: () => void }) {
+  if (n <= 0) return null
+  return <button type="button" onClick={onPick} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-semibold text-wall-ink-2">+{n} more ›</button>
+}
 
 /**
  * Page 2, Out & about (canvas 72B, rethought Oct 8 — Jake: "im not seeing much … things that look cool a couple weeks
@@ -259,12 +266,14 @@ function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: bo
       </Section>
       {plan.nextWeek.length > 0 && (
         <Section label="Next week" count={plan.nextWeek.length}>
-          <div className={grid}>{plan.nextWeek.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : null, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+          <div className={grid}>{plan.nextWeek.slice(0, CALM_ROOM).map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : null, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+          <MorePicked n={plan.nextWeek.length - CALM_ROOM} onPick={() => setPick({ ...NO_PICK, when: 'nextweek' })} />
         </Section>
       )}
       {plan.later.length > 0 && (
         <Section label="Further out · worth planning for" count={plan.later.length}>
-          <div className={grid}>{plan.later.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)) : null, KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+          <div className={grid}>{plan.later.slice(0, CALM_ROOM).map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)) : null, KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+          <MorePicked n={plan.later.length - CALM_ROOM} onPick={() => setPick({ ...NO_PICK, when: 'later' })} />
         </Section>
       )}
       {plan.weekly.length > 0 && (

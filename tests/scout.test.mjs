@@ -577,3 +577,17 @@ test('Out & about pickers: local bands vs touring acts, the weekend by day, coun
   assert.deepEqual(outCounts(rows, { what: 'music', who: 'local', when: 'all', today }, 'when'), { all: 2, tonight: 0, '2026-10-10': 2, '2026-10-11': 0, nextweek: 0, later: 0 })
   assert.deepEqual(outCounts(rows, { what: 'all', who: 'any', when: 'all', today }, 'who'), { any: 7, local: 3, touring: 3 })
 })
+
+test('Ticketmaster: a run of nights is one line; past 70 minutes only a big room (not a Miami club)', async () => {
+  const { collapseRuns, calendarReach, isBigRoom } = await import('../supabase/functions/_shared/scout.mjs')
+  const show = (title, when, place) => ({ kind: 'comedy', title, when, place, why: null })
+  const runs = collapseRuns([show('Marcello Hernández', '2026-11-02 20:00', 'Hard Rock Live'), show('Marcello Hernández', '2026-11-01 20:00', 'Hard Rock Live'), show('Marcello Hernández', '2026-11-03 20:00', 'Hard Rock Live'), show('Jerry Seinfeld', '2026-12-01 19:00', 'Hard Rock Live')])
+  assert.deepEqual(runs.map((r) => [r.title, r.when, r.why]), [['Marcello Hernández', '2026-11-01 20:00', '+2 more dates'], ['Jerry Seinfeld', '2026-12-01 19:00', null]])
+  assert.equal(isBigRoom('Kaseya Center'), true)
+  assert.equal(isBigRoom('LIV Nightclub Miami'), false)
+  assert.equal(isBigRoom("Churchill's Pub"), false)
+  const home = { lat: 26.7145, lng: -80.0549 }
+  const miami = { lat: 25.7814, lng: -80.187 }
+  assert.equal(calendarReach({ place: 'Kaseya Center', at: miami, ticketed: true, major: true }, home).ok, true)
+  assert.equal(calendarReach({ place: 'LIV Nightclub Miami', at: miami, ticketed: true, major: true }, home).ok, false)
+})

@@ -2965,7 +2965,7 @@ test('wall: the morning paper — plain words until the server’s arrive; gone 
   await expect(page.getByRole('article', { name: 'The morning paper' })).toHaveCount(0)
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'Open menu' }).click()
-  await wall.getByRole('button', { name: 'Morning paper' }).click()
+  await wall.getByRole('button', { name: 'Paper', exact: true }).click()
   await expect(page.getByRole('article', { name: 'The morning paper' })).toBeVisible()
   await expect(page.getByText(/Previewing/)).toBeVisible()
 })

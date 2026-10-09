@@ -12,7 +12,7 @@ import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/p
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
-  MAJOR_AHEAD_DAYS, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
+  MAJOR_AHEAD_DAYS, collapseRuns, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
 const CORS = {
@@ -68,7 +68,8 @@ Deno.serve(async (req) => {
   const today = ymdNY()
 
   if (body.action === 'list') {
-    const { data } = await sb.from('outings').select('*').in('status', ['new', 'offered', 'saved']).order('kind').limit(200)
+    // Today on (and the weekly ones), soonest first — the big rooms add hundreds (Ticketmaster, four months out).
+    const { data } = await sb.from('outings').select('*').in('status', ['new', 'offered', 'saved']).or(`when.is.null,when.gte.${today}`).order('when', { ascending: true, nullsFirst: false }).limit(1500)
     const live = (data ?? []).filter((o: { when: string | null }) => !o.when || o.when.slice(0, 10) >= today)
     // The paper's third page: the latest morning's news (a day or two old at most).
     const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date, on_date')
@@ -181,7 +182,7 @@ Deno.serve(async (req) => {
               const probe = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?apikey=${encodeURIComponent(k)}&size=1`)
               if (probe.ok) { key = k; break }
             }
-            log.push({ cal: cal.id, keys: keys.length, shapes: keys.map((k) => `${k.length} chars${/[^A-Za-z0-9]/.test(k) ? ', has other characters' : ''}`), works: key ? (key === keys[0] ? 'TICKETMASTER_API_KEY' : 'the secret') : 'neither' })
+            log.push({ cal: cal.id, keys: keys.length, works: key ? (key === keys[0] ? 'TICKETMASTER_API_KEY' : 'the secret') : 'neither' })
             if (!key || !home) return
             const items: Array<Record<string, any>> = []
             for (let page = 0; page < 4; page++) {
@@ -196,7 +197,7 @@ Deno.serve(async (req) => {
               if (!more) break
             }
             let kept = 0
-            for (const it of items) {
+            for (const it of collapseRuns(items) as Array<Record<string, any>>) {
               if (String(it.when).slice(0, 10) < today || String(it.when).slice(0, 10) > addDays(today, MAJOR_AHEAD_DAYS)) continue
               if (isBait(it) || notLiveMusic(it)) continue
               const reach = calendarReach(it, home)

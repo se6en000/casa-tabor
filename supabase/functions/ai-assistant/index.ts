@@ -1060,7 +1060,7 @@ Deno.serve(async (req) => {
       // Alexa's character and house notes (canvas 60), from Settings → Alexa's personality and the weekly look back.
       sb.from('settings').select('value').eq('key', PERSONA_KEY).maybeSingle(),
       // The Scout's checked list (Oct 8): what to suggest when they ask for something to do.
-      sb.from('outings').select('kind, title, "when", recurring, place, drive_min, rating, rating_count, gem, free, why, status, source, verify_note').in('status', ['new', 'offered', 'saved']).limit(200),
+      sb.from('outings').select('kind, title, "when", recurring, place, drive_min, rating, rating_count, gem, free, why, status, source, source_ref, verify_note').in('status', ['new', 'offered', 'saved']).or(`when.is.null,when.gte.${todayYmdNY()}`).order('when', { ascending: true, nullsFirst: false }).limit(1500),
       // This morning's paper as the wall showed it, and its Around town — the latest news (Jake, Oct 8: "yes add it").
       sb.from('morning_papers').select('headline, deck, brief').eq('paper_date', todayYmdNY()).maybeSingle(),
       sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date').order('news_date', { ascending: false }).limit(40),

@@ -447,6 +447,24 @@ export const CALENDARS = [
 /** How far ahead the big shows are kept (Jake, Oct 9: "more of a heads up"). */
 export const MAJOR_AHEAD_DAYS = 120
 
+/** A big room — an arena, an amphitheatre, a concert hall or theatre — not a club or a pub (Miami is for a big show). */
+export const isBigRoom = (place) => /\b(arena|center|centre|stadium|amphithea\w*|fillmore|hard rock live|theat(er|re)|hall|bandshell|auditorium)\b/i.test(place ?? '') && !/\b(nightclub|club|pub|bar|lounge)\b/i.test(place ?? '')
+
+/** One act's run of nights at one room is one line, its first night, "+N more dates" (Marcello Hernández ×5). */
+export function collapseRuns(items) {
+  const firsts = new Map()
+  const out = []
+  for (const it of [...items].sort((a, b) => String(a.when).localeCompare(String(b.when)))) {
+    const key = `${String(it.title).toLowerCase()}|${String(it.place ?? '').toLowerCase()}`
+    const first = firsts.get(key)
+    if (first) { first.more = (first.more ?? 0) + 1; continue }
+    const copy = { ...it }
+    firsts.set(key, copy)
+    out.push(copy)
+  }
+  return out.map(({ more, ...it }) => (more ? { ...it, why: [it.why, `+${more} more ${more === 1 ? 'date' : 'dates'}`].filter(Boolean).join(' · ') } : it))
+}
+
 /** The Discovery API's searches: music, and comedy, within 75 miles of home (Miami's arenas included), from today. */
 export function ticketmasterUrls(apiKey, home, today, page = 0) {
   const end = addDays(today, MAJOR_AHEAD_DAYS)
@@ -644,7 +662,7 @@ export function calendarReach(item, home) {
   if (item.at && home) {
     const minutes = roadMinutes(haversineKm(home, item.at))
     // A big ticketed show (Ticketmaster's) is worth Miami (Jake, Oct 9: "FLL / Miami / Hollywood").
-    return minutes <= 35 || (item.ticketed && minutes <= 70) || (item.major && minutes <= 105) ? { ok: true, minutes } : { ok: false, note: `about ${minutes} min` }
+    return minutes <= 35 || (item.ticketed && minutes <= 70) || (item.major && minutes <= 105 && isBigRoom(item.place)) ? { ok: true, minutes } : { ok: false, note: `about ${minutes} min` }
   }
   const t = `${item.address ?? ''} ${item.place ?? ''}`.toLowerCase()
   if (HOUR_TOWNS.some((x) => t.includes(x))) return item.ticketed ? { ok: true, minutes: null } : { ok: false, note: 'about 40+ min' }
@@ -767,13 +785,16 @@ export function tonightSection(rows, today) {
   const tonight = dated.filter((o) => o.when.slice(0, 10) === today).slice(0, 14)
   const week = dated.filter((o) => o.when.slice(0, 10) !== today).slice(0, 24)
   const weekly = live.filter((o) => !o.when && o.recurring).sort((a, b) => (weekdaysOf(a.recurring)[0] ?? 7) - (weekdaysOf(b.recurring)[0] ?? 7)).slice(0, 24)
-  if (!tonight.length && !week.length && !weekly.length) return null
+  // The big rooms, further out (Jake, Oct 9: "the national acts … at the hardrock … FLL / Miami / Hollywood").
+  const big = live.filter((o) => o.source_ref === 'ticketmaster' && o.when && o.when.slice(0, 10) > addDays(today, 7)).sort((a, b) => a.when.localeCompare(b.when)).slice(0, 40)
+  if (!tonight.length && !week.length && !weekly.length && !big.length) return null
   const day = (w) => outingWhen({ when: w }).replace(/^(\w+), /, '$1 ')
   return [
     'LIVE MUSIC, COMEDY & TRIVIA (read this morning from local gig and trivia calendars — bars, restaurants and venues within about half an hour; ticketed shows up to an hour): for "who\'s playing tonight", "live music", "a band", "comedy", "trivia", answer from these, local first, two to four with when and where. Nothing that isn\'t here unless search_web finds it right now.',
     ...(tonight.length ? [`Tonight (${today}):`, ...tonight.map((o) => `- ${time(o.when) ? `${time(o.when)} · ` : ''}${kind(o)}${at(o)}`)] : []),
     ...(week.length ? ['The next week:', ...week.map((o) => `- ${kind(o)}${day(o.when)} · ${at(o)}`)] : []),
     ...(weekly.length ? ['Every week:', ...weekly.map((o) => `- ${kind(o)}${o.recurring} · ${at(o)}`)] : []),
+    ...(big.length ? ['Big shows coming (Ticketmaster — arenas, amphitheatres, the Hard Rock, the Kravis, Miami’s big rooms; for "who’s coming to town", "any concerts", "a big show"):', ...big.map((o) => `- ${kind(o)}${day(o.when)} · ${at(o)}`)] : []),
   ].join('\n')
 }
 
