@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Car, Check, ChevronLeft, ChevronRight, Clock, Lock, MapPin, Plus } from 'lucide-react'
+import { CalendarDays, Car, Check, ChevronLeft, ChevronRight, Clock, Lock, MapPin, Navigation, Plus } from 'lucide-react'
 import type { Trip, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
@@ -171,6 +171,13 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const pill = 'h-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-phone-body font-semibold text-wall-ink'
   const dark = 'h-[44px] rounded-full border-0 bg-wall-ink px-[20px] text-phone-body font-bold text-wall-on-pigment'
   const label = 'text-phone-label font-bold tracking-[0.16em] text-wall-ink-2'
+  const brass = 'h-[44px] rounded-full border-0 bg-wall-brass px-[20px] text-phone-body font-bold text-wall-on-pigment'
+  // The place's address without its name said again ("Lake Lytal, 3645 Gun Club Road…" → "3645 Gun Club Road…").
+  const named = view.place.address?.toLowerCase().startsWith(`${view.place.name.toLowerCase()}, `)
+  const viewAddress = view.place.address && view.place.address !== view.place.name
+    ? (named ? view.place.address.slice(view.place.name.length + 2) : view.place.address)
+    : null
+  const viewPlace = { name: view.place.name, detail: [viewAddress, view.place.driveMinutes != null ? `${view.place.driveMinutes} min from home` : null].filter(Boolean).join(' · ') }
   // Editing (canvas 82A): grouped cards of rows, as the phone's own settings are.
   const group = 'mb-[6px] mt-[22px] px-[14px] text-phone-label font-semibold tracking-[0.08em] text-wall-ink-2'
   const card = 'flex flex-col overflow-hidden rounded-[14px] bg-wall-on-pigment'
@@ -186,201 +193,232 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
         <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-0 border-b border-solid border-wall-stone bg-phone-ground px-[16px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
           <button type="button" onClick={() => (isNew ? onClose() : setMode('details'))} className="h-[44px] justify-self-start border-0 bg-transparent p-0 text-phone-body text-wall-ink">Cancel</button>
           <span className="text-phone-body font-bold">{isNew ? (kind === 'reminder' ? 'New reminder' : 'New event') : kind === 'reminder' ? 'Edit reminder' : 'Edit event'}</span>
-          <button type="button" disabled={busy || !draft.title.trim()} onClick={save} className="h-[44px] justify-self-end border-0 bg-transparent p-0 text-phone-body font-bold text-wall-brass-ink disabled:opacity-40">
+          <button type="button" disabled={busy || !draft.title.trim()} onClick={save} className={`${brass} justify-self-end px-[18px] disabled:opacity-40`}>
             {busy ? (isNew ? 'Adding…' : 'Saving…') : isNew ? 'Add it' : changes.length === 0 ? 'Done' : 'Save'}
           </button>
         </div>
       ) : (
       <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
-        <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
-        {mode === 'details' && !view.repeating && !projectStep && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
+        <button type="button" aria-label="Back" onClick={onClose} className="-ml-[8px] flex h-[44px] items-center gap-[2px] border-0 bg-transparent p-0 pr-[8px] text-phone-body text-wall-ink"><ChevronLeft size={24} aria-hidden="true" />Back</button>
+        {mode === 'details' && !view.repeating && !projectStep && saveEvent && <button type="button" className={brass} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
       </div>
       )}
       <div className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+16px))]">
 
       {mode !== 'edit' ? (
-        <div className="mt-[14px] flex flex-col gap-[16px]">
-          <div>
-            <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">{view.when}</div>
-            <h2 className="m-0 mt-[6px] font-display text-phone-title font-bold text-wall-ink">{event.title}</h2>
-          </div>
+        // The event (canvas 83A; Jake, Oct 9: "This screen still looks ugly" → "the buttons. need some pop" → "83A … with
+        // the navigation button/where from 83b"): the when and title, then light cards on the ground, as its Edit is;
+        // the buttons filled; Keep from and Delete quiet rows in the last card.
+        <div className="flex flex-col pb-[10px]">
+          <div className="mt-[16px] text-phone-label font-bold tracking-[0.14em] text-wall-brass-ink">{view.when}</div>
+          <h2 className="m-0 mt-[6px] font-display text-phone-title font-bold leading-[1.08] text-wall-ink">{event.title}</h2>
           {projectStep && (
-            <section aria-label="Project step" className="flex flex-col gap-[10px] rounded-[16px] bg-phone-card p-[14px]">
-              <div className={label}>PROJECT STEP · {projectStep.number} OF {projectStep.total}</div>
-              <div className="text-phone-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
-              <div className="flex gap-[8px]">
-                {onStepDone && (projectStep.done
-                  ? <span className="flex h-[44px] items-center gap-[6px] text-phone-body font-semibold text-wall-ink-2"><Check size={18} aria-hidden="true" /> Done</span>
-                  : <button type="button" disabled={busy} className={`${dark} flex-1`} onClick={() => void run(onStepDone, 'That didn’t save. Try again.')}>Done</button>)}
-                {onOpenProject && <button type="button" className={`${pill} flex-1`} onClick={onOpenProject}>Open project</button>}
-              </div>
-              <div className="text-phone-detail text-wall-ink-2">Its dates and name come from the project: change them there.</div>
-            </section>
+            <>
+              <span className={group}>PROJECT STEP · {projectStep.number} OF {projectStep.total}</span>
+              <section aria-label="Project step" className={`${card} gap-[10px] p-[14px]`}>
+                <div className="text-phone-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
+                <div className="flex gap-[8px]">
+                  {onStepDone && (projectStep.done
+                    ? <span className="flex h-[44px] items-center gap-[6px] text-phone-body font-semibold text-wall-ink-2"><Check size={18} aria-hidden="true" /> Done</span>
+                    : <button type="button" disabled={busy} className={`${dark} flex-1`} onClick={() => void run(onStepDone, 'That didn’t save. Try again.')}>Done</button>)}
+                  {onOpenProject && <button type="button" className={`${brass} flex-1`} onClick={onOpenProject}>Open project</button>}
+                </div>
+                <div className="text-phone-detail text-wall-ink-2">Its dates and name come from the project: change them there.</div>
+              </section>
+            </>
           )}
           {view.place.name && (
-            <div className="flex items-start gap-[10px] text-phone-body">
-              <MapPin size={20} className="mt-[2px] shrink-0 text-wall-ink-2" aria-hidden="true" />
-              <div>
-                <div className="font-semibold">{view.place.name}</div>
-                <div className="text-phone-detail text-wall-ink-2">
-                  {[view.place.address && view.place.address !== view.place.name ? view.place.address : null, view.place.driveMinutes != null ? `${view.place.driveMinutes} min from home` : null].filter(Boolean).join(' · ')}
+            <>
+              <span className={group}>WHERE</span>
+              <div className={card}>
+                <div className={`${row} py-[12px]`}>
+                  <MapPin size={20} className="shrink-0 text-wall-ink-2" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-phone-body font-semibold">{viewPlace.name}</div>
+                    {viewPlace.detail && <div className="text-phone-detail leading-snug text-wall-ink-2">{viewPlace.detail}</div>}
+                  </div>
+                  {view.place.address && (
+                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(view.place.address)}`} target="_blank" rel="noreferrer" aria-label="Directions"
+                      className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-wall-ink text-wall-on-pigment no-underline">
+                      <Navigation size={19} aria-hidden="true" />
+                    </a>
+                  )}
                 </div>
+                {/* Not sure of the place (Jake, Oct 2): the choices, one tap; or none at all: add the address. */}
+                {!view.place.address && choices.length > 0 && saveEvent && (
+                  <section aria-label="Which one?" className="flex flex-col gap-[8px] border-0 border-t border-solid border-wall-stone p-[12px]">
+                    <div className={label}>WHICH ONE?</div>
+                    {choices.map((c) => (
+                      <button key={`${c.name}|${c.address}`} type="button" onClick={() => void run(() => saveEvent(event, setPlace(draftFromEvent(event), { name: c.name, address: c.address, driveMinutes: null })), 'That didn’t save. Try again.')}
+                        className="flex min-h-[48px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-phone-ground px-[12px] py-[8px] text-left text-wall-ink">
+                        <span className="text-phone-body font-semibold">{c.name}</span>
+                        <span className="text-phone-detail text-wall-ink-2">{c.address}</span>
+                      </button>
+                    ))}
+                  </section>
+                )}
+                {!view.place.address && view.place.name && choices.length === 0 && saveEvent && !(event as { _placePending?: boolean })._placePending && (
+                  <div className="px-[14px] pb-[12px] pl-[46px]">
+                    <button type="button" onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }} className={brass}>Add the address</button>
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           )}
-          {view.place.address && (
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(view.place.address)}`} target="_blank" rel="noreferrer" className={`${pill} flex items-center justify-center no-underline`}>Directions</a>
-          )}
-          {/* Not sure of the place (Jake, Oct 2): the choices, one tap; or none at all: add the address. */}
-          {!view.place.address && choices.length > 0 && saveEvent && (
-            <section aria-label="Which one?" className="flex flex-col gap-[8px] rounded-[16px] bg-phone-card p-[12px]">
-              <div className={label}>WHICH ONE?</div>
-              {choices.map((c) => (
-                <button key={`${c.name}|${c.address}`} type="button" onClick={() => void run(() => saveEvent(event, setPlace(draftFromEvent(event), { name: c.name, address: c.address, driveMinutes: null })), 'That didn’t save. Try again.')}
-                  className="flex min-h-[48px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[8px] text-left text-wall-ink">
-                  <span className="text-phone-body font-semibold">{c.name}</span>
-                  <span className="text-phone-detail text-wall-ink-2">{c.address}</span>
-                </button>
-              ))}
-            </section>
-          )}
-          {!view.place.address && view.place.name && choices.length === 0 && saveEvent && !(event as { _placePending?: boolean })._placePending && (
-            <button type="button" onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }} className={`${pill} flex items-center justify-center`}>Add the address</button>
-          )}
-          <div>
-            <div className={label}>WHO'S GOING</div>
-            <div className="mt-[8px] flex flex-wrap gap-[8px]">
-              {view.going.length === 0 && <span className="text-phone-body italic text-wall-ink-2">Nobody yet</span>}
-              {view.going.map((id) => <span key={id} className="flex items-center gap-[6px] text-phone-body">{disc(id)}{nameOf(id)}</span>)}
-            </div>
+          <span className={group}>WHO'S GOING</span>
+          <div className={`${card} flex-row flex-wrap gap-x-[16px] gap-y-[8px] px-[14px] py-[12px]`}>
+            {view.going.length === 0 && <span className="text-phone-body italic text-wall-ink-2">Nobody yet</span>}
+            {view.going.map((id) => <span key={id} className="flex items-center gap-[10px] text-phone-body">{disc(id)}{nameOf(id)}</span>)}
           </div>
           {trip && (
-            <div className="flex flex-col gap-[8px] rounded-[16px] bg-phone-card p-[14px]">
-              <div className={label}>THE TRIP</div>
-              <div className="flex items-center gap-[10px] text-phone-body">
-                {trip.driverId ? disc(trip.driverId, 'h-[28px] w-[28px] text-phone-detail') : null}
-                <span>
-                  <b>{trip.driverId ? `${nameOf(trip.driverId)} drives` : 'Needs a driver'}</b>
-                  {trip.leaveAt ? ` · leave ${fmt(trip.leaveAt.getHours() * 60 + trip.leaveAt.getMinutes())}` : ''}
-                  {trip.homeAt ? ` · back ${fmt(trip.homeAt.getHours() * 60 + trip.homeAt.getMinutes())}` : ''}
-                </span>
-              </div>
-              <div className="flex gap-[8px]">
+            <>
+              <span className={group}>THE TRIP</span>
+              <div className={`${card} gap-[10px] px-[14px] py-[12px]`}>
+                <div className="flex items-center gap-[12px] text-phone-body">
+                  {trip.driverId ? disc(trip.driverId) : <Car size={20} className="shrink-0 text-wall-ink-2" aria-hidden="true" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold">{trip.driverId ? `${nameOf(trip.driverId)} drives` : 'Needs a driver'}</span>
+                    {(trip.leaveAt || trip.homeAt) && (
+                      <span className="block text-phone-detail text-wall-ink-2">
+                        {[trip.leaveAt ? `Leave ${fmt(trip.leaveAt.getHours() * 60 + trip.leaveAt.getMinutes())}` : null, trip.homeAt ? `back ${fmt(trip.homeAt.getHours() * 60 + trip.homeAt.getMinutes())}` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  {onHandOff && <button type="button" className={`${brass} shrink-0`} onClick={() => onHandOff(trip)}>{trip.driverId ? 'Hand off' : 'Choose a driver'}</button>}
+                </div>
                 {onLeaving && trip.driverId === viewerId && trip.leaveAt && trip.leaveAt.toDateString() === now.toDateString() && !trip.departedAt && (
-                  <button type="button" className={`${dark} flex-1`} onClick={() => onLeaving(trip)}>Leaving now</button>
+                  <button type="button" className={dark} onClick={() => onLeaving(trip)}>Leaving now</button>
                 )}
-                {onHandOff && <button type="button" className={`${pill} flex-1`} onClick={() => onHandOff(trip)}>{trip.driverId ? 'Hand off' : 'Choose a driver'}</button>}
               </div>
-            </div>
+            </>
           )}
           {(prep.length > 0 || (onAddItem && !isNew)) && (
-            <div>
-              <div className={label}>{prep.length ? `GET & PACK · ${prep.filter((i) => i.checked).length} OF ${prep.length}` : 'GET & PACK'}</div>
-              {prep.map((item) => (
-                <button key={item.id} type="button" aria-pressed={item.checked} disabled={!onToggleItem} onClick={() => onToggleItem?.(item)} className="flex min-h-[44px] w-full items-center gap-[12px] border-0 border-t border-solid border-wall-stone bg-transparent p-0 text-left text-phone-body text-wall-ink">
-                  <span aria-hidden="true" className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[4px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-wall-paper'}`}>{item.checked && <Check size={14} strokeWidth={3} />}</span>
-                  <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
-                </button>
-              ))}
-              {onAddItem && !isNew && (
-                <form className="flex items-center gap-[8px] border-0 border-t border-solid border-wall-stone pt-[8px]" onSubmit={(e) => { e.preventDefault(); void addItem() }}>
-                  <input aria-label="Add to get & pack" value={itemText} onChange={(e) => setItemText(e.target.value)} placeholder="Add something to get or pack"
-                    className="h-[44px] min-w-0 flex-1 rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-phone-body text-wall-ink" />
-                  <button type="submit" disabled={!itemText.trim()} className={`${pill} disabled:opacity-40`}>Add</button>
-                </form>
-              )}
-              {itemError && <div className="text-phone-detail font-semibold text-wall-rust">{itemError}</div>}
-            </div>
+            <>
+              <span className={group}>{prep.length ? `GET & PACK · ${prep.filter((i) => i.checked).length} OF ${prep.length}` : 'GET & PACK'}</span>
+              <div className={card}>
+                {prep.map((item) => (
+                  <button key={item.id} type="button" aria-pressed={item.checked} disabled={!onToggleItem} onClick={() => onToggleItem?.(item)} className={`${row} w-full border-0 border-b text-left text-phone-body`}>
+                    <span aria-hidden="true" className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 border-solid ${item.checked ? 'border-wall-ink bg-wall-ink text-wall-on-pigment' : 'border-wall-ink-2 bg-transparent'}`}>{item.checked && <Check size={14} strokeWidth={3} />}</span>
+                    <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
+                  </button>
+                ))}
+                {onAddItem && !isNew && (
+                  <form className={`${row} py-[4px]`} onSubmit={(e) => { e.preventDefault(); void addItem() }}>
+                    <Plus size={20} className="shrink-0 text-wall-ink-2" aria-hidden="true" />
+                    <input aria-label="Add to get & pack" value={itemText} onChange={(e) => setItemText(e.target.value)} placeholder="Add something to get or pack"
+                      className="h-[44px] min-w-0 flex-1 border-0 bg-transparent p-0 text-phone-body text-wall-ink placeholder:text-wall-ink-2 focus:outline-none" />
+                    {itemText.trim() && <button type="submit" className={`${brass} h-[36px] shrink-0 px-[14px]`}>Add</button>}
+                  </form>
+                )}
+              </div>
+              {itemError && <div className="mt-[6px] px-[14px] text-phone-detail font-semibold text-wall-rust">{itemError}</div>}
+            </>
           )}
 
           {/* Notes (canvas 65d): what people wrote, or an email's specifics with where they came from; a tap edits. */}
           {!isNew && (notes || onSaveNotes) && (
-            <div>
-              <div className={label}>NOTES</div>
+            <>
+              <span className={group}>NOTES</span>
               {notesText != null ? (
-                <form className="flex flex-col gap-[8px] border-0 border-t border-solid border-wall-stone pt-[8px]" onSubmit={(e) => { e.preventDefault(); void saveNotes() }}>
+                <form className={`${card} gap-[10px] p-[12px]`} onSubmit={(e) => { e.preventDefault(); void saveNotes() }}>
                   <textarea aria-label="Notes" autoFocus rows={6} value={notesText} onChange={(e) => setNotesText(e.target.value)}
-                    className="min-h-[132px] w-full resize-y rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment p-[12px] text-phone-body leading-snug text-wall-ink" />
+                    className="min-h-[132px] w-full resize-y rounded-[10px] border border-solid border-wall-stone bg-phone-ground p-[12px] text-phone-body leading-snug text-wall-ink" />
                   <div className="flex gap-[8px]">
                     <button type="submit" className={dark}>Save</button>
                     <button type="button" className={pill} onClick={() => setNotesText(null)}>Cancel</button>
                   </div>
                 </form>
               ) : (
-                <button type="button" aria-label={notes ? `Notes: ${notes}` : 'Add a note'} disabled={!onSaveNotes} onClick={() => setNotesText(notes)}
-                  className="min-h-[44px] w-full border-0 border-t border-solid border-wall-stone bg-transparent p-0 pt-[8px] text-left">
-                  {notes
-                    ? <span className="block whitespace-pre-wrap break-words text-phone-body leading-snug text-wall-ink">{notes}</span>
-                    : <span className="flex items-center gap-[8px] text-phone-body font-semibold text-wall-ink-2"><Plus size={18} aria-hidden="true" /> Add a note</span>}
-                </button>
-              )}
-              {source && notesText == null && (
-                <div className="mt-[8px] flex flex-wrap items-baseline gap-x-[12px] text-phone-detail text-wall-ink-2">
-                  <span>{source.text}</span>
-                  {source.url && <a href={source.url} target="_blank" rel="noreferrer" className="flex min-h-[44px] items-center font-semibold text-wall-ink">Open email ›</a>}
-                </div>
-              )}
-              {notesError && <div className="text-phone-detail font-semibold text-wall-rust">{notesError}</div>}
-            </div>
-          )}
-
-          {onKeepFrom && !isNew && (
-            <div className="flex flex-col gap-[8px]">
-              {(keepOpen || keptFrom.length > 0 || suggestKeepFrom.length > 0) && <div className={label}>KEEP FROM</div>}
-              {keptFrom.length === 0 && suggestKeepFrom.length > 0 && (
-                <div className="flex flex-col gap-[10px] rounded-[16px] bg-phone-card p-[14px]">
-                  <div className="text-phone-body">A surprise for {names(suggestKeepFrom)}? Keep it off the wall and off {names(suggestKeepFrom)}’s phone.</div>
-                  <button type="button" disabled={busy} className={dark} onClick={() => void run(() => onKeepFrom(suggestKeepFrom), 'That didn’t save. Nothing changed.', true)}>
-                    Keep it from {names(suggestKeepFrom)}
+                <div className={card}>
+                  <button type="button" aria-label={notes ? `Notes: ${notes}` : 'Add a note'} disabled={!onSaveNotes} onClick={() => setNotesText(notes)}
+                    className="min-h-[52px] w-full border-0 bg-transparent px-[14px] py-[12px] text-left">
+                    {notes
+                      ? <span className="block whitespace-pre-wrap break-words text-phone-body leading-snug text-wall-ink">{notes}</span>
+                      : <span className="flex items-center gap-[12px] text-phone-body text-wall-ink-2"><Plus size={20} aria-hidden="true" /> Add a note</span>}
                   </button>
+                  {source && (
+                    <div className="flex flex-wrap items-baseline gap-x-[12px] border-0 border-t border-solid border-wall-stone px-[14px] text-phone-detail text-wall-ink-2">
+                      <span className="py-[10px]">{source.text}</span>
+                      {source.url && <a href={source.url} target="_blank" rel="noreferrer" className="flex min-h-[44px] items-center font-semibold text-wall-brass-ink">Open email ›</a>}
+                    </div>
+                  )}
                 </div>
               )}
-              {!keepOpen && keptFrom.length === 0 ? (
-                <button type="button" onClick={() => setKeepOpen(true)} className={`${pill} flex items-center gap-[6px] self-start`}>
-                  <Lock size={16} aria-hidden="true" /> Keep from…
-                </button>
-              ) : (
-              <div className="flex flex-wrap gap-[8px]">
-                {members.filter((m) => m.show_on_home_sidebar !== false && m.id !== viewerId).map((m) => {
-                  const on = keptFrom.includes(m.id)
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      aria-pressed={on}
-                      aria-label={`Keep from ${m.name}`}
-                      disabled={busy}
-                      onClick={() => void run(() => onKeepFrom(on ? keptFrom.filter((id) => id !== m.id) : [...keptFrom, m.id]), 'That didn’t save. Nothing changed.', true)}
-                      className={`flex h-[44px] items-center gap-[6px] rounded-full px-[12px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}
-                    >
-                      {on && <Lock size={14} aria-hidden="true" />}{m.name}
-                    </button>
-                  )
-                })}
-              </div>
-              )}
-              <div className="text-phone-detail text-wall-ink-2">
-                {keptFrom.length > 0 ? `Not on the wall, and never on ${names(keptFrom)}’s phone.` : 'Everyone can see it, and it’s on the wall.'}
-              </div>
-              {error && mode === 'details' && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
-            </div>
+              {notesError && <div className="mt-[6px] px-[14px] text-phone-detail font-semibold text-wall-rust">{notesError}</div>}
+            </>
           )}
 
-          {view.repeating ? (
-            <div className="text-phone-detail text-wall-ink-2">This repeats. <Link to={`/calendar?event=${event.id}`} className="text-wall-ink">Change or delete it in Calendar</Link>.</div>
-          ) : mode === 'delete' ? (
-            <div className="flex flex-col gap-[10px] rounded-[16px] border-2 border-solid border-wall-rust p-[14px]">
-              <div className="font-display text-phone-heading font-bold">Delete “{event.title}”?</div>
-              <div className="text-phone-detail text-wall-ink-2">{(event.event_type ?? '') === 'reminder' ? 'It comes off the wall, the phones and your Reminders.' : 'It comes off the wall, the phones and Google Calendar, for everyone.'}</div>
-              {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
-              <div className="flex gap-[8px]">
-                <button type="button" disabled={busy} className="h-[44px] flex-1 rounded-full border-0 bg-wall-rust text-phone-body font-bold text-wall-on-pigment" onClick={() => deleteEvent && void run(() => deleteEvent(event), 'Deleting didn’t work. Nothing was removed.')}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
-                <button type="button" disabled={busy} className={pill} onClick={() => { setMode('details'); setError(null) }}>Keep it</button>
-              </div>
+          {/* A surprise (05g): the suggestion stands out above the quiet rows. */}
+          {onKeepFrom && !isNew && keptFrom.length === 0 && suggestKeepFrom.length > 0 && (
+            <div className={`${card} mt-[22px] gap-[10px] p-[14px]`}>
+              <div className="text-phone-body">A surprise for {names(suggestKeepFrom)}? Keep it off the wall and off {names(suggestKeepFrom)}’s phone.</div>
+              <button type="button" disabled={busy} className={dark} onClick={() => void run(() => onKeepFrom(suggestKeepFrom), 'That didn’t save. Nothing changed.', true)}>
+                Keep it from {names(suggestKeepFrom)}
+              </button>
             </div>
-          ) : (
-            deleteEvent && <button type="button" className={`${pill} self-start text-wall-rust`} onClick={() => setMode('delete')}>Delete</button>
           )}
+          {view.repeating ? (
+            <div className="mt-[22px] px-[14px] text-phone-detail text-wall-ink-2">This repeats. <Link to={`/calendar?event=${event.id}`} className="text-wall-ink">Change or delete it in Calendar</Link>.</div>
+          ) : null}
+          {((onKeepFrom && !isNew) || (deleteEvent && !view.repeating)) && (
+            <div className={`${card} mt-[22px]`}>
+              {onKeepFrom && !isNew && (
+                <div className={`${row} flex-wrap ${deleteEvent && !view.repeating ? 'border-0 border-b' : ''}`}>
+                  {!keepOpen && keptFrom.length === 0 ? (
+                    <button type="button" onClick={() => setKeepOpen(true)} className="flex min-h-[44px] w-full items-center gap-[12px] border-0 bg-transparent p-0 text-left text-wall-ink">
+                      <Lock size={20} className="shrink-0 text-wall-ink-2" aria-hidden="true" />
+                      <span className="flex-1">
+                        <span className="block text-phone-body">Keep from…</span>
+                        <span className="block text-phone-detail text-wall-ink-2">Everyone can see it, and it’s on the wall.</span>
+                      </span>
+                      <ChevronRight size={18} className="text-wall-ink-2" aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <div className="flex w-full flex-col gap-[8px] py-[4px]">
+                      <div className="flex items-center gap-[12px] text-phone-body"><Lock size={20} className="shrink-0 text-wall-ink-2" aria-hidden="true" /> Keep from</div>
+                      <div className="flex flex-wrap gap-[8px]">
+                        {members.filter((m) => m.show_on_home_sidebar !== false && m.id !== viewerId).map((m) => {
+                          const on = keptFrom.includes(m.id)
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              aria-pressed={on}
+                              aria-label={`Keep from ${m.name}`}
+                              disabled={busy}
+                              onClick={() => void run(() => onKeepFrom(on ? keptFrom.filter((id) => id !== m.id) : [...keptFrom, m.id]), 'That didn’t save. Nothing changed.', true)}
+                              className={`flex h-[40px] items-center gap-[6px] rounded-full px-[12px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-phone-ground text-wall-ink'}`}
+                            >
+                              {on && <Lock size={14} aria-hidden="true" />}{m.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="text-phone-detail text-wall-ink-2">
+                        {keptFrom.length > 0 ? `Not on the wall, and never on ${names(keptFrom)}’s phone.` : 'Everyone can see it, and it’s on the wall.'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {deleteEvent && !view.repeating && (mode === 'delete' ? (
+                <div className="flex flex-col gap-[10px] p-[14px]">
+                  <div className="font-display text-phone-heading font-bold">Delete “{event.title}”?</div>
+                  <div className="text-phone-detail text-wall-ink-2">{(event.event_type ?? '') === 'reminder' ? 'It comes off the wall, the phones and your Reminders.' : 'It comes off the wall, the phones and Google Calendar, for everyone.'}</div>
+                  {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
+                  <div className="flex gap-[8px]">
+                    <button type="button" disabled={busy} className="h-[44px] flex-1 rounded-full border-0 bg-wall-rust text-phone-body font-bold text-wall-on-pigment" onClick={() => void run(() => deleteEvent(event), 'Deleting didn’t work. Nothing was removed.')}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
+                    <button type="button" disabled={busy} className={pill} onClick={() => { setMode('details'); setError(null) }}>Keep it</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className={`${row} w-full border-0 text-left text-phone-body text-wall-rust`} onClick={() => setMode('delete')}>
+                  {(event.event_type ?? '') === 'reminder' ? 'Delete reminder' : 'Delete event'}
+                </button>
+              ))}
+            </div>
+          )}
+          {error && mode === 'details' && <div className="mt-[8px] px-[14px] text-phone-detail font-semibold text-wall-rust">{error}</div>}
         </div>
       ) : (
         <div className="flex flex-col pb-[20px]">
