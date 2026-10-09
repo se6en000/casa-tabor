@@ -97,3 +97,81 @@ test('guide: Your taste — Jake\'s Oct 9 answers to start; a saved one cleaned,
   assert.equal(t.reachMin, 45)
   assert.deepEqual(t.tryFirst, ['Escape rooms'])
 })
+
+test('guide buzz: the shelves follow Your taste — a love of their own is searched as written; taking one off drops it', async () => {
+  const { guideShelves, DEFAULT_TASTE } = await import('../supabase/functions/_shared/guide.mjs')
+  const ids = guideShelves(DEFAULT_TASTE).map((s) => s.id)
+  assert.deepEqual(ids, ['oysters', 'bars', 'gameday', 'trivia', 'hotel', 'vintage', 'spooky', 'escape'])
+  const mine = guideShelves({ ...DEFAULT_TASTE, loves: ['Oysters', 'Jazz'], tryFirst: [] })
+  assert.deepEqual(mine.map((s) => s.id), ['oysters', 'own:jazz'])
+  assert.deepEqual(mine[1].queries, ['Jazz'])
+})
+
+test('guide buzz: a place is checked — open, liked, not a chain, within reach (a little past it allowed, marked)', async () => {
+  const { placeVerdict } = await import('../supabase/functions/_shared/guide.mjs')
+  const home = { lat: 26.69, lng: -80.06 }
+  const p = (name, lat, lng, extra = {}) => ({ displayName: { text: name }, businessStatus: 'OPERATIONAL', rating: 4.6, userRatingCount: 300, location: { latitude: lat, longitude: lng }, ...extra })
+  assert.deepEqual(placeVerdict(p('Blind Monk', 26.71, -80.05), home), { ok: true, minutes: 10, beyond: false })
+  assert.equal(placeVerdict(p('Some Bar FTL', 26.1224, -80.1373), home).beyond, true)
+  assert.equal(placeVerdict(p('Far Away', 25.77, -80.19), home).ok, false)
+  assert.equal(placeVerdict(p('Hooters', 26.71, -80.05), home).note, 'a chain')
+  assert.equal(placeVerdict(p('Closed Bar', 26.71, -80.05, { businessStatus: 'CLOSED_PERMANENTLY' }), home).note, 'not open')
+  assert.equal(placeVerdict(p('Meh Bar', 26.71, -80.05, { rating: 3.9 }), home).ok, false)
+  assert.equal(placeVerdict(p('Tiny', 26.71, -80.05, { userRatingCount: 8 }), home).ok, false)
+})
+
+test('guide buzz: what locals say is parsed as said, once a place; names match loosely', async () => {
+  const { parseBuzz, sameName, buzzPrompt, GUIDE_SHELVES } = await import('../supabase/functions/_shared/guide.mjs')
+  assert.match(buzzPrompt(GUIDE_SHELVES[0], 'Friday, October 9, 2026'), /oysters & raw bars places in Palm Beach County/)
+  const got = parseBuzz('```json\n[{"name":"The Blind Monk","town":"West Palm Beach","said":"Locals\' wine bar, great by-the-glass list","kind":"reddit","new":false},{"name":"Blind Monk","kind":"press"},{"name":"Grato","said":"","kind":"blog","new":true},{"town":"x"}]\n```')
+  assert.deepEqual(got, [
+    { name: 'The Blind Monk', town: 'West Palm Beach', said: 'Locals\' wine bar, great by-the-glass list', kind: 'reddit', new: false },
+    { name: 'Grato', town: null, said: null, kind: 'press', new: true },
+  ])
+  assert.ok(sameName('The Blind Monk', 'Blind Monk WPB'))
+  assert.ok(sameName('Mr B’s', "Mr B's Bar"))
+  assert.ok(!sameName('Monk', 'Blind Monk'))
+})
+
+test('guide buzz: labels only on evidence; what was heard, in one line; the order', async () => {
+  const { guideLabels, heardLine, reviewTrend, guideScore } = await import('../supabase/functions/_shared/guide.mjs')
+  const now = new Date('2026-10-30T12:00:00Z')
+  const trend = reviewTrend([{ seen_on: '2026-10-02', rating_count: 100 }, { seen_on: '2026-10-09', rating_count: 112 }, { seen_on: '2026-10-30', rating_count: 130 }], now)
+  assert.deepEqual(trend, { added: 30, growth: 0.3, days: 28 })
+  assert.equal(reviewTrend([{ seen_on: '2026-10-30', rating_count: 100 }], now), null)
+  const reddit = [{ kind: 'reddit', said: 'Best happy-hour oysters in town', new: false }]
+  assert.deepEqual(guideLabels({ rating: 4.5, rating_count: 900 }, { buzz: reddit }), ['local'])
+  assert.deepEqual(guideLabels({ rating: 4.5, rating_count: 900, touristy: true }, { buzz: reddit }), [])
+  assert.deepEqual(guideLabels({ rating: 4.4, rating_count: 100 }, { trend }), ['hot'])
+  assert.deepEqual(guideLabels({ rating: 4.4, rating_count: 100 }, { buzz: [{ kind: 'press', new: true }] }), ['hot'])
+  // Sweetwater, Oct 9: "new" in a write-up, 1,069 reviews on Google — not new.
+  assert.deepEqual(guideLabels({ rating: 4.6, rating_count: 1069 }, { buzz: [{ kind: 'press', new: true }] }), [])
+  assert.equal(heardLine({ rating: 4.5, rating_count: 460 }, { buzz: [{ kind: 'reddit' }, { kind: 'press' }] }), 'Talked up on Reddit and in the local press · 4.5 from 460 Google reviews.')
+  assert.deepEqual(guideLabels({ rating: 4.8, rating_count: 140 }), ['gem'])
+  assert.deepEqual(guideLabels({ rating: 4.8, rating_count: 1400 }), [])
+  assert.deepEqual(guideLabels({ rating: 4.4, rating_count: 140 }), [])
+  assert.equal(heardLine({ rating: 4.6, rating_count: 210 }, { buzz: reddit, trend }), 'Talked up on Reddit · 30 new Google reviews in 28 days · 4.6 from 210 Google reviews. Best happy-hour oysters in town.')
+  assert.equal(heardLine({ rating: 4.8, rating_count: 140 }), '4.8 from 140 Google reviews.')
+  assert.ok(guideScore({ labels: ['local'], rating: 4.5, mentions: 2 }) > guideScore({ labels: [], rating: 4.9 }))
+  assert.ok(guideScore({ labels: ['gem'], rating: 4.8 }) > guideScore({ labels: ['gem'], rating: 4.8, beyond: true }))
+})
+
+test('guide buzz: the AI\'s look — keep, touristy, why — by number; unanswered stays as it was', async () => {
+  const { curatePrompt, parseCurate } = await import('../supabase/functions/_shared/guide.mjs')
+  const prompt = curatePrompt([{ name: 'Grato', shelf_label: 'Neighborhood bars', address: '1901 S Dixie', types: 'bar', rating: 4.6, rating_count: 2000 }], { loves: ['Oysters'], places: [{ name: 'Blue Door' }] })
+  assert.match(prompt, /They love: Oysters, Blue Door/)
+  assert.match(prompt, /0\. Grato — Neighborhood bars/)
+  const got = parseCurate('[{"i":0,"keep":false,"touristy":false,"why":"x"},{"i":1,"touristy":true,"why":"  Oysters on the water, made for a slow evening  "},{"i":9,"keep":true}]', 3)
+  assert.deepEqual([...got.entries()], [[0, { keep: false, touristy: false, why: 'x' }], [1, { keep: true, touristy: true, why: 'Oysters on the water, made for a slow evening' }]])
+})
+
+test('guide page: places by shelf, the best few of each in the guide\'s order; Not for us stays out; the town', async () => {
+  const { placesByShelf, townOf } = await import('../supabase/functions/_shared/guide.mjs')
+  const p = (id, shelf, status = 'live') => ({ id, shelf, shelf_label: shelf, status })
+  const got = placesByShelf([p('a', 'vintage'), p('b', 'oysters'), p('c', 'oysters'), p('d', 'oysters'), p('e', 'oysters'), p('f', 'own:jazz'), p('g', 'oysters', 'not_for_us')], 3)
+  assert.deepEqual(got.shown.map((s) => [s.shelf, s.places.map((x) => x.id)]), [['oysters', ['b', 'c', 'd']], ['vintage', ['a']], ['own:jazz', ['f']]])
+  assert.equal(got.more, 1)
+  assert.equal(got.total, 6)
+  assert.equal(townOf('2141 S Federal Hwy, Delray Beach, FL 33483, USA'), 'Delray Beach')
+  assert.equal(townOf(null), null)
+})

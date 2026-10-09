@@ -5,7 +5,8 @@
 // | { action: 'news', force?, dry_run? } (the paper's Around town, each morning)
 // | { action: 'calendars', dry_run? } (live music, comedy and trivia from local calendars, each morning)
 // | { action: 'details', id } (what an outing's own page says, for its card — read once, kept a week)
-// | { action: 'rate_ask', dry_run? } (the local guide: yesterday's outings, asked about in Something for you, each morning).
+// | { action: 'rate_ask', dry_run? } (the local guide: yesterday's outings, asked about in Something for you, each morning)
+// | { action: 'guide', dry_run? } (the local guide's week of research: places worth trying) | { action: 'guide_feedback', id, status }.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
@@ -15,7 +16,10 @@ import {
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   MAJOR_AHEAD_DAYS, collapseRuns, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
-import { parseRateAsk, rateAskPrompt, rateCandidates, rateRows } from '../_shared/guide.mjs'
+import {
+  GUIDE_AREAS, TASTE_KEY, buzzPrompt, curatePrompt, guideLabels, guideScore, guideShelves, heardLine, parseBuzz, parseCurate, parseRateAsk, placeVerdict,
+  rateAskPrompt, rateCandidates, rateRows, reviewTrend, sameName, tasteOf,
+} from '../_shared/guide.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -77,7 +81,10 @@ Deno.serve(async (req) => {
     const { data: news } = await sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date, on_date')
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
     const latest = news?.[0]?.news_date
-    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), today })
+    // The local guide's places worth trying (canvas 85B), best first; Not for us stays out.
+    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status')
+      .in('status', ['live', 'saved']).order('score', { ascending: false }).limit(250)
+    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], today })
   }
 
   if (body.action === 'feedback') {
@@ -131,6 +138,144 @@ Deno.serve(async (req) => {
     // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
     EdgeRuntime.waitUntil(find().then((r) => console.log('[scout rate_ask]', JSON.stringify(r))).catch((e) => console.error('[scout rate_ask]', e)))
     return json({ ok: true, started: true }, 202)
+  }
+
+  if (body.action === 'guide') {
+    // The local guide's week of research (canvas 85B; guide.mjs): places worth trying, by what they love.
+    const research = async () => {
+      const [{ data: homeRow }, { data: llmRow }, { data: tasteRow }, { data: known }, { data: snaps }] = await Promise.all([
+        sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+        sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+        sb.from('settings').select('value').eq('key', TASTE_KEY).maybeSingle(),
+        sb.from('guide_places').select('google_place_id, status, created_at').limit(3000),
+        sb.from('guide_place_counts').select('google_place_id, seen_on, rating, rating_count').gte('seen_on', addDays(today, -31)).limit(20000),
+      ])
+      const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
+      if (!llm?.api_key) throw new Error('AI not configured')
+      const mapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
+      const geo = homeRow?.value?.geocode_cache
+      const home = typeof geo?.lat === 'number' ? { lat: geo.lat as number, lng: geo.lng as number } : null
+      if (!mapsKey || !home) throw new Error('No Maps key or home')
+      const taste = tasteOf(tasteRow?.value)
+      const shelves = guideShelves(taste)
+      const gemini = (payload: unknown) => providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+      }, { callPurpose: 'guide-research' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+      const textOf = (res: any) => ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
+      const FIELDS = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.location,places.primaryTypeDisplayName,places.types,places.websiteUri,places.googleMapsUri'
+      const search = async (textQuery: string, center: { lat: number; lng: number }, max = 20) => {
+        const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'X-Goog-Api-Key': mapsKey, 'X-Goog-FieldMask': FIELDS },
+          body: JSON.stringify({ textQuery, maxResultCount: max, locationBias: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius: 12000 } } }),
+        }, { callPurpose: 'guide-places' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+        return (res?.places ?? []) as Array<Record<string, any>>
+      }
+      type Found = { p: Record<string, any>; shelf: { id: string; label: string }; minutes: number; beyond: boolean }
+      const found = new Map<string, Found>()
+      const notes: Record<string, number> = {}
+      const take = (p: Record<string, any>, shelf: { id: string; label: string }) => {
+        if (!p?.id || found.has(p.id)) return
+        const v = placeVerdict(p, home, taste.reachMin)
+        if (!v.ok) { notes[v.note.replace(/\d+(\.\d+)?/g, 'N')] = (notes[v.note.replace(/\d+(\.\d+)?/g, 'N')] ?? 0) + 1; return }
+        found.set(p.id, { p, shelf, minutes: v.minutes, beyond: v.beyond })
+      }
+      // 1. Google, shelf by shelf, area by area.
+      const areas = GUIDE_AREAS.map((a) => (a.id === 'home' ? { ...a, lat: home.lat, lng: home.lng } : a)) as Array<{ lat: number; lng: number }>
+      const jobs = shelves.flatMap((shelf) => shelf.queries.flatMap((q) => areas.map((area) => ({ shelf, q, area }))))
+      await inBatches(jobs, 6, async ({ shelf, q, area }) => { for (const p of await search(q, area)) take(p, shelf) })
+      // 2. What locals and the local press say, shelf by shelf (one grounded search each).
+      const buzzBy = new Map<string, Array<{ kind: string; said: string | null; new: boolean; url: string | null }>>()
+      const lookups: Array<{ b: ReturnType<typeof parseBuzz>[number]; shelf: { id: string; label: string }; url: string | null }> = []
+      await Promise.all(shelves.map(async (shelf) => {
+        const res = await gemini({
+          contents: [{ parts: [{ text: buzzPrompt(shelf, longDay(today)) }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 2500, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+        })
+        const urls = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []) as Array<{ web?: { uri?: string; title?: string } }>).map((c) => c.web?.uri).filter(Boolean) as string[]
+        for (const b of parseBuzz(textOf(res))) {
+          const hit = [...found.values()].find((f) => sameName(f.p.displayName?.text, b.name))
+          const entry = { kind: b.kind, said: b.said, new: b.new, url: urls[0] ?? null }
+          if (hit) buzzBy.set(hit.p.id, [...(buzzBy.get(hit.p.id) ?? []), entry])
+          else lookups.push({ b, shelf, url: urls[0] ?? null })
+        }
+      }))
+      // Talked about but not found by the shelves' searches: looked up by name (a few).
+      await inBatches(lookups.slice(0, 25), 5, async ({ b, shelf, url }) => {
+        const [p] = await search(`${b.name} ${b.town ?? ''} FL`, home, 1)
+        if (!p || !sameName(p.displayName?.text, b.name)) return
+        take(p, shelf)
+        if (found.has(p.id)) buzzBy.set(p.id, [...(buzzBy.get(p.id) ?? []), { kind: b.kind, said: b.said, new: b.new, url }])
+      })
+      // 3. This week's review counts (a month of them kept), and each place's trend.
+      const counts = [...found.values()].map((f) => ({ google_place_id: f.p.id, seen_on: today, rating: f.p.rating ?? null, rating_count: f.p.userRatingCount ?? null }))
+      const history = new Map<string, Array<{ seen_on: string; rating_count: number }>>()
+      for (const s of [...(snaps ?? []), ...counts] as Array<{ google_place_id: string; seen_on: string; rating_count: number }>) history.set(s.google_place_id, [...(history.get(s.google_place_id) ?? []).filter((x) => x.seen_on !== s.seen_on), s])
+      // 4. The AI's look: still the kind of place, touristy or not, and why these two.
+      const list = [...found.values()].map((f) => ({
+        id: f.p.id, name: String(f.p.displayName?.text ?? ''), shelf_label: f.shelf.label, address: f.p.formattedAddress ?? null,
+        types: f.p.primaryTypeDisplayName?.text ?? (f.p.types ?? []).slice(0, 3).join(', '), rating: f.p.rating, rating_count: f.p.userRatingCount,
+        said: (buzzBy.get(f.p.id) ?? []).find((b) => b.said)?.said ?? null,
+      }))
+      const looks = new Map<string, { keep: boolean; touristy: boolean; why: string | null }>()
+      const batches = Array.from({ length: Math.ceil(list.length / 50) }, (_, i) => list.slice(i * 50, i * 50 + 50))
+      await inBatches(batches, 4, async (batch) => {
+        const res = await gemini({
+          contents: [{ parts: [{ text: curatePrompt(batch, taste) }] }],
+          generationConfig: { maxOutputTokens: 6000, temperature: 0.3, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        })
+        for (const [i, look] of parseCurate(textOf(res), batch.length)) looks.set(batch[i].id, look)
+      })
+      // 5. Labels on evidence; past the usual drive only with one.
+      const status = new Map(((known ?? []) as Array<{ google_place_id: string; status: string }>).map((k) => [k.google_place_id, k.status]))
+      const rows = []
+      for (const f of found.values()) {
+        const look = looks.get(f.p.id) ?? { keep: true, touristy: false, why: null }
+        if (!look.keep) continue
+        const buzz = buzzBy.get(f.p.id) ?? []
+        const trend = reviewTrend(history.get(f.p.id) ?? [], new Date())
+        const base = { rating: f.p.rating, rating_count: f.p.userRatingCount, touristy: look.touristy }
+        const labels = guideLabels(base, { buzz, trend })
+        if (f.beyond && !labels.length) continue
+        const row = {
+          google_place_id: f.p.id, name: String(f.p.displayName?.text ?? ''), address: f.p.formattedAddress ?? null, shelf: f.shelf.id, shelf_label: f.shelf.label,
+          types: f.p.primaryTypeDisplayName?.text ?? null, lat: f.p.location?.latitude ?? null, lng: f.p.location?.longitude ?? null, drive_min: f.minutes, beyond: f.beyond,
+          rating: f.p.rating ?? null, rating_count: f.p.userRatingCount ?? null, maps_url: f.p.googleMapsUri ?? null, website: f.p.websiteUri ?? null,
+          buzz, mentions: buzz.length, labels, heard: heardLine(base, { buzz, trend }), why: look.why, touristy: look.touristy,
+          status: status.get(f.p.id) ?? 'live', seen_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }
+        rows.push({ ...row, score: Math.round(guideScore(row) * 100) / 100 })
+      }
+      rows.sort((a, b) => b.score - a.score)
+      const summary = {
+        shelves: shelves.map((s) => s.id), searches: jobs.length, lookups: Math.min(25, lookups.length), found: found.size, kept: rows.length,
+        labeled: { local: rows.filter((r) => r.labels.includes('local')).length, hot: rows.filter((r) => r.labels.includes('hot')).length, gem: rows.filter((r) => r.labels.includes('gem')).length },
+        touristy: rows.filter((r) => r.touristy).length, dropped: notes,
+      }
+      if (body.dry_run) return { ...summary, top: rows.slice(0, 30).map((r) => `${r.name} (${r.shelf}, ${r.drive_min} min) ${r.labels.join('+') || '-'} · ${r.heard} · ${r.why ?? ''}`) }
+      if (counts.length) await sb.from('guide_place_counts').upsert(counts, { onConflict: 'google_place_id,seen_on' })
+      await sb.from('guide_place_counts').delete().lt('seen_on', addDays(today, -31))
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await sb.from('guide_places').upsert(rows.slice(i, i + 200), { onConflict: 'google_place_id' })
+        if (error) throw new Error(error.message)
+      }
+      // Google's terms: what it said about a place is kept a month at most.
+      await sb.from('guide_places').delete().lt('seen_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+      return summary
+    }
+    if (body.dry_run) {
+      try { return json(await research()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
+    }
+    // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+    EdgeRuntime.waitUntil(research().then((r) => console.log('[scout guide]', JSON.stringify(r))).catch((e) => console.error('[scout guide]', e)))
+    return json({ ok: true, started: true }, 202)
+  }
+
+  if (body.action === 'guide_feedback') {
+    if (!body.id || !['saved', 'not_for_us', 'been', 'live'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
+    const { error } = await sb.from('guide_places').update({ status: body.status, updated_at: new Date().toISOString() }).eq('id', body.id)
+    return error ? json({ error: error.message }, 500) : json({ ok: true })
   }
 
   if (body.action === 'news') {

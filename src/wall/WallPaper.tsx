@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, QrCode } from 'lucide-react'
+import { ChevronDown, Flame, Gem, House, QrCode, Ticket } from 'lucide-react'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
@@ -11,6 +11,7 @@ import type { WallEvent, WallMember } from './engine/types'
 import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
+import { placesByShelf, townOf, type GuideLabel, type GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
 import { OUT_WHAT, OUT_WHO, outAndAboutPlan, outCounts, outFiltered, outWhenChoices, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 
 export interface WallPaperProps {
@@ -136,14 +137,48 @@ const KIND_WORD: Record<string, string> = { couple: 'For two', family: 'Family',
 const dayShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 const timeOf = (when: string | null) => (when && when.length > 10 ? outingWhen({ when, recurring: null })?.split(' · ')[1] ?? null : null)
 
+// The labels the guide's picks earn (canvas 85B; guide.mjs): each its icon and word — color is never the only signal.
+const TAGS: Record<GuideLabel, { word: string; Icon: typeof Flame }> = {
+  local: { word: 'Locals’ favorite', Icon: House },
+  hot: { word: 'Hot right now', Icon: Flame },
+  gem: { word: 'Hidden gem', Icon: Gem },
+  big: { word: 'Big night', Icon: Ticket },
+}
+function Tag({ label, large = false }: { label: GuideLabel; large?: boolean }) {
+  const { word, Icon } = TAGS[label]
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-[7px] whitespace-nowrap rounded-full font-body font-bold text-wall-on-pigment ${label === 'hot' ? 'bg-wall-rust' : 'bg-wall-ink'} ${large ? 'h-[36px] px-[16px] text-wall-detail' : 'h-[30px] px-[12px] text-wall-label'}`}>
+      <Icon aria-hidden="true" className={`${large ? 'h-[18px] w-[18px]' : 'h-[15px] w-[15px]'} text-wall-night-brass`} strokeWidth={2.2} />{word}
+    </span>
+  )
+}
+/** A show from Ticketmaster is a big room's night (canvas 85B): the one label an event earns today. */
+const eventTag = (o: Outing): GuideLabel | null => ((o as Outing & { source_ref?: string | null }).source_ref === 'ticketmaster' ? 'big' : null)
+
 /** One outing on Out & about: what kind and when in small capitals, its name, where and why; a tap opens its card. */
 function Entry({ o, chip, onOpen }: { o: Outing; chip: string; onOpen: (o: Outing) => void }) {
   const where = o.kind === 'restaurant' ? outingMeta(o) : [o.place && o.place !== o.title ? o.place : null, o.free ? 'free' : null].filter(Boolean).join(' · ')
+  const tag = eventTag(o)
   return (
     <button type="button" aria-label={o.title} onClick={() => onOpen(o)} className="flex min-w-0 flex-col gap-[2px] border-0 border-t border-solid border-wall-rule bg-transparent px-0 pb-[10px] pt-[10px] text-left font-body text-wall-ink">
+      {tag && <span className="mb-[6px]"><Tag label={tag} /></span>}
       <span className="truncate text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{chip.toUpperCase()}{o.status === 'saved' ? ' · SAVED' : ''}</span>
       <span className="line-clamp-2 font-display text-wall-heading font-semibold">{o.title}</span>
       {where && <span className="truncate text-wall-detail text-wall-ink-2">{where}</span>}
+    </button>
+  )
+}
+
+/** A place worth trying (canvas 85B): its labels, its shelf, its name, the town and the drive, and why the two of them. */
+function PlaceEntry({ p, onOpen }: { p: GuidePlace; onOpen: (p: GuidePlace) => void }) {
+  const where = [townOf(p.address), p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(' · ')
+  return (
+    <button type="button" aria-label={p.name} onClick={() => onOpen(p)} className="flex min-w-0 flex-col gap-[2px] border-0 border-t border-solid border-wall-rule bg-transparent px-0 pb-[12px] pt-[10px] text-left font-body text-wall-ink">
+      {p.labels.length > 0 && <span className="mb-[6px] flex flex-wrap gap-[6px]">{p.labels.map((l) => <Tag key={l} label={l} />)}</span>}
+      <span className="truncate text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{p.shelf_label.toUpperCase()}{p.status === 'saved' ? ' · SAVED' : ''}</span>
+      <span className="line-clamp-2 font-display text-wall-heading font-semibold">{p.name}</span>
+      {where && <span className="truncate text-wall-detail text-wall-ink-2">{where}</span>}
+      {p.why && <span className="mt-[2px] line-clamp-2 font-display text-wall-detail italic text-wall-ink">{p.why}</span>}
     </button>
   )
 }
@@ -186,7 +221,7 @@ function PickPill({ label, open, on, choices, counts, chosen, onOpen, onPick }: 
 }
 
 /** The pickers on Out & about: what, who, when — a tap outside closes an open one. */
-function OutPickers({ rows, today, pick, setPick }: { rows: Outing[]; today: string; pick: OutPick; setPick: (p: OutPick) => void }) {
+function OutPickers({ rows, places, today, pick, setPick }: { rows: Outing[]; places: number; today: string; pick: OutPick; setPick: (p: OutPick) => void }) {
   const [open, setOpen] = useState<Picker | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -196,13 +231,14 @@ function OutPickers({ rows, today, pick, setPick }: { rows: Outing[]; today: str
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
   const whenChoices = outWhenChoices(today)
-  const lists: Record<Picker, string[][]> = { what: OUT_WHAT, who: OUT_WHO, when: whenChoices }
+  // Places worth trying (canvas 85B) are a kind of their own: Everything ▾ › Places shows them all.
+  const lists: Record<Picker, string[][]> = { what: places ? [...OUT_WHAT, ['places', 'Places']] : OUT_WHAT, who: OUT_WHO, when: whenChoices }
   const nameOf = (which: Picker) => lists[which].find(([id]) => id === pick[which])?.[1] ?? ''
   return (
     <div ref={ref} data-no-swipe className="flex items-center gap-[10px]">
       {(['what', 'who', 'when'] as const).map((which) => (
         <PickPill key={which} label={nameOf(which)} open={open === which} on={pick[which] !== lists[which][0][0]} choices={lists[which]}
-          counts={open === which ? outCounts(rows, { ...pick, today }, which) : {}} chosen={pick[which]}
+          counts={open === which ? { ...outCounts(rows, { ...pick, today }, which), ...(which === 'what' ? { places } : {}) } : {}} chosen={pick[which]}
           onOpen={() => setOpen(open === which ? null : which)} onPick={(id) => { setPick({ ...pick, [which]: id }); setOpen(null) }} />
       ))}
     </div>
@@ -223,14 +259,19 @@ function MorePicked({ n, onPick }: { n: number; onPick: () => void }) {
  * out are good to know too for planning"): by when — tonight and the weekend day by day, next week, further out, every
  * week, and places — everything the Scout and the calendars have, the page scrolling when it's a lot.
  */
-function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void }) {
+function OutPage({ scout, active, now, onOpen, onOpenPlace }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void; onOpenPlace: (p: GuidePlace) => void }) {
   const plan = outAndAboutPlan(scout.outings, { today: scout.today, nowTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
   const grid = 'mt-[6px] grid grid-cols-4 gap-x-[32px]'
   // The pickers (canvas 84B; Jake, Oct 9: "84b"): anything picked shows just that, in time order.
   const [pick, setPick] = useState<OutPick>(NO_PICK)
   const picked = pick.what !== 'all' || pick.who !== 'any' || pick.when !== 'all'
-  const shown = picked ? outFiltered(scout.outings, { ...pick, today: scout.today }) : []
-  const pickLabel = [
+  const placesPicked = pick.what === 'places'
+  const shown = picked && !placesPicked ? outFiltered(scout.outings, { ...pick, today: scout.today }) : []
+  // The local guide's places worth trying (canvas 85B; Jake, Oct 9: "i need more than 4 suggestions"): the best few of
+  // each shelf here, every one under Everything ▾ › Places.
+  const guide = placesByShelf(scout.guide ?? [], 3)
+  const allPlaces = placesPicked ? placesByShelf(scout.guide ?? [], 999).shown.flatMap((sh) => sh.places) : []
+  const pickLabel = placesPicked ? 'Places worth trying' : [
     outWhenChoices(scout.today).find(([id]) => id === pick.when)?.[1],
     pick.who !== 'any' ? OUT_WHO.find(([id]) => id === pick.who)?.[1] : null,
     pick.what !== 'all' ? OUT_WHAT.find(([id]) => id === pick.what)?.[1] : null,
@@ -238,17 +279,18 @@ function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: bo
   return (
     <ScrollPage active={active}>
       {/* On the kicker's line, clear of the title (it keeps its one line). */}
-      <div className="relative z-20 h-0"><div className="absolute -top-[12px] right-0"><OutPickers rows={scout.outings} today={scout.today} pick={pick} setPick={setPick} /></div></div>
+      <div className="relative z-20 h-0"><div className="absolute -top-[12px] right-0"><OutPickers rows={scout.outings} places={guide.total} today={scout.today} pick={placesPicked ? { ...NO_PICK, what: 'places' } : pick} setPick={setPick} /></div></div>
       <PageHead kicker="Out & about · the next six weeks"
         title={plan.count >= 12 ? 'Plenty worth getting out for.' : plan.count ? 'A few worth getting out for.' : 'Nothing checked out this week.'}
-        deck="Checked: real, on, and within half an hour of home — an hour for a show worth the drive." />
+        deck={guide.total ? 'Checked: real, on, and near home — labeled when locals are talking.' : 'Checked: real, on, and within half an hour of home — an hour for a show worth the drive.'} />
       {picked ? (
         <section aria-label="Picked" className="mt-[34px] flex flex-col">
           <span className="flex items-baseline gap-[18px]">
-            <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{`${pickLabel} · ${shown.length}`.toUpperCase()}</span>
+            <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{`${pickLabel} · ${placesPicked ? allPlaces.length : shown.length}`.toUpperCase()}</span>
             <button type="button" onClick={() => setPick(NO_PICK)} className="h-[44px] border-0 bg-transparent p-0 font-body text-wall-detail font-semibold text-wall-ink-2">Clear</button>
           </span>
-          {shown.length === 0 && <span className="mt-[10px] border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing like that yet.</span>}
+          {(placesPicked ? allPlaces.length : shown.length) === 0 && <span className="mt-[10px] border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing like that yet.</span>}
+          {placesPicked && <div className={grid}>{allPlaces.map((p) => <PlaceEntry key={p.id} p={p} onOpen={onOpenPlace} />)}</div>}
           <div className={grid}>{shown.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : o.recurring, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
         </section>
       ) : (<>
@@ -264,6 +306,12 @@ function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: bo
           ))}
         </div>
       </Section>
+      {guide.total > 0 && (
+        <Section label="Places worth trying" count={guide.total}>
+          <div className={grid}>{guide.shown.flatMap((sh) => sh.places).map((p) => <PlaceEntry key={p.id} p={p} onOpen={onOpenPlace} />)}</div>
+          <MorePicked n={guide.more} onPick={() => setPick({ ...NO_PICK, what: 'places' })} />
+        </Section>
+      )}
       {plan.nextWeek.length > 0 && (
         <Section label="Next week" count={plan.nextWeek.length}>
           <div className={grid}>{plan.nextWeek.slice(0, CALM_ROOM).map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : null, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
@@ -368,6 +416,58 @@ const readDay = (iso: string | null | undefined, today: string) => {
  * doesn't say said so — and the QR for its tickets or page. Add to calendar (who's going, when, leave by, that evening, a
  * reminder to get tickets), Send to our phones, Save, Ask Alexa, Not for us.
  */
+/**
+ * The guide's note (canvas 85B; Jake, Oct 9 — approved): what it's hearing, only what the evidence says, and why the two
+ * of them; Plan a night (Alexa), Save it, To our phones, Not for us — it learns from each. The QR opens it on Maps.
+ */
+function GuideNote({ p, scout, onAsk, onClose }: { p: GuidePlace; scout: ScoutPaper; onAsk?: (say: string) => void; onClose: () => void }) {
+  const [said, setSaid] = useState<string | null>(null)
+  const saved = p.status === 'saved'
+  const where = [townOf(p.address), p.drive_min ? `${p.drive_min} min` : null, p.beyond ? 'worth the drive' : null, 'a place to try, not an event'].filter(Boolean).join(' · ')
+  const heard = (p.heard ?? '').split(/(?<=\.)\s+/)
+  const sources = [...new Set(p.buzz.map((b) => (b.kind === 'reddit' ? 'Reddit' : 'the local press')))]
+  const link = p.maps_url ?? p.website
+  const pill = 'h-[56px] rounded-full px-[24px] text-wall-body font-semibold'
+  const send = async () => {
+    try { await scout.sendPlace?.(p); setSaid('Sent to the phones') } catch { setSaid('The phones didn’t take it. Try again.') }
+  }
+  return (
+    <div className="absolute inset-0 z-20 bg-wall-ink/20" onClick={onClose}>
+      <div role="dialog" aria-label={`The guide on ${p.name}`} onClick={(e) => e.stopPropagation()}
+        className="absolute right-[72px] top-[150px] flex w-[620px] flex-col gap-[14px] rounded-[26px] bg-wall-band px-[36px] py-[32px] font-body text-wall-on-pigment shadow-[0_22px_50px_rgba(38,34,29,0.35)]">
+        <div className="flex items-center gap-[10px]">
+          {p.labels.map((l) => <Tag key={l} label={l} large />)}
+          <span className="flex-1" />
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[48px] w-[48px] items-center justify-center border-0 bg-transparent p-0 text-wall-date text-wall-night-ink-2">×</button>
+        </div>
+        <span className="font-display text-wall-quote font-semibold leading-[1.05]">{p.name}</span>
+        <span className="-mt-[6px] text-wall-detail text-wall-night-ink-2">{where}</span>
+        <span className="mt-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHAT I’M HEARING</span>
+        <div className="-mt-[4px] flex flex-col gap-[6px] text-wall-body">
+          <span>{heard[0]}</span>
+          {heard.length > 1 && <span className="text-wall-night-ink-2">“{heard.slice(1).join(' ').replace(/\.$/, '')}”{sources.length ? ` — from ${sources.join(' and ')}` : ''}</span>}
+        </div>
+        {p.why && (
+          <>
+            <span className="mt-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHY YOU TWO</span>
+            <span className="-mt-[4px] font-display text-wall-answer italic">{p.why}</span>
+          </>
+        )}
+        <div className="mt-[10px] flex items-end gap-[20px]">
+          <div className="flex flex-1 flex-wrap gap-[10px]">
+            {onAsk && <button type="button" onClick={() => { onClose(); onAsk(`Help us plan a date night at ${p.name}${townOf(p.address) ? ` in ${townOf(p.address)}` : ''}`) }} className={`${pill} border-0 bg-wall-night-brass text-wall-ink`}>Plan a night</button>}
+            {scout.answerPlace && <button type="button" aria-pressed={saved} onClick={() => { scout.answerPlace!(p.id, saved ? 'live' : 'saved'); onClose() }} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-on-pigment`}>{saved ? 'Saved ✓' : 'Save it'}</button>}
+            {scout.sendPlace && <button type="button" onClick={() => void send()} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-on-pigment`}>To our phones</button>}
+            {scout.answerPlace && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_for_us'); onClose() }} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-night-ink-2`}>Not for us</button>}
+            {said && <span role="status" className="self-center text-wall-detail font-semibold text-wall-night-brass">{said}</span>}
+          </div>
+          {link && <div className="shrink-0"><Qr text={link} label={`QR code: ${p.name} on Google Maps`} small /></div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OutingCard({ o, scout, members, events, computer, onAdd, onAsk, onClose }: {
   o: Outing; scout: ScoutPaper; members: WallMember[]; events: WallEvent[]; computer: boolean
   onAdd?: (args: Record<string, unknown>) => Promise<void>; onAsk?: (say: string) => void; onClose: () => void
@@ -523,6 +623,7 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
   const pageNow = useRef(0)
   useEffect(() => { pageNow.current = page }, [page])
   const [phone, setPhone] = useState<Outing | null>(null)
+  const [place, setPlace] = useState<GuidePlace | null>(null)
   const computer = useMemo(() => deviceKeyboardHere(), [])
   const turn = (step: 1 | -1) => setPage((p) => Math.min(pages - 1, Math.max(0, p + step)))
   // The front page's scroll (canvas 73A): how far it goes, and whether the cards are slim.
@@ -648,7 +749,7 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
           {scout && (
             <>
               <section aria-label="Out & about" aria-hidden={page !== 1} className="relative h-full w-1/3">
-                <OutPage scout={scout} active={page === 1} now={now} onOpen={setPhone} />
+                <OutPage scout={scout} active={page === 1} now={now} onOpen={setPhone} onOpenPlace={setPlace} />
               </section>
               <section aria-label="Around town" aria-hidden={page !== 2} className="relative h-full w-1/3">
                 <TownPage news={scout.news} today={scout.today} active={page === 2} />
@@ -686,6 +787,7 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
         </footer>
       </div>
       {phone && scout && <OutingCard o={phone} scout={scout} members={members} events={events} computer={computer} onAdd={onAdd} onAsk={onAsk} onClose={() => setPhone(null)} />}
+      {place && scout && <GuideNote p={place} scout={scout} onAsk={onAsk} onClose={() => setPlace(null)} />}
     </article>
   )
 }

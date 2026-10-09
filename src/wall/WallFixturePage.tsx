@@ -41,6 +41,7 @@ import type { TypedImage } from './typeLine'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 import { useFixtureHowWasIt } from './howWasItFixture'
+import { GUIDE_PLACES } from './guideFixture'
 
 // School, and the parents' work hours (canvas 16a).
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
@@ -304,6 +305,9 @@ export default function WallFixturePage() {
       : id === 'o3'
         ? { facts: [{ label: 'Tickets', text: '$15 a car, kids under 12 free' }, { label: 'What’s in it', text: 'Pumpkin patch, hayrides, live music and trick-or-treating' }, { label: 'For kids', text: 'All ages; costumes welcome' }], not_said: ['Parking'], ticket_url: 'https://example.org/pumpkin-tickets', ends: '15:00', read_at: new Date(day).toISOString() }
         : null),
+    guide: new URLSearchParams(window.location.search).get('guide') === '1' ? GUIDE_PLACES : [],
+    answerPlace: (id, status) => { ((window as unknown as { __placed?: string[] }).__placed ??= []).push(`${id}:${status}`) },
+    sendPlace: async (p) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(p.name) },
     send: async (o) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(o.title) },
   } : null
   const howWasIt = useFixtureHowWasIt(now)

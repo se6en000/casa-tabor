@@ -3033,3 +3033,46 @@ test('wall: How was it? — the morning after Mr B’s, in Something for you; st
   expect(await page.evaluate(() => window.__rated)).toEqual(['jake-id:5:soon:vibe+drinks', 'kelly:later'])
   await expect(wall.getByRole('button', { name: 'I have something for you' })).toHaveCount(0)
 })
+
+// The local guide on Out & about (canvas 85B; Jake, Oct 9 — "85B", "i need more than 4 suggestions"): places worth trying
+// by shelf, each with its labels and why the two of them; a tap opens the guide's note (what it's hearing, why you two,
+// Plan a night / Save it / To our phones / Not for us); Everything ▾ › Places shows them all.
+test('wall: the local guide — places worth trying with their labels; the guide’s note; Everything › Places', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1&guide=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  await page.keyboard.press('ArrowRight')
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  const places = paper.getByRole('region', { name: 'Places worth trying' })
+  await expect(places).toContainText('PLACES WORTH TRYING · 14')
+  const sports = places.getByRole('button', { name: 'Sports & Rec' })
+  await expect(sports).toContainText('Locals’ favorite')
+  await expect(sports).toContainText('Hot right now')
+  await expect(sports).toContainText('A game-day bar for a stylish and fun outing.')
+  // Down the page to the places (the page scrolls; the paper's pages don't move).
+  await places.evaluate((el) => {
+    let box = el.parentElement
+    while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement
+    if (box) box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - 20
+  })
+  await page.waitForTimeout(400)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('guide-places.png')
+  await sports.click()
+  const note = page.getByRole('dialog', { name: 'The guide on Sports & Rec' })
+  await expect(note).toContainText('WHAT I’M HEARING')
+  await expect(note).toContainText('Talked up in the local press · 4.5 from 322 Google reviews.')
+  await expect(note).toContainText('WHY YOU TWO')
+  await expect(note.getByRole('img', { name: /QR code: Sports & Rec/ })).toHaveCount(0)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('guide-note.png')
+  await note.getByRole('button', { name: 'Save it' }).click()
+  await expect(note).toHaveCount(0)
+  // Everything ▾ › Places: all of them.
+  await paper.getByRole('button', { name: 'Everything' }).click()
+  await paper.getByRole('listbox', { name: 'Everything' }).getByRole('option', { name: /^Places \d+$/ }).click()
+  const picked = paper.getByRole('region', { name: 'Picked' })
+  await expect(picked).toContainText('PLACES WORTH TRYING · 14')
+  await picked.getByRole('button', { name: 'Kelsey Vintage Goods' }).click()
+  await page.getByRole('dialog', { name: 'The guide on Kelsey Vintage Goods' }).getByRole('button', { name: 'Not for us' }).click()
+  expect(await page.evaluate(() => window.__placed)).toEqual(['g1:saved', 'g9:not_for_us'])
+})

@@ -21,11 +21,11 @@ export function telOf(phone: string | null): string | null {
   return `tel:${digits}`
 }
 
-export function Qr({ text, label }: { text: string; label: string }) {
+export function Qr({ text, label, small = false }: { text: string; label: string; small?: boolean }) {
   const modules = useMemo(() => qrModules(text), [text])
   const n = modules.length
   return (
-    <svg role="img" aria-label={label} viewBox={`-2 -2 ${n + 4} ${n + 4}`} className="h-[232px] w-[232px] shrink-0 rounded-[12px] bg-wall-on-pigment text-wall-ink" shapeRendering="crispEdges">
+    <svg role="img" aria-label={label} viewBox={`-2 -2 ${n + 4} ${n + 4}`} className={`${small ? 'h-[120px] w-[120px]' : 'h-[232px] w-[232px]'} shrink-0 rounded-[12px] bg-wall-on-pigment text-wall-ink`} shapeRendering="crispEdges">
       <path d={qrPath(modules)} fill="currentColor" />
     </svg>
   )
