@@ -1,4 +1,4 @@
-import { Flame, Mic, Plus } from 'lucide-react'
+import { Cloud, Flame, Mic, Moon, Newspaper, Plus, Sun, Sunset, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
 
@@ -91,12 +91,17 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
   )
 }
 
-const PREVIEWS: Array<{ face: Posture | 'paper' | 'night'; label: string }> = [
-  { face: 'launch', label: 'Full day' },
-  { face: 'calm', label: 'Calm' },
-  { face: 'paper', label: 'Morning paper' },
-  { face: 'evening', label: 'Evening' },
-  { face: 'night', label: 'Night calm' },
+/** A face to preview from the menu: the postures, the paper, night calm and the fireplace. */
+export type MenuFace = Posture | 'paper' | 'night' | 'fire'
+
+// The day's arc (canvas 81B; Jake, Oct 8: "81B is awesome"): morning to night, then the fire.
+const PREVIEWS: Array<{ face: MenuFace; label: string; Icon: LucideIcon }> = [
+  { face: 'paper', label: 'Paper', Icon: Newspaper },
+  { face: 'launch', label: 'Full day', Icon: Sun },
+  { face: 'calm', label: 'Calm', Icon: Cloud },
+  { face: 'evening', label: 'Evening', Icon: Sunset },
+  { face: 'night', label: 'Night', Icon: Moon },
+  { face: 'fire', label: 'Fireplace', Icon: Flame },
 ]
 
 /**
@@ -104,7 +109,7 @@ const PREVIEWS: Array<{ face: Posture | 'paper' | 'night'; label: string }> = [
  * opens under the mark that opened it — top right on the day faces, top left on the launch face (Jake, Oct 6: "can
  * settings menu show up near the MT button?").
  */
-export default function WallMenu({ onClose, onBack, onPreview, onFireplace, side = 'right' }: { onClose: () => void; /** Back to the Wall: the face that fits the time, any preview ended. */ onBack?: () => void; onPreview?: (face: Posture | 'paper' | 'night') => void; onFireplace?: () => void; side?: 'left' | 'right' }) {
+export default function WallMenu({ onClose, onBack, onPreview, onShow = null, side = 'right' }: { onClose: () => void; /** Back to the Wall: the face that fits the time, any preview ended. */ onBack?: () => void; onPreview?: (face: MenuFace) => void; /** The face on show, filled in on the arc. */ onShow?: MenuFace | null; side?: 'left' | 'right' }) {
   return (
     <div
       role="dialog"
@@ -130,31 +135,34 @@ export default function WallMenu({ onClose, onBack, onPreview, onFireplace, side
           </Link>
         ))}
         {onPreview && (
-          <div className="mt-[14px] flex flex-col gap-[10px] border-t border-wall-rule pt-[14px]">
-            <div className="text-wall-label font-semibold tracking-[0.2em] text-wall-ink-2">PREVIEW A FACE</div>
-            <div className="grid grid-cols-2 gap-[10px]">
-              {PREVIEWS.map((p) => (
-                <button
-                  key={p.face}
-                  type="button"
-                  onClick={() => onPreview(p.face)}
-                  className="h-[52px] rounded-full border border-wall-rule bg-wall-paper text-wall-detail font-semibold text-wall-ink"
-                >
-                  {p.label}
-                </button>
-              ))}
+          <section aria-label="Preview a face" className="mt-[14px] flex flex-col border-t border-wall-rule pt-[14px]">
+            <div className="flex items-baseline justify-between">
+              <span className="text-wall-label font-semibold tracking-[0.2em] text-wall-ink-2">PREVIEW A FACE</span>
+              <span className="text-wall-label text-wall-ink-2">morning → night</span>
             </div>
-          </div>
-        )}
-        {onFireplace && (
-          <button
-            type="button"
-            onClick={onFireplace}
-            className="flex h-[64px] items-center gap-[14px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left font-display text-wall-date font-semibold text-wall-ink"
-          >
-            <Flame aria-hidden="true" size={26} strokeWidth={1.8} className="shrink-0 text-wall-rust" />
-            Fireplace
-          </button>
+            <div className="relative mt-[14px] flex justify-between">
+              {/* The line through the day: dawn's brass to night, then the fire. */}
+              <span aria-hidden="true" className="absolute left-[26px] right-[26px] top-[25px] h-[2px] bg-gradient-to-r from-wall-brass via-wall-night-ground to-wall-rust" />
+              {PREVIEWS.map(({ face, label, Icon }) => {
+                const on = face === onShow
+                const tone = on ? 'bg-wall-ink text-wall-on-pigment ring-[3px] ring-wall-brass' : face === 'night' ? 'bg-wall-night-ground text-wall-on-pigment ring-1 ring-wall-rule' : face === 'fire' ? 'bg-wall-rust text-wall-on-pigment ring-1 ring-wall-rule' : 'bg-wall-paper text-wall-ink ring-1 ring-wall-rule'
+                return (
+                  <button
+                    key={face}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => onPreview(face)}
+                    className="relative flex w-[66px] flex-col items-center gap-[6px] border-0 bg-transparent p-0 text-wall-ink"
+                  >
+                    <span className={`flex h-[52px] w-[52px] items-center justify-center rounded-full ${tone}`}>
+                      <Icon aria-hidden="true" size={22} strokeWidth={1.8} />
+                    </span>
+                    <span className="whitespace-nowrap text-wall-label font-semibold">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
         )}
         <button
           type="button"

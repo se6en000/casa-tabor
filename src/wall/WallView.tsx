@@ -986,8 +986,9 @@ export default function WallView(props: WallViewProps) {
           side={railFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
           onBack={() => { endPreviews(); setDayPreview(null); setMenuOpen(false) }}
-          onFireplace={() => { setMenuOpen(false); setFireplace(true) }}
+          onShow={fireplace ? 'fire' : nightPreview || nightSettled ? 'night' : paperOnShow ? 'paper' : nightFace ? 'evening' : shown.posture}
           onPreview={(face) => {
+            if (face === 'fire') { setMenuOpen(false); setFireplace(true); return }
             setDayPreview(null)
             setComingUpUntil(0)
             setTodoUntil(0)

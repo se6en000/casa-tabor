@@ -54,7 +54,7 @@ test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as 
   await page.goto('/__wall-fixture?at=2026-09-25T14:00:00')
   const wall = page.getByTestId('wall-fixture')
   await wall.getByRole('button', { name: 'Open menu' }).click()
-  await wall.getByRole('button', { name: 'Night calm' }).click()
+  await wall.getByRole('button', { name: 'Night', exact: true }).click()
   await expect(wall.getByText(/Previewing Night calm/)).toBeVisible()
   const night = wall.getByLabel('Night')
   await expect(night).toBeVisible()
