@@ -1436,3 +1436,21 @@ test('phone: Settings › Your taste — what you love, try one first, places, g
   expect(saved.places.map((p) => p.name)).toEqual(['Mr B’s', 'Blind Monk', 'French Grill', 'Blue Door', 'Grato'])
   expect(saved.reachMin).toBe(90)
 })
+
+// Settings › Send to Tabor House (Jake, Oct 9: "how do I setup the shareing shortcut?"): make the key, copy it, and
+// the Shortcut's steps; Back Tap for the screen.
+test('phone: Settings › Send to Tabor House — make my key, then the Shortcut and Back Tap', async ({ page }) => {
+  await page.goto('/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id')
+  const phone = page.getByTestId('phone-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: 'You, people and settings' }).click()
+  await phone.getByRole('button', { name: /Send to Tabor House Share from any app/ }).click()
+  const setup = phone.getByRole('region', { name: 'Send to Tabor House' })
+  await expect(setup.getByText('It tells the house the shares are yours.')).toBeVisible()
+  await setup.getByRole('button', { name: 'Make my key' }).click()
+  await expect(setup.getByLabel('Your key', { exact: true })).toHaveText('tabor_share_fixture0000000000000000000000000000')
+  await expect(setup.getByRole('button', { name: 'Copy your key' })).toBeVisible()
+  await expect(setup.getByText('Get Contents of URL', { exact: true })).toBeVisible()
+  await expect(setup.getByText(/Back Tap › Double Tap › Send to Tabor House/)).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-share-setup.png')
+})

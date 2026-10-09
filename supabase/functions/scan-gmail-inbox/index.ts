@@ -1366,6 +1366,28 @@ async function handleGmailScan(req: Request): Promise<Response> {
           body: details.body,
         })
 
+        // A note to themselves (Jake, Oct 9: he forwarded "Loco West Palm Beach - Oysters and Tequilla two of our favorite
+        // things" to his own Gmail and it was skipped): from one of the family's own mailboxes, it's a share — read like
+        // the iPhone's Send to Tabor House (a place saved, a recipe saved, dates waiting for a yes).
+        const fromAddr = (details.from.match(/<([^>]+)>/)?.[1] ?? details.from).trim().toLowerCase()
+        const sharer = (tokens ?? []).find((t) => !isSharedFamilyInbox(t.google_email) && String(t.google_email ?? '').toLowerCase() === fromAddr)
+        if (sharer && !backfillFamilyEvidenceOnly) {
+          const text = `${details.subject}\n${details.body}`.slice(0, 8000)
+          const { data: reply } = await sb.functions.invoke('share-in', { body: { member_id: sharer.family_member_id, text } }).catch(() => ({ data: null }))
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject, email_subject: details.subject,
+            from_email: details.from,
+            received_at: details.date ? new Date(details.date).toISOString() : null,
+            intent: 'skip', skipped_reason: `sent to Tabor House: ${typeof reply === 'string' ? reply.slice(0, 200) : 'not read'}`,
+            email_body: details.body.slice(0, 8000),
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          skipped++
+          continue
+        }
+
         // Labeled emails bypass negative skip filters completely
         if (!isUserLabeled && !isTravel && !isCalendar && !isActionCandidate && !familyEvidenceCandidate.eligible) {
           await sb.from('gmail_processed_messages').upsert({

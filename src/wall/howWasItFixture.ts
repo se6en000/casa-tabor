@@ -28,3 +28,9 @@ export function useFixtureTaste(): GuideTasteProps {
   const [taste, setTaste] = useState<GuideTaste>(DEFAULT_TASTE)
   return { taste, save: async (next) => { setTaste(next); (window as unknown as { __taste?: GuideTaste }).__taste = next } }
 }
+
+/** Settings › Send to Tabor House on the phone fixture: no key yet; Make my key gives a made-up one. */
+export function useFixtureShareKey() {
+  const [status, setStatus] = useState<{ created_at: string; last_used_at: string | null } | null>(null)
+  return { status, make: async () => { setStatus({ created_at: new Date().toISOString(), last_used_at: null }); return 'tabor_share_fixture0000000000000000000000000000' } }
+}

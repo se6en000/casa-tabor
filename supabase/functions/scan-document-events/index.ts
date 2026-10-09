@@ -210,7 +210,10 @@ Deno.serve(async (req) => {
       current_date_iso: currentDateIsoRaw,
       timezone: timezoneRaw,
       family_members: familyMembersRaw,
+      text: textRaw,
     } = body
+    // Words to read as the document (Send to Tabor House: plans in a text, a post's caption, a page) — with or without photos.
+    const sharedText = typeof textRaw === 'string' ? textRaw.trim().slice(0, 8000) : ''
 
     const nowIso = String(currentDateIsoRaw || new Date().toISOString())
     const anchorDate = new Date(nowIso)
@@ -236,7 +239,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (normalizedFiles.length === 0) {
+    if (normalizedFiles.length === 0 && !sharedText) {
       throw new Error('At least one photo or document file is required')
     }
 
@@ -316,6 +319,7 @@ RETURN STRICT JSON matching this exact schema:
 `.trim()
 
     const parts: Array<Record<string, unknown>> = [{ text: promptText }]
+    if (sharedText) parts.push({ text: `THE DOCUMENT${normalizedFiles.length ? ' ALSO SAYS (words shared with the picture)' : ' (words, not a picture: read them the same way)'}:\n"""\n${sharedText}\n"""` })
     for (const file of normalizedFiles) {
       parts.push({
         inline_data: {

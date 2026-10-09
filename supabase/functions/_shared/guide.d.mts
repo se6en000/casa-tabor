@@ -62,7 +62,7 @@ export interface GuidePlace {
   rating_count: number | null
   maps_url: string | null
   website: string | null
-  buzz: Array<{ kind: 'reddit' | 'press'; said: string | null; new: boolean; url: string | null }>
+  buzz: Array<{ kind: 'reddit' | 'press' | 'shared'; said: string | null; new: boolean; url: string | null }>
   labels: GuideLabel[]
   heard: string | null
   why: string | null

@@ -608,6 +608,10 @@
       {
         "path": "src/phone/PhoneTaste.tsx",
         "reason": "The phone lens: Settings › Your taste (canvas 85D, approved 2026-10-09) — chips with take-off and Add, places, How far radios, Back — part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
+      },
+      {
+        "path": "src/phone/PhoneShareSetup.tsx",
+        "reason": "The phone lens: Settings › Send to Tabor House (Jake, 2026-10-09: \"how do I setup the shareing shortcut?\") — Make my key, Copy, Back — the same push page as Your taste, part of the Wall's own component set (CLAUDE.md Wall exception); wall-*/phone-* tokens, 44px targets."
       }
     ]
   }

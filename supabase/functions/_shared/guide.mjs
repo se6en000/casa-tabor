@@ -319,7 +319,8 @@ export function parseCurate(text, count) {
 
 /** Places worth trying for the page (85B): by shelf in the guide's order, the best few of each, then "+N more". */
 export function placesByShelf(places, each = 3) {
-  const order = GUIDE_SHELVES.map((s) => s.id)
+  // What they shared themselves first (Send to Tabor House), then the guide's shelves in order.
+  const order = ['shared', ...GUIDE_SHELVES.map((s) => s.id)]
   const shelves = new Map()
   for (const p of places ?? []) {
     if (p.status === 'not_for_us') continue

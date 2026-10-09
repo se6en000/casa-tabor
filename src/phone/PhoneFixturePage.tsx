@@ -30,7 +30,7 @@ import { tripEvents } from '../../tests/fixtures/wall-trip-2026-10-07.mjs'
 import { buildTrips } from '../wall/engine/travel'
 import { decisionsFor } from '../wall/decisions'
 import { casaTopic, type CasaTalkState } from '../wall/casaTalk'
-import { useFixtureHowWasIt, useFixtureTaste } from '../wall/howWasItFixture'
+import { useFixtureHowWasIt, useFixtureShareKey, useFixtureTaste } from '../wall/howWasItFixture'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -199,6 +199,7 @@ function PhoneFixturePageInner() {
               }}
               useEmailSettingsHook={fixtureEmailSettings}
               useTasteHook={useFixtureTaste}
+              useShareKeyHook={useFixtureShareKey}
               now={now}
               viewerId={viewerId}
               members={members as WallMember[]}

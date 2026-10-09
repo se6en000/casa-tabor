@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.ensure-event-transportation-plan]
 verify_jwt = false
+
+[functions.share-in]
+verify_jwt = false

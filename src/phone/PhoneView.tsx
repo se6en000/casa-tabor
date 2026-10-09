@@ -2,7 +2,7 @@ import type { GiftIdea } from '../wall/comingUp'
 import type { PlanOpen } from '../wall/plan'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, CalendarDays, Car, Check, ChefHat, ChevronDown, ChevronRight, Heart, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, ShoppingBasket, Sun, Users, X } from 'lucide-react'
+import { ArrowUp, CalendarDays, Car, Check, ChefHat, ChevronDown, ChevronRight, Heart, ListChecks, Lock, LogOut, Mail, Plane, Monitor, Navigation, Plus, Settings, Share, ShoppingBasket, Sun, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { dayWhen, mergeEvents, needsAroundFetch, stripDates } from '../wall/dayFocus'
 import { pigmentStyleFor } from '../wall/lanes'
@@ -25,6 +25,8 @@ const ymdOf = (iso: string) => {
 }
 import PhoneEmailSettings from './PhoneEmailSettings'
 import PhoneTaste from './PhoneTaste'
+import PhoneShareSetup from './PhoneShareSetup'
+import { useShareKey } from './useShareKey'
 import { useGuideTaste } from '../wall/useGuideTaste'
 import { useEmailSettings } from '../wall/useEmailOffers'
 import PhoneScanSheet from './PhoneScanSheet'
@@ -104,6 +106,8 @@ export interface PhoneViewProps {
   howWasIt?: HowWasItData | null
   /** Settings › Your taste (canvas 85D); a fixture passes its own. */
   useTasteHook?: typeof useGuideTaste
+  /** Settings › Send to Tabor House: this person's key for the Shortcut; a fixture passes its own. */
+  useShareKeyHook?: typeof useShareKey
   /** Chores ticked for the day (`chore:<id>:<date>`), and ticking one (canvas 30a, as the wall's NEXT UP). */
   choreDone?: ReadonlySet<string>
   tickChore?: (choreId: string, date: Date, done: boolean) => Promise<void>
@@ -214,7 +218,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, onSaveNotes, useEventItems, createEvent, applyPlan, saveEvent, searchPlaces, savePlace, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, howWasIt = null, useTasteHook = useGuideTaste, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, onSaveNotes, useEventItems, createEvent, applyPlan, saveEvent, searchPlaces, savePlace, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, howWasIt = null, useTasteHook = useGuideTaste, useShareKeyHook = useShareKey, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -253,6 +257,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [groceryVoice, setGroceryVoice] = useState<GroceryVoice | null>(null)
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false)
   const [tasteOpen, setTasteOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
   // Opened from a project ("Talk to Casa"): its words are said first.
@@ -763,7 +768,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   // The loading mark (39a) gives way once the day is here.
   useEffect(() => { if (!loading) finishSplash() }, [loading])
   // A page pushed over the tabs, or a sheet raised over them (the screen behind moves either way).
-  const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || tasteOpen || (todos && projectId))
+  const pushOpen = Boolean((openId && eventIds.has(openId)) || peopleOpen || emailSettingsOpen || tasteOpen || shareOpen || (todos && projectId))
   const sheetUp = Boolean(monthOpen || addOpen || handOff || editingTodo || (askOpen && !glance) || initialOpen)
   // Me and Family are a pager of whole days (PhoneDayPager): the page in view is the one that scrolls.
   const paged = !loading && tab === 'today'
@@ -984,6 +989,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             <PhoneTaste onClose={() => setTasteOpen(false)} useTaste={useTasteHook} />
           </PhonePushPage>
         )}
+        {shareOpen && (
+          <PhonePushPage key="share" onShift={shiftBehind} onBack={() => setShareOpen(false)}>
+            <PhoneShareSetup onClose={() => setShareOpen(false)} useKey={useShareKeyHook} />
+          </PhonePushPage>
+        )}
       </AnimatePresence>
       {/* Ask Casa rises as a tall sheet (premium plan): the screen behind shrinks back; drag its handle down to close. */}
       {/* Held to talk, the same assistant draws its answer over the screen (34f) — the same elements either way, so
@@ -1035,6 +1045,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             {initialRow(<Users size={20} />, 'People and places', 'Find someone · call, text, directions', () => { setInitialOpen(false); setPeopleOpen(true) })}
             {initialRow(<Mail size={20} />, 'Email', 'Keep me posted · what’s quiet · the wall', () => { setInitialOpen(false); setEmailSettingsOpen(true) })}
             {initialRow(<Heart size={20} />, 'Your taste', 'What the guide picks for you two', () => { setInitialOpen(false); setTasteOpen(true) })}
+            {initialRow(<Share size={20} />, 'Send to Tabor House', 'Share from any app, or double-tap the phone', () => { setInitialOpen(false); setShareOpen(true) })}
             <Link to="/recipes" className="flex min-h-[64px] w-full items-center gap-[14px] border-0 border-t border-solid border-wall-stone py-[8px] text-wall-ink no-underline">
               <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-phone-card"><ChefHat size={20} /></span>
               <span className="flex flex-1 flex-col gap-[2px]"><span className="text-phone-body font-bold">Recipes</span><span className="text-phone-detail text-wall-ink-2">Find one, cook it, add one</span></span>

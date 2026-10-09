@@ -87,6 +87,8 @@ test('an address he gives for someone becomes the save card, from the reader', a
   assert.match(buildTurnPrompt({ messages: [{ role: 'user', content: 'x' }], draft: null, referents: [], upcoming: [], family: [], nowLine: 'Now', utcOffset: '-04:00', nowIso: '2026-09-30T14:00:00Z' }), /"address_for":/)
   assert.deepEqual(readTurnResolution({ act: 'other', address_for: { who: 'Mary RBT', address: '412 Palm Way, Jupiter' } }).addressFor, { who: 'Mary RBT', address: '412 Palm Way, Jupiter' })
   assert.equal(readTurnResolution({ act: 'other', address_for: { who: 'Mary RBT', address: '' } }).addressFor, null)
+  // Loco (Oct 9): "a tequila and oyster bar in West Palm Beach" is a place to try — a town is not an address.
+  assert.equal(readTurnResolution({ act: 'other', address_for: { who: 'Loco', address: 'West Palm Beach' } }).addressFor, null)
   const server = fs.readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
   assert.match(server, /semantic_intent: 'conversation\.save_address'/)
 })

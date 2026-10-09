@@ -379,12 +379,15 @@ Deno.serve(async (req) => {
       meal_photo_index: mealPhotoIndexRaw,
       mime_type: mimeTypeRaw,
       fallback_name: fallbackNameRaw,
+      text: textRaw,
     } = await req.json().catch(() => ({}))
 
     const sourceType = String(sourceTypeRaw ?? '').trim().toLowerCase()
-    if (!['url', 'image', 'pdf'].includes(sourceType)) {
-      throw new Error('source_type must be one of: url, image, pdf')
+    if (!['url', 'image', 'pdf', 'text'].includes(sourceType)) {
+      throw new Error('source_type must be one of: url, image, pdf, text')
     }
+    // Words (Send to Tabor House: a post's caption, a recipe copied out of a message).
+    const sourceText = typeof textRaw === 'string' ? textRaw.trim().slice(0, 12000) : ''
 
     const sourceUrl = String(sourceUrlRaw ?? '').trim()
     const fileBase64 = String(fileBase64Raw ?? '').trim()
@@ -425,7 +428,11 @@ Deno.serve(async (req) => {
     let extracted: ExtractedRecipe
     let sourceExcerpt = ''
 
-    if (sourceType === 'url') {
+    if (sourceType === 'text') {
+      if (!sourceText) throw new Error('text is required for text imports')
+      sourceExcerpt = sourceText.slice(0, 1000)
+      extracted = await extractFromTextWithLlm(llmConfig, sourceText, fallbackName)
+    } else if (sourceType === 'url') {
       if (!sourceUrl) throw new Error('source_url is required for url imports')
       const res = await fetch(sourceUrl, { redirect: 'follow' })
       if (!res.ok) throw new Error(`Failed to fetch URL (${res.status})`)
@@ -483,7 +490,7 @@ Deno.serve(async (req) => {
     const { error: importError } = await sb
       .from('recipe_import_runs')
       .insert({
-        source_type: sourceType,
+        source_type: sourceType === 'text' ? 'manual' : sourceType,
         source_url: sourceUrl || null,
         source_excerpt: sourceExcerpt || null,
         parsed_name: extracted.name,

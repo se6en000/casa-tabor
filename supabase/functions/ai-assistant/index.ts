@@ -1287,6 +1287,16 @@ Deno.serve(async (req) => {
               result = error ? { error: error.message } : (data as Record<string, unknown>)
             }
           }
+        } else if (call.name === 'save_place') {
+          // Saved at once to the guide's Places worth trying, the same way a shared post is (share-in).
+          const words = [call.args?.name, call.args?.what, call.args?.town ? `in ${call.args.town}` : null].filter(Boolean).map(String).join(', ')
+          if (!words) result = { error: 'Which place?' }
+          else if (dryRun) result = { saved: true, dry_run: true, place: words }
+          else {
+            const { data, error } = await sb.functions.invoke('share-in', { body: { member_id: activeMemberId ?? null, text: words } })
+            const line = typeof data === 'string' ? data : ''
+            result = error ? { error: error.message } : /^Saved /.test(line) ? { saved: true, said: line } : { saved: false, said: line || 'It wasn’t saved.' }
+          }
         } else if (call.name === 'show_day') {
           shownDay = readShowDay(call.args) ?? shownDay
           result = shownDay ? { shown: shownDay.date, note: shownDay.open ? 'It is on the screen now. Say one short line about the day.' : 'The screen offers to open it.' } : { error: 'The date must be YYYY-MM-DD' }
