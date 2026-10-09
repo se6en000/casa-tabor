@@ -527,3 +527,29 @@ test('the calendars: Weekend Broward pages a day ahead; the Improv in local time
   assert.deepEqual(shows.map((s) => [s.title, s.when, s.place]), [['Frank Caliendo', '2026-10-09 19:00', 'Palm Beach Improv'], ['Have-Nots Comedy Live', '2026-10-09 21:30', 'Palm Beach Improv'], ['Mojo Brookzz', '2026-10-11 19:00', 'Palm Beach Improv']])
   assert.equal(calendarReach(shows[0], null).ok, true)
 })
+
+test('Ticketmaster: the big rooms months ahead — one per act a day, no parking or VIP, Miami in reach for a big show only', async () => {
+  const { parseTicketmaster, calendarReach, ticketmasterUrls } = await import('../supabase/functions/_shared/scout.mjs')
+  const venue = (name, city, lat, lng) => ({ name, city: { name: city }, address: { line1: '1 Seminole Way' }, location: { latitude: String(lat), longitude: String(lng) } })
+  const hrl = venue('Hard Rock Live', 'Hollywood', 26.0513, -80.2111)
+  const kaseya = venue('Kaseya Center', 'Miami', 25.7814, -80.1870)
+  const ev = (name, date, v, c = { segment: { name: 'Music' }, genre: { name: 'Rock' } }, extra = {}) => ({ name, url: `https://tm/${name}`, dates: { start: { localDate: date, localTime: '20:00:00' }, status: { code: 'onsale' } }, classifications: [c], _embedded: { venues: [v], attractions: [{ name: name.split(':')[0] }] }, ...extra })
+  const data = { _embedded: { events: [
+    ev('Def Leppard', '2026-11-14', hrl),
+    ev('Def Leppard', '2026-11-14', hrl),
+    ev('Def Leppard: VIP Package', '2026-11-14', hrl),
+    ev('Parking: Def Leppard', '2026-11-14', hrl),
+    ev('Sebastian Maniscalco', '2026-12-05', kaseya, { segment: { name: 'Arts & Theatre' }, genre: { name: 'Comedy' } }),
+    ev('The Nutcracker', '2026-12-06', kaseya, { segment: { name: 'Arts & Theatre' }, genre: { name: 'Ballet' } }),
+    ev('Called off', '2026-11-20', hrl, undefined, { dates: { start: { localDate: '2026-11-20' }, status: { code: 'cancelled' } } }),
+  ] } }
+  const shows = parseTicketmaster(data)
+  assert.deepEqual(shows.map((s) => [s.kind, s.title, s.when, s.place, s.why]), [
+    ['music', 'Def Leppard', '2026-11-14 20:00', 'Hard Rock Live', 'Rock'],
+    ['comedy', 'Sebastian Maniscalco', '2026-12-05 20:00', 'Kaseya Center', null],
+  ])
+  const home = { lat: 26.7145, lng: -80.0549 }
+  assert.equal(calendarReach(shows[1], home).ok, true) // Miami, a big show
+  assert.equal(calendarReach({ ...shows[1], major: false }, home).ok, false) // the same distance, a smaller ticketed show
+  assert.match(ticketmasterUrls('k', home, '2026-10-09')[0], /latlong=26\.7145,-80\.0549&radius=75.*endDateTime=2027-02-06.*segmentName=Music/)
+})

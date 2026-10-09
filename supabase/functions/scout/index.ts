@@ -12,7 +12,7 @@ import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/p
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
-  parseImprov, parseWeekendBroward, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
+  MAJOR_AHEAD_DAYS, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
 const CORS = {
@@ -172,6 +172,42 @@ Deno.serve(async (req) => {
       const log: Array<Record<string, unknown>> = []
       await Promise.all(CALENDARS.map(async (cal) => {
         try {
+          if (cal.id === 'ticketmaster') {
+            const clean = (v?: string) => v?.trim().replace(/^["']|["']$/g, '') || null
+            // The Consumer Key is the API key; the secret isn't needed — but if they're in each other's places, use the one that works.
+            const keys = [clean(Deno.env.get('TICKETMASTER_API_KEY')), clean(Deno.env.get('TICKETMASTER_API_CONSUMER_SECRET_KEY'))].filter(Boolean) as string[]
+            let key: string | null = null
+            for (const k of keys) {
+              const probe = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?apikey=${encodeURIComponent(k)}&size=1`)
+              if (probe.ok) { key = k; break }
+            }
+            log.push({ cal: cal.id, keys: keys.length, works: key ? (key === keys[0] ? 'TICKETMASTER_API_KEY' : 'the secret') : 'neither' })
+            if (!key || !home) return
+            const items: Array<Record<string, any>> = []
+            for (let page = 0; page < 4; page++) {
+              let more = false
+              for (const url of ticketmasterUrls(key, home, today, page)) {
+                const r = await fetch(url)
+                if (!r.ok) { log.push({ cal: cal.id, page, status: r.status, why: (await r.text()).slice(0, 160).replace(key, '…') }); continue }
+                const data = await r.json()
+                items.push(...parseTicketmaster(data))
+                if ((data?.page?.totalPages ?? 0) > page + 1) more = true
+              }
+              if (!more) break
+            }
+            let kept = 0
+            for (const it of items) {
+              if (String(it.when).slice(0, 10) < today || String(it.when).slice(0, 10) > addDays(today, MAJOR_AHEAD_DAYS)) continue
+              if (isBait(it) || notLiveMusic(it)) continue
+              const reach = calendarReach(it, home)
+              if (!reach.ok) continue
+              const { at: _at, ticketed: _t, major: _m, ...row } = it
+              found.push({ ...row, drive_min: reach.minutes ?? null, source: 'calendar', source_ref: cal.id, verify_note: `on ${cal.name}` })
+              kept++
+            }
+            log.push({ cal: cal.id, read: items.length, kept })
+            return
+          }
           const res = await fetch(cal.url, { redirect: 'follow', headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36' } })
           if (!res.ok) { log.push({ cal: cal.id, status: res.status }); return }
           const html = await res.text()

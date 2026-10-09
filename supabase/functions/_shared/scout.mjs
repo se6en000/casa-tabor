@@ -440,7 +440,52 @@ export const CALENDARS = [
   { id: 'greatbigtrivia', name: 'Great Big Trivia', url: 'https://www.greatbigtrivia.com/play/palm-beach-county' },
   // Touring comedians (Jake, Oct 9: "where is the national acts … or other major bands/comedians").
   { id: 'improv-pb', name: 'Palm Beach Improv', url: 'https://www.improv.com/palmbeach/calendar/' },
+  // The big rooms (Hard Rock Live, the Kravis, the Fillmore, Kaseya, iTHINK…) draw their lists in the browser; Ticketmaster
+  // sells nearly all of them and says what's on months ahead (its Discovery API, key TICKETMASTER_API_KEY).
+  { id: 'ticketmaster', name: 'Ticketmaster', url: 'https://app.ticketmaster.com/discovery/v2/events.json' },
 ]
+/** How far ahead the big shows are kept (Jake, Oct 9: "more of a heads up"). */
+export const MAJOR_AHEAD_DAYS = 120
+
+/** The Discovery API's searches: music, and comedy, within 75 miles of home (Miami's arenas included), from today. */
+export function ticketmasterUrls(apiKey, home, today, page = 0) {
+  const end = addDays(today, MAJOR_AHEAD_DAYS)
+  const base = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${encodeURIComponent(apiKey)}&latlong=${home.lat.toFixed(4)},${home.lng.toFixed(4)}&radius=75&unit=miles&startDateTime=${today}T00:00:00Z&endDateTime=${end}T23:59:59Z&size=200&sort=date,asc&page=${page}`
+  return [`${base}&segmentName=Music`, `${base}&classificationName=comedy`]
+}
+
+const NOT_A_SHOW = /\b(parking|vip|packages?|upgrades?|suites?|premium seat|tailgate|shuttle|meet ?(&|and) ?greet|vouchers?|gift cards?|add-?ons?|lounge access|club access|fast lane|early entry)\b/i
+/** Ticketmaster's events: one per act a day, a real show (no parking, VIP packages or upgrades), not called off. */
+export function parseTicketmaster(data) {
+  const out = []
+  const seen = new Set()
+  for (const e of data?._embedded?.events ?? []) {
+    const name = decode(e.name)
+    const date = e.dates?.start?.localDate
+    const status = e.dates?.status?.code
+    if (!name || !date || status === 'cancelled' || status === 'postponed' || NOT_A_SHOW.test(name)) continue
+    const venue = e._embedded?.venues?.[0] ?? {}
+    if (NOT_A_SHOW.test(venue.name ?? '')) continue
+    const act = decode(e._embedded?.attractions?.[0]?.name) || name
+    const key = `${act.toLowerCase()}|${date}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const c = e.classifications?.[0] ?? {}
+    const genre = [c.genre?.name, c.subGenre?.name].find((g) => g && !/^(undefined|other|miscellaneous)$/i.test(g)) ?? null
+    const comedy = /comedy/i.test(`${c.genre?.name ?? ''} ${c.subGenre?.name ?? ''}`)
+    if (!comedy && c.segment?.name && c.segment.name !== 'Music') continue
+    const lat = Number(venue.location?.latitude)
+    const lng = Number(venue.location?.longitude)
+    const time = e.dates?.start?.localTime
+    out.push({
+      kind: comedy ? 'comedy' : 'music', title: name, when: time ? `${date} ${time.slice(0, 5)}` : `${date} 20:00`, recurring: null,
+      place: decode(venue.name) || null, address: [venue.address?.line1, venue.city?.name].filter(Boolean).join(', ') || null,
+      url: e.url ?? null, why: genre && !comedy ? genre : null, free: false,
+      ticketed: true, major: true, at: Number.isFinite(lat) && Number.isFinite(lng) && lat ? { lat, lng } : null,
+    })
+  }
+  return out
+}
 
 /**
  * Weekend Broward shows one day a page (Jake, Oct 9: "it feels really empty … for saturday"): the calendar's id and the
@@ -593,12 +638,13 @@ const roadMinutes = (km) => Math.round(km < 15 ? km / 0.75 + 4 : 24 + (km - 15) 
 const HOUR_TOWNS = ['boca raton', 'deerfield', 'pompano', 'fort lauderdale', 'ft. lauderdale', 'hollywood', 'sunrise', 'coral springs', 'coconut creek', 'margate', 'parkland', 'stuart', 'hobe sound', 'jensen beach', 'palm city', 'port st']
 /**
  * Local first (Jake, Oct 8): an everyday thing — a bar band, trivia — within about 35 minutes; a ticketed show (a
- * touring band, a comedian) up to about an hour (Boca, Fort Lauderdale; never Miami).
+ * touring band, a comedian) up to about an hour (Boca, Fort Lauderdale); a big room's show (Ticketmaster) to Miami.
  */
 export function calendarReach(item, home) {
   if (item.at && home) {
     const minutes = roadMinutes(haversineKm(home, item.at))
-    return minutes <= 35 || (item.ticketed && minutes <= 70) ? { ok: true, minutes } : { ok: false, note: `about ${minutes} min` }
+    // A big ticketed show (Ticketmaster's) is worth Miami (Jake, Oct 9: "FLL / Miami / Hollywood").
+    return minutes <= 35 || (item.ticketed && minutes <= 70) || (item.major && minutes <= 105) ? { ok: true, minutes } : { ok: false, note: `about ${minutes} min` }
   }
   const t = `${item.address ?? ''} ${item.place ?? ''}`.toLowerCase()
   if (HOUR_TOWNS.some((x) => t.includes(x))) return item.ticketed ? { ok: true, minutes: null } : { ok: false, note: 'about 40+ min' }
