@@ -438,7 +438,57 @@ export const CALENDARS = [
   { id: 'weekendbroward', name: 'Weekend Broward', url: 'https://weekendbroward.com/live-music-calendar-palm-beach-county/' },
   { id: 'sflm', name: 'South Florida Live Music', url: 'https://southfloridalivemusic.com/gigs-calendar/' },
   { id: 'greatbigtrivia', name: 'Great Big Trivia', url: 'https://www.greatbigtrivia.com/play/palm-beach-county' },
+  // Touring comedians (Jake, Oct 9: "where is the national acts … or other major bands/comedians").
+  { id: 'improv-pb', name: 'Palm Beach Improv', url: 'https://www.improv.com/palmbeach/calendar/' },
 ]
+
+/**
+ * Weekend Broward shows one day a page (Jake, Oct 9: "it feels really empty … for saturday"): the calendar's id and the
+ * next day's stamp, for its own "next day" call (Simple Calendar's admin-ajax list draw).
+ */
+export function weekendBrowardNext(html) {
+  const id = String(html).match(/data-calendar-id="(\d+)"/)?.[1] ?? null
+  const next = String(html).match(/data-next="(\d+)"/)?.[1] ?? null
+  return id && next ? { id, next } : null
+}
+
+/** A UTC instant as the family's local "YYYY-MM-DD HH:MM" (the Improv lists its shows in UTC). */
+export function localWhen(iso, timeZone = 'America/New_York') {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map((x) => [x.type, x.value]))
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`
+}
+
+/** The Improv: its shows (schema.org Events in the page's JSON-LD) — one per comedian a day, the first show; no promos. */
+export function parseImprov(html) {
+  const out = []
+  const seen = new Set()
+  const walk = (o) => {
+    if (Array.isArray(o)) return o.forEach(walk)
+    if (!o || typeof o !== 'object') return
+    if (o.startDate && o.name) {
+      const name = decode(o.name)
+      const when = localWhen(o.startDate)
+      if (!when || /book your|gift card|private party|holiday party|open mic|class\b|workshop/i.test(name)) return
+      const key = `${name.toLowerCase()}|${when.slice(0, 10)}`
+      if (seen.has(key)) return
+      seen.add(key)
+      const addr = o.location?.address ?? {}
+      out.push({
+        kind: 'comedy', title: name.replace(/\s+@\s+.*Improv.*$/i, '').replace(/\s*\((?=[^)]*[A-Z]{3})[^a-z)]*\)\s*$/, ''), when, recurring: null,
+        place: decode(o.location?.name) || 'Palm Beach Improv', address: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', ') || null,
+        url: o.url ?? null, why: null, free: false, ticketed: true,
+      })
+      return
+    }
+    Object.values(o).forEach(walk)
+  }
+  for (const m of String(html).matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { walk(JSON.parse(m[1])) } catch { /* a broken block: the rest still count */ }
+  }
+  return out.sort((a, b) => a.when.localeCompare(b.when))
+}
 
 const decode = (s) => String(s ?? '').replace(/&amp;/g, '&').replace(/&#0?39;|&#8217;|&rsquo;/g, '’').replace(/&#8216;/g, '‘').replace(/&quot;|&#8220;|&#8221;/g, '"').replace(/&nbsp;/g, ' ').replace(/&#8211;/g, '–').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/\s+/g, ' ').trim()
 const hhmm = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`

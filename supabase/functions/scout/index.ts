@@ -12,7 +12,7 @@ import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/p
 import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
-  parseWeekendBroward, restaurantVerdict, townInReach, townNewsPrompt,
+  parseImprov, parseWeekendBroward, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
 } from '../_shared/scout.mjs'
 
 const CORS = {
@@ -175,7 +175,19 @@ Deno.serve(async (req) => {
           const res = await fetch(cal.url, { redirect: 'follow', headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36' } })
           if (!res.ok) { log.push({ cal: cal.id, status: res.status }); return }
           const html = await res.text()
-          const items = cal.id === 'weekendbroward' ? parseWeekendBroward(html) : cal.id === 'sflm' ? parseSflmGigs(html, today) : parseTriviaSchedule(html, cal.url)
+          const items = cal.id === 'weekendbroward' ? parseWeekendBroward(html) : cal.id === 'sflm' ? parseSflmGigs(html, today) : cal.id === 'improv-pb' ? parseImprov(html) : parseTriviaSchedule(html, cal.url)
+          // Weekend Broward: a page a day — the next six days too, by its own "next day" call.
+          if (cal.id === 'weekendbroward') {
+            let nav = weekendBrowardNext(html)
+            for (let day = 0; nav && day < 6; day++) {
+              const r = await fetch('https://weekendbroward.com/wp-admin/admin-ajax.php', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36' }, body: `action=simcal_default_calendar_draw_list&ts=${nav.next}&id=${nav.id}` })
+              const page = r.ok ? String((await r.json().catch(() => null))?.data ?? '') : ''
+              if (!page) break
+              items.push(...parseWeekendBroward(page))
+              const next = page.match(/data-next="(\d+)"/)?.[1]
+              nav = next ? { id: nav.id, next } : null
+            }
+          }
           let kept = 0
           for (const it of items as Array<Record<string, any>>) {
             if (it.when && String(it.when).slice(0, 10) < today) continue

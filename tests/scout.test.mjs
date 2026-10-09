@@ -508,3 +508,22 @@ test('an outing’s page: "not mentioned" is not a fact — it’s not said', as
   assert.deepEqual(d.facts.map((f) => f.label), ['Tickets'])
   assert.deepEqual(d.not_said, ['For kids', 'Parking'])
 })
+
+// Jake, Oct 9: "it feels really empty … for saturday" and "where is the national acts … or other major bands/comedians".
+test('the calendars: Weekend Broward pages a day ahead; the Improv in local time, one show a comedian a day, no promos', async () => {
+  const { weekendBrowardNext, parseImprov, localWhen, calendarReach } = await import('../supabase/functions/_shared/scout.mjs')
+  assert.deepEqual(weekendBrowardNext('<div class="simcal-calendar" data-calendar-id="30501"><nav data-prev="1791432000" data-next="1791604800">'), { id: '30501', next: '1791604800' })
+  assert.equal(weekendBrowardNext('<div>nothing</div>'), null)
+  assert.equal(localWhen('2026-10-10T01:30:00Z'), '2026-10-09 21:30')
+  const place = { '@type': 'Place', name: 'Palm Beach Improv', address: { streetAddress: '10300 Forest Hill Blvd', addressLocality: 'Wellington' } }
+  const ld = [
+    { '@type': 'Event', name: 'Frank Caliendo', startDate: '2026-10-09T23:00:00Z', url: 'https://www.palmbeachimprov.com/shows/1', location: place },
+    { '@type': 'Event', name: 'Frank Caliendo', startDate: '2026-10-10T01:30:00Z', url: 'https://www.palmbeachimprov.com/shows/2', location: place },
+    { '@type': 'Event', name: 'Have-Nots Comedy Live @ WPB Improv', startDate: '2026-10-10T01:30:00Z', location: place },
+    { '@type': 'Event', name: 'Mojo Brookzz (USE THIS SHOW ONLY!)', startDate: '2026-10-11T23:00:00Z', location: place },
+    { '@type': 'Event', name: 'Book Your Holiday Party', startDate: '2026-10-13T01:00:00Z', location: place },
+  ]
+  const shows = parseImprov(`<script type="application/ld+json">${JSON.stringify(ld)}</script>`)
+  assert.deepEqual(shows.map((s) => [s.title, s.when, s.place]), [['Frank Caliendo', '2026-10-09 19:00', 'Palm Beach Improv'], ['Have-Nots Comedy Live', '2026-10-09 21:30', 'Palm Beach Improv'], ['Mojo Brookzz', '2026-10-11 19:00', 'Palm Beach Improv']])
+  assert.equal(calendarReach(shows[0], null).ok, true)
+})
