@@ -52,6 +52,7 @@ import { PERSONA_KEY } from '../_shared/house-persona.mjs'
 import { allDayWords } from '../_shared/all-day.mjs'
 import { overdueToRaise } from '../_shared/todo-stage.mjs'
 import { routinesSection } from '../_shared/routines-for-assistant.mjs'
+import { TASTE_KEY, guideSection, tasteOf } from '../_shared/guide.mjs'
 import { READ_TOOLS, mergePrepCards, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
@@ -1052,7 +1053,7 @@ Deno.serve(async (req) => {
     // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
     // health, therapy and money facts are left out on the wall; they're answered on a phone.
     // In the order asked (it once read the persona from the routines' answer, the routines from the days off — Oct 8).
-    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }, { data: tidyRows }] = await Promise.all([
+    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }, { data: tidyRows }, { data: guideRows }, { data: tasteRow }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle(),
       // The routines (school, work, who has whom) and the days off in the next three weeks (Oct 7).
       sb.from('member_availability_rules').select('member_id, day_of_week, reason').limit(200),
@@ -1066,6 +1067,9 @@ Deno.serve(async (req) => {
       sb.from('town_news').select('section, headline, line, source, source_date, rank, news_date').order('news_date', { ascending: false }).limit(40),
       // What she has for them (canvas 75): the morning's tidy-up, still open.
       sb.from('tidy_suggestions').select('id, says, fix, choices').eq('status', 'open').gte('made_on', new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)).order('created_at').limit(8),
+      // The places they saved to try and the guide's picks, and Your taste (Jake, Oct 9: "things I actually like").
+      sb.from('guide_places').select('id, name, address, shelf_label, drive_min, rating, rating_count, heard, labels, score, status').in('status', ['saved', 'been', 'live']).order('score', { ascending: false }).limit(300),
+      sb.from('settings').select('value').eq('key', TASTE_KEY).maybeSingle(),
     ])
     const onWall = String(context?.page ?? '').startsWith('wall')
     const memory = ((memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string; sensitive?: boolean }>)
@@ -1139,7 +1143,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), tonight: tonightSection(outingRows ?? [], todayYmdNY()), tidy: tidySection(tidyRows ?? []),
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), guide: guideSection(guideRows ?? [], tasteOf(tasteRow?.value)), tonight: tonightSection(outingRows ?? [], todayYmdNY()), tidy: tidySection(tidyRows ?? []),
       paper: paperSection({ paper: paperRow ?? null, outings: outingRows ?? [], news: (newsRows ?? []).filter((n: { news_date: string }) => n.news_date === newsRows?.[0]?.news_date), today: todayYmdNY() }) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
@@ -1286,6 +1290,15 @@ Deno.serve(async (req) => {
                 : await sb.rpc('casa_memory_undo', { p_id: id })
               result = error ? { error: error.message } : (data as Record<string, unknown>)
             }
+          }
+        } else if (call.name === 'mark_place') {
+          const id = String(call.args?.id ?? '')
+          const status = String(call.args?.status ?? '')
+          if (!/^[0-9a-f-]{36}$/.test(id) || !['been', 'not_for_us', 'saved'].includes(status)) result = { error: 'Which place, and been, not_for_us or saved?' }
+          else if (dryRun) result = { done: true, dry_run: true }
+          else {
+            const { data, error } = await sb.from('guide_places').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select('name').maybeSingle()
+            result = error ? { error: error.message } : data ? { done: true, name: data.name, status } : { error: 'No place with that id' }
           }
         } else if (call.name === 'save_place') {
           // Saved at once to the guide's Places worth trying, the same way a shared post is (share-in).

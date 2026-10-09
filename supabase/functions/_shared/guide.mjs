@@ -339,3 +339,32 @@ export function townOf(address) {
   const i = parts.findIndex((s) => /^(FL|Florida)\b/.test(s))
   return i > 0 ? parts[i - 1] : parts.length >= 3 ? parts[parts.length - 3] : null
 }
+
+/**
+ * What Alexa knows of the guide (Jake, Oct 9: "sounds like something she should know as these are things I actually like
+ * and have told her so"): what they love (Your taste), the places they saved to try — theirs first, in their words —
+ * the ones they've been to, and the guide's best few. [id]s for mark_place.
+ */
+export function guideSection(rows, taste) {
+  const t = taste ?? {}
+  const where = (p) => [townOf(p.address), p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(', ')
+  const google = (p) => (p.rating ? `Google ${p.rating}${p.rating_count ? ` (${p.rating_count})` : ''}` : null)
+  const line = (p) => `- [${p.id}] ${p.name} · ${p.shelf_label}${where(p) ? ` · ${where(p)}` : ''}${google(p) ? ` · ${google(p)}` : ''}${p.heard ? ` · ${p.heard}` : ''}`
+  const saved = (rows ?? []).filter((p) => p.status === 'saved')
+  const been = (rows ?? []).filter((p) => p.status === 'been')
+  const picks = (rows ?? []).filter((p) => p.status === 'live' && (p.labels ?? []).length).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 6)
+  const loves = [
+    t.loves?.length ? `They love: ${t.loves.join(', ')}.` : null,
+    t.places?.length ? `Places they love: ${t.places.map((p) => p.name).join(', ')}.` : null,
+    t.tryFirst?.length ? `Want to try once first: ${t.tryFirst.join(', ')}.` : null,
+    t.teams?.length ? `Game days: ${t.teams.join(', ')}.` : null,
+  ].filter(Boolean).join(' ')
+  if (!loves && !saved.length && !been.length && !picks.length) return null
+  return [
+    'THEIR TASTE AND THE PLACES THEY WANT TO TRY (Out & about › Places worth trying, in the morning paper): mostly date nights for the two of them. Asked what they\'ve saved, or for a date night or somewhere to go, start from the places they saved — things they told you they like — then the guide\'s picks; never say you\'ve been anywhere. "We went to …" is mark_place been; "not for us" is mark_place not_for_us. A new place to try is save_place.',
+    loves || null,
+    saved.length ? `SAVED TO TRY (${saved.length}):\n${saved.map(line).join('\n')}` : 'SAVED TO TRY: none yet.',
+    been.length ? `BEEN TO:\n${been.map(line).join('\n')}` : null,
+    picks.length ? `THE GUIDE'S PICKS (from what locals and the local press say):\n${picks.map((p) => `${line(p)} · ${(p.labels ?? []).join(', ')}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n')
+}

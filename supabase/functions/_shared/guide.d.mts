@@ -88,3 +88,4 @@ export function parseCurate(text: string, count: number): Map<number, { keep: bo
 export function placesByShelf(places: GuidePlace[], each?: number): { shown: Array<{ shelf: string; label: string; places: GuidePlace[] }>; more: number; total: number }
 /** A short town from an address: "Delray Beach". */
 export function townOf(address: string | null): string | null
+export function guideSection(rows: Array<Record<string, any>>, taste: GuideTaste | null): string | null

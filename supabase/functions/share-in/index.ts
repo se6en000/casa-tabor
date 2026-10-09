@@ -5,7 +5,7 @@ import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { verifyProfileSessionToken } from '../_shared/profile-session.mjs'
 import { GUIDE_SHELVES, TASTE_KEY, guideDriveMin, guideScore, sameName, tasteOf, townOf } from '../_shared/guide.mjs'
-import { factsSayAnything, isWalled, linkFacts, parseShare, sharePrompt, shareReply, sharedHeard, sharedShelf, sourceOf, tiktokFacts, urlsIn, wordsOf, type LinkFacts } from '../_shared/share-in.mjs'
+import { datesToAsk, factsSayAnything, isWalled, linkFacts, parseShare, sharePrompt, shareReply, sharedHeard, sharedShelf, sourceOf, tiktokFacts, urlsIn, wordsOf, type LinkFacts } from '../_shared/share-in.mjs'
 
 // Send to Tabor House (Jake, Oct 9: "right now I screen shot and paste into chat, if theres an easier way"). The iPhone
 // Shortcut posts whatever was shared — a link (Instagram, TikTok, a page), words (a text, an email), a picture (a
@@ -264,10 +264,22 @@ Deno.serve(async (req) => {
       timezone: 'America/New_York',
       family_members: (members ?? []).map((m: { id: string; name: string; full_name: string | null }) => ({ id: m.id, name: m.name, full_name: m.full_name })),
     })
-    const items = Array.isArray(scanned?.items) ? scanned.items : []
+    const read_ = Array.isArray(scanned?.items) ? scanned.items as Array<Record<string, any>> : []
+    // Not what's past (a booking email's old appointment), and what's already on the calendar said so.
+    const todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
+    const days = [...new Set(read_.map((i) => i.date).filter((d) => d && d >= todayYmd))] as string[]
+    const { data: around } = days.length ? await sb.from('events').select('id, title, location_name, start_time, all_day').is('deleted_at', null)
+      .gte('start_time', new Date(`${days.sort()[0]}T00:00:00-05:00`).toISOString()).lte('start_time', new Date(`${days[days.length - 1]}T23:59:59-04:00`).toISOString()).limit(300) : { data: [] }
+    const local = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))
+    const events = ((around ?? []) as Array<{ id: string; title: string; location_name: string | null; start_time: string; all_day: boolean }>).map((e) => {
+      const [ymd, hm] = local(e.start_time).split(', ')
+      return { id: e.id, title: e.title, location_name: e.location_name, ymd, minutes: e.all_day ? null : Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) }
+    })
+    const items = datesToAsk(read_, events, todayYmd)
     const summary = String(scanned?.document_summary ?? read.summary ?? '').trim()
-    const reply = shareReply({ kind: 'events', summary: read.summary || summary, items })
-    await record({ kind: 'events', summary: read.summary || summary, read: readText.slice(0, 4000) || null, items, status: items.length ? 'ask' : 'done', reply })
+    const reply = shareReply({ kind: 'events', summary: read.summary || summary, items, past: read_.length > 0 && !items.length })
+    const waiting = items.some((i) => i.type !== 'prep' && !i.already)
+    await record({ kind: 'events', summary: read.summary || summary, read: readText.slice(0, 4000) || null, items, status: waiting ? 'ask' : 'done', reply })
     return said(reply)
   }
 

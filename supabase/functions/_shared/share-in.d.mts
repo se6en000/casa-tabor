@@ -28,3 +28,4 @@ export function itemWhen(item: { date?: string; all_day?: boolean; start_time_lo
 export function shareReply(outcome: Record<string, unknown>): string
 export function sharedShelf(shelves: Array<{ id: string; label: string; match: RegExp | null }>, text: unknown): { id: string; label: string }
 export function sharedHeard(name: string | null, source: string, said: string | null): string
+export function datesToAsk(items: Array<Record<string, any>>, events: Array<{ id: string; title: string; location_name?: string | null; ymd: string; minutes: number | null }>, todayYmd: string): Array<Record<string, any>>

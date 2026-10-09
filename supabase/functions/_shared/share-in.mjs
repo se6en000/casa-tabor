@@ -158,8 +158,10 @@ export function shareReply(outcome) {
       return `Saved ${outcome.name} to Places worth trying${where ? ` — ${where}` : ''}.`
     }
     case 'events': {
-      const items = (outcome.items ?? []).filter((i) => i.type !== 'prep')
-      if (!items.length) return 'I couldn’t find a date in it.'
+      const all = (outcome.items ?? []).filter((i) => i.type !== 'prep')
+      const items = all.filter((i) => !i.already)
+      if (!all.length) return outcome.past ? 'The dates in it have already passed.' : 'I couldn’t find a date in it.'
+      if (!items.length) return all.length === 1 ? `${all[0].already.title} is already on your calendar (${itemWhen(all[0])}).` : `Those ${all.length} are already on your calendar.`
       if (items.length === 1) return `${items[0].title} · ${itemWhen(items[0])}. Add it? It’s waiting in Tabor House.`
       return `${items.length} dates from ${outcome.summary || 'that'}. They’re waiting in Tabor House for your yes.`
     }
@@ -182,4 +184,23 @@ export function sharedShelf(shelves, text) {
 export function sharedHeard(name, source, said) {
   const how = source === 'Alexa' ? 'asked Alexa to save it' : source === 'a text' ? 'saved it' : `shared it from ${source}`
   return `${name ?? 'Someone'} ${how}.${said ? ` ${said.charAt(0).toUpperCase()}${said.slice(1)}` : ''}`
+}
+
+const wordsIn = (t) => new Set(String(t ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !['the', 'and', 'with', 'appointment', 'for'].includes(w)))
+
+/** Dates worth asking about: none already past (a confirmation email's old booking), each marked when it's already on
+ * the calendar (the same day, within an hour, sharing a word of its name or place). */
+export function datesToAsk(items, events, todayYmd) {
+  return (items ?? []).filter((i) => !i.date || i.date >= todayYmd).map((i) => {
+    if (i.type === 'prep') return i
+    const words = wordsIn(`${i.title} ${i.location_name ?? ''}`)
+    const start = i.start_time_local ? Number(i.start_time_local.slice(0, 2)) * 60 + Number(i.start_time_local.slice(3, 5)) : null
+    const hit = (events ?? []).find((e) => {
+      if (e.ymd !== i.date) return false
+      if (start != null && e.minutes != null && Math.abs(e.minutes - start) > 60) return false
+      const theirs = wordsIn(`${e.title} ${e.location_name ?? ''}`)
+      return [...words].some((w) => theirs.has(w))
+    })
+    return hit ? { ...i, already: { id: hit.id, title: hit.title } } : i
+  })
 }

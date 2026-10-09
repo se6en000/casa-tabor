@@ -85,3 +85,32 @@ test('share-in: when Alexa promised to save it and is sent back to act, save_pla
   const req = fullAiRequest({ system: 's', contents: [], tools: fullAiTools({ planning: false }), mustAct: true })
   assert.ok(req.tool_config.function_calling_config.allowed_function_names.includes('save_place'))
 })
+
+test('share-in: a booking screenshot — the past one dropped, the one already on the calendar said so (Oct 9, Owen\'s haircut)', async () => {
+  const { datesToAsk, shareReply } = await import('../supabase/functions/_shared/share-in.mjs')
+  const cut = (date, at) => ({ type: 'event', title: 'Boys Cut appointment', date, start_time_local: at, end_time_local: null, location_name: 'Sharkey\'s Boynton Beach' })
+  const items = datesToAsk([cut('2026-09-12', '13:40'), cut('2026-10-11', '11:40')], [{ id: 'e1', title: 'Owen haircut at Sharkey\'s', location_name: null, ymd: '2026-10-11', minutes: 11 * 60 + 40 }], '2026-10-09')
+  assert.equal(items.length, 1)
+  assert.deepEqual(items[0].already, { id: 'e1', title: 'Owen haircut at Sharkey\'s' })
+  assert.equal(shareReply({ kind: 'events', items }), 'Owen haircut at Sharkey\'s is already on your calendar (Sun, Oct 11 · 11:40 AM).')
+  assert.equal(shareReply({ kind: 'events', items: [], past: true }), 'The dates in it have already passed.')
+  const fresh = datesToAsk([cut('2026-10-18', '10:00')], [], '2026-10-09')
+  assert.match(shareReply({ kind: 'events', items: fresh }), /Add it\?/)
+})
+
+test('share-in: Alexa knows their taste and the places they saved — theirs first, the ones they\'ve been, the guide\'s picks', async () => {
+  const { guideSection, DEFAULT_TASTE } = await import('../supabase/functions/_shared/guide.mjs')
+  const rows = [
+    { id: 'a1', name: 'Loco West Palm Beach', address: '840 N Railroad Ave, West Palm Beach, FL 33401, USA', shelf_label: 'Oysters & raw bars', drive_min: 7, rating: 4.2, rating_count: 221, heard: 'Jake saved it. A tequila and oyster bar in West Palm Beach', labels: [], score: 0.4, status: 'saved' },
+    { id: 'b2', name: 'Sports & Rec', address: '1 Main St, Delray Beach, FL', shelf_label: 'Game-day bars', drive_min: 31, rating: 4.6, rating_count: 900, heard: null, labels: ['local'], score: 6, status: 'live' },
+    { id: 'c3', name: 'Grato', address: '1901 S Dixie Hwy, West Palm Beach, FL', shelf_label: 'You shared', drive_min: 8, rating: 4.5, rating_count: 2000, heard: null, labels: [], score: 1, status: 'been' },
+  ]
+  const s = guideSection(rows, DEFAULT_TASTE)
+  assert.match(s, /They love: Neighborhood bars, Oysters/)
+  assert.match(s, /Places they love: Mr B’s/)
+  assert.match(s, /SAVED TO TRY \(1\):\n- \[a1\] Loco West Palm Beach · Oysters & raw bars · West Palm Beach, 7 min · Google 4\.2 \(221\) · Jake saved it\./)
+  assert.match(s, /BEEN TO:\n- \[c3\] Grato/)
+  assert.match(s, /THE GUIDE'S PICKS[^\n]*\n- \[b2\] Sports & Rec .* · local/)
+  assert.match(s, /never say you\'ve been anywhere/)
+  assert.equal(guideSection([], null), null)
+})
