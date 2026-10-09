@@ -29,7 +29,8 @@ import PhoneScanSheet from './PhoneScanSheet'
 import PhoneTodo from './PhoneTodo'
 import PhoneProject from './PhoneProject'
 import PhoneTodoSheet from './PhoneTodoSheet'
-import { type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
+import { stepForEvent, type TodoAction, type TodoItem, type TodoList, type TodoProjectDetail } from '../wall/todos'
+import type { PlaceSearchResult } from '../wall/places'
 import type { ComingUpAction, ComingUpItem } from '../wall/comingUp'
 import type { ScannedItem } from '../utils/documentScanner'
 import type { ScanPlanItem } from './scan'
@@ -116,6 +117,9 @@ export interface PhoneViewProps {
   applyPlan?: (title: string, items: ScanPlanItem[]) => Promise<void>
   /** Saves an edit from the event sheet (the same steps as the wall). */
   saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
+  /** The event sheet's place search (the wall's place-search) and Save to my places. */
+  searchPlaces?: (query: string) => Promise<PlaceSearchResult[]>
+  savePlace?: (place: PlaceSearchResult) => Promise<void>
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Scan it (the + → Scan it): reads photos into drafts; added with `createEvent`. */
   scan?: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
@@ -202,7 +206,7 @@ const NO_TICKS: ReadonlySet<string> = new Set()
 /** A page's room: clear of the status bar at the top, and of the floating tab bar at the foot. */
 const PAGE_PAD = 'px-[20px] pb-[calc(110px+env(safe-area-inset-bottom))] pt-[max(22px,calc(env(safe-area-inset-top)+10px))]'
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, onSaveNotes, useEventItems, createEvent, applyPlan, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAddItem, onSaveNotes, useEventItems, createEvent, applyPlan, saveEvent, searchPlaces, savePlace, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [], todos = null, groceries = null, pastPlaces = [], onSignOut, notice = null, onNoticeSeen, findSimilar, planDay, aroundEvents = null, onFocusDay, useEmailSettingsHook = useEmailSettings, routines = [], dayOffs = [], casaTalk = null, choreDone = NO_TICKS, tickChore, useMonthEvents, onRefresh }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('today')
   // Behind your initial (32h): people and places, email, settings.
   const [initialOpen, setInitialOpen] = useState(false)
@@ -804,6 +808,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
   const choices = handOff ? driverChoices(handOff.plan, members, handOff.trip, handOff.trip.sourceId) : []
   const opened = openId && eventIds.has(openId) ? eventView({ eventId: openId, plan: planOf(openId), events, members, viewerId, checklist }) : null
+  // A project step's calendar event (the wall's projectStep): its step, Done, and its project.
+  const openedStep = opened && todos ? stepForEvent(todos.list, openId!) : null
 
   return (
     // Locked to the screen like an app: the page never scrolls or bounces, only the middle does;
@@ -926,6 +932,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           keptFrom={keptFromOf(keepFrom, openId!)}
           suggestKeepFrom={opened.event ? keepFromSuggestion(opened.event, members, keepFrom) : []}
           onKeepFrom={setKeptFrom ? (ids) => setKeptFrom(openId!, ids) : undefined}
+          searchPlaces={searchPlaces}
+          savePlace={savePlace}
+          projectStep={openedStep}
+          onStepDone={openedStep && todos ? async () => { await todos.act({ action: 'project_edit', id: openedStep.projectId, op: 'done_step', args: { step_id: openedStep.stepId } }) } : undefined}
+          onOpenProject={openedStep && todos ? () => { setOpenId(null); setOpenMode('details'); setProjectId(openedStep.projectId) } : undefined}
         />
         </PhonePushPage>
       )}
@@ -1054,6 +1065,8 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             return clashLines(plan, draft.going, at(draft.startMin), at(draft.endMin), members)
           }}
           placeFromLastTime={(title) => placeFromLastTime(title, pastPlaces, now)}
+          searchPlaces={searchPlaces}
+          savePlace={savePlace}
         />
       )}
 

@@ -140,6 +140,11 @@ function PhoneFixturePageInner() {
   const [choreDone, setChoreDone] = useState<ReadonlySet<string>>(() => new Set())
   const [evs, setEvs] = useState(() => [
     ...(events as unknown as WallEvent[]),
+    // `?stepEvent=1` (P3.23): a project step's all-day calendar event, as on the wall's fixture.
+    ...(params.get('stepEvent') === '1' ? [{
+      id: 'ev-colours', title: 'Paint the house: Pick colours: 3 sample pots', start_time: '2026-09-25T00:00:00Z', end_time: '2026-09-25T23:59:59Z',
+      all_day: true, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [],
+    } as unknown as WallEvent] : []),
     // `?far=1` (any day): Jake's week around Sat, Oct 17 — weeks past the usual strip.
     ...(params.get('far') ? [
       { id: 'far-build', title: 'Emme’s build night', start_time: new Date(2026, 9, 17, 18, 0).toISOString(), end_time: new Date(2026, 9, 17, 20, 0).toISOString(), all_day: false, event_type: 'event', status: 'confirmed', location_name: null, address: null, members: [{ family_member_id: 'jake-id', role: 'primary' }, { family_member_id: 'emme', role: 'attendee' }] },
@@ -272,6 +277,11 @@ function PhoneFixturePageInner() {
               onAddItem={async (eventId, label) => setChecklist((list) => [...list, { id: `added-${list.length}`, event_id: eventId, label, checked: false, sort_order: 1 + Math.max(-1, ...list.filter((i) => i.event_id === eventId).map((i) => i.sort_order)) }])}
               onSaveNotes={async (event, notes) => setEvs((list) => list.map((e) => (e.id === event.id ? { ...e, description: withNotes(e.description, notes) } : e)))}
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
+              // The place search, canned: Ferrin Park's fields (the real one asks place-search); a save is recorded.
+              searchPlaces={async (q) => (/ferr/i.test(q) ? [
+                { place_id: 'p-ferrin2', name: 'Ferrin Park Field 2', address: '11921 Cyrus Blvd, West Palm Beach, FL 33410', street: '11921 Cyrus Blvd', city: 'West Palm Beach', state: 'FL', zip: '33410', lat: 26.85, lng: -80.11 },
+              ] : [])}
+              savePlace={async (r) => { (window as unknown as { __savedPlaces?: string[] }).__savedPlaces = [...((window as unknown as { __savedPlaces?: string[] }).__savedPlaces ?? []), r.name] }}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
               createEvent={async (args) => {
                 ;(window as unknown as { __createArgs?: unknown[] }).__createArgs = [...((window as unknown as { __createArgs?: unknown[] }).__createArgs ?? []), args]

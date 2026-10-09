@@ -19,7 +19,10 @@ import PhoneView from './PhoneView'
 import PhoneAssistant from './PhoneAssistant'
 import type { FamilyMember } from '../types'
 import { useContactDirectory } from '../hooks/useSavedContacts'
-import { useSavedPlaces } from '../hooks/useSavedPlaces'
+import { useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
+import { DEFAULT_HOUSEHOLD_COORDINATES } from '../utils/geoDistance'
+import { guessKind } from '../wall/placeSuggest'
+import type { PlaceSearchResult } from '../wall/places'
 import { scanDocumentFiles, type ScannedItem } from '../utils/documentScanner'
 import { similarEvent } from './scan'
 import { decisionsFor } from '../wall/decisions'
@@ -87,6 +90,16 @@ export default function PhoneFrame() {
   const groceries = usePhoneGroceries()
   const { data: pastPlaces = [] } = useQuery({ queryKey: ['phone-past-places'], queryFn: fetchPastPlaces, staleTime: 60 * 60_000 })
   const { data: places = [] } = useSavedPlaces()
+  const savePlaceMutation = useSavePlace()
+  // The event sheet's place search and Save to my places — the wall's own (WallEventSheet).
+  const searchPlaces = useCallback(async (query: string): Promise<PlaceSearchResult[]> => {
+    const { data } = await supabase.functions.invoke('place-search', { body: { query, lat: DEFAULT_HOUSEHOLD_COORDINATES.lat, lng: DEFAULT_HOUSEHOLD_COORDINATES.lng } })
+    const found = (data as { places?: PlaceSearchResult[] } | null)?.places
+    return Array.isArray(found) ? found : []
+  }, [])
+  const savePlace = useCallback(async (r: PlaceSearchResult) => {
+    await savePlaceMutation.mutateAsync({ name: r.name, address: r.street || r.address, city: r.city ?? null, state: r.state ?? null, zip: r.zip ?? null, lat: r.lat, lng: r.lng, phone: r.phone ?? null, category: guessKind(r) })
+  }, [savePlaceMutation])
   // To do is Jake's Reminders list (P3.22 step 7): on his phone only.
   const isJake = members.find((m) => m.id === profile?.memberId)?.name === 'Jake'
   const todos = useTodos({ enabled: isJake, surface: 'phone' })
@@ -136,6 +149,8 @@ export default function PhoneFrame() {
           setNotice(`That change to “${event.title}” didn’t save. Try it again.`)
         })
       }}
+      searchPlaces={searchPlaces}
+      savePlace={savePlace}
       notice={notice}
       onNoticeSeen={() => setNotice(null)}
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}

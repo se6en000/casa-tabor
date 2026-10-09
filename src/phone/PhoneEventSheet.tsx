@@ -1,16 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, ChevronLeft, Lock, MapPin, Minus, Plus } from 'lucide-react'
 import type { Trip, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
-import { createArgs, dayChips, draftChanges, draftFromEvent, NEW_EVENT_ID, setDay, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
+import { createArgs, dayChips, draftChanges, draftFromEvent, NEW_EVENT_ID, setAllDay, setAnytime, setDay, setDriver, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
+import type { PlaceSearchResult } from '../wall/places'
 import type { EventView } from './lens'
 import { notesOf, notesSource } from '../../supabase/functions/_shared/event-notes.mjs'
 
 // Board 05d: one event on the phone — when and where, who's going, the trip, get &
-// pack; Edit for the everyday changes (title, day, times, who's going), saved through
-// the same steps as the wall; Delete after a clear yes. Repeats and places go to Calendar.
+// pack; Edit with everything the wall's sheet has (Jake, Oct 8: "On mobile I need to be able to edit events /reminders
+// with all the options the wall has"): title, any day, the time (a tap opens the phone's own wheel), all day or anytime,
+// the place (saved places, a search for the real address, Save to my places), who's going, who drives; a project
+// step's Done and its project. Saved through the same steps as the wall; Delete after a clear yes. Repeats go to Calendar.
 
 /** A tap on − or + moves a time this many minutes (stepStart/stepEnd take minutes). */
 const STEP_MIN = 15
@@ -52,11 +55,19 @@ export interface PhoneEventSheetProps {
   useItems?: (eventId: string) => WallChecklistItem[]
   /** Save what people wrote in its notes (canvas 65); absent = shown, not edited. */
   onSaveNotes?: (event: EditableEvent, notes: string) => Promise<void>
+  /** A place search for the real address (the wall's place-search); absent = saved places only. */
+  searchPlaces?: (query: string) => Promise<PlaceSearchResult[]>
+  /** Keep a searched place as one of the family's (the wall's Save to my places). */
+  savePlace?: (place: PlaceSearchResult) => Promise<void>
+  /** A project step's calendar event (the wall's): which step it is, ticking it, and its project. */
+  projectStep?: { project: string; title: string; number: number; total: number; done: boolean } | null
+  onStepDone?: () => Promise<void>
+  onOpenProject?: () => void
 }
 
 const noItems = (): WallChecklistItem[] => []
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, onSaveNotes, clashesFor, placeFromLastTime, placeOptions = [] }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom, onAddItem, useItems = noItems, onSaveNotes, clashesFor, placeFromLastTime, placeOptions = [], searchPlaces, savePlace, projectStep = null, onStepDone, onOpenProject }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -118,6 +129,22 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const placeHits = typed.length >= 2 && !draft.place.address
     ? placeOptions.filter((p) => p.name.toLowerCase().includes(typed) && p.name.toLowerCase() !== typed).slice(0, 3)
     : []
+  // The real address, searched as the wall does (three letters on, a moment after typing stops).
+  const [found, setFound] = useState<PlaceSearchResult[]>([])
+  const [picked, setPicked] = useState<PlaceSearchResult | null>(null)
+  const [keptPlace, setKeptPlace] = useState<'offer' | 'saved' | null>(null)
+  useEffect(() => {
+    if (!searchPlaces || typed.length < 3 || draft.place.address) { setFound([]); return }
+    let cancelled = false
+    const timer = window.setTimeout(() => { void searchPlaces(typed).then((r) => { if (!cancelled) setFound(r.slice(0, 4)) }).catch(() => {}) }, 350)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [typed, draft.place.address, searchPlaces])
+  const savedNames = new Set(placeOptions.map((p) => p.name.toLowerCase()))
+  const [otherDate, setOtherDate] = useState(false)
+  const reminder = kind === 'reminder'
+  const off = reminder ? draft.anytime : draft.allDay
+  const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const drivers = members.filter((m) => m.can_drive)
   const run = async (work: () => Promise<void>, failed: string, stayOpen = false) => {
     setBusy(true)
@@ -141,7 +168,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
       {/* A pinned top bar, clear of the notch: Back and Edit never scroll away or sit under the status bar. */}
       <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
-        {mode === 'details' && !view.repeating && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
+        {mode === 'details' && !view.repeating && !projectStep && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
         {isNew && (
           <div className="flex rounded-full border border-solid border-wall-stone p-[3px]">
             {(['event', 'reminder'] as const).map((k) => (
@@ -160,6 +187,19 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
             <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">{view.when}</div>
             <h2 className="m-0 mt-[6px] font-display text-phone-title font-bold text-wall-ink">{event.title}</h2>
           </div>
+          {projectStep && (
+            <section aria-label="Project step" className="flex flex-col gap-[10px] rounded-[16px] bg-phone-card p-[14px]">
+              <div className={label}>PROJECT STEP · {projectStep.number} OF {projectStep.total}</div>
+              <div className="text-phone-body">Step {projectStep.number} of {projectStep.total} in <b>{projectStep.project}</b></div>
+              <div className="flex gap-[8px]">
+                {onStepDone && (projectStep.done
+                  ? <span className="flex h-[44px] items-center gap-[6px] text-phone-body font-semibold text-wall-ink-2"><Check size={18} aria-hidden="true" /> Done</span>
+                  : <button type="button" disabled={busy} className={`${dark} flex-1`} onClick={() => void run(onStepDone, 'That didn’t save. Try again.')}>Done</button>)}
+                {onOpenProject && <button type="button" className={`${pill} flex-1`} onClick={onOpenProject}>Open project</button>}
+              </div>
+              <div className="text-phone-detail text-wall-ink-2">Its dates and name come from the project: change them there.</div>
+            </section>
+          )}
           {view.place.name && (
             <div className="flex items-start gap-[10px] text-phone-body">
               <MapPin size={20} className="mt-[2px] shrink-0 text-wall-ink-2" aria-hidden="true" />
@@ -332,13 +372,13 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
             <input value={draft.title} autoFocus={isNew} placeholder={isNew ? (kind === 'reminder' ? 'What to remember' : 'What is it?') : undefined} onChange={(e) => setDraft((d) => setTitle(d, e.target.value))} className="h-[52px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-display text-phone-heading font-semibold text-wall-ink" />
           </label>
           {/* Where it is, when adding and when editing (Jake, Oct 2): typed, or one of the saved places as you type. */}
-          {(isNew || kind === 'event') && (
+          {(
             <label className="flex flex-col gap-[6px]">
               <span className={label}>PLACE</span>
               <input
                 value={draft.place.name}
                 placeholder="Home, a place, or an address (optional)"
-                onChange={(e) => setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null }))}
+                onChange={(e) => { setPicked(null); setKeptPlace(null); setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null })) }}
                 className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
               />
               {/* The whole address, so it's plainly the right place (Jake, Oct 2: "I need to see it in full. Not just the
@@ -359,6 +399,26 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                   ))}
                 </span>
               )}
+              {/* The search (the wall's): the real place and its address. */}
+              {found.length > 0 && (
+                <span className="flex flex-col gap-[6px]" aria-label="Places found">
+                  {found.filter((r) => !placeHits.some((p) => p.name === r.name)).map((r) => (
+                    <button key={r.place_id} type="button" onClick={() => { setPicked(r); setKeptPlace(savedNames.has(r.name.toLowerCase()) || !savePlace ? null : 'offer'); setDraft((d) => setPlace(d, { name: r.name, address: r.address, driveMinutes: null })) }}
+                      className="flex min-h-[44px] items-start gap-[8px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[6px] text-left text-wall-ink">
+                      <MapPin size={16} aria-hidden="true" className="mt-[3px] shrink-0 text-wall-brass-ink" />
+                      <span className="flex flex-col"><span className="text-phone-body font-semibold">{r.name}</span><span className="text-phone-detail text-wall-ink-2">{r.address}</span></span>
+                    </button>
+                  ))}
+                </span>
+              )}
+              {keptPlace === 'offer' && picked && savePlace && (
+                <span className="flex flex-wrap items-center gap-[8px]">
+                  <span className="text-phone-detail text-wall-ink-2">Keep it as one of your places?</span>
+                  <button type="button" className={pill} onClick={() => { setKeptPlace('saved'); void savePlace(picked).catch(() => setKeptPlace('offer')) }}>Save to my places</button>
+                  <button type="button" className={pill} onClick={() => setKeptPlace(null)}>Just this once</button>
+                </span>
+              )}
+              {keptPlace === 'saved' && <span className="text-phone-detail font-semibold text-wall-brass-ink">Saved to your places.</span>}
               {lastPlace && (
                 <button type="button" onClick={() => setDraft((d) => setPlace(d, { name: lastPlace.name, address: lastPlace.address ?? '', driveMinutes: null }))}
                   className="flex min-h-[44px] items-center gap-[6px] self-start rounded-full border border-solid border-wall-brass bg-wall-brass/10 px-[14px] text-phone-detail font-semibold text-wall-brass-ink">
@@ -367,22 +427,40 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
               )}
             </label>
           )}
+          {/* All day for an event, Anytime for a reminder (no date at all) — as on the wall. */}
+          <label className="flex min-h-[44px] items-center gap-[12px] text-phone-body font-semibold">
+            <input type="checkbox" checked={off} onChange={(e) => setDraft((d) => (reminder ? setAnytime(d, e.target.checked) : setAllDay(d, e.target.checked)))} className="h-[22px] w-[22px] accent-wall-ink" />
+            {reminder ? 'Anytime (no date)' : 'All day'}
+          </label>
+          {!(reminder && draft.anytime) && (
           <div className="flex flex-col gap-[6px]">
             <span className={label}>DAY</span>
             <div className="flex gap-[6px] overflow-x-auto">
               {dayChips(now, draft.day).map((chip) => (
-                <button key={chip.date.getTime()} type="button" aria-pressed={chip.selected} onClick={() => setDraft((d) => setDay(d, chip.date))} className={`flex h-[60px] min-w-[52px] flex-col items-center justify-center rounded-[12px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
+                <button key={chip.date.getTime()} type="button" aria-pressed={chip.selected} onClick={() => { setOtherDate(false); setDraft((d) => setDay(d, chip.date)) }} className={`flex h-[60px] min-w-[52px] flex-col items-center justify-center rounded-[12px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
                   <span className="text-phone-label font-bold">{chip.weekday}</span>
                   <span className="font-display text-phone-heading font-bold">{chip.date.getDate()}</span>
                 </button>
               ))}
+              <button type="button" aria-pressed={otherDate} onClick={() => setOtherDate((o) => !o)} className="flex h-[60px] min-w-[72px] items-center justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-paper px-[8px] text-phone-detail font-semibold text-wall-ink">Other date</button>
             </div>
+            {otherDate && (
+              <input aria-label="Other date" type="date" value={ymd(draft.day)} onChange={(e) => { if (e.target.value) { const [y, m, d] = e.target.value.split('-').map(Number); setDraft((dr) => setDay(dr, new Date(y, m - 1, d))) } }}
+                className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-phone-body text-wall-ink" />
+            )}
           </div>
-          {!draft.allDay && (['start', 'end'] as const).map((which) => (
+          )}
+          {!off && (reminder ? (['start'] as const) : (['start', 'end'] as const)).map((which) => (
             <div key={which} className="flex items-center gap-[10px]">
-              <span className="w-[56px] text-phone-body text-wall-ink-2">{which === 'start' ? 'Starts' : 'Ends'}</span>
+              <span className="w-[56px] text-phone-body text-wall-ink-2">{which === 'start' ? (reminder ? 'At' : 'Starts') : 'Ends'}</span>
               <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} earlier`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, -STEP_MIN) : stepEnd(d, -STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Minus size={18} /></button>
-              <span className="flex h-[48px] flex-1 items-center justify-center rounded-[12px] border-2 border-solid border-wall-brass font-display text-phone-heading font-semibold">{fmt(which === 'start' ? draft.startMin : draft.endMin)}</span>
+              {/* A tap opens the phone's own time wheel; − and + still step a quarter hour. */}
+              <label className="relative flex h-[48px] flex-1 items-center justify-center rounded-[12px] border-2 border-solid border-wall-brass font-display text-phone-heading font-semibold">
+                {fmt(which === 'start' ? draft.startMin : draft.endMin)}
+                <input aria-label={which === 'start' ? (reminder ? 'At' : 'Starts at') : 'Ends at'} type="time" value={hhmm(which === 'start' ? draft.startMin : draft.endMin)}
+                  onChange={(e) => { if (!e.target.value) return; const [h, m] = e.target.value.split(':').map(Number); const to = h * 60 + m; setDraft((d) => (which === 'start' ? stepStart(d, to - d.startMin) : stepEnd(d, to - d.endMin))) }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+              </label>
               <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} later`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, STEP_MIN) : stepEnd(d, STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Plus size={18} /></button>
             </div>
           ))}
@@ -403,14 +481,14 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
             <div className="text-phone-detail font-semibold text-wall-brass-ink">Nobody’s on it yet — who’s going?</div>
           )}
           {clashes.map((c) => <div key={c} role="status" className="text-phone-detail font-semibold text-wall-rust">{c}</div>)}
-          {isNew && kind === 'event' && outing && drivers.length > 0 && (
+          {kind === 'event' && outing && drivers.length > 0 && (
             <div className="flex flex-col gap-[8px]">
               <span className={label}>WHO’S DRIVING?</span>
               <div className="flex flex-wrap gap-[8px]">
                 {drivers.map((m) => {
                   const on = draft.driverId === m.id
                   return (
-                    <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => ({ ...d, driverId: on ? null : m.id }))}
+                    <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => setDriver(d, on ? null : m.id))}
                       className={`flex h-[44px] items-center gap-[6px] rounded-full pl-[5px] pr-[14px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
                       {disc(m.id, 'h-[30px] w-[30px] text-phone-detail')}{m.name}
                     </button>
@@ -435,7 +513,7 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           {isNew ? (
             <span className="text-phone-detail text-wall-ink-2">Goes on Google Calendar too.</span>
           ) : (
-            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (repeats) in Calendar</Link>
+            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">Repeats are changed in Calendar</Link>
           )}
         </div>
       )}
