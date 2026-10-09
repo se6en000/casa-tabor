@@ -54,7 +54,9 @@ actions = [
     action('is.workflow.actions.downloadurl', UUID=fetch, WFURL=URL, WFHTTPMethod='POST', WFHTTPBodyType='Form', ShowHeaders=False,
            WFFormValues={'Value': {'WFDictionaryFieldValueItems': [
                {'WFItemType': 0, 'WFKey': token_string('text'), 'WFValue': token_string('￼', {'{0, 1}': THING})},
-               {'WFItemType': 5, 'WFKey': token_string('file'), 'WFValue': {'Value': THING, 'WFSerializationType': 'WFTokenAttachmentParameterState'}},
+               # A file's value is an attachment inside the parameter state (one level shallower, it came through empty —
+               # Jake's first tries, Oct 9: the form had only text=Image).
+               {'WFItemType': 5, 'WFKey': token_string('file'), 'WFValue': {'Value': attachment(THING), 'WFSerializationType': 'WFTokenAttachmentParameterState'}},
            ]}, 'WFSerializationType': 'WFDictionaryFieldValue'}),
     # What the house did, in a line.
     action('is.workflow.actions.notification', WFNotificationActionTitle='Tabor House', WFNotificationActionSound=False,

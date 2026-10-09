@@ -41,6 +41,21 @@ function base64Of(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+/** What the bytes are, when the Shortcut sends a picture as "Image" with no type (Oct 9, Jake's first try). */
+function sniffMime(b: Uint8Array): string | null {
+  const at = (i: number, ...xs: number[]) => xs.every((x, j) => b[i + j] === x)
+  if (at(0, 0x89, 0x50, 0x4e, 0x47)) return 'image/png'
+  if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg'
+  if (at(0, 0x25, 0x50, 0x44, 0x46)) return 'application/pdf'
+  if (at(0, 0x47, 0x49, 0x46, 0x38)) return 'image/gif'
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp'
+  if (at(4, 0x66, 0x74, 0x79, 0x70)) {
+    const brand = String.fromCharCode(...b.subarray(8, 12))
+    if (/heic|heix|hevc|mif1|msf1|heif/.test(brand)) return 'image/heic'
+  }
+  return null
+}
+
 const imageMime = (type: string, name = '') => {
   if (/^image\/|application\/pdf/.test(type)) return type
   if (/\.(png)$/i.test(name)) return 'image/png'
@@ -53,16 +68,20 @@ const imageMime = (type: string, name = '') => {
 type Picture = { data: string; mime: string }
 
 /** Whatever the Shortcut sent: a form (words and files), JSON, or plain words. */
-async function readShare(req: Request): Promise<{ texts: string[]; pictures: Picture[] }> {
+async function readShare(req: Request): Promise<{ texts: string[]; pictures: Picture[]; received: Array<Record<string, unknown>> }> {
   const type = req.headers.get('content-type') ?? ''
+  // What came, for the record (each share keeps it): field names, file names, types, sizes.
+  const received: Array<Record<string, unknown>> = [{ content_type: type.split(';')[0] }]
   const texts: string[] = []
   const pictures: Picture[] = []
   if (/multipart\/form-data|application\/x-www-form-urlencoded/i.test(type)) {
     const form = await req.formData()
-    for (const [, v] of form.entries()) {
-      if (typeof v === 'string') { if (v.trim()) texts.push(v); continue }
-      const mime = imageMime(v.type, v.name)
-      if (mime && v.size > 0 && v.size <= MAX_IMAGE) pictures.push({ data: base64Of(new Uint8Array(await v.arrayBuffer())), mime })
+    for (const [k, v] of form.entries()) {
+      if (typeof v === 'string') { received.push({ field: k, text: v.slice(0, 80) }); if (v.trim()) texts.push(v); continue }
+      received.push({ field: k, file: v.name, type: v.type, size: v.size })
+      const bytes = v.size > 0 && v.size <= MAX_IMAGE ? new Uint8Array(await v.arrayBuffer()) : null
+      const mime = bytes ? sniffMime(bytes) ?? imageMime(v.type, v.name) : null
+      if (bytes && mime) pictures.push({ data: base64Of(bytes), mime })
       // Words as a file (a shared note); a page the phone downloaded for a link (HTML) is left — the link itself came as text.
       else if (/^text\/plain/.test(v.type) || /\.txt$/i.test(v.name)) texts.push((await v.text()).slice(0, 20000))
     }
@@ -71,11 +90,15 @@ async function readShare(req: Request): Promise<{ texts: string[]; pictures: Pic
     for (const k of ['text', 'url']) if (typeof b?.[k] === 'string' && b[k].trim()) texts.push(b[k])
     if (typeof b?.image_base64 === 'string' && b.image_base64) pictures.push({ data: b.image_base64, mime: String(b.mime_type ?? 'image/jpeg') })
   } else {
-    const t = await req.text()
-    if (t.trim()) texts.push(t)
+    // The thing itself as the body (a Shortcut sending a picture or a file as its request body).
+    const bytes = new Uint8Array(await req.arrayBuffer())
+    received.push({ body: type.split(';')[0], size: bytes.length })
+    const mime = bytes.length && bytes.length <= MAX_IMAGE ? sniffMime(bytes) : null
+    if (mime) pictures.push({ data: base64Of(bytes), mime })
+    else { const t = new TextDecoder().decode(bytes); if (t.trim()) texts.push(t) }
   }
   // The Shortcut sends the thing twice (as words and as a file): once is enough.
-  return { texts: [...new Set(texts.map((t) => t.trim()))], pictures }
+  return { texts: [...new Set(texts.map((t) => t.trim()))], pictures, received }
 }
 
 /** What a server can read from the link: TikTok's public card, else the page's own card and what it declares. */
@@ -170,7 +193,8 @@ Deno.serve(async (req) => {
 
   let texts: string[]
   let pictures: Picture[]
-  try { ({ texts, pictures } = await readShare(req)) } catch { return said('That didn’t come through. Try sharing it again.', 400) }
+  let received: Array<Record<string, unknown>> = []
+  try { ({ texts, pictures, received } = await readShare(req)) } catch { return said('That didn’t come through. Try sharing it again.', 400) }
 
   const all = texts.join('\n').trim()
   const link = urlsIn(all)[0] ?? null
@@ -187,7 +211,7 @@ Deno.serve(async (req) => {
   ])
   const who = (members ?? []).find((m: { id: string }) => m.id === keyRow.member_id) as { name: string } | undefined
   const record = async (row: Record<string, unknown>) => {
-    const { data } = await sb.from('shared_in').insert({ member_id: keyRow.member_id, source, url: link, said_text: words ? words.slice(0, 4000) : null, ...row }).select('id').single()
+    const { data } = await sb.from('shared_in').insert({ member_id: keyRow.member_id, source, url: link, said_text: words ? words.slice(0, 4000) : null, received, ...row }).select('id').single()
     return data?.id as string | undefined
   }
 

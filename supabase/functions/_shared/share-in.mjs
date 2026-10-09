@@ -12,6 +12,8 @@ export function wordsOf(text) {
   for (const u of urlsIn(t)) t = t.split(u).join(' ')
   t = t.replace(/\s+/g, ' ').trim()
   if (/^(IMG|image|Photo|Screenshot|PDF)[\w .:-]*\.(png|jpe?g|heic|gif|pdf)$/i.test(t)) return ''
+  // What the Shortcut writes for a picture as words ("Image", "Photo").
+  if (/^(image|photo|screenshot|picture|file)s?$/i.test(t)) return ''
   if (/^Screenshot \d{4}-\d{2}-\d{2}/i.test(t)) return ''
   return t
 }

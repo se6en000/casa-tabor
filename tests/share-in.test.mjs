@@ -7,6 +7,7 @@ test('share-in: a share\'s link, its words, and where it came from', () => {
   assert.deepEqual(urlsIn('look! https://www.instagram.com/p/DAbc123xyz/?igsh=abc.'), ['https://www.instagram.com/p/DAbc123xyz/?igsh=abc'])
   assert.equal(wordsOf('https://www.instagram.com/p/DAbc123xyz/'), '')
   assert.equal(wordsOf('IMG_2231.PNG'), '')
+  assert.equal(wordsOf('Image'), '', 'the Shortcut sends a picture\'s words as "Image" (Oct 9)')
   assert.equal(wordsOf('Screenshot 2026-10-09 at 8.14.22 PM.png'), '')
   assert.equal(wordsOf('Dinner at Mr B’s Saturday 7pm with the Springmyers'), 'Dinner at Mr B’s Saturday 7pm with the Springmyers')
   assert.equal(sourceOf({ url: 'https://www.instagram.com/reel/x/' }), 'Instagram')
