@@ -136,6 +136,8 @@ test('phone: an event — details, the trip, get & pack; Edit a time and save; D
   await expect(sheet.getByRole('link', { name: 'Directions' })).toBeVisible()
   await sheet.getByRole('button', { name: 'Water bottle' }).click()
   await expect(sheet.getByText('GET & PACK · 2 OF 2')).toBeVisible()
+  // The tick may scroll the sheet a little: the picture is from the top.
+  await sheet.locator('.overflow-y-auto').first().evaluate((el) => { el.scrollTop = 0 })
   await expect(phone).toHaveScreenshot('phone-event.png')
   // Jake, 2026-09-29: add to any event's or reminder's get & pack by hand.
   await sheet.getByRole('textbox', { name: 'Add to get & pack' }).fill('bug spray')
