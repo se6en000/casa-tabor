@@ -74,7 +74,8 @@ async function readShare(req: Request): Promise<{ texts: string[]; pictures: Pic
     const t = await req.text()
     if (t.trim()) texts.push(t)
   }
-  return { texts, pictures }
+  // The Shortcut sends the thing twice (as words and as a file): once is enough.
+  return { texts: [...new Set(texts.map((t) => t.trim()))], pictures }
 }
 
 /** What a server can read from the link: TikTok's public card, else the page's own card and what it declares. */

@@ -1450,6 +1450,7 @@ test('phone: Settings › Send to Tabor House — make my key, then the Shortcut
   await setup.getByRole('button', { name: 'Make my key' }).click()
   await expect(setup.getByLabel('Your key', { exact: true })).toHaveText('tabor_share_fixture0000000000000000000000000000')
   await expect(setup.getByRole('button', { name: 'Copy your key' })).toBeVisible()
+  await expect(setup.getByRole('button', { name: 'Copy your address' })).toBeVisible()
   await expect(setup.getByText('Get Contents of URL', { exact: true })).toBeVisible()
   await expect(setup.getByText(/Back Tap › Double Tap › Send to Tabor House/)).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-share-setup.png')

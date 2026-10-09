@@ -10,14 +10,14 @@ const label = 'text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink'
 const card = 'flex flex-col gap-[10px] rounded-[20px] bg-phone-card p-[16px]'
 const pill = 'flex h-[44px] items-center justify-center gap-[8px] rounded-full px-[18px] text-phone-body font-semibold'
 
-function CopyButton({ text, name }: { text: string; name: string }) {
+function CopyButton({ text, name, label = 'Copy' }: { text: string; name: string; label?: string }) {
   const [done, setDone] = useState(false)
   const copy = async () => {
     try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 2000) } catch { /* the words are on screen to select */ }
   }
   return (
     <button type="button" aria-label={`Copy ${name}`} onClick={() => void copy()} className={`${pill} border border-solid border-wall-ink-2 bg-transparent text-wall-ink`}>
-      {done ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />} {done ? 'Copied' : 'Copy'}
+      {done ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />} {done ? 'Copied' : label}
     </button>
   )
 }
@@ -57,6 +57,8 @@ export default function PhoneShareSetup({ onClose, useKey = useShareKey }: { onC
             <>
               <div aria-label="Your key" className="select-all break-all rounded-[12px] bg-wall-on-pigment px-[12px] py-[10px] font-mono text-phone-detail text-wall-ink">{key}</div>
               <div className="flex items-center gap-[10px]"><CopyButton text={key} name="your key" /><span className="text-phone-detail text-wall-ink-2">Shown once. It goes in the Shortcut, step 4.</span></div>
+              {/* The ready-made Shortcut asks for this when it's added: the address with the key in it. */}
+              <div className="flex items-center gap-[10px]"><CopyButton text={`${SHARE_URL}?key=${key}`} name="your address" label="Copy your address" /><span className="text-phone-detail text-wall-ink-2">For the ready-made Shortcut.</span></div>
             </>
           ) : (
             <>
