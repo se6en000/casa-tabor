@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { QrCode } from 'lucide-react'
+import { ChevronDown, QrCode } from 'lucide-react'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
@@ -11,7 +11,7 @@ import type { WallEvent, WallMember } from './engine/types'
 import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
-import { outAndAboutPlan, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
+import { OUT_WHAT, OUT_WHO, outAndAboutPlan, outCounts, outFiltered, outWhenChoices, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 
 export interface WallPaperProps {
   now: Date
@@ -157,6 +157,60 @@ function Section({ label, count, children }: { label: string; count?: number; ch
   )
 }
 
+type OutPick = { what: string; who: string; when: string }
+type Picker = 'what' | 'who' | 'when'
+
+/** One picker (canvas 84B): a quiet pill; a tap opens its choices in a small dark panel, each with how many it shows. */
+function PickPill({ label, open, on, choices, counts, chosen, onOpen, onPick }: {
+  label: string; open: boolean; on: boolean; choices: string[][]; counts: Record<string, number>; chosen: string
+  onOpen: () => void; onPick: (id: string) => void
+}) {
+  return (
+    <div className="relative">
+      <button type="button" aria-expanded={open} onClick={onOpen}
+        className={`flex h-[52px] items-center gap-[10px] rounded-full border-0 px-[22px] font-body text-wall-detail font-semibold ${open || on ? 'bg-wall-ink text-wall-on-pigment' : 'bg-wall-paper text-wall-ink'}`}>
+        {label}<ChevronDown aria-hidden="true" className="h-[16px] w-[16px] opacity-70" />
+      </button>
+      {open && (
+        <div role="listbox" aria-label={label} className="absolute right-0 top-[62px] z-30 flex w-[340px] flex-col rounded-[20px] bg-wall-ink p-[10px] shadow-[0_18px_40px] shadow-wall-ink/30">
+          {choices.map(([id, name]) => (
+            <button key={id} type="button" role="option" aria-selected={id === chosen} disabled={!counts[id] && id !== chosen} onClick={() => onPick(id)}
+              className={`flex h-[56px] items-center justify-between rounded-[14px] border-0 px-[20px] font-body text-wall-detail text-wall-on-pigment disabled:opacity-40 ${id === chosen ? 'bg-wall-on-pigment/10 font-bold' : 'bg-transparent font-medium'}`}>
+              {name}<span className="font-medium text-wall-night-ink-2">{counts[id] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The pickers on Out & about: what, who, when — a tap outside closes an open one. */
+function OutPickers({ rows, today, pick, setPick }: { rows: Outing[]; today: string; pick: OutPick; setPick: (p: OutPick) => void }) {
+  const [open, setOpen] = useState<Picker | null>(null)
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null) }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  const whenChoices = outWhenChoices(today)
+  const lists: Record<Picker, string[][]> = { what: OUT_WHAT, who: OUT_WHO, when: whenChoices }
+  const nameOf = (which: Picker) => lists[which].find(([id]) => id === pick[which])?.[1] ?? ''
+  return (
+    <div ref={ref} data-no-swipe className="flex items-center gap-[10px]">
+      {(['what', 'who', 'when'] as const).map((which) => (
+        <PickPill key={which} label={nameOf(which)} open={open === which} on={pick[which] !== lists[which][0][0]} choices={lists[which]}
+          counts={open === which ? outCounts(rows, { ...pick, today }, which) : {}} chosen={pick[which]}
+          onOpen={() => setOpen(open === which ? null : which)} onPick={(id) => { setPick({ ...pick, [which]: id }); setOpen(null) }} />
+      ))}
+    </div>
+  )
+}
+
+const NO_PICK: OutPick = { what: 'all', who: 'any', when: 'all' }
+
 /**
  * Page 2, Out & about (canvas 72B, rethought Oct 8 — Jake: "im not seeing much … things that look cool a couple weeks
  * out are good to know too for planning"): by when — tonight and the weekend day by day, next week, further out, every
@@ -165,11 +219,32 @@ function Section({ label, count, children }: { label: string; count?: number; ch
 function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void }) {
   const plan = outAndAboutPlan(scout.outings, { today: scout.today, nowTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
   const grid = 'mt-[6px] grid grid-cols-4 gap-x-[32px]'
+  // The pickers (canvas 84B; Jake, Oct 9: "84b"): anything picked shows just that, in time order.
+  const [pick, setPick] = useState<OutPick>(NO_PICK)
+  const picked = pick.what !== 'all' || pick.who !== 'any' || pick.when !== 'all'
+  const shown = picked ? outFiltered(scout.outings, { ...pick, today: scout.today }) : []
+  const pickLabel = [
+    outWhenChoices(scout.today).find(([id]) => id === pick.when)?.[1],
+    pick.who !== 'any' ? OUT_WHO.find(([id]) => id === pick.who)?.[1] : null,
+    pick.what !== 'all' ? OUT_WHAT.find(([id]) => id === pick.what)?.[1] : null,
+  ].filter(Boolean).join(' · ')
   return (
     <ScrollPage active={active}>
+      {/* On the kicker's line, clear of the title (it keeps its one line). */}
+      <div className="relative z-20 h-0"><div className="absolute -top-[12px] right-0"><OutPickers rows={scout.outings} today={scout.today} pick={pick} setPick={setPick} /></div></div>
       <PageHead kicker="Out & about · the next six weeks"
         title={plan.count >= 12 ? 'Plenty worth getting out for.' : plan.count ? 'A few worth getting out for.' : 'Nothing checked out this week.'}
         deck="Checked: real, on, and within half an hour of home — an hour for a show worth the drive." />
+      {picked ? (
+        <section aria-label="Picked" className="mt-[34px] flex flex-col">
+          <span className="flex items-baseline gap-[18px]">
+            <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{`${pickLabel} · ${shown.length}`.toUpperCase()}</span>
+            <button type="button" onClick={() => setPick(NO_PICK)} className="h-[44px] border-0 bg-transparent p-0 font-body text-wall-detail font-semibold text-wall-ink-2">Clear</button>
+          </span>
+          {shown.length === 0 && <span className="mt-[10px] border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing like that yet.</span>}
+          <div className={grid}>{shown.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : o.recurring, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+        </section>
+      ) : (<>
       <Section label="Tonight & this weekend">
         <div className={`mt-[6px] grid gap-x-[32px] ${plan.weekend.length >= 4 ? 'grid-cols-4' : plan.weekend.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           {plan.weekend.map((d) => (
@@ -202,6 +277,7 @@ function OutPage({ scout, active, now, onOpen }: { scout: ScoutPaper; active: bo
           <div className={grid}>{plan.places.map((o) => <Entry key={o.id} o={o} chip={o.gem ? 'Hidden gem' : 'Worth a try'} onOpen={onOpen} />)}</div>
         </Section>
       )}
+      </>)}
     </ScrollPage>
   )
 }

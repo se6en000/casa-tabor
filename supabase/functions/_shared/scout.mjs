@@ -880,3 +880,47 @@ export function parseDetails(text, kind) {
     ends: typeof o?.ends === 'string' && /^\d{2}:\d{2}$/.test(o.ends) ? o.ends : null,
   }
 }
+
+// ── Out & about's pickers (canvas 84B; Jake, Oct 9: "a filter on this page, for local/cover bands, type of music, or
+// type of act, distance") — what, who, when; each choice with how many it would show. Distance waits for the drive
+// times (most of the calendars' venues have none yet).
+export const OUT_WHAT = [['all', 'Everything'], ['music', 'Music'], ['comedy', 'Comedy'], ['trivia', 'Trivia'], ['couple', 'For two'], ['family', 'Family']]
+export const OUT_WHO = [['any', 'Any act'], ['local', 'Local bands'], ['touring', 'Touring acts']]
+/** A touring act: a ticketed show — the Improv's, Ticketmaster's, or a calendar's own "ticketed". */
+export const isTouring = (o) => ['improv-pb', 'ticketmaster'].includes(o.source_ref ?? '') || /\bticketed\b/i.test(o.why ?? '')
+/** The days to pick from: tonight, the rest of this weekend by name, next week, months ahead. */
+export function outWhenChoices(today) {
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay()
+  const sunday = addDays(today, (7 - dow) % 7)
+  const out = [['all', 'Any day'], ['tonight', 'Tonight']]
+  for (let d = addDays(today, 1); d <= sunday; d = addDays(d, 1)) {
+    const wd = new Date(`${d}T12:00:00Z`).getUTCDay()
+    if (wd === 5 || wd === 6 || wd === 0) out.push([d, DAYS[wd].replace(/^./, (c) => c.toUpperCase())])
+  }
+  out.push(['nextweek', 'Next week'], ['later', 'Months ahead'])
+  return out
+}
+function whenMatches(o, when, today) {
+  if (when === 'all') return true
+  if (!o.when) return false
+  const day = o.when.slice(0, 10)
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay()
+  const sunday = addDays(today, (7 - dow) % 7)
+  if (when === 'tonight') return day === today
+  if (when === 'nextweek') return day > sunday && day <= addDays(sunday, 7)
+  if (when === 'later') return day > addDays(sunday, 7)
+  return day === when
+}
+/** The outings a pick shows (live ones, as the page's own plan keeps them), in time order. */
+export function outFiltered(rows, { what = 'all', who = 'any', when = 'all', today }) {
+  return (rows ?? []).filter((o) => ['new', 'saved', 'offered'].includes(o.status ?? 'new') && (!o.when || o.when.slice(0, 10) >= today))
+    .filter((o) => what === 'all' || o.kind === what)
+    .filter((o) => who === 'any' || (CALENDAR_KINDS.includes(o.kind) && (who === 'touring' ? isTouring(o) : !isTouring(o))))
+    .filter((o) => whenMatches(o, when, today))
+    .sort((a, b) => (a.when ?? '9999').localeCompare(b.when ?? '9999'))
+}
+/** How many each choice of one picker would show, the other two as they are. */
+export function outCounts(rows, pick, which) {
+  const choices = which === 'what' ? OUT_WHAT : which === 'who' ? OUT_WHO : outWhenChoices(pick.today)
+  return Object.fromEntries(choices.map(([id]) => [id, outFiltered(rows, { ...pick, [which]: id }).length]))
+}

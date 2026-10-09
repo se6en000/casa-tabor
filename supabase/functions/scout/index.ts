@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
               const probe = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?apikey=${encodeURIComponent(k)}&size=1`)
               if (probe.ok) { key = k; break }
             }
-            log.push({ cal: cal.id, keys: keys.length, works: key ? (key === keys[0] ? 'TICKETMASTER_API_KEY' : 'the secret') : 'neither' })
+            log.push({ cal: cal.id, keys: keys.length, shapes: keys.map((k) => `${k.length} chars${/[^A-Za-z0-9]/.test(k) ? ', has other characters' : ''}`), works: key ? (key === keys[0] ? 'TICKETMASTER_API_KEY' : 'the secret') : 'neither' })
             if (!key || !home) return
             const items: Array<Record<string, any>> = []
             for (let page = 0; page < 4; page++) {

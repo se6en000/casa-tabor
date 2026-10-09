@@ -553,3 +553,27 @@ test('Ticketmaster: the big rooms months ahead — one per act a day, no parking
   assert.equal(calendarReach({ ...shows[1], major: false }, home).ok, false) // the same distance, a smaller ticketed show
   assert.match(ticketmasterUrls('k', home, '2026-10-09')[0], /latlong=26\.7145,-80\.0549&radius=75.*endDateTime=2027-02-06.*segmentName=Music/)
 })
+
+// Canvas 84B (Jake, Oct 9: "84b"): Out & about's pickers — what, who, when, each with its count.
+test('Out & about pickers: local bands vs touring acts, the weekend by day, counts per choice', async () => {
+  const { outFiltered, outCounts, outWhenChoices, isTouring } = await import('../supabase/functions/_shared/scout.mjs')
+  const today = '2026-10-09' // a Friday
+  const row = (id, kind, when, extra = {}) => ({ id, kind, when, title: id, status: 'new', ...extra })
+  const rows = [
+    row('pickers', 'music', '2026-10-10 13:00', { source_ref: 'sflm', why: 'bluegrass · free' }),
+    row('mccain', 'music', '2026-10-10', { source_ref: 'sflm', why: 'rock · ticketed' }),
+    row('caliendo', 'comedy', '2026-10-09 19:00', { source_ref: 'improv-pb' }),
+    row('snapback', 'music', '2026-10-10 19:00', { source_ref: 'weekendbroward' }),
+    row('pumpkin', 'family', '2026-10-10 11:00'),
+    row('later', 'music', '2026-11-20 20:00', { source_ref: 'ticketmaster' }),
+    row('trivia', 'trivia', null, { recurring: 'Tuesdays 7–9 PM', source_ref: 'greatbigtrivia' }),
+    row('gone', 'music', '2026-10-10 20:00', { status: 'not_for_us' }),
+  ]
+  assert.deepEqual(outWhenChoices(today).map(([, l]) => l), ['Any day', 'Tonight', 'Saturday', 'Sunday', 'Next week', 'Months ahead'])
+  assert.equal(isTouring(rows[1]), true)
+  assert.deepEqual(outFiltered(rows, { what: 'music', who: 'local', when: '2026-10-10', today }).map((o) => o.id), ['pickers', 'snapback'])
+  assert.deepEqual(outFiltered(rows, { who: 'touring', today }).map((o) => o.id), ['caliendo', 'mccain', 'later'])
+  assert.deepEqual(outFiltered(rows, { when: 'later', today }).map((o) => o.id), ['later'])
+  assert.deepEqual(outCounts(rows, { what: 'music', who: 'local', when: 'all', today }, 'when'), { all: 2, tonight: 0, '2026-10-10': 2, '2026-10-11': 0, nextweek: 0, later: 0 })
+  assert.deepEqual(outCounts(rows, { what: 'all', who: 'any', when: 'all', today }, 'who'), { any: 7, local: 3, touring: 3 })
+})

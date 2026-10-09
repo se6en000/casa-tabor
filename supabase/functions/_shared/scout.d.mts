@@ -32,3 +32,9 @@ export function townNewsPage(rows: TownNews[] | null | undefined, today?: string
 export function outingLink(o: Partial<Outing> & Pick<Outing, 'kind' | 'title'>): string
 export interface DayPlan { day: string; label: string; items: Outing[]; more: number }
 export function outAndAboutPlan(rows: Outing[] | null | undefined, opts: { today: string; nowTime?: string | null }): { weekend: DayPlan[]; nextWeek: Outing[]; later: Outing[]; weekly: Outing[]; places: Outing[]; count: number }
+export const OUT_WHAT: string[][]
+export const OUT_WHO: string[][]
+export function isTouring(o: Outing): boolean
+export function outWhenChoices(today: string): string[][]
+export function outFiltered(rows: Outing[] | null | undefined, pick: { what?: string; who?: string; when?: string; today: string }): Outing[]
+export function outCounts(rows: Outing[] | null | undefined, pick: { what: string; who: string; when: string; today: string }, which: 'what' | 'who' | 'when'): Record<string, number>

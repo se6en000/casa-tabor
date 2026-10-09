@@ -2840,6 +2840,44 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await expect(paper).toBeVisible()
 })
 
+// Canvas 84B (Jake, Oct 9: "how about a filter on this page, for local/cover bands, type of music, or type of act,
+// distance" → "84b"): three quiet pickers by the title — what, who, when; a tap opens one with how many each shows.
+test('wall: Out & about pickers — what, who and when, each with its count; anything picked shows just that; Clear', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
+  const paper = page.getByRole('article', { name: 'The morning paper' })
+  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  await page.keyboard.press('ArrowRight')
+  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
+  await paper.getByRole('button', { name: 'Any day' }).click()
+  const when = paper.getByRole('listbox', { name: 'Any day' })
+  await expect(when.getByRole('option')).toHaveText([/^Any day\d+$/, /^Tonight\d+$/, /^Saturday\d+$/, /^Sunday\d+$/, /^Next week\d+$/, /^Months ahead\d+$/])
+  await page.waitForTimeout(400)
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out-pick-open.png')
+  await when.getByRole('option', { name: /^Saturday/ }).click()
+  await expect(when).toHaveCount(0)
+  const picked = paper.getByRole('region', { name: 'Picked' })
+  await expect(picked).toContainText(/SATURDAY · \d+/)
+  await expect(picked).toContainText('Sunset Jazz on the Waterfront')
+  await expect(paper.getByRole('region', { name: 'Tonight & this weekend' })).toHaveCount(0)
+  // What, on top of when: nothing to show is greyed out (no music that Saturday); For two is the jazz.
+  await paper.getByRole('button', { name: 'Everything' }).click()
+  const what = paper.getByRole('listbox', { name: 'Everything' })
+  await expect(what.getByRole('option', { name: /^Music/ })).toBeDisabled()
+  await what.getByRole('option', { name: /^For two/ }).click()
+  await expect(picked).toContainText(/SATURDAY · FOR TWO · 1/)
+  await expect(picked).toContainText('Sunset Jazz on the Waterfront')
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out-picked.png')
+  // A tap outside closes an open picker; Clear goes back to the whole page.
+  await paper.getByRole('button', { name: 'Any act' }).click()
+  await expect(paper.getByRole('listbox', { name: 'Any act' })).toBeVisible()
+  await paper.getByRole('heading').click()
+  await expect(paper.getByRole('listbox', { name: 'Any act' })).toHaveCount(0)
+  await picked.getByRole('button', { name: 'Clear' }).click()
+  await expect(paper.getByRole('region', { name: 'Tonight & this weekend' })).toBeVisible()
+})
+
 // Canvas 73A (Jake, Oct 8: "the front page is the most important. how can we fix the cut off text. I dont want less" →
 // "on vertical scroll the cards shrink away as the scroll goes up … as the scroll goes back down the cards expand back up"
 // → "the shrink / expand should be very smooth and very cool feeling"). A heavy day's real paper (Oct 8's): nothing is
