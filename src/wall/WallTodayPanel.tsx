@@ -83,7 +83,7 @@ export default function WallTodayPanel({ mode, members, pigmentOf, next, moveAct
                     event.stopPropagation()
                     onTick?.(row)
                   }}
-                  className={`flex h-[64px] min-w-0 items-center gap-[14px] border-0 bg-transparent px-[16px] text-left text-wall-ink ${i ? 'border-t border-solid border-wall-rule' : ''}`}
+                  className={`flex min-h-[64px] min-w-0 items-center gap-[14px] border-0 bg-transparent px-[16px] py-[10px] text-left text-wall-ink ${i ? 'border-t border-solid border-wall-rule' : ''}`}
                 >
                   {row.at
                     ? <span className={`w-[64px] shrink-0 font-display text-wall-date lining-nums ${row.late ? 'text-wall-rust' : ''}`}>{formatWallClock(row.at).time}</span>
@@ -95,7 +95,8 @@ export default function WallTodayPanel({ mode, members, pigmentOf, next, moveAct
                         <House size={14} strokeWidth={2.2} />
                       </span>
                     )}
-                  <span className={`min-w-0 flex-1 truncate font-display text-wall-heading ${done ? 'text-wall-ink-2 line-through' : ''}`}>
+                  {/* Two lines before it's cut (Jake, Oct 8: "what can we do about the to do truncating"): the row grows to fit. */}
+                  <span className={`line-clamp-2 min-w-0 flex-1 font-display text-wall-heading leading-[1.15] ${done ? 'text-wall-ink-2 line-through' : ''}`}>
                     {row.title}
                     {row.late && !done && <span className="font-body text-wall-detail text-wall-rust"> &nbsp;late</span>}
                   </span>
