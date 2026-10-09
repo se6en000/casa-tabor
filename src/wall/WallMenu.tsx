@@ -1,4 +1,4 @@
-import { Mic, Plus } from 'lucide-react'
+import { Flame, Mic, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
 
@@ -150,8 +150,9 @@ export default function WallMenu({ onClose, onPreview, onFireplace, side = 'righ
           <button
             type="button"
             onClick={onFireplace}
-            className="flex h-[64px] items-center border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left font-display text-wall-date font-semibold text-wall-ink"
+            className="flex h-[64px] items-center gap-[14px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left font-display text-wall-date font-semibold text-wall-ink"
           >
+            <Flame aria-hidden="true" size={26} strokeWidth={1.8} className="shrink-0 text-wall-rust" />
             Fireplace
           </button>
         )}
