@@ -146,7 +146,7 @@ test('phone: an event — details, the trip, get & pack; Edit a time and save; D
 
   await sheet.getByRole('button', { name: 'Edit' }).click()
   await expect(sheet.getByRole('button', { name: 'Done' })).toBeVisible() // nothing changed yet
-  await sheet.getByRole('button', { name: 'Start later' }).click()
+  await sheet.getByLabel('Starts at').fill('12:45')
   await sheet.getByRole('button', { name: 'Save' }).click()
   await expect(phone.getByRole('region', { name: /on the phone/ })).toHaveCount(0)
   await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
@@ -159,33 +159,39 @@ test('phone: an event — details, the trip, get & pack; Edit a time and save; D
 })
 
 // Jake, Oct 8: "On mobile I need to be able to edit events /reminders with all the options the wall has".
-test('phone: Edit has the wall\'s options — all day, any date, the time wheel, the place search and Save to my places, who drives', async ({ page }) => {
+test('phone: Edit (canvas 82A) has the wall\'s options — all day, the date and time pickers, the place search and Save to my places, who drives', async ({ page }) => {
   const phone = await open(page, '2026-09-26T08:00:00', 'jake-id')
   await phone.getByRole('button', { name: 'Today' }).click()
   await phone.getByRole('button', { name: /Softball: Huskies/ }).click()
   const sheet = phone.getByRole('region', { name: /Softball: Huskies @ RPB Cascade on the phone/ })
   await sheet.getByRole('button', { name: 'Edit' }).click()
+  // The phone's own top bar: Cancel · Edit event · Done (Save once something changes).
+  await expect(sheet.getByText('Edit event')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Done' })).toBeVisible()
+  // The place as a name and its address — not the address run into the name.
+  await expect(sheet.getByText('Ferrin Park Field 1', { exact: true })).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-event-edit-82a.png')
   // All day hides the times; off again, they're back.
   await sheet.getByRole('checkbox', { name: 'All day' }).check()
   await expect(sheet.getByLabel('Starts at')).toHaveCount(0)
   await sheet.getByRole('checkbox', { name: 'All day' }).uncheck()
-  // A tap on the time is the phone's own wheel (a time field); − and + still step.
+  // The date and the time are the phone's own pickers.
   await sheet.getByLabel('Starts at').fill('13:15')
   await expect(sheet.getByText('1:15 PM')).toBeVisible()
-  // Any date, past the chips.
-  await sheet.getByRole('button', { name: 'Other date' }).click()
-  await sheet.getByLabel('Other date').fill('2026-10-03')
-  // Who drives, on an event that leaves home.
-  await expect(sheet.getByText('WHO’S DRIVING?')).toBeVisible()
+  await sheet.getByLabel('Date').fill('2026-10-03')
+  await expect(sheet.getByText('Sat, Oct 3')).toBeVisible()
+  // Who drives, from the Driving row.
+  await sheet.getByRole('button', { name: /^Driving/ }).click()
   await sheet.getByRole('button', { name: 'Kelly', exact: true }).last().click()
+  await expect(sheet.getByRole('button', { name: /^Driving/ })).toContainText('Kelly')
   // The place: a search for the real address, and keep it.
+  await sheet.getByRole('button', { name: /Ferrin Park Field 1/ }).click()
   await sheet.getByPlaceholder('Home, a place, or an address (optional)').fill('Ferrin')
   await sheet.getByRole('button', { name: /Ferrin Park Field 2/ }).click()
-  await expect(sheet.getByText('11921 Cyrus Blvd, West Palm Beach, FL 33410')).toBeVisible()
+  await expect(sheet.getByText(/11921 Cyrus Blvd, West Palm Beach, FL 33410/)).toBeVisible()
   await sheet.getByRole('button', { name: 'Save to my places' }).click()
   await expect(sheet.getByText('Saved to your places.')).toBeVisible()
   expect(await page.evaluate(() => window.__savedPlaces)).toEqual(['Ferrin Park Field 2'])
-  await expect(phone).toHaveScreenshot('phone-event-edit-all.png')
   await sheet.getByRole('button', { name: 'Save' }).click()
   await expect(phone.getByRole('region', { name: /on the phone/ })).toHaveCount(0)
 })
@@ -200,7 +206,7 @@ test('phone: a reminder edits as the wall\'s does — At (no end), or Anytime wi
   await expect(sheet.getByLabel('Ends at')).toHaveCount(0)
   await expect(sheet.getByPlaceholder('Home, a place, or an address (optional)')).toBeVisible()
   await sheet.getByRole('checkbox', { name: 'Anytime (no date)' }).check()
-  await expect(sheet.getByText('DAY', { exact: true })).toHaveCount(0)
+  await expect(sheet.getByLabel('Date', { exact: true })).toHaveCount(0)
   await expect(sheet.getByLabel('At', { exact: true })).toHaveCount(0)
 })
 
@@ -232,7 +238,9 @@ test('phone: + → Type it adds an event on the day being looked at, with who is
   const sheet = phone.getByRole('region', { name: /on the phone/ })
   await expect(sheet.getByRole('button', { name: 'Add it' })).toBeDisabled()
   await sheet.getByRole('textbox').first().fill('Haircut')
-  await sheet.getByPlaceholder(/Home, a place/).fill('Great Clips')
+  // Typed a letter at a time, the place box stays open (it once closed to its row after the first letter).
+  await sheet.getByPlaceholder(/Home, a place/).pressSequentially('Great Clips')
+  await expect(sheet.getByPlaceholder(/Home, a place/)).toHaveValue('Great Clips')
   await sheet.getByRole('button', { name: 'Owen', exact: true }).click()
   await expect(phone).toHaveScreenshot('phone-add.png')
   await sheet.getByRole('button', { name: 'Add it' }).click()
@@ -253,7 +261,7 @@ test('phone: the next-move card — Directions first, the right words mid-trip, 
   await expect(card.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', /destination=Ferrin%20Park%20Field%201/)
   await expect(phone).toHaveScreenshot('phone-card.png')
   await card.getByRole('button', { name: 'Edit' }).click()
-  await expect(phone.getByRole('region', { name: /on the phone/ }).getByText('TITLE')).toBeVisible()
+  await expect(phone.getByRole('region', { name: /on the phone/ }).getByText('Edit event')).toBeVisible()
 })
 
 test('phone: People — find someone, then call, text or drive there', async ({ page }) => {
@@ -1187,12 +1195,13 @@ test('phone: the form — the place from last time, a clash warned, who’s driv
   const form = phone.getByRole('region', { name: /on the phone/ })
   await form.getByPlaceholder('What is it?').fill('Pet grooming')
   await form.getByRole('button', { name: 'Happy Tails, like last time' }).click()
-  await expect(form.getByPlaceholder(/Home, a place/)).toHaveValue('Happy Tails')
+  await expect(form.getByRole('button', { name: /^Change the place: Happy Tails/ })).toBeVisible()
   await expect(form.getByText('Nobody’s on it yet — who’s going?')).toBeVisible()
   await form.getByRole('button', { name: 'Liv', exact: true }).click()
   // School is a routine — never a clash (Jake, Oct 7: "If there is a clash with a 'routine' schedule - I really dont need
   // the alert"); a real appointment is (wall-clashes tests).
   await expect(form.getByText(/Clashes with/)).toHaveCount(0)
+  await form.getByRole('button', { name: /^Driving/ }).click()
   await form.getByRole('button', { name: 'Jake', exact: true }).last().click()
   await expect(phone).toHaveScreenshot('phone-form-smart.png')
   await form.getByRole('button', { name: 'Add it' }).click()
@@ -1250,10 +1259,11 @@ test('phone: editing an event changes its place — a saved place offered as you
   await phone.getByRole('button', { name: /Emme Practice Violin/ }).first().click()
   const sheet = phone.getByRole('region', { name: /on the phone$/ })
   await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
+  // No place yet: the place box is open (canvas 82A; with one, a tap on its row opens it).
   const place = sheet.getByPlaceholder(/Home, a place/)
   await place.fill('Ferr')
   await sheet.getByRole('button', { name: /Ferrin Park/ }).click()
-  await expect(place).toHaveValue('Ferrin Park')
+  await expect(sheet.getByRole('button', { name: /^Change the place: Ferrin Park/ })).toBeVisible()
   await sheet.getByRole('button', { name: 'Save' }).click()
   await expect(phone.getByText(/Ferrin Park/).first()).toBeVisible()
 })
@@ -1282,7 +1292,8 @@ test('phone: the place on the edit sheet shows its whole address', async ({ page
   await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
   const place = sheet.getByPlaceholder(/Home, a place/)
   await place.fill('Ferr')
-  await expect(sheet.getByText('No address yet — pick one below, or it’s looked up after you save.')).toBeVisible()
+  // The saved place offered with its whole address, before and after it's picked.
+  await expect(sheet.getByRole('button', { name: /Ferrin Park/ })).toContainText('11921 Okeechobee Blvd')
   await sheet.getByRole('button', { name: /Ferrin Park/ }).click()
   await expect(sheet.getByText('11921 Okeechobee Blvd, Royal Palm Beach, FL, 33411')).toBeVisible()
 })

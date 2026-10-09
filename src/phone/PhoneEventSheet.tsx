@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, ChevronLeft, Lock, MapPin, Minus, Plus } from 'lucide-react'
+import { CalendarDays, Car, Check, ChevronLeft, ChevronRight, Clock, Lock, MapPin, Plus } from 'lucide-react'
 import type { Trip, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
-import { createArgs, dayChips, draftChanges, draftFromEvent, NEW_EVENT_ID, setAllDay, setAnytime, setDay, setDriver, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
+import { createArgs, draftChanges, draftFromEvent, NEW_EVENT_ID, setAllDay, setAnytime, setDay, setDriver, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
 import type { PlaceSearchResult } from '../wall/places'
 import type { EventView } from './lens'
 import { notesOf, notesSource } from '../../supabase/functions/_shared/event-notes.mjs'
@@ -14,9 +14,6 @@ import { notesOf, notesSource } from '../../supabase/functions/_shared/event-not
 // with all the options the wall has"): title, any day, the time (a tap opens the phone's own wheel), all day or anytime,
 // the place (saved places, a search for the real address, Save to my places), who's going, who drives; a project
 // step's Done and its project. Saved through the same steps as the wall; Delete after a clear yes. Repeats go to Calendar.
-
-/** A tap on − or + moves a time this many minutes (stepStart/stepEnd take minutes). */
-const STEP_MIN = 15
 
 const fmt = (minutes: number) => {
   const h = Math.floor(minutes / 60) % 24
@@ -140,12 +137,24 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [typed, draft.place.address, searchPlaces])
   const savedNames = new Set(placeOptions.map((p) => p.name.toLowerCase()))
-  const [otherDate, setOtherDate] = useState(false)
   const reminder = kind === 'reminder'
   const off = reminder ? draft.anytime : draft.allDay
   const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
   const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const drivers = members.filter((m) => m.can_drive)
+  // The place box: open while there's no place yet (and while typing one); a pick closes it to its row.
+  const [placeOpen, setPlaceOpen] = useState(() => !draft.place.name.trim())
+  const [driverOpen, setDriverOpen] = useState(false)
+  // The place as a name and its address — never the address run into the name ("Ferrin Park Field 1, 11921 …").
+  const splitName = (full: string) => (full.includes(',') ? { name: full.split(',')[0].trim(), address: full.slice(full.indexOf(',') + 1).trim() } : null)
+  const shownPlace = draft.place.address && draft.place.address !== draft.place.name
+    ? { name: splitName(draft.place.name)?.name ?? draft.place.name, address: draft.place.address }
+    : splitName(draft.place.name) ?? { name: draft.place.name, address: draft.place.address || null }
+  const save = () => {
+    if (isNew) { if (createEvent) void run(async () => { await createEvent(createArgs(draft, kind, members)) }, 'Adding didn’t work. Nothing was added.'); return }
+    if (changes.length === 0) { onClose(); return }
+    if (saveEvent) void run(() => saveEvent(event, draft), 'Saving didn’t work. Nothing was changed.')
+  }
   const run = async (work: () => Promise<void>, failed: string, stayOpen = false) => {
     setBusy(true)
     setError(null)
@@ -162,23 +171,31 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const pill = 'h-[44px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-phone-body font-semibold text-wall-ink'
   const dark = 'h-[44px] rounded-full border-0 bg-wall-ink px-[20px] text-phone-body font-bold text-wall-on-pigment'
   const label = 'text-phone-label font-bold tracking-[0.16em] text-wall-ink-2'
+  // Editing (canvas 82A): grouped cards of rows, as the phone's own settings are.
+  const group = 'mb-[6px] mt-[22px] px-[14px] text-phone-label font-semibold tracking-[0.08em] text-wall-ink-2'
+  const card = 'flex flex-col overflow-hidden rounded-[14px] bg-wall-on-pigment'
+  const row = 'flex min-h-[52px] items-center gap-[12px] border-solid border-wall-stone bg-transparent px-[14px] py-[8px] text-wall-ink'
+  const chip = 'h-[36px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[14px] text-phone-detail font-semibold text-wall-ink'
 
   return (
     <section aria-label={`${event.title} on the phone`} className="absolute inset-0 z-20 flex flex-col bg-phone-ground font-body text-wall-ink">
       {/* A pinned top bar, clear of the notch: Back and Edit never scroll away or sit under the status bar. */}
+      {mode === 'edit' ? (
+        // Editing (canvas 82A; Jake, Oct 8: "The edit screens look pretty ugly on mobile" → "82A"): the iPhone's own
+        // top bar — Cancel, what it is, Save — always in reach.
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-0 border-b border-solid border-wall-stone bg-phone-ground px-[16px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
+          <button type="button" onClick={() => (isNew ? onClose() : setMode('details'))} className="h-[44px] justify-self-start border-0 bg-transparent p-0 text-phone-body text-wall-ink">Cancel</button>
+          <span className="text-phone-body font-bold">{isNew ? (kind === 'reminder' ? 'New reminder' : 'New event') : kind === 'reminder' ? 'Edit reminder' : 'Edit event'}</span>
+          <button type="button" disabled={busy || !draft.title.trim()} onClick={save} className="h-[44px] justify-self-end border-0 bg-transparent p-0 text-phone-body font-bold text-wall-brass-ink disabled:opacity-40">
+            {busy ? (isNew ? 'Adding…' : 'Saving…') : isNew ? 'Add it' : changes.length === 0 ? 'Done' : 'Save'}
+          </button>
+        </div>
+      ) : (
       <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         {mode === 'details' && !view.repeating && !projectStep && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
-        {isNew && (
-          <div className="flex rounded-full border border-solid border-wall-stone p-[3px]">
-            {(['event', 'reminder'] as const).map((k) => (
-              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`h-[38px] rounded-full border-0 px-[16px] text-phone-detail font-semibold ${kind === k ? 'bg-wall-ink text-wall-on-pigment' : 'bg-transparent text-wall-ink'}`}>
-                {k === 'event' ? 'Event' : 'Reminder'}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
+      )}
       <div className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+16px))]">
 
       {mode !== 'edit' ? (
@@ -366,154 +383,143 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           )}
         </div>
       ) : (
-        <div className="mt-[14px] flex flex-col gap-[18px]">
-          <label className="flex flex-col gap-[6px]">
-            <span className={label}>TITLE</span>
-            <input value={draft.title} autoFocus={isNew} placeholder={isNew ? (kind === 'reminder' ? 'What to remember' : 'What is it?') : undefined} onChange={(e) => setDraft((d) => setTitle(d, e.target.value))} className="h-[52px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-display text-phone-heading font-semibold text-wall-ink" />
-          </label>
-          {/* Where it is, when adding and when editing (Jake, Oct 2): typed, or one of the saved places as you type. */}
-          {(
-            <label className="flex flex-col gap-[6px]">
-              <span className={label}>PLACE</span>
-              <input
-                value={draft.place.name}
-                placeholder="Home, a place, or an address (optional)"
-                onChange={(e) => { setPicked(null); setKeptPlace(null); setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null })) }}
-                className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
-              />
-              {/* The whole address, so it's plainly the right place (Jake, Oct 2: "I need to see it in full. Not just the
-                  place's name"). */}
-              {draft.place.address && draft.place.address !== draft.place.name ? (
-                <span className="flex items-start gap-[6px] text-phone-detail text-wall-ink-2"><MapPin size={14} aria-hidden="true" className="mt-[2px] shrink-0" />{draft.place.address}</span>
-              ) : draft.place.name.trim() && !/^home$/i.test(draft.place.name.trim()) ? (
-                <span className="text-phone-detail text-wall-ink-2">No address yet — pick one below, or it’s looked up after you save.</span>
-              ) : null}
-              {placeHits.length > 0 && (
-                <span className="flex flex-col gap-[6px]">
-                  {placeHits.map((p) => (
-                    <button key={p.name} type="button" onClick={() => setDraft((d) => setPlace(d, { name: p.name, address: p.address, driveMinutes: null }))}
-                      className="flex min-h-[44px] flex-col items-start justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[6px] text-left text-wall-ink">
-                      <span className="text-phone-body font-semibold">{p.name}</span>
-                      {p.address && <span className="text-phone-detail text-wall-ink-2">{p.address}</span>}
-                    </button>
-                  ))}
-                </span>
-              )}
-              {/* The search (the wall's): the real place and its address. */}
-              {found.length > 0 && (
-                <span className="flex flex-col gap-[6px]" aria-label="Places found">
-                  {found.filter((r) => !placeHits.some((p) => p.name === r.name)).map((r) => (
-                    <button key={r.place_id} type="button" onClick={() => { setPicked(r); setKeptPlace(savedNames.has(r.name.toLowerCase()) || !savePlace ? null : 'offer'); setDraft((d) => setPlace(d, { name: r.name, address: r.address, driveMinutes: null })) }}
-                      className="flex min-h-[44px] items-start gap-[8px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] py-[6px] text-left text-wall-ink">
-                      <MapPin size={16} aria-hidden="true" className="mt-[3px] shrink-0 text-wall-brass-ink" />
-                      <span className="flex flex-col"><span className="text-phone-body font-semibold">{r.name}</span><span className="text-phone-detail text-wall-ink-2">{r.address}</span></span>
-                    </button>
-                  ))}
-                </span>
-              )}
-              {keptPlace === 'offer' && picked && savePlace && (
-                <span className="flex flex-wrap items-center gap-[8px]">
-                  <span className="text-phone-detail text-wall-ink-2">Keep it as one of your places?</span>
-                  <button type="button" className={pill} onClick={() => { setKeptPlace('saved'); void savePlace(picked).catch(() => setKeptPlace('offer')) }}>Save to my places</button>
-                  <button type="button" className={pill} onClick={() => setKeptPlace(null)}>Just this once</button>
-                </span>
-              )}
-              {keptPlace === 'saved' && <span className="text-phone-detail font-semibold text-wall-brass-ink">Saved to your places.</span>}
-              {lastPlace && (
-                <button type="button" onClick={() => setDraft((d) => setPlace(d, { name: lastPlace.name, address: lastPlace.address ?? '', driveMinutes: null }))}
-                  className="flex min-h-[44px] items-center gap-[6px] self-start rounded-full border border-solid border-wall-brass bg-wall-brass/10 px-[14px] text-phone-detail font-semibold text-wall-brass-ink">
-                  <MapPin size={15} aria-hidden="true" /> {lastPlace.name}, like last time
-                </button>
-              )}
-            </label>
-          )}
-          {/* All day for an event, Anytime for a reminder (no date at all) — as on the wall. */}
-          <label className="flex min-h-[44px] items-center gap-[12px] text-phone-body font-semibold">
-            <input type="checkbox" checked={off} onChange={(e) => setDraft((d) => (reminder ? setAnytime(d, e.target.checked) : setAllDay(d, e.target.checked)))} className="h-[22px] w-[22px] accent-wall-ink" />
-            {reminder ? 'Anytime (no date)' : 'All day'}
-          </label>
-          {!(reminder && draft.anytime) && (
-          <div className="flex flex-col gap-[6px]">
-            <span className={label}>DAY</span>
-            <div className="flex gap-[6px] overflow-x-auto">
-              {dayChips(now, draft.day).map((chip) => (
-                <button key={chip.date.getTime()} type="button" aria-pressed={chip.selected} onClick={() => { setOtherDate(false); setDraft((d) => setDay(d, chip.date)) }} className={`flex h-[60px] min-w-[52px] flex-col items-center justify-center rounded-[12px] ${chip.selected ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-wall-paper text-wall-ink'}`}>
-                  <span className="text-phone-label font-bold">{chip.weekday}</span>
-                  <span className="font-display text-phone-heading font-bold">{chip.date.getDate()}</span>
+        <div className="flex flex-col pb-[20px]">
+          {/* The title, big, as on the event itself; a new one asks Event or Reminder under it. */}
+          {/* Wraps rather than cuts off ("Softball: Huskies @ RPB Cascade" on two lines). */}
+          <textarea aria-label="Title" value={draft.title} autoFocus={isNew} rows={draft.title.length > 22 ? 2 : 1} placeholder={kind === 'reminder' ? 'What to remember' : 'What is it?'}
+            onChange={(e) => setDraft((d) => setTitle(d, e.target.value.replace(/\n/g, ' ')))}
+            className="mt-[16px] resize-none border-0 border-b-[1.5px] border-solid border-wall-stone bg-transparent px-[2px] pb-[10px] font-display text-phone-title font-bold leading-[1.1] text-wall-ink placeholder:text-wall-ink-2 focus:outline-none" />
+          {isNew && (
+            <div className="mt-[12px] flex self-start rounded-full bg-phone-card p-[3px]">
+              {(['event', 'reminder'] as const).map((k) => (
+                <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`h-[36px] rounded-full border-0 px-[18px] text-phone-detail font-semibold ${kind === k ? 'bg-wall-ink text-wall-on-pigment' : 'bg-transparent text-wall-ink'}`}>
+                  {k === 'event' ? 'Event' : 'Reminder'}
                 </button>
               ))}
-              <button type="button" aria-pressed={otherDate} onClick={() => setOtherDate((o) => !o)} className="flex h-[60px] min-w-[72px] items-center justify-center rounded-[12px] border border-solid border-wall-stone bg-wall-paper px-[8px] text-phone-detail font-semibold text-wall-ink">Other date</button>
             </div>
-            {otherDate && (
-              <input aria-label="Other date" type="date" value={ymd(draft.day)} onChange={(e) => { if (e.target.value) { const [y, m, d] = e.target.value.split('-').map(Number); setDraft((dr) => setDay(dr, new Date(y, m - 1, d))) } }}
-                className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[12px] text-phone-body text-wall-ink" />
+          )}
+
+          <span className={group}>WHERE</span>
+          <div className={card}>
+            {placeOpen ? (
+              <div className="flex flex-col gap-[8px] px-[14px] py-[12px]">
+                <div className="flex items-center gap-[10px]">
+                  <MapPin size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" />
+                  <input value={draft.place.name} autoFocus={placeOpen} placeholder="Home, a place, or an address (optional)"
+                    onChange={(e) => { setPicked(null); setKeptPlace(null); setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null })) }}
+                    className="h-[40px] min-w-0 flex-1 border-0 bg-transparent p-0 text-phone-body text-wall-ink placeholder:text-wall-ink-2 focus:outline-none" />
+                </div>
+                {[...placeHits.map((p) => ({ key: `saved:${p.name}`, name: p.name, address: p.address, result: null as PlaceSearchResult | null })),
+                  ...found.filter((r) => !placeHits.some((p) => p.name === r.name)).map((r) => ({ key: r.place_id, name: r.name, address: r.address, result: r }))].map((o) => (
+                  <button key={o.key} type="button"
+                    onClick={() => { setPicked(o.result); setKeptPlace(o.result && savePlace && !savedNames.has(o.name.toLowerCase()) ? 'offer' : null); setPlaceOpen(false); setDraft((d) => setPlace(d, { name: o.name, address: o.address ?? '', driveMinutes: null })) }}
+                    className="flex min-h-[48px] flex-col items-start justify-center border-0 border-t border-solid border-wall-stone bg-transparent px-[28px] py-[6px] text-left text-wall-ink">
+                    <span className="text-phone-body font-semibold">{o.name}</span>
+                    {o.address && <span className="text-phone-detail text-wall-ink-2">{o.address}</span>}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button type="button" aria-label={`Change the place: ${shownPlace.name}`} onClick={() => setPlaceOpen(true)} className={`${row} w-full border-0`}>
+                <MapPin size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" />
+                <span className="flex min-w-0 flex-1 flex-col text-left">
+                  <span className="text-phone-body text-wall-ink">{shownPlace.name}</span>
+                  <span className="text-phone-detail text-wall-ink-2">{[shownPlace.address ?? (/^home$/i.test(shownPlace.name) ? null : 'Its address is found after you save'), draft.place.driveMinutes != null ? `${draft.place.driveMinutes} min` : null].filter(Boolean).join(' · ')}</span>
+                </span>
+                <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" />
+              </button>
             )}
           </div>
+          {lastPlace && (
+            <button type="button" onClick={() => { setPlaceOpen(false); setDraft((d) => setPlace(d, { name: lastPlace.name, address: lastPlace.address ?? '', driveMinutes: null })) }}
+              className="mt-[8px] flex min-h-[40px] items-center gap-[6px] self-start rounded-full border border-solid border-wall-brass bg-wall-brass/10 px-[14px] text-phone-detail font-semibold text-wall-brass-ink">
+              <MapPin size={15} aria-hidden="true" /> {lastPlace.name}, like last time
+            </button>
           )}
-          {!off && (reminder ? (['start'] as const) : (['start', 'end'] as const)).map((which) => (
-            <div key={which} className="flex items-center gap-[10px]">
-              <span className="w-[56px] text-phone-body text-wall-ink-2">{which === 'start' ? (reminder ? 'At' : 'Starts') : 'Ends'}</span>
-              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} earlier`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, -STEP_MIN) : stepEnd(d, -STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Minus size={18} /></button>
-              {/* A tap opens the phone's own time wheel; − and + still step a quarter hour. */}
-              <label className="relative flex h-[48px] flex-1 items-center justify-center rounded-[12px] border-2 border-solid border-wall-brass font-display text-phone-heading font-semibold">
-                {fmt(which === 'start' ? draft.startMin : draft.endMin)}
+          {keptPlace === 'offer' && picked && savePlace && (
+            <div className="mt-[8px] flex flex-wrap items-center gap-[8px] px-[4px]">
+              <span className="text-phone-detail text-wall-ink-2">Keep it as one of your places?</span>
+              <button type="button" className={chip} onClick={() => { setKeptPlace('saved'); void savePlace(picked).catch(() => setKeptPlace('offer')) }}>Save to my places</button>
+              <button type="button" className={chip} onClick={() => setKeptPlace(null)}>Just this once</button>
+            </div>
+          )}
+          {keptPlace === 'saved' && <span className="mt-[8px] px-[4px] text-phone-detail font-semibold text-wall-brass-ink">Saved to your places.</span>}
+
+          <span className={group}>WHEN</span>
+          <div className={card}>
+            <label className={row}>
+              <span className="flex-1 text-phone-body">{reminder ? 'Anytime (no date)' : 'All day'}</span>
+              <input type="checkbox" checked={off} onChange={(e) => setDraft((d) => (reminder ? setAnytime(d, e.target.checked) : setAllDay(d, e.target.checked)))}
+                className="relative h-[31px] w-[51px] shrink-0 cursor-pointer appearance-none rounded-full bg-wall-stone transition-colors before:absolute before:left-[2px] before:top-[2px] before:h-[27px] before:w-[27px] before:rounded-full before:bg-wall-on-pigment before:shadow before:transition-transform before:content-[''] checked:bg-wall-ink checked:before:translate-x-[20px]" />
+            </label>
+            {!(reminder && draft.anytime) && (
+              // A tap opens the phone's own date picker.
+              <label className={`${row} relative border-t`}>
+                <CalendarDays size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" />
+                <span className="flex-1 text-phone-body">Date</span>
+                <span className="text-phone-body text-wall-ink-2">{draft.day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                <input aria-label="Date" type="date" value={ymd(draft.day)} onChange={(e) => { if (e.target.value) { const [y, m, d] = e.target.value.split('-').map(Number); setDraft((dr) => setDay(dr, new Date(y, m - 1, d))) } }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+              </label>
+            )}
+            {!off && (reminder ? (['start'] as const) : (['start', 'end'] as const)).map((which) => (
+              // And a time, the phone's own wheel.
+              <label key={which} className={`${row} relative border-t`}>
+                {which === 'start' ? <Clock size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" /> : <span className="w-[18px] shrink-0" />}
+                <span className="flex-1 text-phone-body">{which === 'start' ? (reminder ? 'At' : 'Starts') : 'Ends'}</span>
+                <span className="rounded-[8px] bg-wall-stone/60 px-[10px] py-[4px] text-phone-body">{fmt(which === 'start' ? draft.startMin : draft.endMin)}</span>
                 <input aria-label={which === 'start' ? (reminder ? 'At' : 'Starts at') : 'Ends at'} type="time" value={hhmm(which === 'start' ? draft.startMin : draft.endMin)}
                   onChange={(e) => { if (!e.target.value) return; const [h, m] = e.target.value.split(':').map(Number); const to = h * 60 + m; setDraft((d) => (which === 'start' ? stepStart(d, to - d.startMin) : stepEnd(d, to - d.endMin))) }}
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
               </label>
-              <button type="button" aria-label={`${which === 'start' ? 'Start' : 'End'} later`} onClick={() => setDraft((d) => (which === 'start' ? stepStart(d, STEP_MIN) : stepEnd(d, STEP_MIN)))} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-wall-paper p-0 text-wall-ink"><Plus size={18} /></button>
-            </div>
-          ))}
-          <div className="flex flex-col gap-[8px]">
-            <span className={label}>WHO'S GOING</span>
-            <div className="grid grid-cols-3 gap-[8px]">
-              {members.filter((m) => m.show_on_home_sidebar !== false).map((m) => {
-                const on = draft.going.includes(m.id)
-                return (
-                  <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id]))} className={`flex h-[60px] flex-col items-center justify-center gap-[2px] rounded-[12px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
-                    {disc(m.id, 'h-[26px] w-[26px] text-phone-detail')}{m.name}
-                  </button>
-                )
-              })}
-            </div>
+            ))}
+          </div>
+
+          <span className={group}>WHO’S GOING</span>
+          <div className={`${card} grid grid-cols-6 px-[6px] py-[12px]`}>
+            {members.filter((m) => m.show_on_home_sidebar !== false).map((m) => {
+              const on = draft.going.includes(m.id)
+              return (
+                <button key={m.id} type="button" aria-pressed={on} aria-label={m.name} onClick={() => setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id]))}
+                  className="flex flex-col items-center gap-[5px] border-0 bg-transparent p-0 text-wall-ink">
+                  {on ? disc(m.id, 'h-[40px] w-[40px] text-phone-heading') : <span aria-hidden="true" className="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[1.5px] border-solid border-wall-ink-2/50 font-display text-phone-heading text-wall-ink-2">{m.name.charAt(0)}</span>}
+                  <span className={`text-phone-label ${on ? 'font-bold' : 'text-wall-ink-2'}`}>{m.name}</span>
+                </button>
+              )
+            })}
           </div>
           {isNew && kind === 'event' && draft.going.length === 0 && draft.title.trim() && (
-            <div className="text-phone-detail font-semibold text-wall-brass-ink">Nobody’s on it yet — who’s going?</div>
+            <div className="mt-[8px] px-[4px] text-phone-detail font-semibold text-wall-brass-ink">Nobody’s on it yet — who’s going?</div>
           )}
-          {clashes.map((c) => <div key={c} role="status" className="text-phone-detail font-semibold text-wall-rust">{c}</div>)}
+          {clashes.map((c) => <div key={c} role="status" className="mt-[8px] px-[4px] text-phone-detail font-semibold text-wall-rust">{c}</div>)}
+
           {kind === 'event' && outing && drivers.length > 0 && (
-            <div className="flex flex-col gap-[8px]">
-              <span className={label}>WHO’S DRIVING?</span>
-              <div className="flex flex-wrap gap-[8px]">
-                {drivers.map((m) => {
-                  const on = draft.driverId === m.id
-                  return (
-                    <button key={m.id} type="button" aria-pressed={on} onClick={() => setDraft((d) => setDriver(d, on ? null : m.id))}
-                      className={`flex h-[44px] items-center gap-[6px] rounded-full pl-[5px] pr-[14px] text-phone-detail text-wall-ink ${on ? 'border-2 border-solid border-wall-ink bg-wall-on-pigment font-bold' : 'border border-solid border-wall-stone bg-wall-paper'}`}>
-                      {disc(m.id, 'h-[30px] w-[30px] text-phone-detail')}{m.name}
-                    </button>
-                  )
-                })}
+            <>
+              <span className={group}>THE TRIP</span>
+              <div className={card}>
+                <button type="button" aria-expanded={driverOpen} onClick={() => setDriverOpen((o) => !o)} className={`${row} w-full border-0`}>
+                  <Car size={18} aria-hidden="true" className="shrink-0 text-wall-ink-2" />
+                  <span className="flex-1 text-left text-phone-body">Driving</span>
+                  {draft.driverId ? <>{disc(draft.driverId, 'h-[26px] w-[26px] text-phone-detail')}<span className="text-phone-body text-wall-ink-2">{nameOf(draft.driverId)}</span></> : <span className="text-phone-body text-wall-ink-2">Nobody yet</span>}
+                  <ChevronRight size={18} aria-hidden="true" className={`shrink-0 text-wall-ink-2 transition-transform ${driverOpen ? 'rotate-90' : ''}`} />
+                </button>
+                {driverOpen && [...drivers.map((m) => ({ id: m.id as string | null, name: m.name })), { id: null, name: 'Nobody yet' }].map((o) => (
+                  <button key={o.id ?? 'none'} type="button" aria-pressed={draft.driverId === o.id} onClick={() => { setDraft((d) => setDriver(d, o.id)); setDriverOpen(false) }}
+                    className={`${row} w-full border-0 border-t`}>
+                    {o.id ? disc(o.id, 'h-[26px] w-[26px] text-phone-detail') : <span className="w-[26px] shrink-0" />}
+                    <span className="flex-1 text-left text-phone-body">{o.name}</span>
+                    {draft.driverId === o.id && <Check size={18} aria-hidden="true" className="shrink-0 text-wall-brass-ink" />}
+                  </button>
+                ))}
               </div>
-            </div>
+            </>
           )}
-          {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
-          <div className="flex gap-[8px]">
-            {isNew ? (
-              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => createEvent && void run(async () => { await createEvent(createArgs(draft, kind, members)) }, 'Adding didn’t work. Nothing was added.')}>
-                {busy ? 'Adding…' : 'Add it'}
-              </button>
-            ) : (
-              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => (changes.length === 0 ? onClose() : saveEvent && void run(() => saveEvent(event, draft), 'Saving didn’t work. Nothing was changed.'))}>
-                {busy ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
-              </button>
-            )}
-            <button type="button" className={pill} onClick={() => (isNew ? onClose() : setMode('details'))}>Cancel</button>
-          </div>
+
+          {error && <div className="mt-[12px] px-[4px] text-phone-detail font-semibold text-wall-rust">{error}</div>}
           {isNew ? (
-            <span className="text-phone-detail text-wall-ink-2">Goes on Google Calendar too.</span>
+            <span className="mt-[14px] px-[4px] text-phone-detail text-wall-ink-2">Goes on Google Calendar too.</span>
           ) : (
-            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">Repeats are changed in Calendar</Link>
+            <Link to={`/calendar?event=${event.id}`} className="mt-[14px] self-start px-[4px] text-phone-detail text-wall-ink-2">Repeats are changed in Calendar.</Link>
           )}
         </div>
       )}
