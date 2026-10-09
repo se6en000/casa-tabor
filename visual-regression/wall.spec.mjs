@@ -43,6 +43,21 @@ test('wall: a touch on Calm wakes the full day; faces are previewed from the MT 
   await expect(wall.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
 })
 
+// Jake, Oct 8: "can i get a menu option for evening calm … id like to cycle through all the landing screens while testing".
+test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as the evening shows it); a tap ends it', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T14:00:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  await wall.getByRole('button', { name: 'Night calm' }).click()
+  await expect(wall.getByText(/Previewing Night calm/)).toBeVisible()
+  const night = wall.getByLabel('Night')
+  await expect(night).toBeVisible()
+  await expect(night.getByText('Saturday, September 26')).toBeVisible()
+  await page.mouse.click(1200, 600)
+  await expect(wall.getByLabel('Night')).toHaveCount(0)
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+})
+
 test('wall: a menu item opens that part of the app', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
   const wall = page.getByTestId('wall-fixture')

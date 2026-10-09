@@ -91,11 +91,12 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
   )
 }
 
-const PREVIEWS: Array<{ face: Posture | 'paper'; label: string }> = [
+const PREVIEWS: Array<{ face: Posture | 'paper' | 'night'; label: string }> = [
   { face: 'launch', label: 'Full day' },
   { face: 'calm', label: 'Calm' },
   { face: 'paper', label: 'Morning paper' },
   { face: 'evening', label: 'Evening' },
+  { face: 'night', label: 'Night calm' },
 ]
 
 /**
@@ -103,7 +104,7 @@ const PREVIEWS: Array<{ face: Posture | 'paper'; label: string }> = [
  * opens under the mark that opened it — top right on the day faces, top left on the launch face (Jake, Oct 6: "can
  * settings menu show up near the MT button?").
  */
-export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (face: Posture | 'paper') => void; side?: 'left' | 'right' }) {
+export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (face: Posture | 'paper' | 'night') => void; side?: 'left' | 'right' }) {
   return (
     <div
       role="dialog"

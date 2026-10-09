@@ -201,6 +201,16 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setPaperPreviewUntil(0), Math.max(0, paperPreviewUntil - Date.now()))
     return () => window.clearTimeout(timer)
   }, [paperPreviewUntil])
+  // Night calm from the menu (Jake, Oct 8: "can i get a menu option for evening calm … id like to cycle through all the
+  // landing screens while testing"): by itself it waits for 10 untouched evening minutes. Shown until a tap, or as long
+  // as any preview.
+  const [nightPreviewUntil, setNightPreviewUntil] = useState(0)
+  const nightPreview = Date.now() < nightPreviewUntil
+  useEffect(() => {
+    if (!nightPreviewUntil) return
+    const timer = window.setTimeout(() => setNightPreviewUntil(0), Math.max(0, nightPreviewUntil - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [nightPreviewUntil])
   // The secret way back to the paper (Jake, Oct 8: "a button or a secret touch place to go back to the newspaper"): the
   // date under the clock opens it, as the menu's Morning paper does.
   const openPaper = () => {
@@ -708,10 +718,11 @@ export default function WallView(props: WallViewProps) {
         onStart={todos && comingUp.start ? (key) => void comingUp.start!(key).then((id) => { if (id) { openTodo(); setTodoProject(id) } }) : undefined}
       />
     )
-  } else if (nightSettled) {
-    // The night Calm (canvas 36a/36b): nobody at the wall for a while in the evening.
+  } else if (nightSettled || nightPreview) {
+    // The night Calm (canvas 36a/36b): nobody at the wall for a while in the evening — or previewed from the menu,
+    // when by day it shows tomorrow as the evening would.
     darkFace = true
-    const plan = planFor(dayOnShow)
+    const plan = nightPreview && !evening ? shownTomorrow : planFor(dayOnShow)
     const lists = plan ? packingGroups(plan, checklist) : null
     face = <WallNightCalm now={now} members={members} plan={plan} today={tonightByClock(now) ? todayPanel('evening') : null} packing={lists} onToggleItem={toggleChecklist} />
   } else if (!sameDay(dayOnShow, now) || (evening && !picked)) {
@@ -804,7 +815,7 @@ export default function WallView(props: WallViewProps) {
       ref={rootRef}
       className="relative h-full w-full"
       // A tap that nothing else handled (a person, a count, a block stop it) wakes Calm; once awake, any touch keeps it awake.
-      onClick={() => setAwakeUntil(Date.now() + WAKE_MS)}
+      onClick={() => { setAwakeUntil(Date.now() + WAKE_MS); setNightPreviewUntil(0) }}
       onPointerDownCapture={() => {
         setIdle(false)
         setTouches((n) => n + 1)
@@ -853,9 +864,9 @@ export default function WallView(props: WallViewProps) {
       {tidyOpen && tidy && !overlay && !selected && !handOff && (
         <WallTidy tidy={tidy} onClose={() => setTidyOpen(false)} onTalk={() => { setTidyOpen(false); onAsk?.('What’s the something you have for me?') }} />
       )}
-      {(shown.preview || paperPreview) && !selected && (
+      {(shown.preview || paperPreview || nightPreview) && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
-          Previewing {paperPreview ? 'Morning paper' : POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
+          Previewing {nightPreview ? 'Night calm' : paperPreview ? 'Morning paper' : POSTURE_NAMES[shown.posture]} · back to {POSTURE_NAMES[auto]} on its own
         </div>
       )}
       {selected && (
@@ -973,6 +984,8 @@ export default function WallView(props: WallViewProps) {
             // The morning paper is a calm face (any time of day, from the menu).
             const until = Date.now() + PREVIEW_MS
             setPaperPreviewUntil(face === 'paper' ? until : 0)
+            setNightPreviewUntil(face === 'night' ? until : 0)
+            if (face === 'night') { setPreview(null); setMenuOpen(false); return }
             const posture: Posture = face === 'paper' ? 'calm' : face
             setPreview(posture === auto ? null : { posture, until })
             setMenuOpen(false)
