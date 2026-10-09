@@ -3,18 +3,20 @@
 
 /** Every web address in some words. */
 export function urlsIn(text) {
-  return [...new Set(String(text ?? '').match(/https?:\/\/[^\s<>"')\]]+/gi) ?? [])].map((u) => u.replace(/[.,;!?]+$/, ''))
+  // iOS adds "(null)" after a link it shares from a Shortcut (Oct 9, a Maps share): not part of it.
+  return [...new Set(String(text ?? '').replace(/\(null\)/g, ' ').match(/https?:\/\/[^\s<>"'()\]]+/gi) ?? [])].map((u) => u.replace(/[.,;!?]+$/, ''))
 }
 
 /** What a share's words say besides a link or a file's name ("IMG_2231.PNG", "Screenshot 2026-10-09 at 8.14.22 PM"). */
 export function wordsOf(text) {
-  let t = String(text ?? '')
+  let t = String(text ?? '').replace(/\(null\)/g, ' ')
   for (const u of urlsIn(t)) t = t.split(u).join(' ')
   t = t.replace(/\s+/g, ' ').trim()
   if (/^(IMG|image|Photo|Screenshot|PDF)[\w .:-]*\.(png|jpe?g|heic|gif|pdf)$/i.test(t)) return ''
   // What the Shortcut writes for a picture as words ("Image", "Photo").
   if (/^(image|photo|screenshot|picture|file)s?$/i.test(t)) return ''
   if (/^Screenshot \d{4}-\d{2}-\d{2}/i.test(t)) return ''
+  if (!/[a-z0-9]/i.test(t)) return ''
   return t
 }
 
@@ -153,6 +155,7 @@ export function itemWhen(item) {
 export function shareReply(outcome) {
   switch (outcome.kind) {
     case 'place': {
+      if (outcome.found && outcome.already) return `${outcome.name} is already in Places worth trying${outcome.town ? ` — ${outcome.town}` : ''}${outcome.minutes ? `, ${outcome.minutes} min` : ''}.`
       if (!outcome.found) return `I couldn’t find ${outcome.name} on Google Maps. It’s kept with what you shared.`
       const where = [outcome.town, outcome.minutes ? `${outcome.minutes} min` : null].filter(Boolean).join(', ')
       return `Saved ${outcome.name} to Places worth trying${where ? ` — ${where}` : ''}.`
@@ -203,4 +206,18 @@ export function datesToAsk(items, events, todayYmd) {
     })
     return hit ? { ...i, already: { id: hit.id, title: hit.title } } : i
   })
+}
+
+/** A Google Maps link's place, once its short link is followed: "?q=Loco West Palm Beach, 840 N Railroad Ave, …" or
+ * "/maps/place/Loco+West+Palm+Beach/@…" → its name, and the whole line to look up (Oct 9, Jake's Maps share). */
+export function mapsPlaceOf(url) {
+  let u
+  try { u = new URL(url) } catch { return null }
+  if (!/(^|\.)google\.[a-z.]+$/.test(u.hostname) || !/maps|^\/$/.test(u.pathname + (u.hostname.startsWith('maps.') ? 'maps' : ''))) return null
+  const plus = (t) => decodeURIComponent(String(t).replace(/\+/g, ' ')).trim()
+  const q = u.searchParams.get('q') ?? u.searchParams.get('query')
+  const fromPath = u.pathname.match(/\/maps\/place\/([^/@]+)/)?.[1]
+  const line = q ? q.trim() : fromPath ? plus(fromPath) : ''
+  if (!line || /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(line)) return null
+  return { name: line.split(',')[0].trim(), query: line }
 }

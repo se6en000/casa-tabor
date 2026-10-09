@@ -114,3 +114,15 @@ test('share-in: Alexa knows their taste and the places they saved — theirs fir
   assert.match(s, /never say you\'ve been anywhere/)
   assert.equal(guideSection([], null), null)
 })
+
+test('share-in: a Google Maps share is a place — iOS\'s "(null)" off the link, the place read from where it leads', async () => {
+  const { urlsIn, mapsPlaceOf, shareReply, wordsOf } = await import('../supabase/functions/_shared/share-in.mjs')
+  assert.deepEqual(urlsIn('\nhttps://maps.app.goo.gl/gGJXLUSWM6ehJ8zM7?g_st=com.apple.shortcuts.Run-Workflow(null)'), ['https://maps.app.goo.gl/gGJXLUSWM6ehJ8zM7?g_st=com.apple.shortcuts.Run-Workflow'])
+  assert.equal(wordsOf('https://maps.app.goo.gl/x (null)'), '')
+  // Where Jake's link led (Oct 9).
+  assert.deepEqual(mapsPlaceOf('https://maps.google.com/?q=Loco+West+Palm+Beach,+840+N+Railroad+Ave,+West+Palm+Beach,+FL+33401&ftid=0x88d8d7f6b97568e1:0xbc8a2afe81998028&entry=gps'), { name: 'Loco West Palm Beach', query: 'Loco West Palm Beach, 840 N Railroad Ave, West Palm Beach, FL 33401' })
+  assert.deepEqual(mapsPlaceOf('https://www.google.com/maps/place/Grato/@26.69,-80.05,17z'), { name: 'Grato', query: 'Grato' })
+  assert.equal(mapsPlaceOf('https://maps.app.goo.gl/gGJXLUSWM6ehJ8zM7'), null)
+  assert.equal(mapsPlaceOf('https://www.google.com/maps?q=26.69,-80.05'), null)
+  assert.equal(shareReply({ kind: 'place', found: true, already: true, name: 'Loco West Palm Beach', town: 'West Palm Beach', minutes: 7 }), 'Loco West Palm Beach is already in Places worth trying — West Palm Beach, 7 min.')
+})

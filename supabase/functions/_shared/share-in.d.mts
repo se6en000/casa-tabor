@@ -11,7 +11,7 @@ export interface LinkFacts {
 export interface ShareRead {
   kind: 'events' | 'place' | 'recipe' | 'other'
   summary: string
-  place: { name: string; town: string | null; said: string | null } | null
+  place: { name: string; town: string | null; said: string | null; query?: string } | null
 }
 
 export function urlsIn(text: unknown): string[]
@@ -29,3 +29,4 @@ export function shareReply(outcome: Record<string, unknown>): string
 export function sharedShelf(shelves: Array<{ id: string; label: string; match: RegExp | null }>, text: unknown): { id: string; label: string }
 export function sharedHeard(name: string | null, source: string, said: string | null): string
 export function datesToAsk(items: Array<Record<string, any>>, events: Array<{ id: string; title: string; location_name?: string | null; ymd: string; minutes: number | null }>, todayYmd: string): Array<Record<string, any>>
+export function mapsPlaceOf(url: string): { name: string; query: string } | null

@@ -5,7 +5,7 @@ import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { verifyProfileSessionToken } from '../_shared/profile-session.mjs'
 import { GUIDE_SHELVES, TASTE_KEY, guideDriveMin, guideScore, sameName, tasteOf, townOf } from '../_shared/guide.mjs'
-import { datesToAsk, factsSayAnything, isWalled, linkFacts, parseShare, sharePrompt, shareReply, sharedHeard, sharedShelf, sourceOf, tiktokFacts, urlsIn, wordsOf, type LinkFacts } from '../_shared/share-in.mjs'
+import { datesToAsk, factsSayAnything, mapsPlaceOf, isWalled, linkFacts, parseShare, sharePrompt, shareReply, sharedHeard, sharedShelf, sourceOf, tiktokFacts, urlsIn, wordsOf, type LinkFacts } from '../_shared/share-in.mjs'
 
 // Send to Tabor House (Jake, Oct 9: "right now I screen shot and paste into chat, if theres an easier way"). The iPhone
 // Shortcut posts whatever was shared — a link (Instagram, TikTok, a page), words (a text, an email), a picture (a
@@ -215,10 +215,24 @@ Deno.serve(async (req) => {
     return data?.id as string | undefined
   }
 
+  // A Google Maps link is a place: its short link followed, the place named in it — no reading needed.
+  let mapsPlace: { name: string; query: string } | null = null
+  if (link && /maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google\./i.test(link)) {
+    let at = link
+    for (let i = 0; i < 4 && !mapsPlace; i++) {
+      mapsPlace = mapsPlaceOf(at)
+      if (mapsPlace) break
+      const r = await fetch(at, { redirect: 'manual', headers: { 'user-agent': BROWSER_UA }, signal: AbortSignal.timeout(5000) }).catch(() => null)
+      const next = r?.headers.get('location')
+      if (!next) break
+      at = new URL(next, at).toString()
+    }
+  }
+
   // 1. The link: what a server can see of it (a post's caption and picture, a page's card and declared events).
   let facts: LinkFacts | null = null
   let page = link
-  if (link) {
+  if (link && !mapsPlace) {
     const r = await readLink(link)
     facts = r.facts
     page = r.finalUrl
@@ -229,16 +243,16 @@ Deno.serve(async (req) => {
     }
   }
   const readText = [words, facts?.title, facts?.description, facts?.declared?.length ? `Declared on the page: ${JSON.stringify(facts.declared)}` : null].filter(Boolean).join('\n')
-  if (!words && !pictures.length && !factsSayAnything(facts)) {
+  if (!mapsPlace && !words && !pictures.length && !factsSayAnything(facts)) {
     const reply = shareReply({ kind: 'unreadable', source: link ? (isWalled(link) ? 'a post' : 'a link') : source })
     await record({ kind: 'unreadable', reply })
     return said(reply)
   }
 
-  // 2. What is it?
+  // 2. What is it? (A Maps link already said.)
   const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
   if (!llm?.api_key) return said('Tabor House’s reader isn’t set up right now. It’s kept; try again later.', 503)
-  const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
+  const res = mapsPlace ? null : await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llm.api_key}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -247,8 +261,8 @@ Deno.serve(async (req) => {
     }),
   }, { callPurpose: 'share-read' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
   const answer = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
-  if (!answer) return said('I couldn’t read it just now. Try sharing it again in a minute.', 502)
-  const read = parseShare(answer)
+  if (!answer && !mapsPlace) return said('I couldn’t read it just now. Try sharing it again in a minute.', 502)
+  const read = mapsPlace ? { kind: 'place' as const, summary: mapsPlace.query, place: { name: mapsPlace.name, town: null, said: null, query: mapsPlace.query } } : parseShare(answer)
   const callFunction = (name: string, body: unknown) => fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
@@ -292,10 +306,11 @@ Deno.serve(async (req) => {
     const found = mapsKey ? await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'X-Goog-Api-Key': mapsKey, 'X-Goog-FieldMask': FIELDS },
-      body: JSON.stringify({ textQuery: `${read.place.name} ${read.place.town ?? ''} FL`.trim(), maxResultCount: 3, ...(home ? { locationBias: { circle: { center: { latitude: home.lat, longitude: home.lng }, radius: 50000 } } } : {}) }),
+      body: JSON.stringify({ textQuery: read.place.query ?? `${read.place.name} ${read.place.town ?? ''} FL`.trim(), maxResultCount: 3, ...(home ? { locationBias: { circle: { center: { latitude: home.lat, longitude: home.lng }, radius: 50000 } } } : {}) }),
     }, { callPurpose: 'share-place' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null) : null
     const candidates = (found?.places ?? []) as Array<Record<string, any>>
-    const p = candidates.find((c) => sameName(c.displayName?.text, read.place!.name)) ?? (candidates.length === 1 ? candidates[0] : null)
+    // A Maps link names the exact place (its name and address): the first is it.
+    const p = candidates.find((c) => sameName(c.displayName?.text, read.place!.name)) ?? (candidates.length === 1 || mapsPlace ? candidates[0] ?? null : null)
     if (!p) {
       const reply = shareReply({ kind: 'place', found: false, name: read.place.name })
       await record({ kind: 'place', summary: read.summary, read: readText.slice(0, 4000) || null, reply })
@@ -303,7 +318,7 @@ Deno.serve(async (req) => {
     }
     const name = String(p.displayName?.text ?? read.place.name)
     const minutes = home && p.location ? guideDriveMin(home, { lat: p.location.latitude, lng: p.location.longitude }) : null
-    const { data: existing } = await sb.from('guide_places').select('id').eq('google_place_id', p.id).maybeSingle()
+    const { data: existing } = await sb.from('guide_places').select('id, status').eq('google_place_id', p.id).maybeSingle()
     let placeId = existing?.id as string | undefined
     if (placeId) {
       await sb.from('guide_places').update({ status: 'saved', updated_at: new Date().toISOString() }).eq('id', placeId)
@@ -322,7 +337,7 @@ Deno.serve(async (req) => {
       if (error) return said('I found it but couldn’t save it just now. Try again in a minute.', 500)
       placeId = inserted.id
     }
-    const reply = shareReply({ kind: 'place', found: true, name, town: townOf(p.formattedAddress), minutes })
+    const reply = shareReply({ kind: 'place', found: true, already: existing?.status === 'saved', name, town: townOf(p.formattedAddress), minutes })
     await record({ kind: 'place', summary: read.summary, read: readText.slice(0, 4000) || null, place_id: placeId, reply })
     return said(reply)
   }
