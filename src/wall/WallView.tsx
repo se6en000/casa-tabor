@@ -55,6 +55,7 @@ import WallNightCalm from './WallNightCalm'
 import { comingsAndGoings, nextUpItems, type NextUpItem } from './nextUp'
 import { panelThen, panelTodos, quickSteps, todoHeading, type TodoRow } from './todayPanel'
 import WallTodayPanel, { type TodayPanelMode } from './WallTodayPanel'
+import WallFireplace from './WallFireplace'
 
 export interface WallViewProps {
   now: Date
@@ -204,6 +205,7 @@ export default function WallView(props: WallViewProps) {
   // Night calm from the menu (Jake, Oct 8: "can i get a menu option for evening calm … id like to cycle through all the
   // landing screens while testing"): by itself it waits for 10 untouched evening minutes. Shown until a tap, or as long
   // as any preview.
+  const [fireplace, setFireplace] = useState(false)
   const [nightPreviewUntil, setNightPreviewUntil] = useState(0)
   const nightPreview = Date.now() < nightPreviewUntil
   useEffect(() => {
@@ -979,6 +981,7 @@ export default function WallView(props: WallViewProps) {
         <WallMenu
           side={railFace ? 'left' : 'right'}
           onClose={() => setMenuOpen(false)}
+          onFireplace={() => { setMenuOpen(false); setFireplace(true) }}
           onPreview={(face) => {
             setDayPreview(null)
             // The morning paper is a calm face (any time of day, from the menu).
@@ -992,6 +995,7 @@ export default function WallView(props: WallViewProps) {
           }}
         />
       )}
+      {fireplace && <WallFireplace onClose={() => setFireplace(false)} />}
     </div>
     </PaperRecall.Provider>
   )

@@ -592,6 +592,10 @@
       {
         "path": "src/wall/WallTodayPanel.tsx",
         "reason": "Family Wall: the left panel's TO DO (canvas 79R/79S, approved by Jake 2026-10-08 — \"lets unify this experience\") — each row is the tick (64px, the box at its right). Part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens."
+      },
+      {
+        "path": "src/wall/WallFireplace.tsx",
+        "reason": "Family Wall: the fireplace (Jake, 2026-10-08) — the whole screen is the one control (a tap puts the fire out). Part of the Wall's own component set (CLAUDE.md Wall exception)."
       }
     ]
   }

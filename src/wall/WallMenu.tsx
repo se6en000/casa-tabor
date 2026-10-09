@@ -104,7 +104,7 @@ const PREVIEWS: Array<{ face: Posture | 'paper' | 'night'; label: string }> = [
  * opens under the mark that opened it — top right on the day faces, top left on the launch face (Jake, Oct 6: "can
  * settings menu show up near the MT button?").
  */
-export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClose: () => void; onPreview?: (face: Posture | 'paper' | 'night') => void; side?: 'left' | 'right' }) {
+export default function WallMenu({ onClose, onPreview, onFireplace, side = 'right' }: { onClose: () => void; onPreview?: (face: Posture | 'paper' | 'night') => void; onFireplace?: () => void; side?: 'left' | 'right' }) {
   return (
     <div
       role="dialog"
@@ -145,6 +145,15 @@ export default function WallMenu({ onClose, onPreview, side = 'right' }: { onClo
               ))}
             </div>
           </div>
+        )}
+        {onFireplace && (
+          <button
+            type="button"
+            onClick={onFireplace}
+            className="flex h-[64px] items-center border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left font-display text-wall-date font-semibold text-wall-ink"
+          >
+            Fireplace
+          </button>
         )}
         <button
           type="button"

@@ -58,6 +58,24 @@ test('wall: Night calm can be previewed from the menu, by day too (tomorrow, as 
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
 
+// Jake, Oct 8: "a menu item for fireplace … a good full screen fireplace with some crackling sound" → "id go for real".
+test('wall: Fireplace from the menu fills the screen with a real fire (sound on, no controls); a tap puts it out', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  await wall.getByRole('button', { name: 'Fireplace' }).click()
+  const fire = wall.getByRole('dialog', { name: 'Fireplace' })
+  await expect(fire).toBeVisible()
+  const src = await fire.locator('iframe').getAttribute('src')
+  expect(src).toContain('youtube-nocookie.com/embed/UgHKb_7884o')
+  expect(src).toContain('autoplay=1')
+  expect(src).toContain('controls=0')
+  expect(src).toContain('loop=1')
+  await expect(fire.getByText('Tap anywhere to put it out')).toBeVisible()
+  await page.mouse.click(960, 540)
+  await expect(fire).toHaveCount(0)
+})
+
 test('wall: a menu item opens that part of the app', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
   const wall = page.getByTestId('wall-fixture')
