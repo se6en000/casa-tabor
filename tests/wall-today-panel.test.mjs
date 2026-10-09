@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { nextOutHeading, panelThen, panelTodos, quickSteps, todoHeading } from '../src/wall/todayPanel.ts'
+import { nextOutHeading, panelThen, panelTodos, quickSteps, rowDetail, todoHeading } from '../src/wall/todayPanel.ts'
 
 // Canvas 79R/79S (Jake, Oct 8: "lets unify this experience"): one panel on every face — NEXT, THEN, TO DO.
 const at = (h, m = 0) => new Date(2026, 8, 25, h, m)
@@ -42,4 +42,27 @@ test('NEXT has one heading form: NEXT OUT · time · in N', () => {
   assert.equal(nextOutHeading({ status: 'upcoming', leaveTime: '7:25', ring: { value: '13', unit: 'MIN', fraction: 0.2 }, eyebrow: 'NEXT MOVE · LEAVE BY 7:25' }), 'NEXT OUT · 7:25 · IN 13 MIN')
   assert.equal(nextOutHeading({ status: 'upcoming', leaveTime: '1:50', ring: { value: '2:10', unit: 'HRS', fraction: 1 }, eyebrow: 'x' }), 'NEXT OUT · 1:50 · IN 2 HR 10 MIN')
   assert.equal(nextOutHeading({ status: 'en_route', leaveTime: null, ring: null, eyebrow: 'ON THE ROAD' }), 'ON THE ROAD')
+})
+
+// Canvas 80D (Jake, Oct 8: "ok 80D"): an icon for every row; a second line only where it says something new.
+test('what each to-do is: a chore just its icon; a step its project and progress; a reminder who added it; a to-do what it is part of', () => {
+  const now = at(16, 40)
+  const jobs = [
+    job('meds', 19, 0, 'Give Liv her meds'),
+    { ...job('paint', 19, 30, 'Pick colours: 3 sample pots', { whoId: null }), key: 'todo:paint', kind: 'todo', todoKind: 'step', project: { id: 'pr', title: 'Paint the house', step: 4, of: 9 } },
+    { ...job('trash', 20, 0, 'Trash out to the street', { whoId: null }), key: 'todo:trash', kind: 'todo', todoKind: 'reminder', origin: { via: 'alexa', where: 'wall', text: null, at: new Date(2026, 8, 24, 16, 26).toISOString() } },
+  ]
+  const quick = [todo('vet', 'Bring Gilbert to the vet', { nextStep: 'Call the vet to book a visit' })]
+  const rows = panelTodos(jobs, quick, now, { room: 4, quickRoom: 1 })
+  assert.deepEqual(rows.map((r) => [r.title, r.kind, r.detail, r.progress]), [
+    ['Give Liv her meds', 'chore', null, null],
+    ['Pick colours: 3 sample pots', 'step', 'Paint the house', { step: 4, of: 9 }],
+    ['Trash out to the street', 'reminder', 'By Alexa · Thu 4:26 PM', null],
+    ['Call the vet to book a visit', 'todo', 'Bring Gilbert to the vet', null],
+  ])
+  // A next step the title already starts with is just the title.
+  const anthony = panelTodos([], [todo('anthony', 'Call Anthony about house insurance alternatives', { nextStep: 'Call Anthony' })], now, { room: 1, quickRoom: 1 })
+  assert.deepEqual(anthony.map((r) => [r.title, r.detail]), [['Call Anthony about house insurance alternatives', null]])
+  // A plain to-do with nothing more to say keeps to one line.
+  assert.deepEqual(rowDetail('todo', {}, now), { detail: null, progress: null })
 })

@@ -1,6 +1,6 @@
 import { minutesAway, type NextMoveView } from './header.ts'
 import type { ThenItem } from './headerLead.ts'
-import { comingHours, type ComingGoing, type NextUpItem } from './nextUp.ts'
+import { comingHours, originLine, type ComingGoing, type NextUpItem, type TodoOrigin } from './nextUp.ts'
 import type { TodoItem, TodoList } from './todos.ts'
 
 // The left panel is now (canvas 79R/79S; Jake, Oct 8: "im a bit concerned of the UX drift between calm, day, evening,
@@ -30,6 +30,25 @@ export interface TodoRow {
   job?: NextUpItem
   /** A quick to-do: ticked as done. */
   todoId?: string
+  /** What it is (canvas 80D): its icon, and a second line only where it tells you something the row doesn't. */
+  kind: RowKind
+  detail: string | null
+  /** A project step: which of how many. */
+  progress: { step: number; of: number } | null
+}
+
+export type RowKind = 'chore' | 'step' | 'reminder' | 'todo'
+
+/**
+ * The second line (canvas 80D; Jake, Oct 8: "I tend to like the detail but dont want to end up … overboard"): a chore
+ * none — its person's dot says whose; a project step its project (and how far along); a reminder who added it and when;
+ * a to-do what it's part of (when the row shows its next step), else how it got here.
+ */
+export function rowDetail(kind: RowKind, { project, origin, parent }: { project?: { title: string | null; step: number | null; of: number | null } | null; origin?: TodoOrigin | null; parent?: string | null }, now: Date): Pick<TodoRow, 'detail' | 'progress'> {
+  if (kind === 'chore') return { detail: null, progress: null }
+  if (kind === 'step') return { detail: project?.title ?? null, progress: project?.step && project.of ? { step: project.step, of: project.of } : null }
+  if (kind === 'reminder') return { detail: originLine(origin, null, now), progress: null }
+  return { detail: parent ?? originLine(origin, null, now), progress: null }
 }
 
 /** Quick ones that fit before `until` (ten minutes' room kept): Done finishes the whole thing. */
@@ -43,10 +62,19 @@ export function quickSteps(list: Pick<TodoList, 'nextUp'>, now: Date, until: Dat
  * there's room for them, quick ones that fit (a quiet stretch fills up to three).
  */
 export function panelTodos(jobs: NextUpItem[], quick: TodoItem[], now: Date, { room, quickRoom }: { room: number; quickRoom: number }): TodoRow[] {
-  const timed = comingHours(jobs, now).slice(0, room).map((job): TodoRow => ({ key: job.key, at: job.at, minutes: null, title: job.title, whoId: job.whoId, late: job.state === 'late', job }))
+  const timed = comingHours(jobs, now).slice(0, room).map((job): TodoRow => {
+    const kind: RowKind = job.kind === 'chore' ? 'chore' : job.todoKind === 'step' ? 'step' : job.todoKind === 'reminder' ? 'reminder' : 'todo'
+    return { key: job.key, at: job.at, minutes: null, title: job.title, whoId: job.whoId, late: job.state === 'late', job, kind, ...rowDetail(kind, { project: job.project, origin: job.origin }, now) }
+  })
   const taken = new Set(jobs.map((j) => j.id))
   const fill = quick.filter((q) => !taken.has(q.id)).slice(0, Math.max(0, Math.min(quickRoom, room - timed.length)))
-    .map((q): TodoRow => ({ key: `quick:${q.id}`, at: null, minutes: q.minutes, title: q.nextStep ?? q.title, whoId: null, late: false, todoId: q.id }))
+    .map((q): TodoRow => {
+      const kind: RowKind = q.kind === 'step' ? 'step' : q.kind === 'reminder' ? 'reminder' : 'todo'
+      // A next step the title already starts with ("Call Anthony" of "Call Anthony about house insurance") says
+      // nothing new: the title alone.
+      const step = q.nextStep && !q.title.toLowerCase().startsWith(q.nextStep.toLowerCase()) ? q.nextStep : null
+      return { key: `quick:${q.id}`, at: null, minutes: q.minutes, title: q.stepTitle ?? step ?? q.title, whoId: null, late: false, todoId: q.id, kind, ...rowDetail(kind, { project: q.project, origin: q.origin, parent: step ? q.title : null }, now) }
+    })
   return [...timed, ...fill]
 }
 

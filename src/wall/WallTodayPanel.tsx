@@ -1,4 +1,4 @@
-import { Check, House } from 'lucide-react'
+import { Bell, Check, CircleCheck, House, ListChecks, Repeat, type LucideIcon } from 'lucide-react'
 import { formatWallClock } from './clock'
 import type { WallMember } from './engine/types'
 import type { NextMoveView } from './header'
@@ -6,7 +6,7 @@ import type { ThenItem } from './headerLead'
 import { pigmentStyleFor } from './lanes'
 import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import type { PackingGroup, WallChecklistItem } from './packing'
-import type { TodoRow } from './todayPanel'
+import type { RowKind, TodoRow } from './todayPanel'
 import { RailLabel, TakeWithYou } from './WallRail'
 import WallThen from './WallThen'
 
@@ -95,10 +95,23 @@ export default function WallTodayPanel({ mode, members, pigmentOf, next, moveAct
                         <House size={14} strokeWidth={2.2} />
                       </span>
                     )}
-                  {/* Two lines before it's cut (Jake, Oct 8: "what can we do about the to do truncating"): the row grows to fit. */}
-                  <span className={`line-clamp-2 min-w-0 flex-1 font-display text-wall-heading leading-[1.15] ${done ? 'text-wall-ink-2 line-through' : ''}`}>
-                    {row.title}
-                    {row.late && !done && <span className="font-body text-wall-detail text-wall-rust"> &nbsp;late</span>}
+                  {/* What it is (canvas 80D): its icon; a second line only where it says something the row doesn't. Two
+                      lines of title before it's cut (Jake, Oct 8: "what can we do about the to do truncating"). */}
+                  <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    <span className="flex min-w-0 items-center gap-[10px]">
+                      <span className={`line-clamp-2 min-w-0 font-display text-wall-heading leading-[1.15] ${done ? 'text-wall-ink-2 line-through' : ''}`}>
+                        {row.title}
+                        {row.late && !done && <span className="font-body text-wall-detail text-wall-rust"> &nbsp;late</span>}
+                      </span>
+                      {!row.detail && <KindIcon kind={row.kind} size={17} />}
+                    </span>
+                    {row.detail && (
+                      <span className="flex min-w-0 items-center gap-[7px] text-wall-detail text-wall-ink-2">
+                        <KindIcon kind={row.kind} size={14} />
+                        <span className="truncate">{row.detail}</span>
+                        {row.progress && <Progress {...row.progress} />}
+                      </span>
+                    )}
                   </span>
                   <span aria-hidden="true" className={`flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-[9px] border-2 border-solid ${done ? 'border-wall-brass bg-wall-brass text-wall-band' : row.late ? 'border-wall-rust' : 'border-wall-ink-2'}`}>
                     {done && <Check size={22} strokeWidth={3} />}
@@ -110,6 +123,25 @@ export default function WallTodayPanel({ mode, members, pigmentOf, next, moveAct
         </section>
       )}
     </div>
+  )
+}
+
+const KIND_ICONS: Record<RowKind, LucideIcon> = { chore: Repeat, step: ListChecks, reminder: Bell, todo: CircleCheck }
+const KIND_NAMES: Record<RowKind, string> = { chore: 'Chore', step: 'Project step', reminder: 'Reminder', todo: 'To do' }
+
+function KindIcon({ kind, size }: { kind: RowKind; size: number }) {
+  const Icon = KIND_ICONS[kind]
+  return <Icon aria-label={KIND_NAMES[kind]} role="img" size={size} strokeWidth={2} className="shrink-0 text-wall-ink-2" />
+}
+
+/** How far along a project is: the steps done in brass, this one in ink, the rest faint. */
+function Progress({ step, of }: { step: number; of: number }) {
+  return (
+    <span role="img" aria-label={`step ${step} of ${of}`} className="ml-[2px] inline-flex shrink-0 gap-[3px]">
+      {Array.from({ length: of }, (_, i) => (
+        <span key={i} className={`h-[7px] w-[7px] rounded-full ${i < step - 1 ? 'bg-wall-brass' : i === step - 1 ? 'bg-wall-ink' : 'bg-wall-rule'}`} />
+      ))}
+    </span>
   )
 }
 
