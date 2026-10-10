@@ -18,7 +18,7 @@ import {
   AHEAD_DAYS, NEWS_SENDERS, SCOUT_LANES, dedupeKey, laneSearchPrompt, newsletterPrompt, pageText, pageVerdict,
   CALENDARS, CALENDAR_KINDS, calendarReach, detailsPrompt, foldIn, isBait, keptTwice, notLiveMusic, parseDetails, parseCandidates, parseSflmGigs, parseTownNews, parseTriviaSchedule,
   MAJOR_AHEAD_DAYS, collapseRuns, parseImprov, parseTicketmaster, parseWeekendBroward, ticketmasterUrls, restaurantVerdict, weekendBrowardNext, townInReach, townNewsPrompt,
-  venueKey, venuePrompt, parseVenues, venueKindOf, actKey, actPrompt, parseActs, actStanding,
+  searchDetailsPrompt, venueKey, venuePrompt, parseVenues, venueKindOf, actKey, actPrompt, parseActs, actStanding,
 } from '../_shared/scout.mjs'
 import {
   GUIDE_AREAS, TASTE_KEY, townOf, guideDriveMin, buzzPrompt, curatePrompt, guideLabels, guideScore, guideShelves, heardLine, parseBuzz, parseCurate, parseRateAsk, placeVerdict,
@@ -26,6 +26,7 @@ import {
 } from '../_shared/guide.mjs'
 import { GUIDE_SHELVES } from '../_shared/guide.mjs'
 import { sharedShelf } from '../_shared/share-in.mjs'
+import { DOSSIER_FIELDS, dossierPrompt, googleFacts, parseDossier } from '../_shared/place-dossier.mjs'
 import { UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, tallyLeanings, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
 
 const CORS = {
@@ -474,6 +475,35 @@ Deno.serve(async (req) => {
   }
 
   // More like this (canvas 86F): the same scene, near home, none they already know — found, checked on Maps, not saved.
+  if (body.action === 'dossier') {
+    // A place, the whole story (Oct 10; canvas first): Google's details, its photos, its map, and a grounded search for
+    // the dress code, the deals, when it's busy — a dry run only until the sheet is approved (nothing kept).
+    if (!body.id) return json({ error: 'Which place?' }, 400)
+    const { data: p } = await sb.from('guide_places').select('*').eq('id', body.id).maybeSingle()
+    if (!p) return json({ error: 'No such place' }, 404)
+    const ctx = await listCtx(sb)
+    if (!ctx.llmKey || !ctx.mapsKey) return json({ error: 'Not set up' }, 500)
+    const [g, web] = await Promise.all([
+      mapsFetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(p.google_place_id)}`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey, 'X-Goog-FieldMask': DOSSIER_FIELDS } }, { callPurpose: 'guide-dossier' })
+        .then(async (r: Response) => (r.ok ? r.json() : { error: await r.text() })).catch((e: unknown) => ({ error: String(e) })),
+      grounded(ctx.llmKey, dossierPrompt(p, { today: longDay(today) }), 'guide-dossier', 4000),
+    ])
+    if (g?.error) return json({ error: 'Google', detail: String(g.error).slice(0, 600) }, 502)
+    const google = googleFacts(g) as ReturnType<typeof googleFacts> & { photos: Array<{ name: string; uri?: string | null }> }
+    // Photos: a short-lived link each (Google's terms: shown, not kept).
+    await inBatches(google.photos.slice(0, Math.min(6, Number(body.photos) || 6)), 6, async (ph) => {
+      ph.uri = await mapsFetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=1400&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey! } }, { callPurpose: 'guide-dossier' })
+        .then((r: Response) => (r.ok ? r.json() : null)).then((x: { photoUri?: string } | null) => x?.photoUri ?? null).catch(() => null)
+    })
+    let map: string | null = null
+    if (google.location && body.map !== false) {
+      const { lat, lng } = google.location
+      const res = await mapsFetch(`https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=640x400&scale=2&markers=color:0x8a5a2b%7C${lat},${lng}&key=${ctx.mapsKey}`, {}, { callPurpose: 'guide-dossier' }).catch(() => null)
+      if (res?.ok) map = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(await res.arrayBuffer())))}`
+    }
+    return json({ google, web: parseDossier(web.text, web.urls), pages: web.urls.slice(0, 12), raw: body.raw ? web.text : undefined, map, dry_run: true })
+  }
+
   if (body.action === 'like') {
     if (!body.id) return json({ error: 'Like which?' }, 400)
     const { data: p } = await sb.from('guide_places').select('*').eq('id', body.id).maybeSingle()
@@ -556,9 +586,10 @@ Deno.serve(async (req) => {
   }
 
   if (body.action === 'details') {
-    const { data: o } = await sb.from('outings').select('id, kind, title, "when", url, details, details_at').eq('id', String(body.id ?? '')).maybeSingle()
+    const { data: o } = await sb.from('outings').select('id, kind, title, "when", place, url, details, details_at').eq('id', String(body.id ?? '')).maybeSingle()
     if (!o) return json({ error: 'not found' }, 404)
-    if (o.details && o.details_at && Date.now() - Date.parse(o.details_at) < 7 * 86_400_000) return json({ details: { ...o.details, read_at: o.details_at } })
+    // A read that found nothing isn't kept as the answer (Oct 10: Frankenstein's empty one stood for a week).
+    if (o.details?.facts?.length && o.details_at && Date.now() - Date.parse(o.details_at) < 7 * 86_400_000) return json({ details: { ...o.details, read_at: o.details_at } })
     if (!o.url) return json({ details: null })
     const { data: llmRow } = await sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle()
     const llm = resolveBackgroundLlmConfig(llmRow?.value) as { api_key?: string }
@@ -574,7 +605,12 @@ Deno.serve(async (req) => {
       }),
     }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
     const answer = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
-    const details = parseDetails(answer, o.kind)
+    let details = parseDetails(answer, o.kind) as { facts: unknown[] } | null
+    // Its page wouldn't open, or said nothing (the Kravis turns readers away): the web instead.
+    if (!details?.facts?.length) {
+      const found = parseDetails((await grounded(llm.api_key, searchDetailsPrompt(o), 'outing-details', 1500)).text, o.kind) as { facts: unknown[] } | null
+      if (found?.facts?.length) details = { ...found, searched: true } as typeof found
+    }
     if (!details) return json({ details: null })
     const at = new Date().toISOString()
     await sb.from('outings').update({ details, details_at: at }).eq('id', o.id)

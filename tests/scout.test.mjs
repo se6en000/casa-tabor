@@ -480,6 +480,12 @@ test('tonight drops what has already started (an hour in)', async () => {
 // what it says; what a family asks that it doesn't say is said so (never guessed).
 test('an outing’s page, read: its facts by label, its tickets link and end time; kids and parking said when missing', async () => {
   const { detailsPrompt, parseDetails } = await import('../supabase/functions/_shared/scout.mjs')
+  // A page that won't open (the Kravis): the same facts, searched for — its title, day and venue in the search.
+  const { searchDetailsPrompt } = await import('../supabase/functions/_shared/scout.mjs')
+  const sp = searchDetailsPrompt({ kind: 'family', title: 'Frankenstein', when: '2026-10-22 19:00', place: 'Kravis Center, West Palm Beach', url: 'https://kravis.org/x' })
+  assert.match(sp, /Search the web now/)
+  assert.match(sp, /"Frankenstein" on 2026-10-22 19:00 at Kravis Center/)
+  assert.match(sp, /never a guess/)
   const p = detailsPrompt({ kind: 'couple', title: 'Taste of West Palm Beach', when: '2026-10-16 18:00', url: 'https://x' }, 'Taste ... $75 general $130 VIP ... 5-8:30pm')
   assert.match(p, /Only what the page says/)
   assert.match(p, /"Tickets".*"What’s in it".*"How long".*"For kids".*"Parking".*"Good to know"/s)

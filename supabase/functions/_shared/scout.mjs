@@ -916,6 +916,20 @@ Answer with only JSON: {"facts": [{"label": "...", "text": "..."}], "ticket_url"
 ${text ? `The page:\n${String(text).slice(0, 20000)}` : 'Read the page at the link.'}`
 }
 
+/**
+ * Its page wouldn't open or said nothing (Jake, Oct 10: "if there isnt an easy way … use the web and scrape the webpage
+ * for it and or google it"): the same facts, from a web search — its own page, the venue's, the ticket sites.
+ */
+export function searchDetailsPrompt(o) {
+  const labels = DETAIL_LABELS[labelsFor(o.kind)]
+  return `Search the web now for this one event: "${o.title}"${o.when ? ` on ${o.when}` : ''}${o.place ? ` at ${o.place}` : ''}${o.url ? ` (its page: ${o.url})` : ''}. A family is deciding whether to go.
+Read its own page, the venue's page and the ticket pages (Ticketmaster, Eventbrite, Fever, the venue's box office) and local listings.
+Only what those pages say about this event — never a guess. Leave a label out when nothing says it (never "not mentioned").
+Facts, each one short line (under 20 words), with exactly these labels: ${labels.map((l) => `"${l}"`).join(', ')}.
+Also: "ticket_url" — the page to buy tickets, if you found one; "ends" — the time it ends as HH:MM (24-hour), if said.
+Answer with only JSON: {"facts": [{"label": "...", "text": "..."}], "ticket_url": "..." or null, "ends": "HH:MM" or null}`
+}
+
 /** The answer: known labels only, a line each; what a family asks first and the page didn't say, said. Null if unreadable. */
 export function parseDetails(text, kind) {
   const s = String(text ?? '')
