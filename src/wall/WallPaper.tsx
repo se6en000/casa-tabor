@@ -291,7 +291,8 @@ const SHORT_DATE = { month: 'short', day: 'numeric', timeZone: 'UTC' } as const
 
 /**
  * Page 3, Around town (canvas 72C, Oct 8 rethought): the dates to know first (soonest on), then everything from the
- * schools, the city and the papers, each line with where it's from — scrolling when there's a lot.
+ * schools, the city and the papers — the fullest first, across the page — each line with where it's from, scrolling
+ * when there's a lot.
  */
 function TownPage({ news, today, active }: { news: TownNews[]; today: string; active: boolean }) {
   const page = townNewsPage(news, today)
@@ -311,23 +312,27 @@ function TownPage({ news, today, active }: { news: TownNews[]; today: string; ac
           </div>
         </Section>
       )}
-      <div className="mt-[34px] grid grid-cols-3 gap-x-[36px]">
-        {NEWS_COLUMNS.map(({ section, label, none }) => (
-          <section key={section} aria-label={label} className="flex min-w-0 flex-col">
-            <span className="border-0 border-t-2 border-solid border-wall-ink pt-[14px] text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
-            {page[section].length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">{none}</span>}
-            {page[section].map((n, i) => (
-              <article key={`${n.headline}-${i}`} aria-label={n.headline} className="mt-[16px] flex flex-col">
-                <span className="font-display text-wall-heading font-semibold">{n.headline}</span>
-                {n.line && <span className="mt-[4px] text-wall-detail text-wall-ink-2">{n.line}</span>}
-                <span className="mt-[6px] text-wall-label font-bold tracking-[0.08em] text-wall-brass-ink">
-                  {[n.source, n.source_date ? new Date(`${n.source_date}T12:00:00Z`).toLocaleDateString('en-US', SHORT_DATE) : null].filter(Boolean).join(' · ').toUpperCase()}
-                </span>
-              </article>
-            ))}
-          </section>
-        ))}
-      </div>
+      {/* The fullest first, its stories across four columns (Jake, Oct 10: "sort it by largest list first and go across
+          with the items … so its filled, vs one long column"); one with nothing yet says so at the foot. */}
+      {[...NEWS_COLUMNS].sort((x, y) => page[y.section].length - page[x.section].length).map(({ section, label, none }) => (
+        <section key={section} aria-label={label} className="mt-[34px] flex flex-col border-0 border-t-2 border-solid border-wall-ink pt-[14px]">
+          <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}{page[section].length ? ` · ${page[section].length}` : ''}</span>
+          {page[section].length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">{none}</span>}
+          {page[section].length > 0 && (
+            <div className="mt-[16px] grid grid-cols-4 gap-x-[36px] gap-y-[24px]">
+              {page[section].map((n, i) => (
+                <article key={`${n.headline}-${i}`} aria-label={n.headline} className="flex min-w-0 flex-col">
+                  <span className="font-display text-wall-heading font-semibold">{n.headline}</span>
+                  {n.line && <span className="mt-[4px] text-wall-detail text-wall-ink-2">{n.line}</span>}
+                  <span className="mt-[6px] text-wall-label font-bold tracking-[0.08em] text-wall-brass-ink">
+                    {[n.source, n.source_date ? new Date(`${n.source_date}T12:00:00Z`).toLocaleDateString('en-US', SHORT_DATE) : null].filter(Boolean).join(' · ').toUpperCase()}
+                  </span>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
     </ScrollPage>
   )
 }
