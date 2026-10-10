@@ -53,7 +53,7 @@ test('share-in: what the phone is told', () => {
   assert.equal(shareReply({ kind: 'events', items: [fest] }), 'Fall Fest · Sat, Oct 17 · 11 AM – 3 PM. Add it? It’s waiting in Tabor House.')
   assert.equal(shareReply({ kind: 'events', summary: 'the PTO flyer', items: [fest, { ...fest, title: 'Picture day' }, { type: 'prep', title: 'Lunch' }] }), '2 dates from the PTO flyer. They’re waiting in Tabor House for your yes.')
   assert.equal(shareReply({ kind: 'events', items: [] }), 'I couldn’t find a date in it.')
-  assert.equal(shareReply({ kind: 'place', found: true, name: 'Lucky Lou’s', town: 'Delray Beach', minutes: 31 }), 'Saved Lucky Lou’s to Places worth trying — Delray Beach, 31 min.')
+  assert.equal(shareReply({ kind: 'place', found: true, name: 'Lucky Lou’s', town: 'Delray Beach', minutes: 31 }), 'Saved Lucky Lou’s to your list on Out & about — Delray Beach, 31 min.')
   assert.equal(shareReply({ kind: 'place', found: false, name: 'Lucky Lou’s' }), 'I couldn’t find Lucky Lou’s on Google Maps. It’s kept with what you shared.')
   assert.equal(shareReply({ kind: 'recipe', name: 'Crispy gnocchi' }), 'Saved Crispy gnocchi to Recipes.')
   assert.match(shareReply({ kind: 'unreadable', source: 'Instagram' }), /couldn’t see that post from here\. Double-tap the back of your phone/)
@@ -108,11 +108,16 @@ test('share-in: Alexa knows their taste and the places they saved — theirs fir
   const s = guideSection(rows, DEFAULT_TASTE)
   assert.match(s, /They love: Neighborhood bars, Oysters/)
   assert.match(s, /Places they love: Mr B’s/)
-  assert.match(s, /SAVED TO TRY \(1\):\n- \[a1\] Loco West Palm Beach · Oysters & raw bars · West Palm Beach, 7 min · Google 4\.2 \(221\) · Jake saved it\./)
+  assert.match(s, /YOUR LIST — TO TRY \(1\):\n- \[a1\] Loco West Palm Beach · Oysters & raw bars · West Palm Beach, 7 min · Google 4\.2 \(221\) · Jake saved it\./)
   assert.match(s, /BEEN TO:\n- \[c3\] Grato/)
   assert.match(s, /THE GUIDE'S PICKS[^\n]*\n- \[b2\] Sports & Rec .* · local/)
   assert.match(s, /never say you\'ve been anywhere/)
   assert.equal(guideSection([], null), null)
+  // Their spots (Oct 10), whose, and what they watch for.
+  const t = guideSection([...rows, { id: 'd4', name: 'The Blue Door', address: '5700 S Dixie Hwy, West Palm Beach, FL', shelf_label: 'Dinner', status: 'spot', labels: [] }, { id: 'e5', name: 'Mary Lou’s', address: '250 Southern Blvd, West Palm Beach, FL', shelf_label: 'Neighborhood bars', status: 'saved', whose: 'kelly', labels: [] }], null, [{ name: 'Candlelight concerts', kind: 'again', note: 'You loved 90s Hip-Hop on Strings.' }])
+  assert.match(t, /YOUR SPOTS — PLACES THEY LOVE \(1\):\n- \[d4\] The Blue Door/)
+  assert.match(t, /\[e5\] Mary Lou’s .* · Kelly’s/)
+  assert.match(t, /WATCHING FOR[^\n]*\n- Candlelight concerts · they'd do it again · You loved 90s Hip-Hop on Strings\./)
 })
 
 test('share-in: a Google Maps share is a place — iOS\'s "(null)" off the link, the place read from where it leads', async () => {
@@ -126,7 +131,9 @@ test('share-in: a Google Maps share is a place — iOS\'s "(null)" off the link,
   // Mary Lou's (Oct 9), as a server abroad may reach it: Google's cookie page with the place in "continue".
   assert.deepEqual(mapsPlaceOf(`https://consent.google.com/ml?continue=${encodeURIComponent("https://maps.google.com/?q=Mary+Lou's,+250+Southern+Blvd,+West+Palm+Beach,+FL+33405&ftid=0x1")}&gl=DE`), { name: 'Mary Lou\'s', query: 'Mary Lou\'s, 250 Southern Blvd, West Palm Beach, FL 33405' })
   assert.equal(mapsPlaceOf('https://www.google.com/maps?q=26.69,-80.05'), null)
-  assert.equal(shareReply({ kind: 'place', found: true, already: true, name: 'Loco West Palm Beach', town: 'West Palm Beach', minutes: 7 }), 'Loco West Palm Beach is already in Places worth trying — West Palm Beach, 7 min.')
+  assert.equal(shareReply({ kind: 'place', found: true, already: true, name: 'Loco West Palm Beach', town: 'West Palm Beach', minutes: 7 }), 'Loco West Palm Beach is already on your list — West Palm Beach, 7 min.')
+  assert.equal(shareReply({ kind: 'place', found: true, already: true, spot: true, name: 'The Blue Door', town: 'West Palm Beach' }), 'The Blue Door is already one of your spots — West Palm Beach.')
+  assert.equal(shareReply({ kind: 'place', found: true, already: true, made: 'spot', name: 'Loco', town: 'West Palm Beach', minutes: 7 }), 'Saved Loco as one of your spots — West Palm Beach, 7 min.')
 })
 
 test('venue sorter: a busy night leads with what they asked for more of, tributes, cover-band venues; a skipped venue is gone', async () => {

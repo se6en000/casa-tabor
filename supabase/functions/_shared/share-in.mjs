@@ -155,10 +155,13 @@ export function itemWhen(item) {
 export function shareReply(outcome) {
   switch (outcome.kind) {
     case 'place': {
-      if (outcome.found && outcome.already) return `${outcome.name} is already in Places worth trying${outcome.town ? ` — ${outcome.town}` : ''}${outcome.minutes ? `, ${outcome.minutes} min` : ''}.`
-      if (!outcome.found) return `I couldn’t find ${outcome.name} on Google Maps. It’s kept with what you shared.`
+      // Out & about from your list (Oct 10): to try, or one of their spots — a spot stays a spot.
       const where = [outcome.town, outcome.minutes ? `${outcome.minutes} min` : null].filter(Boolean).join(', ')
-      return `Saved ${outcome.name} to Places worth trying${where ? ` — ${where}` : ''}.`
+      if (outcome.found && outcome.made === 'spot' && !outcome.spot) return `Saved ${outcome.name} as one of your spots${where ? ` — ${where}` : ''}.`
+      if (outcome.found && outcome.spot) return `${outcome.name} is already one of your spots${where ? ` — ${where}` : ''}.`
+      if (outcome.found && outcome.already) return `${outcome.name} is already on your list${where ? ` — ${where}` : ''}.`
+      if (!outcome.found) return `I couldn’t find ${outcome.name} on Google Maps. It’s kept with what you shared.`
+      return `Saved ${outcome.name} to your list on Out & about${where ? ` — ${where}` : ''}.`
     }
     case 'events': {
       const all = (outcome.items ?? []).filter((i) => i.type !== 'prep')

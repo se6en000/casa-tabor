@@ -332,7 +332,10 @@ Deno.serve(async (req) => {
     const { data: existing } = await sb.from('guide_places').select('id, status').eq('google_place_id', p.id).maybeSingle()
     let placeId = existing?.id as string | undefined
     if (placeId) {
-      await sb.from('guide_places').update({ status: 'saved', updated_at: new Date().toISOString() }).eq('id', placeId)
+      // On their list already (to try, or a spot — a spot stays one); one of the guide's picks becomes theirs.
+      if (existing?.status !== 'saved' && existing?.status !== 'spot') {
+        await sb.from('guide_places').update({ status: 'saved', origin: source === 'Alexa' ? 'alexa' : 'shared', saved_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', placeId)
+      }
     } else {
       // What they said it is first ("a tequila and oyster bar"), then what Google calls it.
       const shelf = sharedShelf(GUIDE_SHELVES, `${read.summary} ${p.primaryTypeDisplayName?.text ?? ''} ${(p.types ?? []).join(' ')}`)
@@ -343,12 +346,13 @@ Deno.serve(async (req) => {
         rating: p.rating ?? null, rating_count: p.userRatingCount ?? null, maps_url: p.googleMapsUri ?? null, website: p.websiteUri ?? null,
         buzz: [{ kind: 'shared', said: read.place.said, new: false, url: link }], mentions: 0, labels: [],
         heard: sharedHeard(who?.name ?? null, source, read.place.said), why: null, touristy: false, status: 'saved',
+        origin: source === 'Alexa' ? 'alexa' : 'shared', saved_at: new Date().toISOString(),
       }
       const { data: inserted, error } = await sb.from('guide_places').insert({ ...row, score: Math.round(guideScore(row) * 100) / 100 }).select('id').single()
       if (error) return said('I found it but couldn’t save it just now. Try again in a minute.', 500)
       placeId = inserted.id
     }
-    const reply = shareReply({ kind: 'place', found: true, already: existing?.status === 'saved', name, town: townOf(p.formattedAddress), minutes })
+    const reply = shareReply({ kind: 'place', found: true, already: existing?.status === 'saved' || existing?.status === 'spot', spot: existing?.status === 'spot', name, town: townOf(p.formattedAddress), minutes })
     await record({ kind: 'place', summary: read.summary, read: readText.slice(0, 4000) || null, place_id: placeId, reply })
     return said(reply)
   }

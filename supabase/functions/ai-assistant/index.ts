@@ -53,6 +53,7 @@ import { allDayWords } from '../_shared/all-day.mjs'
 import { overdueToRaise } from '../_shared/todo-stage.mjs'
 import { routinesSection } from '../_shared/routines-for-assistant.mjs'
 import { TASTE_KEY, guideSection, tasteOf } from '../_shared/guide.mjs'
+import { shareReply } from '../_shared/share-in.mjs'
 import { READ_TOOLS, mergePrepCards, buildFullAiSystem, isTripTalk, alreadyOnCalendar, alreadyOnCalendarText, describesExistingLeg, tripLegOf, fullAiRequest, fullAiStatus, promisesLookup, fullAiTools, THINK_IT_THROUGH, flubSignal, fullAiCard, fullAiContents, fullAiWindow, giftIdeasForViewer, choresForCasa, todoForCasa, comingUpForModel, mentionedIds, findEventsRange, describeFoundEvents, emailSearchWords, rankEmails, writtenCall, readShowDay, directionsFor, askAddress, addressReply } from '../_shared/assistant-full-ai.mjs'
 
 // Thinking for the drawer's turn and the answers it writes stays off (a small budget only for
@@ -1053,7 +1054,7 @@ Deno.serve(async (req) => {
     // The privacy switch (built, off by default — Jake: "I want to see everything on the wall when I ask"): when on,
     // health, therapy and money facts are left out on the wall; they're answered on a phone.
     // In the order asked (it once read the persona from the routines' answer, the routines from the days off — Oct 8).
-    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }, { data: tidyRows }, { data: guideRows }, { data: tasteRow }] = await Promise.all([
+    const [{ data: privacy }, { data: routineRows }, { data: dayOffRows }, { data: personaRow }, { data: outingRows }, { data: paperRow }, { data: newsRows }, { data: tidyRows }, { data: guideRows }, { data: tasteRow }, { data: watchRows }] = await Promise.all([
       sb.from('settings').select('value').eq('key', 'memory_private_on_wall').maybeSingle(),
       // The routines (school, work, who has whom) and the days off in the next three weeks (Oct 7).
       sb.from('member_availability_rules').select('member_id, day_of_week, reason').limit(200),
@@ -1068,8 +1069,10 @@ Deno.serve(async (req) => {
       // What she has for them (canvas 75): the morning's tidy-up, still open.
       sb.from('tidy_suggestions').select('id, says, fix, choices').eq('status', 'open').gte('made_on', new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)).order('created_at').limit(8),
       // The places they saved to try and the guide's picks, and Your taste (Jake, Oct 9: "things I actually like").
-      sb.from('guide_places').select('id, name, address, shelf_label, drive_min, rating, rating_count, heard, labels, score, status').in('status', ['saved', 'been', 'live']).order('score', { ascending: false }).limit(300),
+      sb.from('guide_places').select('id, name, address, shelf_label, drive_min, rating, rating_count, heard, labels, score, status, whose, note').in('status', ['saved', 'spot', 'been', 'live']).order('score', { ascending: false }).limit(300),
       sb.from('settings').select('value').eq('key', TASTE_KEY).maybeSingle(),
+      // What they watch for (canvas 86C): the kinds of nights they'd do again, or asked about.
+      sb.from('guide_watch').select('name, kind, note').eq('status', 'on').limit(30),
     ])
     const onWall = String(context?.page ?? '').startsWith('wall')
     const memory = ((memoryRows.data ?? []) as Array<Record<string, unknown> & { id: string; kind: string; sensitive?: boolean }>)
@@ -1143,7 +1146,7 @@ Deno.serve(async (req) => {
       ...(Array.isArray(state?.candidateEvents) ? (state.candidateEvents as Array<{ id: string }>).map((c) => c.id) : []),
     ]
     const pending = context?.pendingAction && typeof context.pendingAction === 'object' ? context.pendingAction as { tool: string; args: Record<string, unknown> } : null
-    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), guide: guideSection(guideRows ?? [], tasteOf(tasteRow?.value)), tonight: tonightSection(outingRows ?? [], todayYmdNY()), tidy: tidySection(tidyRows ?? []),
+    const systemFor = (planningTurn: boolean) => buildFullAiSystem({ family, events, groceries, pending, onScreenIds, utcOffset, now, homeCity: typeof context?.homeCity === 'string' ? context.homeCity : null, home: home || null, places, contacts, recipes, todos, finished, chores, projects, comingUp, planning: planningTurn, memory, dueThoughtId: due?.id ?? null, speaker: speakerLine(talkerId, family), persona: personaRow?.value ?? null, routines: routinesSection(routineRows ?? [], family, dayOffRows ?? []), raise, outings: outingsSection(outingRows ?? [], todayYmdNY()), guide: guideSection(guideRows ?? [], tasteOf(tasteRow?.value), watchRows ?? []), tonight: tonightSection(outingRows ?? [], todayYmdNY()), tidy: tidySection(tidyRows ?? []),
       paper: paperSection({ paper: paperRow ?? null, outings: outingRows ?? [], news: (newsRows ?? []).filter((n: { news_date: string }) => n.news_date === newsRows?.[0]?.news_date), today: todayYmdNY() }) })
     let system = systemFor(startPlanning)
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = fullAiContents(messages as Array<{ role: string; content: string }>)
@@ -1238,7 +1241,7 @@ Deno.serve(async (req) => {
         if (!nudgedPromise && !memoryCalls.length && (promisesAction(words) || lookOnly) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
           nudgedPromise = true
           mustActNext = lookOnly ? 'look' : true
-          contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: lookOnly ? 'You said you would look that up, but you called no tool, so they have no answer yet. Look it up now, then answer.' : 'You said you would do that, but you called no tool, so nothing has happened yet. Call the tool for it now.' }] })
+          contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: lookOnly ? '(A note from the house, not from them: you said you would look that up, but called no tool, so they have no answer yet. Look it up now, then answer — don’t apologize or mention this note.)' : '(A note from the house, not from them: you said you would do that, but called no tool, so nothing has happened yet. Call the tool for it now. Don’t apologize or mention this note — just do it, then answer them as if this were your first reply.)' }] })
           parts = []
           continue
         }
@@ -1294,21 +1297,32 @@ Deno.serve(async (req) => {
         } else if (call.name === 'mark_place') {
           const id = String(call.args?.id ?? '')
           const status = String(call.args?.status ?? '')
-          if (!/^[0-9a-f-]{36}$/.test(id) || !['been', 'not_for_us', 'saved'].includes(status)) result = { error: 'Which place, and been, not_for_us or saved?' }
+          if (!/^[0-9a-f-]{36}$/.test(id) || !['been', 'spot', 'not_for_us', 'saved'].includes(status)) result = { error: 'Which place, and been, spot, not_for_us or saved?' }
           else if (dryRun) result = { done: true, dry_run: true }
           else {
-            const { data, error } = await sb.from('guide_places').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select('name').maybeSingle()
+            const { data, error } = await sb.from('guide_places').update({ status, ...(status === 'saved' || status === 'spot' ? { saved_at: new Date().toISOString() } : {}), updated_at: new Date().toISOString() }).eq('id', id).select('name').maybeSingle()
             result = error ? { error: error.message } : data ? { done: true, name: data.name, status } : { error: 'No place with that id' }
           }
         } else if (call.name === 'save_place') {
-          // Saved at once to the guide's Places worth trying, the same way a shared post is (share-in).
-          const words = [call.args?.name, call.args?.what, call.args?.town ? `in ${call.args.town}` : null].filter(Boolean).map(String).join(', ')
-          if (!words) result = { error: 'Which place?' }
-          else if (dryRun) result = { saved: true, dry_run: true, place: words }
+          // On their list at once (Out & about from your list, canvas 86C): to try, or a spot when they love it.
+          const name = String(call.args?.name ?? '').trim()
+          const love = call.args?.love === true
+          const whose = ['us', 'family', 'jake', 'kelly'].includes(String(call.args?.whose)) ? String(call.args?.whose) : undefined
+          if (!name) result = { error: 'Which place?' }
+          else if (dryRun) result = { saved: true, dry_run: true, place: name, love, whose }
           else {
-            const { data, error } = await sb.functions.invoke('share-in', { body: { member_id: activeMemberId ?? null, text: words } })
-            const line = typeof data === 'string' ? data : ''
-            result = error ? { error: error.message } : /^Saved /.test(line) ? { saved: true, said: line } : { saved: false, said: line || 'It wasn’t saved.' }
+            const { data, error } = await sb.functions.invoke('scout', { body: { action: 'list_add', name, town: call.args?.town ?? null, what: call.args?.what ?? null, said: call.args?.what ?? null, status: love ? 'spot' : 'saved', whose, origin: 'alexa' } })
+            const r = (data ?? {}) as { found?: boolean; already?: boolean; was?: string; name?: string; town?: string | null; minutes?: number | null; said?: string }
+            const said = r.found ? shareReply({ kind: 'place', found: true, already: r.already, spot: r.was === 'spot', made: love ? 'spot' : 'saved', name: r.name, town: r.town, minutes: r.minutes }) : r.said ?? `I couldn’t find ${name} on Google Maps.`
+            result = error ? { error: error.message } : { saved: Boolean(r.found) && !(r.already && !love), already: Boolean(r.already), said }
+          }
+        } else if (call.name === 'watch_for') {
+          const name = String(call.args?.name ?? '').trim()
+          if (!name) result = { error: 'Watch for what?' }
+          else if (dryRun) result = { watching: name, dry_run: true }
+          else {
+            const { data, error } = await sb.functions.invoke('scout', { body: { action: 'watch_add', name, kind: call.args?.kind === 'asked' ? 'asked' : 'again', query: call.args?.query ?? name, note: call.args?.note ?? null, whose: call.args?.whose ?? 'us' } })
+            result = error ? { error: error.message } : { watching: name, already: Boolean((data as { again?: boolean } | null)?.again), note: 'New dates show on Out & about as they’re found (checked on their pages).' }
           }
         } else if (call.name === 'show_day') {
           shownDay = readShowDay(call.args) ?? shownDay

@@ -41,7 +41,7 @@ import type { TypedImage } from './typeLine'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 import { useFixtureHowWasIt } from './howWasItFixture'
-import { GUIDE_PLACES } from './guideFixture'
+import { LIST_LIKE, LIST_PLACES, LIST_WATCHES } from './guideFixture'
 
 // School, and the parents' work hours (canvas 16a).
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
@@ -67,7 +67,7 @@ const PAPER_WORDS = {
 const OUTINGS = [
   { id: 'o1', kind: 'couple', title: 'Sunset Jazz on the Waterfront', inDays: 1, at: '19:00', recurring: null, place: 'Meyer Amphitheatre', why: 'A free evening concert by the water — Saturday evening looks free.', free: true },
   { id: 'o2', kind: 'couple', title: 'Art After Dark', inDays: null, at: null, recurring: 'Thursdays 5–9 PM', place: 'Norton Museum', why: 'The museum after hours, with music and a bar.', free: false },
-  { id: 'o3', kind: 'family', title: 'Pumpkin Fest', inDays: 8, at: '11:00', recurring: null, place: 'Harbourside Place', why: 'Pumpkin patch, live music and trick-or-treating, for a good cause.', free: true },
+  { id: 'o3', kind: 'family', title: 'Pumpkin Fest', inDays: 8, at: '11:00', recurring: null, place: 'Harbourside Place', why: 'Pumpkin patch, live music and trick-or-treating, for a good cause.', free: true, watch_id: 'w3' },
   { id: 'o4', kind: 'family', title: 'Clematis by Fright!', inDays: 13, at: '18:00', recurring: null, place: 'the Waterfront', why: 'Hayrides, games and trick-or-treating downtown.', free: true },
   { id: 'o5', kind: 'fitness', title: 'Rooftop Yoga at the Treehouse', inDays: null, at: null, recurring: 'Thursdays 6:30 PM', place: 'The Canopy, 6th floor', why: 'An hour of yoga with the city below.', free: false },
   { id: 'o6', kind: 'fitness', title: 'Pickleball open play', inDays: null, at: null, recurring: 'Mon, Wed, Fri 8:30 AM', place: 'Mandel Rec Center', why: 'First come, first served — bring a paddle.', free: true },
@@ -75,6 +75,11 @@ const OUTINGS = [
   { id: 'o10', kind: 'trivia', title: 'Live Trivia', inDays: null, at: null, recurring: 'Thursdays 7–9 PM', place: 'Newport Diner', why: 'free team trivia, real bar prizes', free: true },
   { id: 'o7', kind: 'restaurant', title: 'Celona', inDays: null, at: null, recurring: null, place: 'Celona', why: 'Restaurant & gin lounge — date-night quiet.', free: null, drive_min: 7, rating: 4.8, rating_count: 46, gem: true },
   { id: 'o8', kind: 'restaurant', title: 'Andino Spot', inDays: null, at: null, recurring: null, place: 'Andino Spot', why: 'Colombian — arepas worth a Saturday lunch.', free: null, drive_min: 4, rating: 5, rating_count: 134, gem: false },
+  // What they watch for (canvas 86C): the Candlelight concerts they'd do again, Ballet Palm Beach they asked about.
+  { id: 'w1a', kind: 'couple', title: 'Candlelight: A Haunted Evening', inDays: 29, at: '18:30', recurring: null, place: 'First Presbyterian Church, West Palm Beach', why: 'Halloween classics by candlelight. From $54.', free: null, watch_id: 'w1' },
+  { id: 'w1b', kind: 'couple', title: 'Candlelight: Tribute to Queen', inDays: 71, at: '20:30', recurring: null, place: 'First Presbyterian Church, West Palm Beach', why: 'Queen by candlelight. From $44.', free: null, watch_id: 'w1' },
+  { id: 'w1c', kind: 'couple', title: 'Candlelight: Tribute to Fleetwood Mac', inDays: 77, at: '20:30', recurring: null, place: 'First Presbyterian Church, West Palm Beach', why: 'Fleetwood Mac by candlelight. From $44.', free: null, watch_id: 'w1' },
+  { id: 'w2a', kind: 'family', title: 'The Nutcracker', inDays: 70, at: '19:00', recurring: null, place: 'Kravis Center, West Palm Beach', why: 'Ballet Palm Beach’s Nutcracker, Dec 4–6. From $25.', free: null, watch_id: 'w2' },
 ] as const
 const TOWN_NEWS = [
   { section: 'schools', headline: 'Free flu shots at school, Oct 28', line: 'Palm Beach Public’s clinic — Emme and Owen can get theirs there; the form is in the email.', source: 'Palm Beach Public', source_date: '2026-09-24', rank: 0 },
@@ -305,7 +310,12 @@ export default function WallFixturePage() {
       : id === 'o3'
         ? { facts: [{ label: 'Tickets', text: '$15 a car, kids under 12 free' }, { label: 'What’s in it', text: 'Pumpkin patch, hayrides, live music and trick-or-treating' }, { label: 'For kids', text: 'All ages; costumes welcome' }], not_said: ['Parking'], ticket_url: 'https://example.org/pumpkin-tickets', ends: '15:00', read_at: new Date(day).toISOString() }
         : null),
-    guide: new URLSearchParams(window.location.search).get('guide') === '1' ? GUIDE_PLACES : [],
+    guide: new URLSearchParams(window.location.search).get('guide') === '1' ? LIST_PLACES : [],
+    watches: LIST_WATCHES,
+    // One of their spots on the calendar, the day after tomorrow.
+    calendar: { g13: { next: ymd(2), last: null } },
+    like: async () => LIST_LIKE,
+    addPlace: async (p) => { ((window as unknown as { __added?: string[] }).__added ??= []).push(p.name) },
     answerPlace: (id, status) => { ((window as unknown as { __placed?: string[] }).__placed ??= []).push(`${id}:${status}`) },
     sendPlace: async (p) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(p.name) },
     send: async (o) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(o.title) },

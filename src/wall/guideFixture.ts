@@ -380,3 +380,28 @@ export const GUIDE_PLACES: GuidePlace[] = [
     "status": "live"
   }
 ]
+
+// Out & about from your list (canvas 86C): some of them theirs — saved to try (one shared in their words, one asked
+// about, one Kelly's), and two spots; the rest stay the guide's picks (one is the week's surprise).
+const THEIRS: Record<string, Partial<GuidePlace>> = {
+  g5: { status: 'saved', origin: 'shared', saved_at: '2026-09-24T20:05:00Z', buzz: [{ kind: 'shared', said: 'an oyster bar with a raw bar and a patio', new: false, url: null }] },
+  g8: { status: 'saved', origin: 'asked', saved_at: '2026-09-23T15:00:00Z', note: 'You asked Alexa what was playing here.' },
+  g7: { status: 'saved', origin: 'guide', saved_at: '2026-09-22T02:20:00Z', whose: 'kelly' },
+  g11: { status: 'saved', origin: 'guide', saved_at: '2026-09-21T02:20:00Z' },
+  g13: { status: 'spot', origin: 'taste', saved_at: '2026-09-01T12:00:00Z' },
+  g9: { status: 'spot', origin: 'taste', saved_at: '2026-09-01T12:00:00Z' },
+}
+export const LIST_PLACES: GuidePlace[] = GUIDE_PLACES.map((p) => ({ ...p, ...(THEIRS[p.id] ?? {}) }))
+export const LIST_WATCHES = [
+  { id: 'w1', name: 'Candlelight concerts', kind: 'again' as const, whose: 'us' as const, note: 'You loved 90s Hip-Hop on Strings.' },
+  { id: 'w2', name: 'Ballet Palm Beach', kind: 'asked' as const, whose: 'family' as const, note: 'You asked Alexa about ballet in Palm Beach.' },
+  { id: 'w3', name: 'Fall festivals', kind: 'asked' as const, whose: 'family' as const, note: 'You asked for fall things to do with the kids.' },
+]
+// More like this (canvas 86F), as the scout's like returns it for Lost Weekend.
+export const LIST_LIKE = {
+  known_for: 'House music, dressed up',
+  places: [
+    { google_place_id: 'gp-spazio', name: 'Spazio', town: 'West Palm Beach', address: '207 Clematis St, West Palm Beach, FL 33401', drive_min: 8, rating: 4.6, what: 'An intimate late-night room for house music, with rotating DJs and a full bar.', alike: 'House music is the whole point', source: 'clubspazio.com' },
+    { google_place_id: 'gp-rox', name: 'Top of the Rox', town: 'West Palm Beach', address: 'Clematis St, West Palm Beach, FL', drive_min: 8, rating: 4.1, what: 'A rooftop with a heated pool that turns into a nightclub after dark.', alike: 'Dress code on weekend nights', source: 'Atly' },
+  ],
+}

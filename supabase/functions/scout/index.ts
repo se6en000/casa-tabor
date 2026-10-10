@@ -7,6 +7,9 @@
 // | { action: 'details', id } (what an outing's own page says, for its card — read once, kept a week)
 // | { action: 'rate_ask', dry_run? } (the local guide: yesterday's outings, asked about in Something for you, each morning)
 // | { action: 'guide', dry_run? } (the local guide's week of research: places worth trying) | { action: 'guide_feedback', id, status }.
+// | { action: 'list_add', name|google_place_id, town?, status?, whose?, origin?, note?, said?, like_of? } (a place on their list)
+// | { action: 'watch_add', name, kind, whose?, query?, note? } | { action: 'watch', id?, force?, dry_run? } (new dates for what they watch)
+// | { action: 'like', id } (More like this: the same scene near home, not saved).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { TALK_PLAN_GEMINI_MODEL } from '../_shared/llm-model-policy.mjs'
@@ -18,9 +21,12 @@ import {
   venueKey, venuePrompt, parseVenues, venueKindOf, actKey, actPrompt, parseActs, actStanding,
 } from '../_shared/scout.mjs'
 import {
-  GUIDE_AREAS, TASTE_KEY, buzzPrompt, curatePrompt, guideLabels, guideScore, guideShelves, heardLine, parseBuzz, parseCurate, parseRateAsk, placeVerdict,
+  GUIDE_AREAS, TASTE_KEY, townOf, guideDriveMin, buzzPrompt, curatePrompt, guideLabels, guideScore, guideShelves, heardLine, parseBuzz, parseCurate, parseRateAsk, placeVerdict,
   rateAskPrompt, rateCandidates, rateRows, reviewTrend, sameName, tasteOf,
 } from '../_shared/guide.mjs'
+import { GUIDE_SHELVES } from '../_shared/guide.mjs'
+import { sharedShelf } from '../_shared/share-in.mjs'
+import { UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -68,6 +74,100 @@ async function inBatches<T, R>(items: T[], size: number, fn: (x: T) => Promise<R
   return out
 }
 
+const LIST_FIELDS = 'id,displayName,formattedAddress,rating,userRatingCount,businessStatus,location,primaryTypeDisplayName,types,websiteUri,googleMapsUri'
+const WHOSE = ['us', 'family', 'jake', 'kelly']
+
+/** What the list's own jobs need (adding, watching, More like this): home, the AI's key, Maps, their taste. */
+// deno-lint-ignore no-explicit-any
+async function listCtx(sb: any) {
+  const [{ data: homeRow }, { data: llmRow }, { data: tasteRow }] = await Promise.all([
+    sb.from('settings').select('value').eq('key', 'home_config').maybeSingle(),
+    sb.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
+    sb.from('settings').select('value').eq('key', TASTE_KEY).maybeSingle(),
+  ])
+  const llm = resolveBackgroundLlmConfig((llmRow as any)?.value) as { api_key?: string }
+  const geo = (homeRow as any)?.value?.geocode_cache
+  return {
+    llmKey: llm?.api_key ?? null,
+    mapsKey: Deno.env.get('GOOGLE_MAPS_API_KEY') ?? null,
+    home: typeof geo?.lat === 'number' ? { lat: geo.lat as number, lng: geo.lng as number } : null,
+    taste: tasteOf((tasteRow as any)?.value),
+  }
+}
+
+/** Google Places: the best match for words near home, or a place by its id. */
+async function findPlace(mapsKey: string, home: { lat: number; lng: number }, q: { text?: string; id?: string }, purpose: string) {
+  if (q.id) {
+    return mapsFetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(q.id)}`, { headers: { 'X-Goog-Api-Key': mapsKey, 'X-Goog-FieldMask': LIST_FIELDS } }, { callPurpose: purpose })
+      .then((r: Response) => (r.ok ? r.json() : null)).catch(() => null) as Promise<Record<string, any> | null>
+  }
+  const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Goog-Api-Key': mapsKey, 'X-Goog-FieldMask': LIST_FIELDS.split(',').map((f) => `places.${f}`).join(',') },
+    body: JSON.stringify({ textQuery: q.text, maxResultCount: 1, locationBias: { circle: { center: { latitude: home.lat, longitude: home.lng }, radius: 30000 } } }),
+  }, { callPurpose: purpose }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+  return (res?.places?.[0] ?? null) as Record<string, any> | null
+}
+
+/** Google's facts about a place, as guide_places keeps them. */
+function placeFacts(p: Record<string, any>, home: { lat: number; lng: number }, reachMin: number) {
+  // Their own place: the drive whatever Google's stars say (Mary Lou's, 3.5, came back with none).
+  const minutes = p.location ? guideDriveMin(home, { lat: p.location.latitude, lng: p.location.longitude }) : null
+  return {
+    google_place_id: p.id, name: String(p.displayName?.text ?? ''), address: p.formattedAddress ?? null, types: p.primaryTypeDisplayName?.text ?? null,
+    lat: p.location?.latitude ?? null, lng: p.location?.longitude ?? null, drive_min: minutes, beyond: minutes != null && minutes > reachMin,
+    rating: p.rating ?? null, rating_count: p.userRatingCount ?? null, maps_url: p.googleMapsUri ?? null, website: p.websiteUri ?? null,
+    seen_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }
+}
+
+/** One grounded Gemini search: its words, and the pages it read. */
+async function grounded(llmKey: string, prompt: string, purpose: string, maxOutputTokens = 3000) {
+  const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${llmKey}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } } }),
+  }, { callPurpose: purpose }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+  const text = ((res?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>).filter((x) => !x.thought).map((x) => x.text ?? '').join('')
+  const urls = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []) as Array<{ web?: { uri?: string } }>).map((c) => c.web?.uri).filter(Boolean) as string[]
+  return { text, urls }
+}
+
+/** A watch's new dates (the Candlelight concerts, Ballet Palm Beach): searched, each checked on its page, kept as outings. */
+// deno-lint-ignore no-explicit-any
+async function lookWatch(sb: any, llmKey: string, w: Record<string, any>, today: string, dryRun = false) {
+  const until = addDays(today, WATCH_DAYS)
+  const { text } = await grounded(llmKey, watchPrompt(w, { today, until }), 'guide-watch', 4000)
+  const found = parseWatchEvents(text, { today, until }) as Array<{ title: string; date: string; time: string | null; url: string; venue: string | null; town: string | null; price_from: number | null; line: string | null }>
+  const kept: Array<Record<string, unknown>> = []
+  const dropped: Record<string, number> = {}
+  const misses: string[] = []
+  const pages = new Map<string, { text: string; url: string } | null>()
+  const ok: Array<typeof found[number] & { url: string; note: string }> = []
+  await inBatches(found, 4, async (e) => {
+    if (watchTooFar(e)) { dropped['too far'] = (dropped['too far'] ?? 0) + 1; return }
+    if (!pages.has(e.url)) pages.set(e.url, await fetchPage(e.url))
+    const page = pages.get(e.url)
+    // A page that opens must show it; one that won't (Fever, the Kravis block readers) keeps it, said so on the page.
+    const opened = (page?.text?.length ?? 0) >= 200
+    const v = opened ? pageVerdict({ title: e.title, kind: 'couple', when: e.date }, page!.text, today, { aheadDays: WATCH_DAYS }) : { ok: true, note: UNCHECKED }
+    if (!v.ok) { dropped[v.note] = (dropped[v.note] ?? 0) + 1; if (dryRun) misses.push(`${v.note}: ${e.date} ${e.title} ${e.url} (${page?.url ?? '-'}, ${page?.text?.length ?? 0} chars)`); return }
+    ok.push({ ...e, url: page?.url ?? e.url, note: v.note })
+  })
+  // One line a show, its other days as also.
+  for (const e of collapseWatchDates(ok)) {
+    const row = watchOuting(e, w) as Record<string, any>
+    kept.push({ ...row, url: e.url, dedupe_key: dedupeKey(row), verify_note: e.note, status: 'new', verified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+  }
+  if (!dryRun) {
+    if (kept.length) {
+      const { error } = await sb.from('outings').upsert(kept, { onConflict: 'dedupe_key', ignoreDuplicates: false })
+      if (error) throw new Error(error.message)
+    }
+    await sb.from('guide_watch').update({ looked_at: new Date().toISOString() }).eq('id', w.id)
+  }
+  return { watch: w.name, found: found.length, kept: kept.length, dropped, ...(dryRun ? { dates: kept.map((k) => `${k.when} ${k.title} — ${k.place}`), misses: misses.slice(0, 8) } : {}) }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const body = await req.json().catch(() => ({})) as { action?: string; force?: boolean; dry_run?: boolean; days?: number; id?: string; status?: string; lanes?: number[] }
@@ -95,9 +195,15 @@ Deno.serve(async (req) => {
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
     const latest = news?.[0]?.news_date
     // The local guide's places worth trying (canvas 85B), best first; Not for us stays out.
-    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status')
-      .in('status', ['live', 'saved']).order('score', { ascending: false }).limit(250)
-    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], today })
+    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status, whose, origin, note, saved_at, score')
+      .in('status', ['live', 'saved', 'spot']).order('score', { ascending: false }).limit(300)
+    // Out & about from your list (canvas 86C): what they watch for, and which of their places are on the calendar.
+    const mine = (guide ?? []).filter((g: { status: string }) => g.status === 'saved' || g.status === 'spot')
+    const [{ data: watches }, { data: events }] = await Promise.all([
+      sb.from('guide_watch').select('id, name, kind, whose, note').eq('status', 'on').limit(50),
+      sb.from('events').select('title, location_name, start_time').gte('start_time', addDays(today, -365)).lt('start_time', addDays(today, 61)).limit(5000),
+    ])
+    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], watches: watches ?? [], calendar: calendarHits(mine, events ?? [], today), today })
   }
 
   if (body.action === 'feedback') {
@@ -273,8 +379,15 @@ Deno.serve(async (req) => {
         const { error } = await sb.from('guide_places').upsert(rows.slice(i, i + 200), { onConflict: 'google_place_id' })
         if (error) throw new Error(error.message)
       }
-      // Google's terms: what it said about a place is kept a month at most.
-      await sb.from('guide_places').delete().lt('seen_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+      // Their list (saved, spots, been, Not for us) is theirs: Google's facts about those refreshed by id, never dropped
+      // (Oct 10: the month-old delete took every place not found again — Loco would have gone in November).
+      const { data: theirs } = await sb.from('guide_places').select('id, google_place_id').neq('status', 'live').lt('seen_at', new Date(Date.now() - 6 * 86_400_000).toISOString()).limit(200)
+      await inBatches((theirs ?? []) as Array<{ id: string; google_place_id: string }>, 5, async (t) => {
+        const p = await findPlace(mapsKey, home, { id: t.google_place_id }, 'guide-refresh')
+        if (p?.id) { const { name: _n, ...facts } = placeFacts(p, home, taste.reachMin); await sb.from('guide_places').update(facts).eq('id', t.id) }
+      })
+      // Google's terms: what it said about a place is kept a month at most — the guide's own picks go.
+      await sb.from('guide_places').delete().eq('status', 'live').lt('seen_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
       return summary
     }
     if (body.dry_run) {
@@ -285,9 +398,104 @@ Deno.serve(async (req) => {
     return json({ ok: true, started: true }, 202)
   }
 
+  // Out & about from your list (canvas 86C–F). Add a place: by name (Alexa, the phone, the taste list) or by Google id
+  // (More like this) — to try, or a spot; a spot stays a spot.
+  if (body.action === 'list_add') {
+    const b = body as Record<string, any>
+    const name = String(b.name ?? '').trim()
+    if (!name && !b.google_place_id) return json({ error: 'Which place?' }, 400)
+    const ctx = await listCtx(sb)
+    if (!ctx.mapsKey || !ctx.home) return json({ error: 'No Maps key or home' }, 500)
+    const p = await findPlace(ctx.mapsKey, ctx.home, b.google_place_id ? { id: String(b.google_place_id) } : { text: `${name} ${b.town ?? ''} FL`.replace(/\s+/g, ' ') }, 'list-add')
+    if (!p?.id) return json({ found: false, said: `I couldn’t find ${name || 'it'} on Google Maps.` })
+    const facts = placeFacts(p, ctx.home, ctx.taste.reachMin)
+    const status = b.status === 'spot' ? 'spot' : 'saved'
+    const whose = WHOSE.includes(b.whose) ? b.whose : null
+    const origin = ['taste', 'asked', 'like', 'added', 'alexa', 'shared'].includes(b.origin) ? b.origin : 'added'
+    const note = typeof b.note === 'string' && b.note.trim() ? b.note.trim().slice(0, 200) : null
+    const { data: existing } = await sb.from('guide_places').select('id, status, origin, saved_at').eq('google_place_id', p.id).maybeSingle()
+    if (existing) {
+      const { name: _name, ...google } = facts
+      const patch: Record<string, unknown> = { ...google, status: existing.status === 'spot' ? 'spot' : status, saved_at: existing.saved_at ?? new Date().toISOString() }
+      if (whose) patch.whose = whose
+      if (note) patch.note = note
+      if (existing.origin === 'guide' || existing.status === 'live' || existing.status === 'not_for_us') patch.origin = origin
+      if (b.like_of) patch.like_of = b.like_of
+      const { error } = await sb.from('guide_places').update(patch).eq('id', existing.id)
+      if (error) return json({ error: error.message }, 500)
+      return json({ found: true, already: existing.status === 'saved' || existing.status === 'spot', was: existing.status, id: existing.id, name: facts.name, town: townOf(facts.address), minutes: facts.drive_min })
+    }
+    const shelf = sharedShelf(GUIDE_SHELVES, `${b.what ?? ''} ${facts.types ?? ''} ${(p.types ?? []).join(' ')}`)
+    const row = {
+      ...facts, shelf: shelf.id, shelf_label: shelf.label, buzz: b.said ? [{ kind: 'shared', said: String(b.said).slice(0, 200), new: false, url: null }] : [],
+      mentions: 0, labels: [], heard: null, why: null, touristy: false, status, whose: whose ?? 'us', origin, note, saved_at: new Date().toISOString(), like_of: b.like_of ?? null,
+    }
+    const { data: inserted, error } = await sb.from('guide_places').insert({ ...row, score: Math.round(guideScore(row) * 100) / 100 }).select('id').single()
+    if (error) return json({ error: error.message }, 500)
+    return json({ found: true, already: false, id: inserted.id, name: facts.name, town: townOf(facts.address), minutes: facts.drive_min })
+  }
+
+  // Watch for a kind of night (Alexa: "we loved the Candlelight concert, find more of those"): kept, and looked up now.
+  if (body.action === 'watch_add') {
+    const b = body as Record<string, any>
+    const name = String(b.name ?? '').trim().slice(0, 120)
+    if (!name) return json({ error: 'Watch for what?' }, 400)
+    const row = { name, kind: b.kind === 'asked' ? 'asked' : 'again', whose: WHOSE.includes(b.whose) ? b.whose : 'us', query: String(b.query ?? name).trim().slice(0, 300), note: typeof b.note === 'string' ? b.note.trim().slice(0, 200) || null : null }
+    const { data: same } = await sb.from('guide_watch').select('id, name, kind, whose, query, note').ilike('name', name).maybeSingle()
+    const { data: w, error } = same ? await sb.from('guide_watch').update({ ...row, status: 'on' }).eq('id', same.id).select('*').single() : await sb.from('guide_watch').insert(row).select('*').single()
+    if (error || !w) return json({ error: error?.message ?? 'not saved' }, 500)
+    const ctx = await listCtx(sb)
+    if (ctx.llmKey) {
+      // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+      EdgeRuntime.waitUntil(lookWatch(sb, ctx.llmKey, w, today).then((r) => console.log('[scout watch]', JSON.stringify(r))).catch((e) => console.error('[scout watch]', e)))
+    }
+    return json({ ok: true, watch: { id: w.id, name: w.name, kind: w.kind, whose: w.whose }, again: Boolean(same) })
+  }
+
+  // Each watch's new dates, once a week each (the morning calendars run asks; force or one id to look now).
+  if (body.action === 'watch') {
+    const b = body as Record<string, any>
+    const ctx = await listCtx(sb)
+    if (!ctx.llmKey) return json({ error: 'AI not configured' }, 500)
+    let q = sb.from('guide_watch').select('*').eq('status', 'on')
+    if (b.id) q = q.eq('id', b.id)
+    else if (!b.force) q = q.or(`looked_at.is.null,looked_at.lt.${new Date(Date.now() - 6 * 86_400_000).toISOString()}`)
+    const { data: due } = await q.limit(20)
+    const run = () => inBatches((due ?? []) as Array<Record<string, any>>, 3, (w) => lookWatch(sb, ctx.llmKey!, w, today, Boolean(body.dry_run)))
+    if (body.dry_run) return json({ looked: await run() })
+    // @ts-ignore EdgeRuntime is provided by Supabase's edge runtime
+    EdgeRuntime.waitUntil(run().then((r) => console.log('[scout watch]', JSON.stringify(r))).catch((e) => console.error('[scout watch]', e)))
+    return json({ ok: true, started: (due ?? []).length }, 202)
+  }
+
+  // More like this (canvas 86F): the same scene, near home, none they already know — found, checked on Maps, not saved.
+  if (body.action === 'like') {
+    if (!body.id) return json({ error: 'Like which?' }, 400)
+    const { data: p } = await sb.from('guide_places').select('*').eq('id', body.id).maybeSingle()
+    if (!p) return json({ error: 'No such place' }, 404)
+    const ctx = await listCtx(sb)
+    if (!ctx.llmKey || !ctx.mapsKey || !ctx.home) return json({ error: 'Not set up' }, 500)
+    const { data: known } = await sb.from('guide_places').select('google_place_id, name, status').neq('status', 'live').limit(500)
+    const theirs = new Set(((known ?? []) as Array<{ google_place_id: string }>).map((k) => k.google_place_id))
+    const { text } = await grounded(ctx.llmKey, likePrompt(p, { today: longDay(today), have: ((known ?? []) as Array<{ name: string }>).map((k) => k.name) }), 'guide-like')
+    const like = parseLike(text, p.name) as { knownFor: string | null; places: Array<{ name: string; town: string | null; what: string | null; alike: string | null; source: string | null }> }
+    const seen = new Set<string>([p.google_place_id])
+    const places: Array<Record<string, unknown>> = []
+    await inBatches(like.places, 5, async (x) => {
+      const g = await findPlace(ctx.mapsKey!, ctx.home!, { text: `${x.name} ${x.town ?? ''} FL` }, 'guide-like')
+      if (!g?.id || seen.has(g.id) || theirs.has(g.id) || !sameName(g.displayName?.text, x.name)) return
+      const v = placeVerdict(g, ctx.home!, Math.max(ctx.taste.reachMin, 45) * 1.5) as { ok: boolean }
+      if (!v.ok) return
+      seen.add(g.id)
+      const f = placeFacts(g, ctx.home!, ctx.taste.reachMin)
+      places.push({ google_place_id: g.id, name: f.name, town: townOf(f.address), address: f.address, drive_min: f.drive_min, rating: f.rating, rating_count: f.rating_count, maps_url: f.maps_url, what: x.what, alike: x.alike, source: x.source })
+    })
+    return json({ known_for: like.knownFor, places: places.slice(0, 4) })
+  }
+
   if (body.action === 'guide_feedback') {
-    if (!body.id || !['saved', 'not_for_us', 'been', 'live'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
-    const { error } = await sb.from('guide_places').update({ status: body.status, updated_at: new Date().toISOString() }).eq('id', body.id)
+    if (!body.id || !['saved', 'spot', 'not_for_us', 'been', 'live'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
+    const { error } = await sb.from('guide_places').update({ status: body.status, ...(body.status === 'saved' || body.status === 'spot' ? { saved_at: new Date().toISOString() } : {}), updated_at: new Date().toISOString() }).eq('id', body.id)
     return error ? json({ error: error.message }, 500) : json({ ok: true })
   }
 
@@ -549,7 +757,15 @@ Deno.serve(async (req) => {
         .lt('verified_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).in('status', ['new', 'offered'])
       const venues = await sortVenues(30).catch((e) => ({ error: String(e) }))
       const acts = await sortActs(45).catch((e) => ({ error: String(e) }))
-      return { found: found.length, written: rows.length, twice: twice.length, venues, acts, log }
+      // The nights they'd do again or asked about (canvas 86C): each watch looked up once a week, a few a morning.
+      const watched = await (async () => {
+        if (body.dry_run) return null
+        const ctx = await listCtx(sb)
+        if (!ctx.llmKey) return null
+        const { data: due } = await sb.from('guide_watch').select('*').eq('status', 'on').or(`looked_at.is.null,looked_at.lt.${new Date(Date.now() - 6 * 86_400_000).toISOString()}`).limit(3)
+        return inBatches((due ?? []) as Array<Record<string, any>>, 3, (w) => lookWatch(sb, ctx.llmKey!, w, today))
+      })().catch((e) => ({ error: String(e) }))
+      return { found: found.length, written: rows.length, twice: twice.length, venues, acts, watched, log }
     }
     try { return json(await read()) } catch (e) { return json({ error: e instanceof Error ? e.message : String(e) }, 500) }
   }

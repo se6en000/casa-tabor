@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, Flame, Gem, House, QrCode, Ticket } from 'lucide-react'
+import { Bookmark, Flame, Gem, Heart, House, Mic, QrCode, Repeat, Ticket, Users } from 'lucide-react'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
@@ -11,8 +11,9 @@ import type { WallEvent, WallMember } from './engine/types'
 import { useFrontScroll } from './useFrontScroll'
 import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
-import { placesByShelf, townOf, type GuideLabel, type GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
-import { OUT_WHAT, OUT_WHO, outAndAboutPlan, outCounts, outFiltered, outWhenChoices, outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
+import { townOf, type GuideLabel, type GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
+import { LIST_TAGS, laterLine, placeItem, yourList, type ListItem, type ListTag } from '../../supabase/functions/_shared/your-list.mjs'
+import { outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 
 export interface WallPaperProps {
   now: Date
@@ -133,7 +134,6 @@ function ScrollPage({ active, children }: { active: boolean; children: ReactNode
   )
 }
 
-const KIND_WORD: Record<string, string> = { couple: 'For two', family: 'Family', fitness: 'Get moving', music: 'Live music', comedy: 'Comedy', trivia: 'Trivia', restaurant: 'Place' }
 const dayShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 const timeOf = (when: string | null) => (when && when.length > 10 ? outingWhen({ when, recurring: null })?.split(' · ')[1] ?? null : null)
 
@@ -144,45 +144,6 @@ const TAGS: Record<GuideLabel, { word: string; Icon: typeof Flame }> = {
   gem: { word: 'Hidden gem', Icon: Gem },
   big: { word: 'Big night', Icon: Ticket },
 }
-function Tag({ label, large = false }: { label: GuideLabel; large?: boolean }) {
-  const { word, Icon } = TAGS[label]
-  return (
-    <span className={`inline-flex shrink-0 items-center gap-[7px] whitespace-nowrap rounded-full font-body font-bold text-wall-on-pigment ${label === 'hot' ? 'bg-wall-rust' : 'bg-wall-ink'} ${large ? 'h-[36px] px-[16px] text-wall-detail' : 'h-[30px] px-[12px] text-wall-label'}`}>
-      <Icon aria-hidden="true" className={`${large ? 'h-[18px] w-[18px]' : 'h-[15px] w-[15px]'} text-wall-night-brass`} strokeWidth={2.2} />{word}
-    </span>
-  )
-}
-/** A show from Ticketmaster is a big room's night (canvas 85B): the one label an event earns today. */
-const eventTag = (o: Outing): GuideLabel | null => ((o as Outing & { source_ref?: string | null }).source_ref === 'ticketmaster' ? 'big' : null)
-
-/** One outing on Out & about: what kind and when in small capitals, its name, where and why; a tap opens its card. */
-function Entry({ o, chip, onOpen }: { o: Outing; chip: string; onOpen: (o: Outing) => void }) {
-  const where = o.kind === 'restaurant' ? outingMeta(o) : [o.place && o.place !== o.title ? o.place : null, o.free ? 'free' : null].filter(Boolean).join(' · ')
-  const tag = eventTag(o)
-  return (
-    <button type="button" aria-label={o.title} onClick={() => onOpen(o)} className="flex min-w-0 flex-col gap-[2px] border-0 border-t border-solid border-wall-rule bg-transparent px-0 pb-[10px] pt-[10px] text-left font-body text-wall-ink">
-      {tag && <span className="mb-[6px]"><Tag label={tag} /></span>}
-      <span className="truncate text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{chip.toUpperCase()}{o.status === 'saved' ? ' · SAVED' : ''}</span>
-      <span className="line-clamp-2 font-display text-wall-heading font-semibold">{o.title}</span>
-      {where && <span className="truncate text-wall-detail text-wall-ink-2">{where}</span>}
-    </button>
-  )
-}
-
-/** A place worth trying (canvas 85B): its labels, its shelf, its name, the town and the drive, and why the two of them. */
-function PlaceEntry({ p, onOpen }: { p: GuidePlace; onOpen: (p: GuidePlace) => void }) {
-  const where = [townOf(p.address), p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(' · ')
-  return (
-    <button type="button" aria-label={p.name} onClick={() => onOpen(p)} className="flex min-w-0 flex-col gap-[2px] border-0 border-t border-solid border-wall-rule bg-transparent px-0 pb-[12px] pt-[10px] text-left font-body text-wall-ink">
-      {p.labels.length > 0 && <span className="mb-[6px] flex flex-wrap gap-[6px]">{p.labels.map((l) => <Tag key={l} label={l} />)}</span>}
-      <span className="truncate text-wall-label font-bold tracking-[0.12em] text-wall-brass-ink">{p.shelf_label.toUpperCase()}{p.status === 'saved' ? ' · SAVED' : ''}</span>
-      <span className="line-clamp-2 font-display text-wall-heading font-semibold">{p.name}</span>
-      {where && <span className="truncate text-wall-detail text-wall-ink-2">{where}</span>}
-      {p.why && <span className="mt-[2px] line-clamp-2 font-display text-wall-detail italic text-wall-ink">{p.why}</span>}
-    </button>
-  )
-}
-
 function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <section aria-label={label} className="mt-[34px] flex flex-col">
@@ -192,149 +153,133 @@ function Section({ label, count, children }: { label: string; count?: number; ch
   )
 }
 
-type OutPick = { what: string; who: string; when: string }
-type Picker = 'what' | 'who' | 'when'
-
-/** One picker (canvas 84B): a quiet pill; a tap opens its choices in a small dark panel, each with how many it shows. */
-function PickPill({ label, open, on, choices, counts, chosen, onOpen, onPick }: {
-  label: string; open: boolean; on: boolean; choices: string[][]; counts: Record<string, number>; chosen: string
-  onOpen: () => void; onPick: (id: string) => void
-}) {
+// Out & about from your list (canvas 86C; Jake, Oct 9: "the list will be significantly slimmed down to stuff I purposely
+// add"): why each one is here, in their words — its icon and word, never color alone.
+const LIST_TAG: Record<ListTag, { word: string; Icon: typeof Flame; tone: 'ink' | 'rust' | 'brass' }> = {
+  try: { word: LIST_TAGS.try, Icon: Bookmark, tone: 'ink' },
+  spot: { word: LIST_TAGS.spot, Icon: Heart, tone: 'ink' },
+  asked: { word: LIST_TAGS.asked, Icon: Mic, tone: 'ink' },
+  again: { word: LIST_TAGS.again, Icon: Repeat, tone: 'brass' },
+  family: { word: LIST_TAGS.family, Icon: Users, tone: 'ink' },
+  kelly: { word: LIST_TAGS.kelly, Icon: Heart, tone: 'ink' },
+  jake: { word: LIST_TAGS.jake, Icon: Heart, tone: 'ink' },
+  local: { word: TAGS.local.word, Icon: House, tone: 'ink' },
+  hot: { word: TAGS.hot.word, Icon: Flame, tone: 'rust' },
+  gem: { word: TAGS.gem.word, Icon: Gem, tone: 'ink' },
+  big: { word: TAGS.big.word, Icon: Ticket, tone: 'ink' },
+}
+/** On a highlight card: a small filled pill. */
+function ListPill({ tag }: { tag: ListTag }) {
+  const t = LIST_TAG[tag]
+  if (!t) return null
   return (
-    <div className="relative">
-      <button type="button" aria-expanded={open} onClick={onOpen}
-        className={`flex h-[52px] items-center gap-[10px] rounded-full border-0 px-[22px] font-body text-wall-detail font-semibold ${open || on ? 'bg-wall-ink text-wall-on-pigment' : 'bg-wall-paper text-wall-ink'}`}>
-        {label}<ChevronDown aria-hidden="true" className="h-[16px] w-[16px] opacity-70" />
-      </button>
-      {open && (
-        <div role="listbox" aria-label={label} className="absolute right-0 top-[62px] z-30 flex w-[340px] flex-col rounded-[20px] bg-wall-ink p-[10px] shadow-[0_18px_40px] shadow-wall-ink/30">
-          {choices.map(([id, name]) => (
-            <button key={id} type="button" role="option" aria-selected={id === chosen} disabled={!counts[id] && id !== chosen} onClick={() => onPick(id)}
-              className={`flex h-[56px] items-center justify-between rounded-[14px] border-0 px-[20px] font-body text-wall-detail text-wall-on-pigment disabled:opacity-40 ${id === chosen ? 'bg-wall-on-pigment/10 font-bold' : 'bg-transparent font-medium'}`}>
-              {name}<span className="font-medium text-wall-night-ink-2">{counts[id] ?? 0}</span>
-            </button>
-          ))}
+    <span className={`inline-flex h-[30px] shrink-0 items-center gap-[7px] whitespace-nowrap rounded-full px-[12px] font-body text-wall-label font-bold ${t.tone === 'rust' ? 'bg-wall-rust text-wall-on-pigment' : t.tone === 'brass' ? 'bg-wall-brass text-wall-ink' : 'bg-wall-ink text-wall-on-pigment'}`}>
+      <t.Icon aria-hidden="true" className="h-[15px] w-[15px]" strokeWidth={2.2} />{t.word}
+    </span>
+  )
+}
+/** In the newspaper columns: the icon and the word, in small capitals. */
+function ListWord({ tag }: { tag: ListTag }) {
+  const t = LIST_TAG[tag]
+  if (!t) return null
+  return (
+    <span className={`inline-flex items-center gap-[6px] whitespace-nowrap text-wall-label font-bold tracking-[0.12em] ${t.tone === 'rust' ? 'text-wall-rust' : t.tone === 'brass' ? 'text-wall-brass-ink' : 'text-wall-ink'}`}>
+      <t.Icon aria-hidden="true" className="h-[14px] w-[14px]" strokeWidth={2.3} />{t.word.toUpperCase()}
+    </span>
+  )
+}
+const eyebrow = (it: ListItem) => [it.is, it.when].filter(Boolean).join(' · ').toUpperCase()
+
+/** One of the four on top: a card (Jake: "i did like the card format for the 3/4 highlight items"). */
+function Highlight({ it, onOpen }: { it: ListItem; onOpen: (it: ListItem) => void }) {
+  return (
+    <button type="button" aria-label={it.title} onClick={() => onOpen(it)} className="flex min-w-0 flex-col gap-[10px] rounded-[22px] border-0 bg-wall-paper px-[26px] pb-[24px] pt-[22px] text-left font-body text-wall-ink">
+      {it.tags.length > 0 && <span className="flex flex-wrap gap-[6px]">{it.tags.map((t) => <ListPill key={t} tag={t} />)}</span>}
+      <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>
+      <span className="line-clamp-2 font-display text-wall-date font-semibold">{it.title}</span>
+      {it.where && <span className="-mt-[4px] truncate text-wall-detail text-wall-ink-2">{it.where}</span>}
+      {it.heard && <span className="line-clamp-3 border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail">{it.heard}</span>}
+      {it.why && <span className="line-clamp-2 font-display text-wall-detail italic">{it.why}</span>}
+    </button>
+  )
+}
+
+/** One in the columns below: no box (Jake: "can these not be cards … feels more newspaper like?"). */
+function Story({ it, first, onOpen }: { it: ListItem; first: boolean; onOpen: (it: ListItem) => void }) {
+  return (
+    <button type="button" aria-label={it.title} onClick={() => onOpen(it)}
+      className={`flex min-w-0 flex-col gap-[6px] border-0 border-solid border-wall-rule bg-transparent pb-[22px] pr-[22px] pt-[14px] text-left font-body text-wall-ink ${first ? 'pl-0' : 'border-l pl-[22px]'}`}>
+      {it.tags.length > 0 && <span className="flex flex-wrap gap-x-[14px] gap-y-[4px]">{it.tags.map((t) => <ListWord key={t} tag={t} />)}</span>}
+      <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>
+      <span className="line-clamp-2 font-display text-wall-heading font-semibold">{it.title}</span>
+      {it.where && <span className="truncate text-wall-detail text-wall-ink-2">{it.where}</span>}
+      {it.heard && <span className="line-clamp-3 text-wall-detail">{it.heard}</span>}
+      {it.why && <span className="line-clamp-2 font-display text-wall-detail italic">{it.why}</span>}
+    </button>
+  )
+}
+
+/** Four across, ruled like a page. */
+function Columns({ items, onOpen }: { items: ListItem[]; onOpen: (it: ListItem) => void }) {
+  const rows = Array.from({ length: Math.ceil(items.length / 4) }, (_, i) => items.slice(i * 4, i * 4 + 4))
+  return (
+    <>
+      {rows.map((row, i) => (
+        <div key={i} className="grid grid-cols-4 border-0 border-t border-solid border-wall-rule">
+          {row.map((it, j) => <Story key={it.key} it={it} first={j === 0} onOpen={onOpen} />)}
         </div>
-      )}
-    </div>
-  )
-}
-
-/** The pickers on Out & about: what, who, when — a tap outside closes an open one. */
-function OutPickers({ rows, places, today, pick, setPick }: { rows: Outing[]; places: number; today: string; pick: OutPick; setPick: (p: OutPick) => void }) {
-  const [open, setOpen] = useState<Picker | null>(null)
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!open) return
-    const away = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null) }
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [open])
-  const whenChoices = outWhenChoices(today)
-  // Places worth trying (canvas 85B) are a kind of their own: Everything ▾ › Places shows them all.
-  const lists: Record<Picker, string[][]> = { what: places ? [...OUT_WHAT, ['places', 'Places']] : OUT_WHAT, who: OUT_WHO, when: whenChoices }
-  const nameOf = (which: Picker) => lists[which].find(([id]) => id === pick[which])?.[1] ?? ''
-  return (
-    <div ref={ref} data-no-swipe className="flex items-center gap-[10px]">
-      {(['what', 'who', 'when'] as const).map((which) => (
-        <PickPill key={which} label={nameOf(which)} open={open === which} on={pick[which] !== lists[which][0][0]} choices={lists[which]}
-          counts={open === which ? { ...outCounts(rows, { ...pick, today }, which), ...(which === 'what' ? { places } : {}) } : {}} chosen={pick[which]}
-          onOpen={() => setOpen(open === which ? null : which)} onPick={(id) => { setPick({ ...pick, [which]: id }); setOpen(null) }} />
       ))}
-    </div>
+    </>
   )
-}
-
-const NO_PICK: OutPick = { what: 'all', who: 'any', when: 'all' }
-/** Next week and further out show this many on the whole page; the rest are a tap away (the big rooms add hundreds). */
-const CALM_ROOM = 12
-
-function MorePicked({ n, onPick }: { n: number; onPick: () => void }) {
-  if (n <= 0) return null
-  return <button type="button" onClick={onPick} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-semibold text-wall-ink-2">+{n} more ›</button>
 }
 
 /**
- * Page 2, Out & about (canvas 72B, rethought Oct 8 — Jake: "im not seeing much … things that look cool a couple weeks
- * out are good to know too for planning"): by when — tonight and the weekend day by day, next week, further out, every
- * week, and places — everything the Scout and the calendars have, the page scrolling when it's a lot.
+ * Page 2, Out & about from your list (canvas 86C; Jake, Oct 9: "ok lets build this"): four highlights — the soonest
+ * night they asked for or would do again, the newest place to try, the next "again", one surprise — then twelve in
+ * newspaper columns, soonest first; Add one and Saved for later at the foot.
  */
-function OutPage({ scout, active, now, onOpen, onOpenPlace }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void; onOpenPlace: (p: GuidePlace) => void }) {
-  const plan = outAndAboutPlan(scout.outings, { today: scout.today, nowTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
-  const grid = 'mt-[6px] grid grid-cols-4 gap-x-[32px]'
-  // The pickers (canvas 84B; Jake, Oct 9: "84b"): anything picked shows just that, in time order.
-  const [pick, setPick] = useState<OutPick>(NO_PICK)
-  const picked = pick.what !== 'all' || pick.who !== 'any' || pick.when !== 'all'
-  const placesPicked = pick.what === 'places'
-  const shown = picked && !placesPicked ? outFiltered(scout.outings, { ...pick, today: scout.today }) : []
-  // The local guide's places worth trying (canvas 85B; Jake, Oct 9: "i need more than 4 suggestions"): the best few of
-  // each shelf here, every one under Everything ▾ › Places.
-  const guide = placesByShelf(scout.guide ?? [], 3)
-  const allPlaces = placesPicked ? placesByShelf(scout.guide ?? [], 999).shown.flatMap((sh) => sh.places) : []
-  const pickLabel = placesPicked ? 'Places worth trying' : [
-    outWhenChoices(scout.today).find(([id]) => id === pick.when)?.[1],
-    pick.who !== 'any' ? OUT_WHO.find(([id]) => id === pick.who)?.[1] : null,
-    pick.what !== 'all' ? OUT_WHAT.find(([id]) => id === pick.what)?.[1] : null,
-  ].filter(Boolean).join(' · ')
+function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void; onOpenPlace: (p: GuidePlace) => void; onAsk?: (say: string) => void }) {
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const page = useMemo(() => yourList({ places: scout.guide ?? [], outings: scout.outings, watches: scout.watches ?? [], today: scout.today, nowTime, calendar: scout.calendar ?? {} }),
+    [scout.guide, scout.outings, scout.watches, scout.today, scout.calendar, nowTime])
+  const [allLater, setAllLater] = useState(false)
+  const open = (it: ListItem) => { if (it.place) onOpenPlace(it.place); else if (it.outing) onOpen(it.outing) }
+  const later = laterLine(page.later)
+  const counted = `${page.counts.places} ${page.counts.places === 1 ? 'place' : 'places'} on your list · ${page.counts.onCalendar ? `${page.counts.onCalendar} on the calendar` : 'none on the calendar yet'}`
   return (
     <ScrollPage active={active}>
-      {/* On the kicker's line, clear of the title (it keeps its one line). */}
-      <div className="relative z-20 h-0"><div className="absolute -top-[12px] right-0"><OutPickers rows={scout.outings} places={guide.total} today={scout.today} pick={placesPicked ? { ...NO_PICK, what: 'places' } : pick} setPick={setPick} /></div></div>
-      <PageHead kicker="Out & about · the next six weeks"
-        title={plan.count >= 12 ? 'Plenty worth getting out for.' : plan.count ? 'A few worth getting out for.' : 'Nothing checked out this week.'}
-        deck={guide.total ? 'Checked: real, on, and near home — labeled when locals are talking.' : 'Checked: real, on, and within half an hour of home — an hour for a show worth the drive.'} />
-      {picked ? (
-        <section aria-label="Picked" className="mt-[34px] flex flex-col">
+      <PageHead kicker="Out & about · from your list" title={page.highlights.length ? 'A few worth getting out for.' : 'Your list is empty so far.'}
+        deck={page.highlights.length ? 'What you saved, what you loved and want again — and one surprise. Tap any for more.' : 'Share a place from any app, or tell Alexa “we want to try…” — it starts here.'} />
+      {page.highlights.length > 0 && (
+        <div className="mt-[30px] grid grid-cols-4 gap-[18px]">{page.highlights.map((it) => <Highlight key={it.key} it={it} onOpen={open} />)}</div>
+      )}
+      {page.more.length > 0 && (
+        <section aria-label="Coming up" className="mt-[40px] flex flex-col">
           <span className="flex items-baseline gap-[18px]">
-            <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{`${pickLabel} · ${placesPicked ? allPlaces.length : shown.length}`.toUpperCase()}</span>
-            <button type="button" onClick={() => setPick(NO_PICK)} className="h-[44px] border-0 bg-transparent p-0 font-body text-wall-detail font-semibold text-wall-ink-2">Clear</button>
+            <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{`COMING UP · ${page.more.length} MORE`}</span>
+            <span className="text-wall-detail text-wall-ink-2">soonest first — your places, what you asked about, and the nights you’d do again</span>
           </span>
-          {(placesPicked ? allPlaces.length : shown.length) === 0 && <span className="mt-[10px] border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing like that yet.</span>}
-          {placesPicked && <div className={grid}>{allPlaces.map((p) => <PlaceEntry key={p.id} p={p} onOpen={onOpenPlace} />)}</div>}
-          <div className={grid}>{shown.map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : o.recurring, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
+          <div className="mt-[14px]"><Columns items={page.more} onOpen={open} /></div>
+          {allLater && page.later.length > 0 && <Columns items={page.later} onOpen={open} />}
         </section>
-      ) : (<>
-      <Section label="Tonight & this weekend">
-        <div className={`mt-[6px] grid gap-x-[32px] ${plan.weekend.length >= 4 ? 'grid-cols-4' : plan.weekend.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-          {plan.weekend.map((d) => (
-            <div key={d.day} aria-label={d.label} className="flex min-w-0 flex-col">
-              <span className="mb-[2px] mt-[10px] font-display text-wall-date font-semibold">{d.label} <span className="text-wall-ink-2">{d.label === 'Tonight' ? '' : dayShort(d.day).replace(/^\w+, /, '')}</span></span>
-              {d.items.length === 0 && <span className="border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail text-wall-ink-2">Nothing found yet.</span>}
-              {d.items.map((o) => <Entry key={o.id} o={o} chip={[timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}
-              {d.more > 0 && <span className="pt-[6px] text-wall-detail text-wall-ink-2">+{d.more} local {d.more === 1 ? 'band' : 'bands'} — ask Alexa</span>}
-            </div>
-          ))}
+      )}
+      <div className="mt-[18px] grid grid-cols-2 border-0 border-t border-solid border-wall-rule">
+        <div className="flex flex-col gap-[6px] pb-[10px] pr-[22px] pt-[14px]">
+          <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">ADD ONE</span>
+          <span className="font-display text-wall-heading font-semibold">Somewhere you want to go?</span>
+          <span className="text-wall-detail">Share it from any app, or tell Alexa “we want to try…”.</span>
+          <span className="text-wall-detail text-wall-ink-2">{counted}.</span>
+          {onAsk && <button type="button" onClick={() => onAsk('We want to try ')} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-bold text-wall-ink">+ Tell Alexa</button>}
         </div>
-      </Section>
-      {guide.total > 0 && (
-        <Section label="Places worth trying" count={guide.total}>
-          <div className={grid}>{guide.shown.flatMap((sh) => sh.places).map((p) => <PlaceEntry key={p.id} p={p} onOpen={onOpenPlace} />)}</div>
-          <MorePicked n={guide.more} onPick={() => setPick({ ...NO_PICK, what: 'places' })} />
-        </Section>
-      )}
-      {plan.nextWeek.length > 0 && (
-        <Section label="Next week" count={plan.nextWeek.length}>
-          <div className={grid}>{plan.nextWeek.slice(0, CALM_ROOM).map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)).split(',')[0] : null, timeOf(o.when), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
-          <MorePicked n={plan.nextWeek.length - CALM_ROOM} onPick={() => setPick({ ...NO_PICK, when: 'nextweek' })} />
-        </Section>
-      )}
-      {plan.later.length > 0 && (
-        <Section label="Further out · worth planning for" count={plan.later.length}>
-          <div className={grid}>{plan.later.slice(0, CALM_ROOM).map((o) => <Entry key={o.id} o={o} chip={[o.when ? dayShort(o.when.slice(0, 10)) : null, KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
-          <MorePicked n={plan.later.length - CALM_ROOM} onPick={() => setPick({ ...NO_PICK, when: 'later' })} />
-        </Section>
-      )}
-      {plan.weekly.length > 0 && (
-        <Section label="Every week" count={plan.weekly.length}>
-          <div className={grid}>{plan.weekly.map((o) => <Entry key={o.id} o={o} chip={[o.recurring?.replace(/^every /i, ''), KIND_WORD[o.kind]].filter(Boolean).join(' · ')} onOpen={onOpen} />)}</div>
-        </Section>
-      )}
-      {plan.places.length > 0 && (
-        <Section label="New & worth it · places" count={plan.places.length}>
-          <div className={grid}>{plan.places.map((o) => <Entry key={o.id} o={o} chip={o.gem ? 'Hidden gem' : 'Worth a try'} onOpen={onOpen} />)}</div>
-        </Section>
-      )}
-      </>)}
+        {later && (
+          <div className="flex flex-col gap-[6px] border-0 border-l border-solid border-wall-rule pb-[10px] pl-[22px] pt-[14px]">
+            <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">SAVED FOR LATER · {page.counts.later}</span>
+            <span className="font-display text-wall-heading font-semibold">More when the week fits</span>
+            <span className="line-clamp-2 text-wall-detail">{later}.</span>
+            <button type="button" onClick={() => setAllLater(!allLater)} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-bold text-wall-ink">{allLater ? 'Fewer ›' : 'See them ›'}</button>
+          </div>
+        )}
+      </div>
     </ScrollPage>
   )
 }
@@ -416,52 +361,134 @@ const readDay = (iso: string | null | undefined, today: string) => {
  * doesn't say said so — and the QR for its tickets or page. Add to calendar (who's going, when, leave by, that evening, a
  * reminder to get tickets), Send to our phones, Save, Ask Alexa, Not for us.
  */
+type Alike = Awaited<ReturnType<NonNullable<ScoutPaper['like']>>>
+const MONTH_DAY = { month: 'short', day: 'numeric' } as const
+const BUZZ_FROM: Record<string, string> = { reddit: 'Reddit', press: 'The local press', shared: 'In your words' }
+
+/** A fact in two columns: the small-capital word, then what it is. */
+function Fact({ k, children }: { k: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-[18px] border-0 border-t border-solid border-wall-rule py-[10px]">
+      <span className="w-[150px] shrink-0 text-wall-label font-bold tracking-[0.12em] text-wall-ink-2">{k}</span>
+      <span className="min-w-0 text-wall-detail text-wall-ink">{children}</span>
+    </div>
+  )
+}
+
 /**
- * The guide's note (canvas 85B; Jake, Oct 9 — approved): what it's hearing, only what the evidence says, and why the two
- * of them; Plan a night (Alexa), Save it, To our phones, Not for us — it learns from each. The QR opens it on Maps.
+ * A place, tapped (canvas 86E; Jake, Oct 9 — "allow me to click and see more details"): why it's here, what people say
+ * (each with where it was said), the two of them and the place (on the list since, the calendar), the details; Plan a
+ * night, More like this (canvas 86F: the same scene near home — Add to the list or Not for us), To our phones, We went,
+ * Not for us. The QR opens it on Maps.
  */
 function GuideNote({ p, scout, onAsk, onClose }: { p: GuidePlace; scout: ScoutPaper; onAsk?: (say: string) => void; onClose: () => void }) {
   const [said, setSaid] = useState<string | null>(null)
-  const saved = p.status === 'saved'
-  const where = [townOf(p.address), p.drive_min ? `${p.drive_min} min` : null, p.beyond ? 'worth the drive' : null, 'a place to try, not an event'].filter(Boolean).join(' · ')
-  const heard = (p.heard ?? '').split(/(?<=\.)\s+/)
-  const sources = [...new Set(p.buzz.map((b) => (b.kind === 'reddit' ? 'Reddit' : 'the local press')))]
+  const [alike, setAlike] = useState<Alike | 'looking' | 'none' | null>(null)
+  const [added, setAdded] = useState<Record<string, 'added' | 'no'>>({})
+  const mine = p.status === 'saved' || p.status === 'spot'
+  const it = placeItem(p, { today: scout.today, calendar: scout.calendar ?? {}, surprise: !mine })
+  const town = townOf(p.address)
+  const sub = [p.shelf_label, town].filter(Boolean).join(' · ')
+  const hit = scout.calendar?.[p.id]
   const link = p.maps_url ?? p.website
-  const pill = 'h-[56px] rounded-full px-[24px] text-wall-body font-semibold'
+  const sayings = p.buzz.filter((b) => b.said)
+  const since = p.saved_at ? new Date(p.saved_at).toLocaleDateString('en-US', MONTH_DAY) : null
+  const how = p.origin === 'alexa' ? 'you told Alexa' : p.origin === 'shared' ? 'you shared it' : p.origin === 'asked' ? 'you asked about it' : p.origin === 'taste' ? 'from Your taste' : p.origin === 'like' ? 'found with More like this' : p.origin === 'guide' ? 'one of the guide’s picks you saved' : null
+  const pill = 'h-[56px] rounded-full px-[26px] text-wall-body font-semibold'
   const send = async () => {
     try { await scout.sendPlace?.(p); setSaid('Sent to the phones') } catch { setSaid('The phones didn’t take it. Try again.') }
   }
+  const findAlike = async () => {
+    if (!scout.like) return
+    setAlike('looking')
+    try { const r = await scout.like(p.id); setAlike(r.places.length ? r : 'none') } catch { setAlike('none') }
+  }
+  const add = async (x: Alike['places'][number]) => {
+    setAdded((a) => ({ ...a, [x.google_place_id]: 'added' }))
+    try { await scout.addPlace?.({ google_place_id: x.google_place_id, name: x.name, whose: p.whose, like_of: p.id, said: x.what }) } catch { setAdded((a) => Object.fromEntries(Object.entries(a).filter(([k]) => k !== x.google_place_id))) }
+  }
   return (
-    <div className="absolute inset-0 z-20 bg-wall-ink/20" onClick={onClose}>
-      <div role="dialog" aria-label={`The guide on ${p.name}`} onClick={(e) => e.stopPropagation()}
-        className="absolute right-[72px] top-[150px] flex w-[620px] flex-col gap-[14px] rounded-[26px] bg-wall-band px-[36px] py-[32px] font-body text-wall-on-pigment shadow-[0_22px_50px_rgba(38,34,29,0.35)]">
-        <div className="flex items-center gap-[10px]">
-          {p.labels.map((l) => <Tag key={l} label={l} large />)}
-          <span className="flex-1" />
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[48px] w-[48px] items-center justify-center border-0 bg-transparent p-0 text-wall-date text-wall-night-ink-2">×</button>
-        </div>
-        <span className="font-display text-wall-quote font-semibold leading-[1.05]">{p.name}</span>
-        <span className="-mt-[6px] text-wall-detail text-wall-night-ink-2">{where}</span>
-        <span className="mt-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHAT I’M HEARING</span>
-        <div className="-mt-[4px] flex flex-col gap-[6px] text-wall-body">
-          <span>{heard[0]}</span>
-          {heard.length > 1 && <span className="text-wall-night-ink-2">“{heard.slice(1).join(' ').replace(/\.$/, '')}”{sources.length ? ` — from ${sources.join(' and ')}` : ''}</span>}
-        </div>
-        {p.why && (
-          <>
-            <span className="mt-[8px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">WHY YOU TWO</span>
-            <span className="-mt-[4px] font-display text-wall-answer italic">{p.why}</span>
-          </>
-        )}
-        <div className="mt-[10px] flex items-end gap-[20px]">
-          <div className="flex flex-1 flex-wrap gap-[10px]">
-            {onAsk && <button type="button" onClick={() => { onClose(); onAsk(`Help us plan a date night at ${p.name}${townOf(p.address) ? ` in ${townOf(p.address)}` : ''}`) }} className={`${pill} border-0 bg-wall-night-brass text-wall-ink`}>Plan a night</button>}
-            {scout.answerPlace && <button type="button" aria-pressed={saved} onClick={() => { scout.answerPlace!(p.id, saved ? 'live' : 'saved'); onClose() }} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-on-pigment`}>{saved ? 'Saved ✓' : 'Save it'}</button>}
-            {scout.sendPlace && <button type="button" onClick={() => void send()} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-on-pigment`}>To our phones</button>}
-            {scout.answerPlace && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_for_us'); onClose() }} className={`${pill} border border-solid border-wall-night-ink-2 bg-transparent text-wall-night-ink-2`}>Not for us</button>}
-            {said && <span role="status" className="self-center text-wall-detail font-semibold text-wall-night-brass">{said}</span>}
+    <div className="absolute inset-0 z-20 bg-wall-ink/30" onClick={onClose}>
+      <div role="dialog" aria-label={`${p.name}, up close`} onClick={(e) => e.stopPropagation()}
+        className="absolute bottom-[48px] left-[80px] right-[80px] top-[48px] flex flex-col rounded-[28px] bg-wall-ground-calm px-[52px] pb-[36px] pt-[40px] font-body text-wall-ink shadow-[0_30px_70px_rgba(38,34,29,0.35)]">
+        <div className="flex items-start gap-[24px]">
+          <div className="flex min-w-0 flex-1 flex-col gap-[12px]">
+            {alike && alike !== 'none'
+              ? <span className="flex items-center gap-[10px] text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[18px] w-[18px]" />MORE LIKE {p.name.toUpperCase()}</span>
+              : it.tags.length > 0 && <span className="flex flex-wrap gap-[8px]">{it.tags.map((t) => <ListPill key={t} tag={t} />)}</span>}
+            <span className="font-display text-wall-headline font-semibold leading-none">{alike && alike !== 'none' && alike !== 'looking' ? (alike.known_for ? `Same scene: ${alike.known_for.replace(/\.$/, '').toLowerCase()}.` : 'The same kind of place.') : p.name}</span>
+            {(!alike || alike === 'none') && sub && <span className="text-wall-body text-wall-ink-2">{sub}</span>}
+            {alike && alike !== 'none' && alike !== 'looking' && <span className="text-wall-body text-wall-ink-2">Found from local guides and the places’ own pages. Add the ones you want — they join your list{p.whose && p.whose !== 'us' ? ` as ${LIST_TAG[p.whose as ListTag]?.word ?? 'theirs'}` : ''}.</span>}
           </div>
-          {link && <div className="shrink-0"><Qr text={link} label={`QR code: ${p.name} on Google Maps`} small /></div>}
+          {link && (!alike || alike === 'none') && <div className="shrink-0"><Qr text={link} label={`QR code: ${p.name} on Google Maps`} small /></div>}
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center border-0 bg-transparent p-0 text-wall-quote text-wall-ink-2">×</button>
+        </div>
+
+        {alike === 'looking' && <span role="status" className="mt-[28px] text-wall-body text-wall-ink-2">Looking for places with the same scene…</span>}
+        {alike && alike !== 'none' && alike !== 'looking' ? (
+          <div className="mt-[20px] flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {alike.places.map((x) => (
+              <div key={x.google_place_id} className="flex items-center gap-[28px] border-0 border-t border-solid border-wall-rule py-[18px]">
+                <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+                  <span className="font-display text-wall-date font-semibold">{x.name}</span>
+                  <span className="text-wall-detail text-wall-ink-2">{[x.town, x.drive_min ? `${x.drive_min} min` : null, x.rating ? `${x.rating} on Google` : null].filter(Boolean).join(' · ')}</span>
+                  {x.what && <span className="text-wall-body">{x.what}</span>}
+                  {x.alike && <span className="flex items-center gap-[8px] font-display text-wall-detail italic text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[16px] w-[16px]" />{x.alike}</span>}
+                  {x.source && <span className="text-wall-label font-bold text-wall-brass-ink">{x.source}</span>}
+                </div>
+                {added[x.google_place_id] === 'added' ? <span role="status" className="text-wall-body font-semibold text-wall-brass-ink">On your list ✓</span>
+                  : added[x.google_place_id] === 'no' ? <span className="text-wall-body text-wall-ink-2">Not for us</span>
+                  : (
+                    <div className="flex shrink-0 flex-col items-stretch gap-[8px]">
+                      {scout.addPlace && <button type="button" onClick={() => void add(x)} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>+ Add to the list</button>}
+                      <button type="button" onClick={() => setAdded((a) => ({ ...a, [x.google_place_id]: 'no' }))} className="h-[44px] border-0 bg-transparent p-0 text-wall-detail font-semibold text-wall-ink-2">Not for us</button>
+                    </div>
+                  )}
+              </div>
+            ))}
+          </div>
+        ) : alike !== 'looking' && (
+          <div className="mt-[26px] grid min-h-0 flex-1 grid-cols-[1.1fr_1fr] gap-[56px] overflow-y-auto">
+            <div className="flex flex-col">
+              <span className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">WHAT PEOPLE SAY</span>
+              {sayings.length === 0 && <span className="mt-[10px] text-wall-detail text-wall-ink-2">{p.heard ?? 'Nothing heard about it yet.'}</span>}
+              {sayings.slice(0, 3).map((b, i) => (
+                <div key={i} className="flex flex-col gap-[4px] border-0 border-t border-solid border-wall-rule py-[12px]">
+                  <span className="text-wall-body">{b.kind === 'shared' ? `“${String(b.said).replace(/\.$/, '')}”` : b.said}</span>
+                  <span className="text-wall-label font-bold text-wall-brass-ink">{BUZZ_FROM[b.kind] ?? 'The web'}</span>
+                </div>
+              ))}
+              <span className="mt-[22px] text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">YOU TWO AND {p.name.toUpperCase()}</span>
+              <Fact k={mine ? (p.status === 'spot' ? 'YOUR SPOT' : 'ON YOUR LIST') : 'NOT ON YOUR LIST'}>{mine ? [since ? `Since ${since}` : null, how].filter(Boolean).join(' — ') || 'On your list' : 'One of the guide’s picks — save it to put it on your list'}</Fact>
+              {p.whose && p.whose !== 'us' && <Fact k="WHOSE">{LIST_TAG[p.whose as ListTag]?.word}</Fact>}
+              {p.note && <Fact k="WHY">{p.note}</Fact>}
+              <Fact k="THE CALENDAR">{hit?.next ? `On it ${new Date(`${hit.next}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', ...MONTH_DAY })}` : hit?.last ? `Last there ${new Date(`${hit.last}T12:00:00`).toLocaleDateString('en-US', MONTH_DAY)}` : 'Not on the calendar yet'}</Fact>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">THE DETAILS</span>
+              {p.address && <Fact k="WHERE">{p.address.replace(/, USA$/, '')}{p.drive_min ? ` · ${p.drive_min} min` : ''}</Fact>}
+              {p.rating && <Fact k="GOOGLE">{p.rating}{p.rating_count ? ` from ${p.rating_count.toLocaleString('en-US')} reviews` : ''}</Fact>}
+              {p.website && <Fact k="WEBSITE">{p.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</Fact>}
+              {p.why && <Fact k="WHY YOU TWO"><span className="font-display italic">{p.why}</span></Fact>}
+            </div>
+          </div>
+        )}
+        {alike === 'none' && <span role="status" className="mt-[10px] text-wall-detail text-wall-ink-2">Nothing close enough with the same scene turned up.</span>}
+
+        <div className="mt-[22px] flex shrink-0 flex-wrap items-center gap-[12px]">
+          {onAsk && (!alike || alike === 'none') && <button type="button" onClick={() => { onClose(); onAsk(`Help us plan a night at ${p.name}${town ? ` in ${town}` : ''}`) }} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>Plan a night</button>}
+          {scout.like && (!alike || alike === 'none') && <button type="button" onClick={() => void findAlike()} className={`${pill} flex items-center gap-[10px] border-2 border-solid border-wall-brass-ink bg-transparent text-wall-brass-ink`}><Repeat aria-hidden="true" className="h-[20px] w-[20px]" />More like this</button>}
+          {alike && alike !== 'none' && alike !== 'looking' && <button type="button" onClick={() => setAlike(null)} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Back to {p.name}</button>}
+          {(!alike || alike === 'none') && (
+            <>
+              {scout.sendPlace && <button type="button" onClick={() => void send()} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>To our phones</button>}
+              {scout.answerPlace && !mine && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'saved'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Save it</button>}
+              {scout.answerPlace && mine && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'been'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>We went</button>}
+            </>
+          )}
+          {said && <span role="status" className="text-wall-detail font-semibold text-wall-brass-ink">{said}</span>}
+          <span className="flex-1" />
+          {scout.answerPlace && (!alike || alike === 'none') && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_for_us'); onClose() }} className="h-[56px] border-0 bg-transparent px-[8px] text-wall-body font-semibold text-wall-ink-2">Not for us</button>}
         </div>
       </div>
     </div>
@@ -749,7 +776,7 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
           {scout && (
             <>
               <section aria-label="Out & about" aria-hidden={page !== 1} className="relative h-full w-1/3">
-                <OutPage scout={scout} active={page === 1} now={now} onOpen={setPhone} onOpenPlace={setPlace} />
+                <OutPage scout={scout} active={page === 1} now={now} onOpen={setPhone} onOpenPlace={setPlace} onAsk={onAsk} />
               </section>
               <section aria-label="Around town" aria-hidden={page !== 2} className="relative h-full w-1/3">
                 <TownPage news={scout.news} today={scout.today} active={page === 2} />

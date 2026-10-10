@@ -127,7 +127,7 @@ const addDays = (ymd, n) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400
  * Whether a candidate's own page backs it up: its name is on the page (most of its words); a dated one is on a coming
  * date within AHEAD_DAYS that the page shows; a weekly one names its day; and nothing near its name says it's off.
  */
-export function pageVerdict(candidate, text, today, { minLength = 200, current = false } = {}) {
+export function pageVerdict(candidate, text, today, { minLength = 200, current = false, aheadDays = AHEAD_DAYS } = {}) {
   if (!text || text.length < minLength) return { ok: false, note: 'the page is empty or blocked' }
   const name = words(candidate.title)
   if (!name.length || !nameTogether(name, text)) return { ok: false, note: 'its name isn’t on the page' }
@@ -141,7 +141,7 @@ export function pageVerdict(candidate, text, today, { minLength = 200, current =
   const day = candidate.when?.slice(0, 10) ?? null
   if (day) {
     if (day < today) return { ok: false, note: 'it’s past' }
-    if (day > addDays(today, AHEAD_DAYS)) return { ok: false, note: 'too far off' }
+    if (day > addDays(today, aheadDays)) return { ok: false, note: 'too far off' }
     if (!dateForms(day).some((f) => text.includes(f))) return { ok: false, note: 'the page doesn’t show that date' }
     return { ok: true, note: 'its page shows the date' }
   }

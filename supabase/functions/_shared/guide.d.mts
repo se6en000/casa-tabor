@@ -76,7 +76,14 @@ export interface GuidePlace {
   heard: string | null
   why: string | null
   touristy: boolean
-  status: 'live' | 'saved' | 'not_for_us' | 'been'
+  /** saved: on their list to try; spot: a place they love (Out & about from your list, Oct 10). */
+  status: 'live' | 'saved' | 'spot' | 'not_for_us' | 'been'
+  whose?: 'us' | 'family' | 'jake' | 'kelly'
+  origin?: 'guide' | 'shared' | 'alexa' | 'taste' | 'asked' | 'like' | 'added'
+  /** Their own line about it ("You asked Alexa what was playing here."). */
+  note?: string | null
+  saved_at?: string | null
+  score?: number
 }
 export interface GuideShelf { id: string; label: string; match: RegExp | null; queries: string[] }
 export const GUIDE_SHELVES: GuideShelf[]
@@ -97,4 +104,4 @@ export function parseCurate(text: string, count: number): Map<number, { keep: bo
 export function placesByShelf(places: GuidePlace[], each?: number): { shown: Array<{ shelf: string; label: string; places: GuidePlace[] }>; more: number; total: number }
 /** A short town from an address: "Delray Beach". */
 export function townOf(address: string | null): string | null
-export function guideSection(rows: Array<Record<string, any>>, taste: GuideTaste | null): string | null
+export function guideSection(rows: Array<Record<string, any>>, taste: GuideTaste | null, watches?: Array<{ name: string; kind: string; note?: string | null }>): string | null

@@ -2785,15 +2785,10 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await swipe(-200)
   await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
   await expect(paper.getByRole('heading')).toHaveText('A few worth getting out for.')
-  // Canvas 76 (Jake, Oct 8: "fit up all the available spots … things that look cool a couple weeks out are good to know
-  // too for planning"): by when — tonight and the weekend by day, next week, further out, every week, places.
-  const weekend = paper.getByRole('region', { name: 'Tonight & this weekend' })
-  await expect(weekend.getByLabel('Tonight')).toContainText('The Goodnicks')
-  await expect(weekend.getByLabel('Saturday')).toContainText('Sunset Jazz on the Waterfront')
-  await expect(paper.getByRole('region', { name: 'Next week' })).toContainText('Pumpkin Fest')
-  await expect(paper.getByRole('region', { name: 'Further out · worth planning for' })).toContainText('Clematis by Fright!')
-  await expect(paper.getByRole('region', { name: 'Every week' })).toContainText('Live Trivia')
-  await expect(paper.getByRole('region', { name: 'New & worth it · places' })).toContainText('Celona')
+  // Canvas 86C (Jake, Oct 9: "ok lets build this"): from their list — what they watch for, each with why it's here.
+  await expect(paper.getByRole('button', { name: 'Candlelight: A Haunted Evening' })).toContainText('Again')
+  // Nothing saved yet: the dates they watch for fill the four on top.
+  await expect(paper.getByRole('button', { name: 'Pumpkin Fest' })).toContainText('You asked about it')
   await page.waitForTimeout(500)
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out.png')
@@ -2801,11 +2796,8 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await paper.getByRole('button', { name: 'Pumpkin Fest' }).click()
   const card = page.getByRole('dialog', { name: 'Pumpkin Fest on your phone' })
   await expect(card.getByRole('img', { name: 'QR code: Pumpkin Fest' })).toBeVisible()
-  await card.getByRole('button', { name: 'Save' }).click()
-  await expect(paper.getByRole('button', { name: 'Pumpkin Fest' })).toContainText('SAVED')
-  await paper.getByRole('button', { name: 'Andino Spot' }).click()
-  await page.getByRole('dialog', { name: 'Andino Spot on your phone' }).getByRole('button', { name: 'Not for us' }).click()
-  await expect(paper.getByRole('button', { name: 'Andino Spot' })).toHaveCount(0)
+  await card.getByRole('button', { name: 'Not for us' }).click()
+  await expect(paper.getByRole('button', { name: 'Pumpkin Fest' })).toHaveCount(0)
   // The page scrolls with the arrow keys (and a finger): the places come into view.
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowDown')
@@ -2838,44 +2830,6 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   // A tap on the page is just a tap: still the paper.
   await paper.getByRole('heading').click()
   await expect(paper).toBeVisible()
-})
-
-// Canvas 84B (Jake, Oct 9: "how about a filter on this page, for local/cover bands, type of music, or type of act,
-// distance" → "84b"): three quiet pickers by the title — what, who, when; a tap opens one with how many each shows.
-test('wall: Out & about pickers — what, who and when, each with its count; anything picked shows just that; Clear', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
-  const paper = page.getByRole('article', { name: 'The morning paper' })
-  await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
-  await page.keyboard.press('ArrowRight')
-  await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
-  await paper.getByRole('button', { name: 'Any day' }).click()
-  const when = paper.getByRole('listbox', { name: 'Any day' })
-  await expect(when.getByRole('option')).toHaveText([/^Any day\d+$/, /^Tonight\d+$/, /^Saturday\d+$/, /^Sunday\d+$/, /^Next week\d+$/, /^Months ahead\d+$/])
-  await page.waitForTimeout(400)
-  await page.evaluate(() => document.fonts.ready)
-  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out-pick-open.png')
-  await when.getByRole('option', { name: /^Saturday/ }).click()
-  await expect(when).toHaveCount(0)
-  const picked = paper.getByRole('region', { name: 'Picked' })
-  await expect(picked).toContainText(/SATURDAY · \d+/)
-  await expect(picked).toContainText('Sunset Jazz on the Waterfront')
-  await expect(paper.getByRole('region', { name: 'Tonight & this weekend' })).toHaveCount(0)
-  // What, on top of when: nothing to show is greyed out (no music that Saturday); For two is the jazz.
-  await paper.getByRole('button', { name: 'Everything' }).click()
-  const what = paper.getByRole('listbox', { name: 'Everything' })
-  await expect(what.getByRole('option', { name: /^Music/ })).toBeDisabled()
-  await what.getByRole('option', { name: /^For two/ }).click()
-  await expect(picked).toContainText(/SATURDAY · FOR TWO · 1/)
-  await expect(picked).toContainText('Sunset Jazz on the Waterfront')
-  await page.waitForTimeout(400)
-  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('morning-paper-out-picked.png')
-  // A tap outside closes an open picker; Clear goes back to the whole page.
-  await paper.getByRole('button', { name: 'Any act' }).click()
-  await expect(paper.getByRole('listbox', { name: 'Any act' })).toBeVisible()
-  await paper.getByRole('heading').click()
-  await expect(paper.getByRole('listbox', { name: 'Any act' })).toHaveCount(0)
-  await picked.getByRole('button', { name: 'Clear' }).click()
-  await expect(paper.getByRole('region', { name: 'Tonight & this weekend' })).toBeVisible()
 })
 
 // Canvas 73A (Jake, Oct 8: "the front page is the most important. how can we fix the cut off text. I dont want less" →
@@ -3034,45 +2988,47 @@ test('wall: How was it? — the morning after Mr B’s, in Something for you; st
   await expect(wall.getByRole('button', { name: 'I have something for you' })).toHaveCount(0)
 })
 
-// The local guide on Out & about (canvas 85B; Jake, Oct 9 — "85B", "i need more than 4 suggestions"): places worth trying
-// by shelf, each with its labels and why the two of them; a tap opens the guide's note (what it's hearing, why you two,
-// Plan a night / Save it / To our phones / Not for us); Everything ▾ › Places shows them all.
-test('wall: the local guide — places worth trying with their labels; the guide’s note; Everything › Places', async ({ page }) => {
+// Out & about from your list (canvas 86C–F; Jake, Oct 9: "ok lets build this"): four highlights as cards — the newest to
+// try, the next "again", the surprise — then newspaper columns, soonest first; a place up close (what people say, the two
+// of them and it, the details) and More like this (the same scene near home: Add to the list, Not for us).
+test('wall: Out & about from your list — highlights, the columns, a place up close, More like this', async ({ page }) => {
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1&guide=1')
   const paper = page.getByRole('article', { name: 'The morning paper' })
   await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
   await page.keyboard.press('ArrowRight')
   await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
-  const places = paper.getByRole('region', { name: 'Places worth trying' })
-  await expect(places).toContainText('PLACES WORTH TRYING · 14')
-  const sports = places.getByRole('button', { name: 'Sports & Rec' })
-  await expect(sports).toContainText('Locals’ favorite')
-  await expect(sports).toContainText('Hot right now')
-  await expect(sports).toContainText('A game-day bar for a stylish and fun outing.')
-  // Down the page to the places (the page scrolls; the paper's pages don't move).
-  await places.evaluate((el) => {
-    let box = el.parentElement
-    while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement
-    if (box) box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - 20
-  })
-  await page.waitForTimeout(400)
+  // The newest to try (their own words), the next Candlelight, the week's surprise.
+  const lucky = paper.getByRole('button', { name: 'Lucky Lou\'s Raw Bar' })
+  await expect(lucky).toContainText('On your list')
+  await expect(lucky).toContainText('“an oyster bar with a raw bar and a patio” — in your words.')
+  await expect(paper.getByRole('button', { name: 'Candlelight: A Haunted Evening' })).toContainText('You loved 90s Hip-Hop on Strings.')
+  await expect(paper.getByRole('button', { name: 'Sports & Rec' })).toContainText('SURPRISE · NOT ON YOUR LIST')
+  // Below, no boxes: their spots (one on the calendar), Kelly's, what they asked about.
+  const below = paper.getByRole('region', { name: 'Coming up' })
+  await expect(below.getByRole('button', { name: 'Celona Restaurant & Gin Lounge' })).toContainText('ON THE CALENDAR SUN')
+  await expect(below.getByRole('button', { name: 'Lost Weekend WPB' })).toContainText('KELLY’S KIND OF NIGHT')
+  await expect(below.getByRole('button', { name: 'The Nutcracker' })).toContainText('WITH THE KIDS')
   await page.evaluate(() => document.fonts.ready)
-  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('guide-places.png')
-  await sports.click()
-  const note = page.getByRole('dialog', { name: 'The guide on Sports & Rec' })
-  await expect(note).toContainText('WHAT I’M HEARING')
-  await expect(note).toContainText('Talked up in the local press · 4.5 from 322 Google reviews.')
-  await expect(note).toContainText('WHY YOU TWO')
-  await expect(note.getByRole('img', { name: /QR code: Sports & Rec/ })).toHaveCount(0)
-  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('guide-note.png')
-  await note.getByRole('button', { name: 'Save it' }).click()
-  await expect(note).toHaveCount(0)
-  // Everything ▾ › Places: all of them.
-  await paper.getByRole('button', { name: 'Everything' }).click()
-  await paper.getByRole('listbox', { name: 'Everything' }).getByRole('option', { name: /^Places \d+$/ }).click()
-  const picked = paper.getByRole('region', { name: 'Picked' })
-  await expect(picked).toContainText('PLACES WORTH TRYING · 14')
-  await picked.getByRole('button', { name: 'Kelsey Vintage Goods' }).click()
-  await page.getByRole('dialog', { name: 'The guide on Kelsey Vintage Goods' }).getByRole('button', { name: 'Not for us' }).click()
-  expect(await page.evaluate(() => window.__placed)).toEqual(['g1:saved', 'g9:not_for_us'])
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-from-your-list.png')
+  // Up close.
+  await below.getByRole('button', { name: 'Lost Weekend WPB' }).click()
+  const close = page.getByRole('dialog', { name: 'Lost Weekend WPB, up close' })
+  await expect(close).toContainText('WHAT PEOPLE SAY')
+  await expect(close).toContainText('Since Sep 21 — one of the guide’s picks you saved')
+  await expect(close).toContainText('Not on the calendar yet')
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-place-up-close.png')
+  // More like this: the same scene; one added, one not for us.
+  await close.getByRole('button', { name: 'More like this' }).click()
+  await expect(close).toContainText('Same scene: house music, dressed up.')
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-more-like-this.png')
+  await close.getByRole('button', { name: '+ Add to the list' }).first().click()
+  await expect(close.getByText('On your list ✓')).toBeVisible()
+  expect(await page.evaluate(() => window.__added)).toEqual(['Spazio'])
+  await close.getByRole('button', { name: 'Back to Lost Weekend WPB' }).click()
+  await close.getByRole('button', { name: 'We went' }).click()
+  await expect(close).toHaveCount(0)
+  // The surprise: Save it.
+  await paper.getByRole('button', { name: 'Sports & Rec' }).click()
+  await page.getByRole('dialog', { name: 'Sports & Rec, up close' }).getByRole('button', { name: 'Save it' }).click()
+  expect(await page.evaluate(() => window.__placed)).toEqual(['g7:been', 'g1:saved'])
 })
