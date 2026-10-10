@@ -138,10 +138,10 @@ export function tallyLeanings({ outings = [], places = [] } = {}) {
   return tally
 }
 
-/** -2.25 (always no) … +3 (always yes), gently — two answers either way before it leans hard; a watch's dates half as much (they asked for it). */
+/** -2 and lower (always no) … +2 (always yes), gently — two answers either way before it leans hard; a watch's dates half as much (they asked for it). */
 export function leaning(leanings, key) {
   const { yes = 0, no = 0 } = leanings?.[key] ?? {}
-  const a = ((yes - 1.5 * no) / (yes + no + 2)) * 3
+  const a = ((yes - 2 * no) / (yes + no + 2)) * 2
   return key?.startsWith('watch:') ? a / 2 : a
 }
 
@@ -157,7 +157,8 @@ export function wantScore(it, { today, leanings = {} }) {
   let s = FROM[it.from] ?? 1
   if (it.date) {
     const d = daysTo(it.date, today)
-    s += d <= 1 ? 2.2 : d <= 3 ? 1.8 : d <= 7 ? 1.2 : d <= 14 ? 0.6 : d <= 30 ? 0.2 : -0.4
+    // A night has a deadline, a place doesn't (Oct 10: their saved places had pushed every show off the top).
+    s += d <= 1 ? 2.6 : d <= 3 ? 2.2 : d <= 7 ? 1.6 : d <= 14 ? 1.1 : d <= 30 ? 0.4 : -0.4
   } else if (it.place) {
     const saved = it.place.saved_at ? daysTo(it.place.saved_at.slice(0, 10), today) : null
     if (saved !== null && saved >= -14) s += 0.6
@@ -169,18 +170,19 @@ export function wantScore(it, { today, leanings = {} }) {
   return s + leaning(leanings, it.lean)
 }
 
-/** The best n in turn, each kind less welcome once it's on the page (not four Candlelights). */
-function bestOf(items, n, { today, leanings, again = 1.6 }) {
+/** The best n in turn, each kind less welcome once it's on the page (not four Candlelights), and places and nights mixed. */
+function bestOf(items, n, { today, leanings, again = 1.6, mix = again / 3 }) {
   const left = items.map((it) => ({ it, score: wantScore(it, { today, leanings }) }))
   const chosen = []
   const kinds = new Map()
   while (chosen.length < n && left.length) {
     let best = 0
-    const at = (x) => x.score - again * (kinds.get(x.it.lean) ?? 0)
+    const at = (x) => x.score - again * (kinds.get(x.it.lean) ?? 0) - mix * (kinds.get(x.it.type) ?? 0)
     for (let i = 1; i < left.length; i++) if (at(left[i]) > at(left[best])) best = i
     const [{ it }] = left.splice(best, 1)
     chosen.push(it)
     kinds.set(it.lean, (kinds.get(it.lean) ?? 0) + 1)
+    kinds.set(it.type, (kinds.get(it.type) ?? 0) + 1)
   }
   return { chosen, left: left.sort((a, b) => b.score - a.score).map((x) => x.it) }
 }
