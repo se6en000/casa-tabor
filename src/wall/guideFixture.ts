@@ -1,4 +1,5 @@
 import type { GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
+import type { PlaceDossier } from '../../supabase/functions/_shared/place-dossier.mjs'
 
 // The local guide's places worth trying on the wall fixture (canvas 85B): fourteen from its first real run, Oct 9 —
 // their names, labels and what it heard, as saved.
@@ -405,3 +406,47 @@ export const LIST_LIKE = {
     { google_place_id: 'gp-rox', name: 'Top of the Rox', town: 'West Palm Beach', address: 'Clematis St, West Palm Beach, FL', drive_min: 8, rating: 4.1, what: 'A rooftop with a heated pool that turns into a nightclub after dark.', alike: 'Dress code on weekend nights', source: 'Atly' },
   ],
 }
+
+// A place, the whole story (canvas 90A–B) on the fixture: plain shapes for photos and the map (no network in tests),
+// lines in the shape the scout's dossier gives them.
+const shape = (a: string, b: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="rgb(${a})"/><stop offset="1" stop-color="rgb(${b})"/></linearGradient></defs><rect width="1200" height="800" fill="url(%23g)"/></svg>`).replace(/%2523/g, '%23')}`
+const HOURS = ['Monday: Closed', 'Tuesday: Closed', 'Wednesday: 5:00 – 10:00 PM', 'Thursday: 5:00 – 10:00 PM', 'Friday: 5:00 – 10:00 PM', 'Saturday: 5:00 – 10:00 PM', 'Sunday: Closed']
+export const LIST_DOSSIER: PlaceDossier = {
+  read_at: '2026-09-25T14:00:00Z',
+  map: shape('214, 205, 186', '190, 178, 158'),
+  for_you: [
+    { mark: 'yes', head: 'Oysters, for Jake', line: 'Happy hour at the bar: six raw oysters for $12, Wed–Sat 5–7 PM.', from: 'example.com' },
+    { mark: 'maybe', head: 'Margaritas, for Kelly?', line: 'Cocktails and spirits — no page names a margarita.', from: 'Google' },
+    { mark: 'yes', head: 'A good fish dish, for both', line: 'Thai crab curry and a hamachi crudo are the dishes people name.', from: 'Google' },
+    { mark: 'note', head: 'A whole night out', line: 'About 40 minutes each way.', from: null },
+  ],
+  best_time: 'Happy hour at the bar on a Wednesday or Thursday, then dinner; book Friday and Saturday.',
+  google: {
+    name: 'Fixture place', type: 'Restaurant', address: '2035 Harrison St, Hollywood, FL 33020, USA', location: { lat: 26.01, lng: -80.15 },
+    phone: '(954) 555-0100', website: 'https://example.com/', maps_url: 'https://maps.example.com/x', rating: 4.7, rating_count: 156,
+    price: '$$ · $30–$90 a person', hours: HOURS, summary: null, overview: 'Asian-inspired seafood and a raw bar.',
+    serves: ['cocktails', 'wine', 'beer'], has: ['outdoor seating', 'takes reservations'], parking: 'paid street, paid garage',
+    reviews: [
+      { stars: 5, when: '5 months ago', at: null, text: 'The perfect blend of seafood forward and refined casual dining. Good for a romantic date night.', by: 'A reviewer', by_url: null },
+      { stars: 5, when: 'a year ago', at: null, text: 'The star of the show was the pork belly.', by: 'Another reviewer', by_url: null },
+    ],
+    photos: [
+      ['70, 96, 128', '36, 48, 66'], ['222, 214, 196', '160, 150, 130'], ['120, 140, 110', '70, 84, 60'], ['180, 110, 90', '110, 60, 50'], ['60, 50, 70', '30, 26, 36'], ['200, 170, 120', '140, 110, 70'],
+    ].map(([a, b], i) => ({ name: `photos/${i}`, w: 1200, h: 800, by: i % 2 ? 'The place' : 'A guest', uri: shape(a, b) })),
+  },
+  web: {
+    dress: { text: 'Smart casual.', url: 'https://maps.google.com/review', as_of: '2024-08' },
+    setting: { text: 'Blue and white with gold, an open kitchen and a bar you can sit around on all four sides.', url: 'https://example.com/room', as_of: '2024-04' },
+    crowd: { text: 'Date nights and family birthdays; downtown locals.', url: 'https://example.org/crowd', as_of: null },
+    busy: { text: 'Very lively on a Friday at 7:30.', url: 'https://example.net/review', as_of: '2024-04' },
+    best_time: null,
+    deals: [{ text: 'Happy hour at the bar only: six raw oysters $12, $9 spirits, $2 off cocktails.', when: 'Wed–Sat 5–7 PM', url: 'https://example.com/happy-hour', as_of: null }],
+    reservations: { text: 'Recommended — on Resy; walk-ins at the bar.', url: 'https://resy.example.com/x', as_of: null },
+    parking: null, noise: { text: 'Music at a low volume.', url: 'https://maps.google.com/review', as_of: '2024-08' },
+    order: { items: ['Thai crab curry', 'Pork belly', 'Raw oysters'], url: null },
+    spend: null,
+    heads_up: [{ text: 'A 20% service charge is added to the bill.', when: null, url: 'https://example.net/review', as_of: '2024-04' }],
+    news: null,
+  },
+}
+export const LIST_PASSED = [{ id: 'gx1', name: 'Some sports bar', shelf_label: 'Game-day bars', said_no_at: '2026-09-20T12:00:00Z' }]

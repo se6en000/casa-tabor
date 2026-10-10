@@ -209,3 +209,28 @@ test('your list: a watch shows its nearby dates first — Broward’s wait', asy
   assert.ok(shown.includes('Candlelight: A Haunted Evening') && shown.includes('Candlelight: Dolly Parton'))
   assert.deepEqual(page.later.map((h) => h.title), ['Candlelight: Classic Rock'])
 })
+
+test('your list: Not for us backs off — three weeks, three months, then retired; Not now and the back-off hide it till its day', async () => {
+  const { placeSaidNo, snoozed, yourList } = await import('../supabase/functions/_shared/your-list.mjs')
+  const first = placeSaidNo({ no_count: 0, status: 'saved' }, '2026-10-10', '2026-10-10T14:00:00Z')
+  assert.deepEqual(first, { no_count: 1, said_no_at: '2026-10-10T14:00:00Z', snoozed_until: '2026-10-31', status: 'saved' })
+  assert.equal(placeSaidNo({ no_count: 1, status: 'live' }, '2026-10-10').snoozed_until, '2027-01-08')
+  assert.deepEqual(placeSaidNo({ no_count: 2, status: 'saved' }, '2026-10-10', 'x'), { no_count: 3, said_no_at: 'x', snoozed_until: null, status: 'not_for_us' })
+  assert.equal(snoozed({ snoozed_until: '2026-10-31' }, '2026-10-30'), true)
+  assert.equal(snoozed({ snoozed_until: '2026-10-31' }, '2026-10-31'), false)
+  const places = [place('a', 'Hidden', { snoozed_until: '2026-10-31' }), place('b', 'Shown')]
+  const titles = (today) => { const pg = yourList({ places, today }); return [...pg.highlights, ...pg.more, ...pg.later].map((h) => h.title) }
+  assert.deepEqual(titles('2026-10-20'), ['Shown'])
+  assert.deepEqual(titles('2026-11-01').sort(), ['Hidden', 'Shown'])
+})
+
+test('your list: answers fade — a no counts half after two months; a place’s backed-off nos count, each one', async () => {
+  const { tallyLeanings } = await import('../supabase/functions/_shared/your-list.mjs')
+  const t = tallyLeanings({
+    today: '2026-10-10',
+    outings: [outing('a', 'Trivia', '2026-08-01', { kind: 'trivia', status: 'not_for_us', updated_at: '2026-08-11T12:00:00Z' }), outing('b', 'Trivia', '2026-10-01', { kind: 'trivia', status: 'not_for_us', updated_at: '2026-10-10T12:00:00Z' })],
+    places: [place('p', 'Pub', { shelf: 'bars', status: 'saved', no_count: 2, said_no_at: '2026-10-10T12:00:00Z', saved_at: '2026-06-12T12:00:00Z' })],
+  })
+  assert.deepEqual(t['night:trivia'], { yes: 0, no: 1.5 })
+  assert.deepEqual(t['shelf:bars'], { yes: 0.5, no: 2 })
+})

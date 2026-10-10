@@ -26,8 +26,8 @@ import {
 } from '../_shared/guide.mjs'
 import { GUIDE_SHELVES } from '../_shared/guide.mjs'
 import { sharedShelf } from '../_shared/share-in.mjs'
-import { DOSSIER_FIELDS, dossierPrompt, googleFacts, parseDossier } from '../_shared/place-dossier.mjs'
-import { UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, tallyLeanings, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
+import { DOSSIER_FIELDS, dossierPrompt, forYouPrompt, googleFacts, parseDossier, parseForYou } from '../_shared/place-dossier.mjs'
+import { NOT_NOW_DAYS, placeSaidNo, UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, tallyLeanings, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -196,20 +196,23 @@ Deno.serve(async (req) => {
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
     const latest = news?.[0]?.news_date
     // The local guide's places worth trying (canvas 85B), best first; Not for us stays out.
-    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status, whose, origin, note, saved_at, score, types')
+    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status, whose, origin, note, saved_at, score, types, no_count, snoozed_until')
       .in('status', ['live', 'saved', 'spot']).order('score', { ascending: false }).limit(300)
     // Out & about from your list (canvas 86C): what they watch for, and which of their places are on the calendar.
     const mine = (guide ?? []).filter((g: { status: string }) => g.status === 'saved' || g.status === 'spot')
-    const half = new Date(Date.now() - 180 * 86_400_000).toISOString()
-    const [{ data: watches }, { data: events }, { data: saidOutings }, { data: saidPlaces }] = await Promise.all([
+    // A year of answers, fading with age (tallyLeanings): a no half after two months, a yes after four.
+    const half = new Date(Date.now() - 365 * 86_400_000).toISOString()
+    const [{ data: watches }, { data: events }, { data: saidOutings }, { data: saidPlaces }, { data: passed }] = await Promise.all([
       sb.from('guide_watch').select('id, name, kind, whose, note').eq('status', 'on').limit(50),
       sb.from('events').select('title, location_name, start_time').gte('start_time', addDays(today, -365)).lt('start_time', addDays(today, 61)).limit(5000),
       // What they lean toward (Oct 10: "based on feedback and adaptive predictions"): the last half year's answers.
-      sb.from('outings').select('kind, venue_kind, watch_id, status').in('status', ['saved', 'been', 'not_for_us']).gte('updated_at', half).limit(2000),
-      sb.from('guide_places').select('name, shelf, status').in('status', ['saved', 'spot', 'been', 'not_for_us']).gte('updated_at', half).limit(2000),
+      sb.from('outings').select('kind, venue_kind, watch_id, status, updated_at').in('status', ['saved', 'been', 'not_for_us']).gte('updated_at', half).limit(2000),
+      sb.from('guide_places').select('name, shelf, status, no_count, said_no_at, saved_at, updated_at').or('status.in.(saved,spot,been,not_for_us),no_count.gt.0').gte('updated_at', half).limit(2000),
+      // Retired after the third Not for us — findable, and brought back with a tap.
+      sb.from('guide_places').select('id, name, shelf_label, said_no_at').eq('status', 'not_for_us').order('said_no_at', { ascending: false, nullsFirst: false }).limit(30),
     ])
-    const leanings = tallyLeanings({ outings: saidOutings ?? [], places: saidPlaces ?? [] })
-    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], watches: watches ?? [], calendar: calendarHits(mine, events ?? [], today), leanings, today })
+    const leanings = tallyLeanings({ outings: saidOutings ?? [], places: saidPlaces ?? [], today })
+    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], watches: watches ?? [], calendar: calendarHits(mine, events ?? [], today), leanings, passed: passed ?? [], today })
   }
 
   if (body.action === 'feedback') {
@@ -476,32 +479,66 @@ Deno.serve(async (req) => {
 
   // More like this (canvas 86F): the same scene, near home, none they already know — found, checked on Maps, not saved.
   if (body.action === 'dossier') {
-    // A place, the whole story (Oct 10; canvas first): Google's details, its photos, its map, and a grounded search for
-    // the dress code, the deals, when it's busy — a dry run only until the sheet is approved (nothing kept).
+    // A place, the whole story (canvas 90A–B; Jake, Oct 10: "great lets build it"): Google's details and photos, a
+    // grounded search for the rest (every line with its page), and "for you two" — kept 30 days (Google's terms), read
+    // again after; the map fresh each time.
     if (!body.id) return json({ error: 'Which place?' }, 400)
-    const { data: p } = await sb.from('guide_places').select('*').eq('id', body.id).maybeSingle()
+    const { data: p } = await sb.from('guide_places').select('id, name, address, google_place_id, drive_min, dossier, dossier_at').eq('id', body.id).maybeSingle()
     if (!p) return json({ error: 'No such place' }, 404)
     const ctx = await listCtx(sb)
-    if (!ctx.llmKey || !ctx.mapsKey) return json({ error: 'Not set up' }, 500)
-    const [g, web] = await Promise.all([
-      mapsFetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(p.google_place_id)}`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey, 'X-Goog-FieldMask': DOSSIER_FIELDS } }, { callPurpose: 'guide-dossier' })
-        .then(async (r: Response) => (r.ok ? r.json() : { error: await r.text() })).catch((e: unknown) => ({ error: String(e) })),
-      grounded(ctx.llmKey, dossierPrompt(p, { today: longDay(today) }), 'guide-dossier', 4000),
-    ])
-    if (g?.error) return json({ error: 'Google', detail: String(g.error).slice(0, 600) }, 502)
-    const google = googleFacts(g) as ReturnType<typeof googleFacts> & { photos: Array<{ name: string; uri?: string | null }> }
-    // Photos: a short-lived link each (Google's terms: shown, not kept).
-    await inBatches(google.photos.slice(0, Math.min(6, Number(body.photos) || 6)), 6, async (ph) => {
-      ph.uri = await mapsFetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=1400&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey! } }, { callPurpose: 'guide-dossier' })
-        .then((r: Response) => (r.ok ? r.json() : null)).then((x: { photoUri?: string } | null) => x?.photoUri ?? null).catch(() => null)
-    })
-    let map: string | null = null
-    if (google.location && body.map !== false) {
-      const { lat, lng } = google.location
-      const res = await mapsFetch(`https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=640x400&scale=2&markers=color:0x8a5a2b%7C${lat},${lng}&key=${ctx.mapsKey}`, {}, { callPurpose: 'guide-dossier' }).catch(() => null)
-      if (res?.ok) map = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(await res.arrayBuffer())))}`
+    if (!ctx.mapsKey) return json({ error: 'Not set up' }, 500)
+    const kept = p.dossier && p.dossier_at && Date.now() - Date.parse(p.dossier_at) < 30 * 86_400_000 && !body.force && !body.dry_run
+    let dossier = kept ? p.dossier : null
+    if (!dossier) {
+      if (!ctx.llmKey) return json({ error: 'Not set up' }, 500)
+      const [g, web] = await Promise.all([
+        mapsFetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(p.google_place_id)}`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey, 'X-Goog-FieldMask': DOSSIER_FIELDS } }, { callPurpose: 'guide-dossier' })
+          .then(async (r: Response) => (r.ok ? r.json() : { error: await r.text() })).catch((e: unknown) => ({ error: String(e) })),
+        grounded(ctx.llmKey, dossierPrompt(p, { today: longDay(today) }), 'guide-dossier', 4000),
+      ])
+      if (g?.error) return json({ error: 'Google', detail: String(g.error).slice(0, 600) }, 502)
+      const google = googleFacts(g) as ReturnType<typeof googleFacts> & { photos: Array<{ name: string; uri?: string | null }> }
+      await inBatches(google.photos.slice(0, 6), 6, async (ph) => {
+        ph.uri = await mapsFetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=1400&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': ctx.mapsKey! } }, { callPurpose: 'guide-dossier' })
+          .then((r: Response) => (r.ok ? r.json() : null)).then((x: { photoUri?: string } | null) => x?.photoUri ?? null).catch(() => null)
+      })
+      google.photos = google.photos.filter((ph) => ph.uri)
+      // deno-lint-ignore no-explicit-any
+      const facts = parseDossier(web.text, web.urls) as Record<string, any> | null
+      // The search's links are Google's redirects: the page each one really is (its name on the sheet).
+      const real = new Map<string, string | null>()
+      const resolve = async (u: string | null) => {
+        if (!u || !/vertexaisearch\.cloud\.google\.com/.test(u)) return u
+        if (!real.has(u)) real.set(u, await fetch(u, { redirect: 'manual' }).then((r) => r.headers.get('location')).catch(() => null))
+        return real.get(u) ?? null
+      }
+      if (facts) {
+        for (const k of Object.keys(facts)) {
+          const v = facts[k]
+          if (Array.isArray(v)) for (const f of v) f.url = await resolve(f.url)
+          else if (v && typeof v === 'object' && 'url' in v) v.url = await resolve(v.url)
+        }
+      }
+      const fy = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${TALK_PLAN_GEMINI_MODEL}:generateContent?key=${ctx.llmKey}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: forYouPrompt({ place: p, google, web: facts, interests: ctx.taste.interests, driveMin: p.drive_min }) }] }], generationConfig: { maxOutputTokens: 1200, temperature: 0.2, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } } }),
+      }, { callPurpose: 'guide-dossier' }).then((r: Response) => (r.ok ? r.json() : null)).catch(() => null)
+      const mine = parseForYou(((fy?.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string }>).map((x) => x.text ?? '').join(''))
+      dossier = { google, web: facts, for_you: mine.for_you, best_time: mine.best_time, read_at: new Date().toISOString() }
+      if (!body.dry_run) await sb.from('guide_places').update({ dossier, dossier_at: dossier.read_at }).eq('id', p.id)
     }
-    return json({ google, web: parseDossier(web.text, web.urls), pages: web.urls.slice(0, 12), raw: body.raw ? web.text : undefined, map, dry_run: true })
+    let map: string | null = null
+    const at = dossier?.google?.location
+    if (at && body.map !== false) {
+      const res = await mapsFetch(`https://maps.googleapis.com/maps/api/staticmap?center=${at.lat},${at.lng}&zoom=15&size=640x400&scale=2&markers=color:0x8a5a2b%7C${at.lat},${at.lng}&key=${ctx.mapsKey}`, {}, { callPurpose: 'guide-dossier' }).catch(() => null)
+      if (res?.ok) {
+        const bytes = new Uint8Array(await res.arrayBuffer())
+        let bin = ''
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+        map = `data:image/png;base64,${btoa(bin)}`
+      }
+    }
+    return json({ dossier: { ...dossier, map }, raw: body.raw ? true : undefined })
   }
 
   if (body.action === 'like') {
@@ -529,9 +566,22 @@ Deno.serve(async (req) => {
   }
 
   if (body.action === 'guide_feedback') {
-    if (!body.id || !['saved', 'spot', 'not_for_us', 'been', 'live'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
-    const { error } = await sb.from('guide_places').update({ status: body.status, ...(body.status === 'saved' || body.status === 'spot' ? { saved_at: new Date().toISOString() } : {}), updated_at: new Date().toISOString() }).eq('id', body.id)
-    return error ? json({ error: error.message }, 500) : json({ ok: true })
+    if (!body.id || !['saved', 'spot', 'not_for_us', 'not_now', 'been', 'live'].includes(String(body.status))) return json({ error: 'Which, and what?' }, 400)
+    const now = new Date().toISOString()
+    let change: Record<string, unknown>
+    if (body.status === 'not_for_us') {
+      // Backs off instead of banning (Oct 10): three weeks, three months, then retired.
+      const { data: row } = await sb.from('guide_places').select('status, no_count').eq('id', body.id).maybeSingle()
+      if (!row) return json({ error: 'No such place' }, 404)
+      change = placeSaidNo(row, today, now)
+    } else if (body.status === 'not_now') {
+      change = { snoozed_until: addDays(today, NOT_NOW_DAYS) }
+    } else {
+      // Saved again (or brought back from Passed on): a fresh start.
+      change = { status: body.status, ...(body.status === 'saved' || body.status === 'spot' ? { saved_at: now, no_count: 0, snoozed_until: null } : {}) }
+    }
+    const { error } = await sb.from('guide_places').update({ ...change, updated_at: now }).eq('id', body.id)
+    return error ? json({ error: error.message }, 500) : json({ ok: true, ...change })
   }
 
   if (body.action === 'news') {

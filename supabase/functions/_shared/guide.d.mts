@@ -86,6 +86,9 @@ export interface GuidePlace {
   score?: number
   /** Google's word for it ("Ice skating rink"). */
   types?: string | null
+  /** Not for us backs off (Oct 10): how many times, and hidden until (Not now too). */
+  no_count?: number
+  snoozed_until?: string | null
 }
 export interface GuideShelf { id: string; label: string; match: RegExp | null; queries: string[] }
 export const GUIDE_SHELVES: GuideShelf[]

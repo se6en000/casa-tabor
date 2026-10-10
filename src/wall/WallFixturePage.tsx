@@ -41,7 +41,7 @@ import type { TypedImage } from './typeLine'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import { FIXTURE_DAY_OFFS, WORK_ROUTINES, seedKnown } from './routineFixture'
 import { useFixtureHowWasIt } from './howWasItFixture'
-import { LIST_LIKE, LIST_PLACES, LIST_WATCHES } from './guideFixture'
+import { LIST_DOSSIER, LIST_LIKE, LIST_PASSED, LIST_PLACES, LIST_WATCHES } from './guideFixture'
 
 // School, and the parents' work hours (canvas 16a).
 const routines = [...(schoolRoutines as unknown as FamilyRoutine[]), ...WORK_ROUTINES]
@@ -317,10 +317,13 @@ export default function WallFixturePage() {
     // One of their spots on the calendar, the day after tomorrow.
     calendar: { g13: { next: ymd(2), last: null } },
     like: async () => LIST_LIKE,
+    // A place, the whole story (canvas 90): a moment's read, as the scout's kept one comes back.
+    dossier: async () => { await new Promise((r) => setTimeout(r, 150)); return LIST_DOSSIER },
+    passed: new URLSearchParams(window.location.search).get('guide') === '1' ? LIST_PASSED : [],
     addPlace: async (p) => { ((window as unknown as { __added?: string[] }).__added ??= []).push(p.name) },
     answerPlace: (id, status) => {
       ((window as unknown as { __placed?: string[] }).__placed ??= []).push(`${id}:${status}`)
-      if (status === 'not_for_us' || status === 'been') setGoneIds((ids) => [...ids, id])
+      if (status === 'not_for_us' || status === 'not_now' || status === 'been') setGoneIds((ids) => [...ids, id])
     },
     sendPlace: async (p) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(p.name) },
     send: async (o) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(o.title) },

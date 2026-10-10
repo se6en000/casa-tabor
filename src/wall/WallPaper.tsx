@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Bookmark, Flame, Gem, Heart, House, Mic, QrCode, Repeat, RotateCw, Ticket, Users } from 'lucide-react'
+import { Bookmark, Check, CircleHelp, Clock, Flame, Gem, Heart, House, Mic, QrCode, Repeat, RotateCw, Sparkles, Star, Ticket, TriangleAlert, Users, X } from 'lucide-react'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
@@ -13,6 +13,7 @@ import { deviceKeyboardHere } from './keyboardMode'
 import type { ScoutPaper } from './useScout'
 import { townOf, type GuideLabel, type GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
 import { LIST_TAGS, laterLine, placeItem, yourList, type ListItem, type ListTag } from '../../supabase/functions/_shared/your-list.mjs'
+import { hoursLine, reviewExcerpt, todayHours, type ForYouLine, type PlaceDossier, type WebDossier } from '../../supabase/functions/_shared/place-dossier.mjs'
 import { outingLink, outingWhen, townNewsPage, weekendHighlight, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 
 export interface WallPaperProps {
@@ -300,7 +301,7 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: Sc
           {allLater && page.later.length > 0 && <div className="mt-[30px]"><Columns items={page.later} onOpen={open} /></div>}
         </section>
       )}
-      <div className="mt-[40px] grid grid-cols-2 gap-x-[36px]">
+      <div className={`mt-[40px] grid gap-x-[36px] ${scout.passed?.length ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <div className="flex flex-col gap-[6px]">
           <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">ADD ONE</span>
           <span className="font-display text-wall-heading font-semibold">Somewhere you want to go?</span>
@@ -315,6 +316,20 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: Sc
             <span className="line-clamp-2 text-wall-detail">{later}.</span>
             <button type="button" onClick={() => setAllLater(!allLater)} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-bold text-wall-ink">{allLater ? 'Fewer ›' : 'See them ›'}</button>
           </div>
+        )}
+        {/* Retired after the third Not for us (canvas 90; Jake: "they have repeatly said not for us … propose it rarely"): findable, brought back with a tap. */}
+        {scout.passed && scout.passed.length > 0 && (
+          <section aria-label="Passed on" className="flex flex-col gap-[6px]">
+            <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">PASSED ON · {scout.passed.length}</span>
+            <span className="font-display text-wall-heading font-semibold">Not for you, three times</span>
+            {scout.passed.slice(0, 3).map((x) => (
+              <span key={x.id} className="flex items-center justify-between gap-[12px] text-wall-detail">
+                <span className="min-w-0 truncate">{x.name}</span>
+                {scout.answerPlace && <button type="button" onClick={() => scout.answerPlace!(x.id, 'saved')} className="h-[44px] shrink-0 border-0 bg-transparent p-0 font-body text-wall-detail font-bold text-wall-ink">Bring back</button>}
+              </span>
+            ))}
+            {scout.passed.length > 3 && <span className="text-wall-detail text-wall-ink-2">and {scout.passed.length - 3} more</span>}
+          </section>
         )}
       </div>
     </ScrollPage>
@@ -407,36 +422,108 @@ type Alike = Awaited<ReturnType<NonNullable<ScoutPaper['like']>>>
 const MONTH_DAY = { month: 'short', day: 'numeric' } as const
 const BUZZ_FROM: Record<string, string> = { reddit: 'Reddit', press: 'The local press', shared: 'In your words' }
 
-/** A fact in two columns: the small-capital word, then what it is. */
-function Fact({ k, children }: { k: string; children: ReactNode }) {
+/** Where a line came from, short: "resy.com · Oct 2026", "A Google review · Aug 2024". */
+function fromWord(f: { url?: string | null; as_of?: string | null } | null | undefined): string | null {
+  if (!f) return null
+  const host = (() => { try { return f.url ? new URL(f.url).hostname.replace(/^www\./, '') : null } catch { return null } })()
+  const m = /^(\d{4})-(\d{2})/.exec(f.as_of ?? '')
+  const when = m ? `${new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 15)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })} ${m[1]}` : null
+  return [host, when].filter(Boolean).join(' · ') || null
+}
+
+/** A fact with where it came from under it (canvas 90: never a line without its page). */
+function Said({ k, from, children }: { k: string; from?: string | null; children: ReactNode }) {
   return (
-    <div className="flex gap-[18px] border-0 border-t border-solid border-wall-rule py-[10px]">
-      <span className="w-[150px] shrink-0 text-wall-label font-bold tracking-[0.12em] text-wall-ink-2">{k}</span>
-      <span className="min-w-0 text-wall-detail text-wall-ink">{children}</span>
+    <div className="grid grid-cols-[150px_1fr] gap-[16px] border-0 border-t border-solid border-wall-rule py-[12px]">
+      <span className="pt-[3px] text-wall-label font-bold tracking-[0.14em] text-wall-ink-2">{k}</span>
+      <div className="flex min-w-0 flex-col gap-[4px]">
+        <span className="text-wall-detail text-wall-ink">{children}</span>
+        {from && <span className="text-wall-label font-bold text-wall-brass-ink">{from}</span>}
+      </div>
+    </div>
+  )
+}
+
+function SheetHead({ label }: { label: string }) {
+  return <span className="mb-[2px] border-0 border-t-2 border-solid border-wall-ink pt-[12px] text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">{label}</span>
+}
+
+const MARK: Record<ForYouLine['mark'], { Icon: typeof Check; tone: string; word: string }> = {
+  yes: { Icon: Check, tone: 'bg-wall-ink', word: 'Yes' },
+  maybe: { Icon: CircleHelp, tone: 'bg-wall-brass', word: 'Maybe' },
+  no: { Icon: X, tone: 'bg-wall-rust', word: 'Not this' },
+  note: { Icon: TriangleAlert, tone: 'bg-wall-ink-2', word: 'Plan for it' },
+}
+
+/** The sheet's words, moved by the wall like the paper's pages (the Pi's own scrolling janks). */
+function SheetScroll({ children }: { children: ReactNode }) {
+  const [max, setMax] = useState(0)
+  const viewRef = useRef<HTMLDivElement | null>(null)
+  const still = useCallback(() => {}, [])
+  const { content, handlers, glideTo, at } = useFrontScroll(max, still)
+  useLayoutEffect(() => {
+    const measure = () => { if (content.current && viewRef.current) setMax(Math.max(0, content.current.offsetHeight - viewRef.current.clientHeight)) }
+    measure()
+    const ro = new ResizeObserver(measure)
+    for (const el of [content.current, viewRef.current]) if (el) ro.observe(el)
+    return () => ro.disconnect()
+  }, [content])
+  useEffect(() => {
+    // First, and only here: the page under the sheet keeps still.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      e.stopPropagation()
+      glideTo(at() + (e.key === 'ArrowDown' ? 360 : -360))
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }, [glideTo, at])
+  return (
+    <div ref={viewRef} className="relative min-h-0 flex-1 overflow-hidden" {...handlers}>
+      <div ref={content} className="pb-[36px] will-change-transform">{children}</div>
+      {max > 0 && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[48px] bg-linear-to-b from-transparent to-wall-ground-calm" />}
     </div>
   )
 }
 
 /**
- * A place, tapped (canvas 86E; Jake, Oct 9 — "allow me to click and see more details"): why it's here, what people say
- * (each with where it was said), the two of them and the place (on the list since, the calendar), the details; Plan a
- * night, More like this (canvas 86F: the same scene near home — Add to the list or Not for us), To our phones, We went,
- * Not for us. The QR opens it on Maps.
+ * A place, the whole story (canvas 90A–B; Jake, Oct 10: "what would a pro put on here so i can see if I want to go …
+ * dress code, what the views are like, when its busy, best days to go, early bird, happy hour specials, what type of
+ * people go there" → "great lets build it"): its photos, open today, for you two (their loves against what the pages
+ * say), the night, when to go, getting there, what to order, heads up, what people say — every line with where it came
+ * from. Read once (about 20 seconds), kept 30 days. Plan a night, More like this (canvas 86F), To our phones, Save it or
+ * We went; Not now (two weeks) and Not for us (backs off: three weeks, three months, then Passed on).
  */
-function GuideNote({ p, scout, onAsk, onClose }: { p: GuidePlace; scout: ScoutPaper; onAsk?: (say: string) => void; onClose: () => void }) {
+function PlaceSheet({ p, scout, onAsk, onClose }: { p: GuidePlace; scout: ScoutPaper; onAsk?: (say: string) => void; onClose: () => void }) {
   const [said, setSaid] = useState<string | null>(null)
   const [alike, setAlike] = useState<Alike | 'looking' | 'none' | null>(null)
   const [added, setAdded] = useState<Record<string, 'added' | 'no'>>({})
+  const [d, setD] = useState<PlaceDossier | 'reading' | 'none'>(scout.dossier ? 'reading' : 'none')
+  const [photo, setPhoto] = useState<number | null>(null)
+  useEffect(() => {
+    if (!scout.dossier) return
+    let on = true
+    scout.dossier(p.id).then((x) => { if (on) setD(x ?? 'none') }).catch(() => { if (on) setD('none') })
+    return () => { on = false }
+  }, [p.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const mine = p.status === 'saved' || p.status === 'spot'
   const it = placeItem(p, { today: scout.today, calendar: scout.calendar ?? {}, surprise: !mine })
   const town = townOf(p.address)
-  const sub = [p.shelf_label, town].filter(Boolean).join(' · ')
   const hit = scout.calendar?.[p.id]
   const link = p.maps_url ?? p.website
   const sayings = p.buzz.filter((b) => b.said)
   const since = p.saved_at ? new Date(p.saved_at).toLocaleDateString('en-US', MONTH_DAY) : null
   const how = p.origin === 'alexa' ? 'you told Alexa' : p.origin === 'shared' ? 'you shared it' : p.origin === 'asked' ? 'you asked about it' : p.origin === 'taste' ? 'from Your taste' : p.origin === 'like' ? 'found with More like this' : p.origin === 'guide' ? 'one of the guide’s picks you saved' : null
-  const pill = 'h-[56px] rounded-full px-[26px] text-wall-body font-semibold'
+  const pill = 'h-[56px] shrink-0 rounded-full px-[26px] text-wall-body font-semibold'
+  const dz = d !== 'reading' && d !== 'none' ? d : null
+  const g = dz?.google ?? null
+  const w = dz?.web ?? null
+  const photos = (g?.photos ?? []).filter((x) => x.uri)
+  const today = todayHours(g?.hours, scout.today)
+  const week = hoursLine(g?.hours)
+  const calendarWord = hit?.next ? `on the calendar ${new Date(`${hit.next}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', ...MONTH_DAY })}` : hit?.last ? `last there ${new Date(`${hit.last}T12:00:00`).toLocaleDateString('en-US', MONTH_DAY)}` : 'not on the calendar yet'
+  const reviews = (g?.reviews ?? []).filter((r) => (r.stars ?? 5) >= 3).slice(0, 3)
+  const hosts = [...new Set([...Object.values(w ?? {}).flatMap((v) => (Array.isArray(v) ? v : v ? [v] : [])).map((f) => fromWord({ url: (f as { url?: string | null }).url })?.split(' · ')[0]).filter(Boolean)])] as string[]
   const send = async () => {
     try { await scout.sendPlace?.(p); setSaid('Sent to the phones') } catch { setSaid('The phones didn’t take it. Try again.') }
   }
@@ -449,88 +536,233 @@ function GuideNote({ p, scout, onAsk, onClose }: { p: GuidePlace; scout: ScoutPa
     setAdded((a) => ({ ...a, [x.google_place_id]: 'added' }))
     try { await scout.addPlace?.({ google_place_id: x.google_place_id, name: x.name, whose: p.whose, like_of: p.id, said: x.what }) } catch { setAdded((a) => Object.fromEntries(Object.entries(a).filter(([k]) => k !== x.google_place_id))) }
   }
+  const showingAlike = alike && alike !== 'none' && alike !== 'looking'
+  const close = (
+    <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-paper/90 p-0 text-wall-ink">
+      <X aria-hidden="true" className="h-[26px] w-[26px]" strokeWidth={2.4} />
+    </button>
+  )
+  const night = [w?.dress && ['DRESS', w.dress], w?.setting && ['THE ROOM', w.setting], w?.crowd && ['WHO GOES', w.crowd], w?.noise && ['NOISE', w.noise]].filter(Boolean) as Array<[string, NonNullable<WebDossier['dress']>]>
   return (
-    <div className="absolute inset-0 z-20 bg-wall-ink/30" onClick={onClose}>
+    <div className="absolute inset-0 z-20 bg-wall-ink/40" onClick={onClose}>
       <div role="dialog" aria-label={`${p.name}, up close`} onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-[48px] left-[80px] right-[80px] top-[48px] flex flex-col rounded-[28px] bg-wall-ground-calm px-[52px] pb-[36px] pt-[40px] font-body text-wall-ink shadow-[0_30px_70px_rgba(38,34,29,0.35)]">
-        <div className="flex items-start gap-[24px]">
-          <div className="flex min-w-0 flex-1 flex-col gap-[12px]">
-            {alike && alike !== 'none'
-              ? <span className="flex items-center gap-[10px] text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[18px] w-[18px]" />MORE LIKE {p.name.toUpperCase()}</span>
-              : it.tags.length > 0 && <span className="flex flex-wrap gap-[8px]">{it.tags.map((t) => <ListPill key={t} tag={t} />)}</span>}
-            <span className="font-display text-wall-headline font-semibold leading-none">{alike && alike !== 'none' && alike !== 'looking' ? (alike.known_for ? `Same scene: ${alike.known_for.replace(/\.$/, '').toLowerCase()}.` : 'The same kind of place.') : p.name}</span>
-            {(!alike || alike === 'none') && sub && <span className="text-wall-body text-wall-ink-2">{sub}</span>}
-            {alike && alike !== 'none' && alike !== 'looking' && <span className="text-wall-body text-wall-ink-2">Found from local guides and the places’ own pages. Add the ones you want — they join your list{p.whose && p.whose !== 'us' ? ` as ${LIST_TAG[p.whose as ListTag]?.word ?? 'theirs'}` : ''}.</span>}
-          </div>
-          {link && (!alike || alike === 'none') && <div className="shrink-0"><Qr text={link} label={`QR code: ${p.name} on Google Maps`} small /></div>}
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-[56px] w-[56px] shrink-0 items-center justify-center border-0 bg-transparent p-0 text-wall-quote text-wall-ink-2">×</button>
-        </div>
-
-        {alike === 'looking' && <span role="status" className="mt-[28px] text-wall-body text-wall-ink-2">Looking for places with the same scene…</span>}
-        {alike && alike !== 'none' && alike !== 'looking' ? (
-          <div className="mt-[20px] flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {alike.places.map((x) => (
-              <div key={x.google_place_id} className="flex items-center gap-[28px] border-0 border-t border-solid border-wall-rule py-[18px]">
-                <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-                  <span className="font-display text-wall-date font-semibold">{x.name}</span>
-                  <span className="text-wall-detail text-wall-ink-2">{[x.town, x.drive_min ? `${x.drive_min} min` : null, x.rating ? `${x.rating} on Google` : null].filter(Boolean).join(' · ')}</span>
-                  {x.what && <span className="text-wall-body">{x.what}</span>}
-                  {x.alike && <span className="flex items-center gap-[8px] font-display text-wall-detail italic text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[16px] w-[16px]" />{x.alike}</span>}
-                  {x.source && <span className="text-wall-label font-bold text-wall-brass-ink">{x.source}</span>}
-                </div>
-                {added[x.google_place_id] === 'added' ? <span role="status" className="text-wall-body font-semibold text-wall-brass-ink">On your list ✓</span>
-                  : added[x.google_place_id] === 'no' ? <span className="text-wall-body text-wall-ink-2">Not for us</span>
-                  : (
-                    <div className="flex shrink-0 flex-col items-stretch gap-[8px]">
-                      {scout.addPlace && <button type="button" onClick={() => void add(x)} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>+ Add to the list</button>}
-                      <button type="button" onClick={() => setAdded((a) => ({ ...a, [x.google_place_id]: 'no' }))} className="h-[44px] border-0 bg-transparent p-0 text-wall-detail font-semibold text-wall-ink-2">Not for us</button>
-                    </div>
-                  )}
+        className="absolute inset-x-[80px] inset-y-[36px] flex flex-col overflow-hidden rounded-[28px] bg-wall-ground-calm font-body text-wall-ink shadow-[0_30px_70px_rgba(38,34,29,0.35)]">
+        {showingAlike || alike === 'looking' ? (
+          <div className="flex min-h-0 flex-1 flex-col px-[52px] pt-[40px]">
+            <div className="flex items-start gap-[24px]">
+              <div className="flex min-w-0 flex-1 flex-col gap-[12px]">
+                <span className="flex items-center gap-[10px] text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[18px] w-[18px]" />MORE LIKE {p.name.toUpperCase()}</span>
+                <span className="font-display text-wall-headline font-semibold leading-none">{showingAlike ? (alike.known_for ? `Same scene: ${alike.known_for.replace(/\.$/, '').toLowerCase()}.` : 'The same kind of place.') : p.name}</span>
+                {showingAlike && <span className="text-wall-body text-wall-ink-2">Found from local guides and the places’ own pages. Add the ones you want — they join your list{p.whose && p.whose !== 'us' ? ` as ${LIST_TAG[p.whose as ListTag]?.word ?? 'theirs'}` : ''}.</span>}
               </div>
-            ))}
-          </div>
-        ) : alike !== 'looking' && (
-          <div className="mt-[26px] grid min-h-0 flex-1 grid-cols-[1.1fr_1fr] gap-[56px] overflow-y-auto">
-            <div className="flex flex-col">
-              <span className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">WHAT PEOPLE SAY</span>
-              {sayings.length === 0 && <span className="mt-[10px] text-wall-detail text-wall-ink-2">{p.heard ?? 'Nothing heard about it yet.'}</span>}
-              {sayings.slice(0, 3).map((b, i) => (
-                <div key={i} className="flex flex-col gap-[4px] border-0 border-t border-solid border-wall-rule py-[12px]">
-                  <span className="text-wall-body">{b.kind === 'shared' ? `“${String(b.said).replace(/\.$/, '')}”` : b.said}</span>
-                  <span className="text-wall-label font-bold text-wall-brass-ink">{BUZZ_FROM[b.kind] ?? 'The web'}</span>
-                </div>
-              ))}
-              <span className="mt-[22px] text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">YOU TWO AND {p.name.toUpperCase()}</span>
-              <Fact k={mine ? (p.status === 'spot' ? 'YOUR SPOT' : 'ON YOUR LIST') : 'NOT ON YOUR LIST'}>{mine ? [since ? `Since ${since}` : null, how].filter(Boolean).join(' — ') || 'On your list' : 'One of the guide’s picks — save it to put it on your list'}</Fact>
-              {p.whose && p.whose !== 'us' && <Fact k="WHOSE">{LIST_TAG[p.whose as ListTag]?.word}</Fact>}
-              {p.note && <Fact k="WHY">{p.note}</Fact>}
-              <Fact k="THE CALENDAR">{hit?.next ? `On it ${new Date(`${hit.next}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', ...MONTH_DAY })}` : hit?.last ? `Last there ${new Date(`${hit.last}T12:00:00`).toLocaleDateString('en-US', MONTH_DAY)}` : 'Not on the calendar yet'}</Fact>
+              {close}
             </div>
-            <div className="flex flex-col">
-              <span className="text-wall-label font-bold tracking-[0.18em] text-wall-brass-ink">THE DETAILS</span>
-              {p.address && <Fact k="WHERE">{p.address.replace(/, USA$/, '')}{p.drive_min ? ` · ${p.drive_min} min` : ''}</Fact>}
-              {p.rating && <Fact k="GOOGLE">{p.rating}{p.rating_count ? ` from ${p.rating_count.toLocaleString('en-US')} reviews` : ''}</Fact>}
-              {p.website && <Fact k="WEBSITE">{p.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</Fact>}
-              {p.why && <Fact k="WHY YOU TWO"><span className="font-display italic">{p.why}</span></Fact>}
+            {alike === 'looking' && <span role="status" className="mt-[28px] text-wall-body text-wall-ink-2">Looking for places with the same scene…</span>}
+            {showingAlike && (
+              <div className="mt-[20px] flex min-h-0 flex-1 flex-col overflow-y-auto">
+                {alike.places.map((x) => (
+                  <div key={x.google_place_id} className="flex items-center gap-[28px] border-0 border-t border-solid border-wall-rule py-[18px]">
+                    <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+                      <span className="font-display text-wall-date font-semibold">{x.name}</span>
+                      <span className="text-wall-detail text-wall-ink-2">{[x.town, x.drive_min ? `${x.drive_min} min` : null, x.rating ? `${x.rating} on Google` : null].filter(Boolean).join(' · ')}</span>
+                      {x.what && <span className="text-wall-body">{x.what}</span>}
+                      {x.alike && <span className="flex items-center gap-[8px] font-display text-wall-detail italic text-wall-brass-ink"><Repeat aria-hidden="true" className="h-[16px] w-[16px]" />{x.alike}</span>}
+                      {x.source && <span className="text-wall-label font-bold text-wall-brass-ink">{x.source}</span>}
+                    </div>
+                    {added[x.google_place_id] === 'added' ? <span role="status" className="text-wall-body font-semibold text-wall-brass-ink">On your list ✓</span>
+                      : added[x.google_place_id] === 'no' ? <span className="text-wall-body text-wall-ink-2">Not for us</span>
+                      : (
+                        <div className="flex shrink-0 flex-col items-stretch gap-[8px]">
+                          {scout.addPlace && <button type="button" onClick={() => void add(x)} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>+ Add to the list</button>}
+                          <button type="button" onClick={() => setAdded((a) => ({ ...a, [x.google_place_id]: 'no' }))} className="h-[44px] border-0 bg-transparent p-0 text-wall-detail font-semibold text-wall-ink-2">Not for us</button>
+                        </div>
+                      )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <SheetScroll>
+            {photos.length > 0 ? (
+              <div className={`relative grid h-[262px] gap-[6px] ${photos.length >= 5 ? 'grid-cols-[2.1fr_1fr_1fr] grid-rows-2' : photos.length >= 3 ? 'grid-cols-[2.1fr_1fr] grid-rows-2' : 'grid-cols-1'}`}>
+                {photos.slice(0, photos.length >= 5 ? 5 : photos.length >= 3 ? 3 : 1).map((ph, i) => (
+                  <button key={ph.name} type="button" aria-label={`Photo ${i + 1} of ${photos.length}`} onClick={() => setPhoto(i)}
+                    className={`relative min-h-0 overflow-hidden border-0 bg-wall-paper p-0 ${i === 0 && photos.length >= 3 ? 'row-span-2' : ''}`}>
+                    <img src={ph.uri ?? undefined} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                  </button>
+                ))}
+                <span className="pointer-events-none absolute bottom-[12px] left-[16px] rounded-[10px] bg-wall-ink/60 px-[10px] py-[4px] text-wall-label text-wall-on-pigment">Photos on Google · {[...new Set(photos.map((x) => x.by).filter(Boolean))].slice(0, 4).join(', ')}</span>
+                {photos.length > 1 && <button type="button" onClick={() => setPhoto(0)} className="absolute bottom-[12px] right-[14px] h-[44px] rounded-full border-0 bg-wall-ink/80 px-[18px] text-wall-detail font-bold text-wall-on-pigment">{photos.length} photos ›</button>}
+                <div className="absolute right-[22px] top-[22px]">{close}</div>
+              </div>
+            ) : null}
+
+            <div className="px-[52px] pt-[22px]">
+              <div className="flex items-start gap-[30px]">
+                <div className="flex min-w-0 flex-1 flex-col gap-[10px]">
+                  {it.tags.length > 0 && <span className="flex flex-wrap gap-[8px]">{it.tags.map((t) => <ListPill key={t} tag={t} />)}</span>}
+                  <span className="font-display text-wall-headline font-semibold leading-none">{p.name}</span>
+                  <span className="text-wall-body text-wall-ink-2">{[p.shelf_label, town, p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(' · ')}</span>
+                  {g?.overview && <span className="font-display text-wall-answer italic text-wall-ink">{g.overview}</span>}
+                  <span className="text-wall-detail text-wall-ink-2">{mine ? `${p.status === 'spot' ? 'Your spot' : 'On your list'}${since ? ` since ${since}` : ''}${how ? ` — ${how}` : ''} · ${calendarWord}` : `Not on your list — one of the guide’s picks · ${calendarWord}`}</span>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-[10px] pt-[4px]">
+                  {photos.length === 0 && close}
+                  {today && <span className={`inline-flex h-[40px] items-center gap-[8px] rounded-full px-[16px] text-wall-detail font-bold text-wall-on-pigment ${today.open ? 'bg-wall-ink' : 'bg-wall-rust'}`}><Clock aria-hidden="true" className="h-[18px] w-[18px]" />{today.text}</span>}
+                  <span className="flex items-center gap-[14px] text-wall-detail">
+                    {(g?.rating ?? p.rating) && <span className="inline-flex items-center gap-[6px]"><Star aria-hidden="true" className="h-[18px] w-[18px] fill-wall-brass text-wall-brass" /><b>{g?.rating ?? p.rating}</b><span className="text-wall-ink-2">{(g?.rating_count ?? p.rating_count)?.toLocaleString('en-US')} on Google</span></span>}
+                    {g?.price && <span><b>{g.price.split(' · ')[0]}</b>{g.price.includes(' · ') && <span className="text-wall-ink-2"> {g.price.split(' · ')[1]}</span>}</span>}
+                  </span>
+                  {link && photos.length === 0 && <Qr text={link} label={`QR code: ${p.name} on Google Maps`} small />}
+                </div>
+              </div>
+
+              {d === 'reading' && (
+                <span role="status" className="mt-[24px] flex items-center gap-[12px] text-wall-body text-wall-ink-2">
+                  <RotateCw aria-hidden="true" className="h-[22px] w-[22px] animate-spin" />Reading up on it — photos, the room, the deals, when to go…
+                </span>
+              )}
+
+              {dz && dz.for_you.length > 0 && (
+                <section aria-label="For you two" className="mt-[20px] rounded-[20px] bg-wall-brass/10 px-[26px] py-[18px]">
+                  <span className="text-wall-label font-bold tracking-[0.2em] text-wall-brass-ink">FOR YOU TWO</span>
+                  <div className={`mt-[14px] grid gap-[26px] ${dz.for_you.length >= 4 ? 'grid-cols-4' : dz.for_you.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {dz.for_you.map((x) => {
+                      const m = MARK[x.mark]
+                      return (
+                        <div key={x.head} className="flex items-start gap-[14px]">
+                          <span role="img" aria-label={m.word} className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full ${m.tone}`}><m.Icon aria-hidden="true" className="h-[18px] w-[18px] text-wall-on-pigment" strokeWidth={2.6} /></span>
+                          <div className="flex min-w-0 flex-col gap-[3px]">
+                            <span className="font-display text-wall-heading font-semibold leading-tight">{x.head}</span>
+                            <span className="text-wall-detail">{x.line}</span>
+                            {x.from && <span className="text-wall-label font-bold text-wall-brass-ink">{x.from}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {d !== 'reading' && (
+                <div className="mt-[22px] grid grid-cols-[1fr_1fr_0.9fr] gap-[44px]">
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="THE NIGHT" />
+                    {night.map(([k, f]) => <Said key={k} k={k} from={fromWord(f)}>{f.text}</Said>)}
+                    {night.length === 0 && sayings.slice(0, 3).map((b, i) => <Said key={i} k={(BUZZ_FROM[b.kind] ?? 'The web').toUpperCase()}>{b.kind === 'shared' ? `“${String(b.said).replace(/\.$/, '')}”` : b.said}</Said>)}
+                    {night.length === 0 && sayings.length === 0 && <span className="py-[12px] text-wall-detail text-wall-ink-2">{p.heard ?? 'Nothing found about the night yet.'}</span>}
+                  </div>
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="WHEN TO GO" />
+                    {(w?.deals ?? []).map((x, i) => <Said key={i} k={i === 0 ? 'DEALS' : ''} from={fromWord(x)}>{x.when && <b>{x.when} — </b>}{x.text}</Said>)}
+                    {week && <Said k="OPEN" from="Google">{week}</Said>}
+                    {w?.busy && <Said k="BUSY" from={fromWord(w.busy)}>{w.busy.text}</Said>}
+                    {(dz?.best_time ?? w?.best_time?.text) && (
+                      <Said k="BEST TIME" from={dz?.best_time ? 'From its hours, deals and busy times' : fromWord(w?.best_time)}>
+                        {dz?.best_time && <span className="mr-[8px] inline-flex items-center gap-[6px] font-bold text-wall-brass-ink"><Sparkles aria-hidden="true" className="h-[16px] w-[16px]" />Alexa’s pick</span>}
+                        {dz?.best_time ?? w?.best_time?.text}
+                      </Said>
+                    )}
+                    {(w?.reservations || g?.has.includes('takes reservations')) && <Said k="RESERVATIONS" from={w?.reservations ? fromWord(w.reservations) : 'Google'}>{w?.reservations?.text ?? 'Takes reservations.'}</Said>}
+                    {!week && !w?.deals?.length && !w?.busy && <span className="py-[12px] text-wall-detail text-wall-ink-2">{d === 'none' ? 'Couldn’t read up on it just now.' : 'No hours or deals found yet.'}</span>}
+                  </div>
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="GETTING THERE" />
+                    {dz?.map && <img src={dz.map} alt={`Map: ${p.name}`} className="mt-[10px] h-[230px] w-full rounded-[16px] object-cover" />}
+                    {(g?.address ?? p.address) && <Said k="WHERE">{String(g?.address ?? p.address).replace(/, USA$/, '')}{p.drive_min ? ` · ${p.drive_min} min` : ''}</Said>}
+                    {(w?.parking || g?.parking) && <Said k="PARKING" from={w?.parking ? fromWord(w.parking) : 'Google'}>{w?.parking?.text ?? `${g!.parking!.charAt(0).toUpperCase()}${g!.parking!.slice(1)}.`}</Said>}
+                    {g?.phone && <Said k="PHONE">{g.phone}</Said>}
+                    {(g?.website ?? p.website) && <Said k="WEBSITE">{String(g?.website ?? p.website).replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</Said>}
+                  </div>
+                </div>
+              )}
+
+              {dz && (w?.order || w?.heads_up?.length || w?.news || w?.spend || reviews.length > 0 || sayings.length > 0) && (
+                <div className="mt-[30px] grid grid-cols-[1fr_1fr_0.9fr] gap-[44px]">
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="WHAT TO ORDER" />
+                    {w?.order && <span className="mt-[12px] flex flex-wrap gap-[8px]">{w.order.items.map((x) => <span key={x} className="inline-flex h-[44px] items-center rounded-full bg-wall-paper px-[16px] text-wall-detail font-semibold">{x}</span>)}</span>}
+                    {w?.order && fromWord(w.order) && <span className="mt-[8px] text-wall-label font-bold text-wall-brass-ink">{fromWord(w.order)}</span>}
+                    {w?.spend && <Said k="WHAT IT COSTS" from={fromWord(w.spend)}>{w.spend.text}</Said>}
+                    {!w?.order && !w?.spend && <span className="py-[12px] text-wall-detail text-wall-ink-2">Nothing named yet.</span>}
+                  </div>
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="HEADS UP" />
+                    {(w?.heads_up ?? []).map((x, i) => <Said key={i} k={i === 0 ? 'KNOW FIRST' : ''} from={fromWord(x)}>{x.text}</Said>)}
+                    {w?.news && <Said k="LATELY" from={fromWord(w.news)}>{w.news.text}</Said>}
+                    {!w?.heads_up?.length && !w?.news && <span className="py-[12px] text-wall-detail text-wall-ink-2">Nothing to know first.</span>}
+                  </div>
+                  <div className="flex min-w-0 flex-col">
+                    <SheetHead label="WHAT PEOPLE SAY" />
+                    {sayings.filter((b) => b.kind === 'shared').slice(0, 1).map((b, i) => (
+                      <div key={`s${i}`} className="flex flex-col gap-[4px] border-0 border-t border-solid border-wall-rule py-[14px]">
+                        <span className="font-display text-wall-answer italic">“{String(b.said).replace(/\.$/, '')}”</span>
+                        <span className="text-wall-label font-bold text-wall-brass-ink">In your words</span>
+                      </div>
+                    ))}
+                    {reviews.map((r, i) => (
+                      <div key={i} className="flex flex-col gap-[4px] border-0 border-t border-solid border-wall-rule py-[14px]">
+                        {r.stars && <span role="img" aria-label={`${r.stars} stars`} className="flex gap-[3px]">{Array.from({ length: r.stars }, (_, k) => <Star key={k} aria-hidden="true" className="h-[16px] w-[16px] fill-wall-brass text-wall-brass" />)}</span>}
+                        <span className="font-display text-wall-answer italic">“{reviewExcerpt(r.text)}”</span>
+                        <span className="text-wall-label text-wall-ink-2">{[r.by, r.when, 'on Google'].filter(Boolean).join(' · ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {dz && photos.length > 5 && (
+                <div className="mt-[28px] grid h-[150px] grid-cols-5 gap-[6px] overflow-hidden rounded-[14px]">
+                  {photos.slice(0, 5).map((ph, i) => (
+                    <button key={ph.name} type="button" aria-label={`Photo ${i + 1} of ${photos.length}`} onClick={() => setPhoto(i)} className="relative min-h-0 overflow-hidden border-0 bg-wall-paper p-0">
+                      <img src={ph.uri ?? undefined} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {dz && (
+                <p className="m-0 mt-[16px] text-wall-label leading-relaxed text-wall-ink-2">
+                  <b className="text-wall-ink">Where this came from</b> — Google (photos, reviews, hours, prices, parking){hosts.length ? ` · ${hosts.join(' · ')}` : ''}. Read {new Date(dz.read_at).toLocaleDateString('en-US', MONTH_DAY)}; read again every 30 days. Google doesn’t give apps its busy-hours chart, so “Busy” comes from what people wrote.
+                </p>
+              )}
+            </div>
+          </SheetScroll>
+        )}
+
+        {photo !== null && photos[photo] && (
+          <div role="dialog" aria-label={`Photos of ${p.name}`} className="absolute inset-0 z-10 flex flex-col bg-wall-ink">
+            <img src={photos[photo].uri ?? undefined} alt="" className="min-h-0 flex-1 object-contain" />
+            <div className="flex h-[96px] shrink-0 items-center gap-[16px] px-[40px] text-wall-detail text-wall-on-pigment">
+              <button type="button" onClick={() => setPhoto((photo + photos.length - 1) % photos.length)} className={`${pill} border-0 bg-wall-paper text-wall-ink`}>‹ Before</button>
+              <button type="button" onClick={() => setPhoto((photo + 1) % photos.length)} className={`${pill} border-0 bg-wall-paper text-wall-ink`}>Next ›</button>
+              <span>{photo + 1} of {photos.length}{photos[photo].by ? ` · by ${photos[photo].by} on Google` : ''}</span>
+              <span className="flex-1" />
+              <button type="button" onClick={() => setPhoto(null)} className={`${pill} border-0 bg-wall-paper text-wall-ink`}>Back to {p.name}</button>
             </div>
           </div>
         )}
-        {alike === 'none' && <span role="status" className="mt-[10px] text-wall-detail text-wall-ink-2">Nothing close enough with the same scene turned up.</span>}
 
-        <div className="mt-[22px] flex shrink-0 flex-wrap items-center gap-[12px]">
-          {onAsk && (!alike || alike === 'none') && <button type="button" onClick={() => { onClose(); onAsk(`Help us plan a night at ${p.name}${town ? ` in ${town}` : ''}`) }} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>Plan a night</button>}
-          {scout.like && (!alike || alike === 'none') && <button type="button" onClick={() => void findAlike()} className={`${pill} flex items-center gap-[10px] border-2 border-solid border-wall-brass-ink bg-transparent text-wall-brass-ink`}><Repeat aria-hidden="true" className="h-[20px] w-[20px]" />More like this</button>}
-          {alike && alike !== 'none' && alike !== 'looking' && <button type="button" onClick={() => setAlike(null)} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Back to {p.name}</button>}
-          {(!alike || alike === 'none') && (
+        <div className="flex h-[104px] shrink-0 items-center gap-[12px] border-0 border-t border-solid border-wall-rule px-[52px]">
+          {onAsk && !showingAlike && <button type="button" onClick={() => { onClose(); onAsk(`Help us plan a night at ${p.name}${town ? ` in ${town}` : ''}`) }} className={`${pill} border-0 bg-wall-ink text-wall-on-pigment`}>Plan a night</button>}
+          {scout.like && !showingAlike && alike !== 'looking' && <button type="button" onClick={() => void findAlike()} className={`${pill} flex items-center gap-[10px] border-2 border-solid border-wall-brass-ink bg-transparent text-wall-brass-ink`}><Repeat aria-hidden="true" className="h-[20px] w-[20px]" />More like this</button>}
+          {showingAlike && <button type="button" onClick={() => setAlike(null)} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Back to {p.name}</button>}
+          {!showingAlike && (
             <>
               {scout.sendPlace && <button type="button" onClick={() => void send()} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>To our phones</button>}
               {scout.answerPlace && !mine && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'saved'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>Save it</button>}
               {scout.answerPlace && mine && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'been'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-wall-paper text-wall-ink`}>We went</button>}
             </>
           )}
+          {alike === 'none' && <span role="status" className="text-wall-detail text-wall-ink-2">Nothing close enough with the same scene turned up.</span>}
           {said && <span role="status" className="text-wall-detail font-semibold text-wall-brass-ink">{said}</span>}
           <span className="flex-1" />
-          {scout.answerPlace && (!alike || alike === 'none') && <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_for_us'); onClose() }} className="h-[56px] border-0 bg-transparent px-[8px] text-wall-body font-semibold text-wall-ink-2">Not for us</button>}
+          {scout.answerPlace && !showingAlike && (
+            <>
+              <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_now'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-transparent text-wall-ink-2`}>Not now</button>
+              <button type="button" onClick={() => { scout.answerPlace!(p.id, 'not_for_us'); onClose() }} className={`${pill} border border-solid border-wall-rule bg-transparent text-wall-ink-2`}>Not for us</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -868,7 +1100,7 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
         </footer>
       </div>
       {phone && scout && <OutingCard o={phone} scout={scout} members={members} events={events} computer={computer} onAdd={onAdd} onAsk={onAsk} onClose={() => setPhone(null)} />}
-      {place && scout && <GuideNote p={place} scout={scout} onAsk={onAsk} onClose={() => setPlace(null)} />}
+      {place && scout && <PlaceSheet p={place} scout={scout} onAsk={onAsk} onClose={() => setPlace(null)} />}
     </article>
   )
 }

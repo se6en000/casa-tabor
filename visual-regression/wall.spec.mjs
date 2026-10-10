@@ -3021,10 +3021,32 @@ test('wall: Out & about from your list — highlights, the columns, a place up c
   // Up close.
   await paper.getByRole('button', { name: 'Lost Weekend WPB' }).click()
   const close = page.getByRole('dialog', { name: 'Lost Weekend WPB, up close' })
-  await expect(close).toContainText('WHAT PEOPLE SAY')
-  await expect(close).toContainText('Since Sep 21 — one of the guide’s picks you saved')
-  await expect(close).toContainText('Not on the calendar yet')
+  // Canvas 90A (Jake, Oct 10: "what would a pro put on here"): read up on it, then the whole story, each line sourced.
+  await expect(close.getByRole('region', { name: 'For you two' })).toContainText('Oysters, for Jake')
+  await expect(close).toContainText('On your list since Sep 21 — one of the guide’s picks you saved · not on the calendar yet')
+  await expect(close).toContainText('Wed–Sat 5–7 PM — Happy hour at the bar only')
+  await expect(close).toContainText('Wed–Sat 5–10 PM · closed Sun–Tue')
+  await expect(close).toContainText('Smart casual.')
+  await expect(close).toContainText('Alexa’s pick')
+  await expect(close.getByRole('img', { name: 'Map: Lost Weekend WPB' })).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-place-up-close.png')
+  // Further down (90B): what to order, heads up, what people say, where it came from.
+  for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(700) }
+  await page.waitForTimeout(800)
+  await expect(close).toContainText('A 20% service charge is added to the bill.')
+  await expect(close).toContainText('Where this came from')
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-place-scrolled.png')
+  // The photos, big (back up top first).
+  for (let i = 0; i < 4; i++) { await page.keyboard.press('ArrowUp'); await page.waitForTimeout(400) }
+  await page.waitForTimeout(600)
+  await close.getByRole('button', { name: '6 photos ›' }).click()
+  const viewer = page.getByRole('dialog', { name: 'Photos of Lost Weekend WPB' })
+  await expect(viewer).toContainText('1 of 6')
+  await viewer.getByRole('button', { name: 'Next ›' }).click()
+  await expect(viewer).toContainText('2 of 6')
+  await viewer.getByRole('button', { name: 'Back to Lost Weekend WPB' }).click()
+  await expect(viewer).toHaveCount(0)
   // More like this: the same scene; one added, one not for us.
   await close.getByRole('button', { name: 'More like this' }).click()
   await expect(close).toContainText('Same scene: house music, dressed up.')
@@ -3048,4 +3070,14 @@ test('wall: Out & about from your list — highlights, the columns, a place up c
   expect(after.slice(0, 3)).toEqual(first.filter((n) => n !== 'Southport Raw Bar & Restaurant'))
   expect(after).toHaveLength(4)
   expect(first).not.toContain(after[3])
+  // Not now: off the page for two weeks, teaching nothing.
+  const fourth = after[3]
+  await top.getByRole('button', { name: fourth }).click()
+  await page.getByRole('dialog', { name: `${fourth}, up close` }).getByRole('button', { name: 'Not now' }).click()
+  await expect.poll(topNames).not.toContain(fourth)
+  // Passed on: three times Not for us — brought back with a tap.
+  const passed = paper.getByRole('region', { name: 'Passed on' })
+  await expect(passed).toContainText('Some sports bar')
+  await passed.getByRole('button', { name: 'Bring back' }).click()
+  expect(await page.evaluate(() => window.__placed)).toContain('gx1:saved')
 })

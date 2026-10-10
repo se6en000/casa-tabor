@@ -38,7 +38,12 @@ export function outingItem(o: Outing, opts?: { today: string; watch?: GuideWatch
 export function calendarHits(places: Array<{ id: string; name: string }>, events: Array<{ title?: string | null; location_name?: string | null; start_time?: string | null }>, today: string): Record<string, CalendarHit>
 export function surprisePick<T extends { status: string; labels?: string[]; beyond?: boolean; score?: number }>(places: T[], today: string, leanings?: Leanings): T | null
 export function leanKey(x: Record<string, any> | null | undefined): string | null
-export function tallyLeanings(rows?: { outings?: Array<Record<string, any>>; places?: Array<Record<string, any>> }): Leanings
+export function tallyLeanings(rows?: { outings?: Array<Record<string, any>>; places?: Array<Record<string, any>>; today?: string | null }): Leanings
+export const FADE_DAYS: { no: number; yes: number }
+export const NO_BACKOFF_DAYS: number[]
+export const NOT_NOW_DAYS: number
+export function placeSaidNo(p: { no_count?: number | null; status?: string } | null, today: string, nowIso?: string): { no_count: number; said_no_at: string; snoozed_until: string | null; status: string }
+export function snoozed(p: { snoozed_until?: string | null } | null, today: string): boolean
 export function leaning(leanings: Leanings | null | undefined, key: string | null | undefined): number
 export function wantScore(it: ListItem, opts: { today: string; leanings?: Leanings }): number
 export function yourList(input: { places?: GuidePlace[]; outings?: Array<Outing & { watch_id?: string | null }>; watches?: GuideWatch[]; today: string; nowTime?: string | null; calendar?: Record<string, CalendarHit>; leanings?: Leanings }): YourListPage

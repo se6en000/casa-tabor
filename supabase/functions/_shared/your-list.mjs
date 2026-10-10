@@ -129,14 +129,44 @@ export function leanKey(x) {
   return `night:${x.kind}${x.kind === 'music' && x.venue_kind === 'cover' ? '-cover' : ''}`
 }
 
-/** Their answers, counted by kind: { 'shelf:oysters': { yes: 2, no: 0 }, … }. */
-export function tallyLeanings({ outings = [], places = [] } = {}) {
+/** Answers fade (Jake, Oct 10: "i saw this one time, so maybe it just wasnt relevant that day"): a no counts half after two months, a yes after four. */
+export const FADE_DAYS = { no: 60, yes: 120 }
+const faded = (at, today, half) => {
+  if (!at || !today) return 1
+  const days = (Date.parse(`${today}T12:00:00Z`) - Date.parse(String(at))) / DAY
+  return Number.isFinite(days) && days > 0 ? 0.5 ** (days / half) : 1
+}
+
+/** Their answers, counted by kind and fading with age: { 'shelf:oysters': { yes: 1.8, no: 0 }, … }. */
+export function tallyLeanings({ outings = [], places = [], today = null } = {}) {
   const tally = {}
-  const add = (key, yes) => { if (!key) return; const t = (tally[key] ??= { yes: 0, no: 0 }); if (yes) t.yes += 1; else t.no += 1 }
-  for (const o of outings ?? []) if (['saved', 'been', 'not_for_us'].includes(o.status)) add(leanKey(o), o.status !== 'not_for_us')
-  for (const p of places ?? []) if (['saved', 'spot', 'been', 'not_for_us'].includes(p.status)) add(leanKey(p), p.status !== 'not_for_us')
+  const add = (key, yes, w = 1) => { if (!key || !(w > 0)) return; const t = (tally[key] ??= { yes: 0, no: 0 }); if (yes) t.yes += w; else t.no += w }
+  for (const o of outings ?? []) {
+    if (!['saved', 'been', 'not_for_us'].includes(o.status)) continue
+    const yes = o.status !== 'not_for_us'
+    add(leanKey(o), yes, faded(o.updated_at, today, yes ? FADE_DAYS.yes : FADE_DAYS.no))
+  }
+  for (const p of places ?? []) {
+    if (['saved', 'spot', 'been'].includes(p.status)) add(leanKey(p), true, faded(p.saved_at ?? p.updated_at, today, FADE_DAYS.yes))
+    // Each Not for us, as many as were said (a place backs off before it's retired).
+    const nos = p.no_count || (p.status === 'not_for_us' ? 1 : 0)
+    if (nos) add(leanKey(p), false, nos * faded(p.said_no_at ?? p.updated_at, today, FADE_DAYS.no))
+  }
+  for (const t of Object.values(tally)) { t.yes = Math.round(t.yes * 100) / 100; t.no = Math.round(t.no * 100) / 100 }
   return tally
 }
+
+/** Not for us backs off instead of banning (Oct 10): three weeks, then three months, then retired (Passed on). */
+export const NO_BACKOFF_DAYS = [21, 90]
+export const NOT_NOW_DAYS = 14
+/** What a Not for us does to a place: { no_count, said_no_at, snoozed_until, status }. */
+export function placeSaidNo(p, today, nowIso = new Date().toISOString()) {
+  const n = (p?.no_count ?? 0) + 1
+  if (n > NO_BACKOFF_DAYS.length) return { no_count: n, said_no_at: nowIso, snoozed_until: null, status: 'not_for_us' }
+  return { no_count: n, said_no_at: nowIso, snoozed_until: addDays(today, NO_BACKOFF_DAYS[n - 1]), status: p?.status ?? 'live' }
+}
+/** Hidden for now (backed off, or Not now) — back on its day. */
+export const snoozed = (p, today) => Boolean(p?.snoozed_until && p.snoozed_until > today)
 
 /** -2 and lower (always no) … +2 (always yes), gently — two answers either way before it leans hard; a watch's dates half as much (they asked for it). */
 export function leaning(leanings, key) {
@@ -198,7 +228,8 @@ export function surprisePick(places, today, leanings = {}) {
  * The page: { highlights (4), more (12), later (the rest, by name), counts }. places — guide_places (live, saved,
  * spot); outings — the scout's, each watch's with watch_id; watches — guide_watch rows; calendar — calendarHits().
  */
-export function yourList({ places = [], outings = [], watches = [], today, nowTime = null, calendar = {}, leanings = {} }) {
+export function yourList({ places: all = [], outings = [], watches = [], today, nowTime = null, calendar = {}, leanings = {} }) {
+  const places = (all ?? []).filter((p) => !snoozed(p, today))
   const watchBy = new Map((watches ?? []).map((w) => [w.id, w]))
   const upcoming = (o) => { const d = dateOf(o); return d && (d > today || (d === today && (!nowTime || !timeOf(o) || timeOf(o) >= nowTime))) }
   // Dated nights they asked for or would do again: the next two of each watch on the page, the rest later.
