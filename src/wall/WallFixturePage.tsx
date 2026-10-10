@@ -299,6 +299,8 @@ export default function WallFixturePage() {
     address: null, url: `https://example.org/${o.id}`, drive_min: null, rating: null, rating_count: null, gem: false, status: 'new' as const, ...o,
     when: inDays == null ? null : `${ymd(inDays)} ${at}`,
   } as Outing)))
+  // Not for us and We went take a place off, as the real list does (Oct 10: the next card slides in).
+  const [goneIds, setGoneIds] = useState<string[]>([])
   // A script can set window.__scoutList (the Scout's real list) to show a real day (design mocks).
   const realList = (window as unknown as { __scoutList?: { outings: Outing[]; news: TownNews[]; today: string } }).__scoutList
   const scout: ScoutPaper | null = PAPER ? {
@@ -310,13 +312,16 @@ export default function WallFixturePage() {
       : id === 'o3'
         ? { facts: [{ label: 'Tickets', text: '$15 a car, kids under 12 free' }, { label: 'What’s in it', text: 'Pumpkin patch, hayrides, live music and trick-or-treating' }, { label: 'For kids', text: 'All ages; costumes welcome' }], not_said: ['Parking'], ticket_url: 'https://example.org/pumpkin-tickets', ends: '15:00', read_at: new Date(day).toISOString() }
         : null),
-    guide: new URLSearchParams(window.location.search).get('guide') === '1' ? LIST_PLACES : [],
+    guide: new URLSearchParams(window.location.search).get('guide') === '1' ? LIST_PLACES.filter((p) => !goneIds.includes(p.id)) : [],
     watches: LIST_WATCHES,
     // One of their spots on the calendar, the day after tomorrow.
     calendar: { g13: { next: ymd(2), last: null } },
     like: async () => LIST_LIKE,
     addPlace: async (p) => { ((window as unknown as { __added?: string[] }).__added ??= []).push(p.name) },
-    answerPlace: (id, status) => { ((window as unknown as { __placed?: string[] }).__placed ??= []).push(`${id}:${status}`) },
+    answerPlace: (id, status) => {
+      ((window as unknown as { __placed?: string[] }).__placed ??= []).push(`${id}:${status}`)
+      if (status === 'not_for_us' || status === 'been') setGoneIds((ids) => [...ids, id])
+    },
     sendPlace: async (p) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(p.name) },
     send: async (o) => { ((window as unknown as { __sent?: string[] }).__sent ??= []).push(o.title) },
   } : null

@@ -21,12 +21,12 @@ test('your list: a place says why it’s here — on your list or your spot, ask
   const loco = placeItem(place('1', 'Loco', { buzz: [{ kind: 'shared', said: 'a tequila and oyster bar.', new: false, url: null }] }), { today: TODAY })
   assert.deepEqual(loco.tags, ['try'])
   assert.equal(loco.heard, '“a tequila and oyster bar” — in your words.')
-  assert.equal(loco.when, 'SAVED OCT 9')
+  assert.equal(loco.when, '')
   const mary = placeItem(place('2', 'Mary Lou’s', { whose: 'kelly' }), { today: TODAY })
   assert.deepEqual(mary.tags, ['try', 'kelly'])
   const okl = placeItem(place('3', 'Old Key Lime House', { origin: 'asked', note: 'You asked Alexa what was playing here.' }), { today: TODAY })
   assert.deepEqual(okl.tags, ['try', 'asked'])
-  assert.equal(okl.when, 'SAVED OCT 9')
+  assert.equal(okl.when, '')
   assert.equal(okl.why, 'You asked Alexa what was playing here.')
   const spot = placeItem(place('4', 'Blue Door', { status: 'spot' }), { today: TODAY, calendar: { 4: { next: '2026-10-10', last: null } } })
   assert.deepEqual(spot.tags, ['spot'])
@@ -50,18 +50,18 @@ test('your list: the calendar finds a list place by its name in a title or a loc
   assert.equal(hits.c, undefined)
 })
 
-test('your list: four highlights — the soonest asked/again night, the newest to try, the next again, the surprise; twelve below, soonest first', async () => {
+test('your list: four highlights — no slot a kind: the most wanted now (asked, soon, their own), the rest below soonest first', async () => {
   const { yourList, placeItem } = await import('../supabase/functions/_shared/your-list.mjs')
   const watches = [
     { id: 'w1', name: 'Candlelight', kind: 'again', whose: 'us', note: 'You loved 90s Hip-Hop on Strings.' },
     { id: 'w2', name: 'Ballet', kind: 'asked', whose: 'family', note: 'You asked Alexa about ballet.' },
   ]
   const places = [
-    place('p1', 'Loco', { saved_at: '2026-10-09T20:00:00Z' }),
-    place('p2', 'J&C Oyster', { saved_at: '2026-10-10T02:19:00Z' }),
-    place('p3', 'Blue Door', { status: 'spot', saved_at: null }),
-    place('p4', 'Old Key Lime House', { origin: 'asked' }),
-    place('s1', 'Bar Capri', { status: 'live', labels: ['hot'], score: 9 }),
+    place('p1', 'Loco', { saved_at: '2026-10-09T20:00:00Z', shelf: 'mexican' }),
+    place('p2', 'J&C Oyster', { saved_at: '2026-10-10T02:19:00Z', shelf: 'oysters' }),
+    place('p3', 'Blue Door', { status: 'spot', saved_at: null, shelf: 'cocktails' }),
+    place('p4', 'Old Key Lime House', { origin: 'asked', shelf: 'waterfront' }),
+    place('s1', 'Bar Capri', { status: 'live', labels: ['hot'], score: 9, shelf: 'italian' }),
     place('s2', 'Some Pick', { status: 'live', labels: [], score: 10 }),
   ]
   const outings = [
@@ -74,23 +74,52 @@ test('your list: four highlights — the soonest asked/again night, the newest t
     outing('x', 'Past', '2026-10-01 19:00', { watch_id: 'w1' }),
   ]
   const page = yourList({ places, outings, watches, today: TODAY, nowTime: '10:30' })
-  assert.deepEqual(page.highlights.map((h) => h.title), ['Big City', 'J&C Oyster', 'Candlelight: A Haunted Evening', 'Bar Capri'])
+  const top = page.highlights.map((h) => h.title)
+  assert.equal(top.length, 4)
+  // What they asked about, and a cover band tonight, lead; one Candlelight on top at most.
+  assert.deepEqual(top.slice(0, 2), ['Old Key Lime House', 'Big City'])
+  assert.ok(top.filter((t) => t.startsWith('Candlelight')).length <= 1)
   // One they shared themselves comes before the guide's picks they tapped Save on, however new those are.
-  const shared = yourList({ places: [...places, place('p5', 'Mary Lou’s', { origin: 'shared', saved_at: '2026-10-09T20:55:00Z' })], outings, watches, today: TODAY, nowTime: '10:30' })
-  assert.equal(shared.highlights[1].title, 'Mary Lou’s')
+  const shared = yourList({ places: [...places, place('p5', 'Mary Lou’s', { origin: 'shared', saved_at: '2026-10-09T20:55:00Z', shelf: 'clubs' })], outings, watches, today: TODAY, nowTime: '10:30' })
+  const sharedTop = shared.highlights.map((h) => h.title)
+  assert.ok(sharedTop.includes('Mary Lou’s') && !sharedTop.includes('J&C Oyster'))
   assert.equal(placeItem(place('p6', 'Palm Beach Ice Works', { origin: 'asked', types: 'Ice skating rink' }), { today: TODAY }).is, 'Ice skating rink')
-  // Below, soonest first: the places (any night) before December; the third Candlelight waits (two a watch).
+  // Below, soonest first; the third Candlelight waits (two a watch); nothing over, nothing unlabeled from the guide.
   const below = page.more.map((h) => h.title)
-  assert.ok(!below.includes('Some local band') && !below.includes('Past') && !below.includes('Some Pick'))
-  assert.ok(below.indexOf('Old Key Lime House') < below.indexOf('The Nutcracker'))
-  assert.ok(below.includes('Candlelight: Queen'))
-  assert.ok(!below.includes('Candlelight: Fleetwood Mac'))
+  const all = [...top, ...below]
+  assert.ok(!all.includes('Some local band') && !all.includes('Past') && !all.includes('Some Pick'))
+  assert.deepEqual(page.more.map((h) => h.date ?? '2026-10-11'), [...page.more.map((h) => h.date ?? '2026-10-11')].sort())
+  assert.ok(all.includes('Candlelight: Queen') && all.includes('Bar Capri'))
   assert.deepEqual(page.later.map((h) => h.title), ['Candlelight: Fleetwood Mac'])
   assert.deepEqual(page.counts, { places: 4, onCalendar: 0, later: 1 })
-  const nut = page.more.find((h) => h.title === 'The Nutcracker')
+  const nut = [...page.highlights, ...page.more].find((h) => h.title === 'The Nutcracker')
   assert.deepEqual(nut.tags, ['asked', 'family'])
   assert.equal(nut.when, 'FRI DEC 4 · 7 PM')
   assert.equal(nut.why, 'You asked Alexa about ballet.')
+})
+
+test('your list: it learns — Not for us twice on a kind moves it off the top, the next best slides in; saves lift a kind', async () => {
+  const { yourList, tallyLeanings, leaning } = await import('../supabase/functions/_shared/your-list.mjs')
+  const places = [
+    place('a', 'Oyster Bar', { shelf: 'oysters', saved_at: '2026-09-01T00:00:00Z' }),
+    place('b', 'Taco Spot', { shelf: 'mexican', saved_at: '2026-09-01T00:00:00Z' }),
+    place('c', 'Pub', { shelf: 'bars', saved_at: '2026-09-01T00:00:00Z' }),
+    place('d', 'Wine Room', { shelf: 'wine', saved_at: '2026-09-01T00:00:00Z' }),
+    place('e', 'Margarita Patio', { shelf: 'margaritas', saved_at: '2026-09-01T00:00:00Z' }),
+  ]
+  const outings = [outing('t1', 'Trivia at the Pub', '2026-10-10 19:00', { kind: 'trivia' })]
+  const before = yourList({ places, outings, today: TODAY }).highlights.map((h) => h.title)
+  assert.equal(before[0], 'Trivia at the Pub')
+  // Two trivia nights said no to (and one taco place): trivia drops, Margarita Patio comes up.
+  const leanings = tallyLeanings({ outings: [outing('t0', 'Old trivia', '2026-10-01 19:00', { kind: 'trivia', status: 'not_for_us' }), outing('t9', 'More trivia', '2026-10-02 19:00', { kind: 'trivia', status: 'not_for_us' })], places: [place('z', 'Gone', { shelf: 'mexican', status: 'not_for_us' })] })
+  assert.deepEqual(leanings['night:trivia'], { yes: 0, no: 2 })
+  assert.ok(leaning(leanings, 'night:trivia') < -2)
+  const after = yourList({ places, outings, today: TODAY, leanings }).highlights.map((h) => h.title)
+  assert.ok(!after.includes('Trivia at the Pub') && !after.includes('Taco Spot'))
+  assert.ok(after.includes('Margarita Patio'))
+  // Saved oysters twice: oysters first among the places.
+  const liked = yourList({ places, outings: [], today: TODAY, leanings: tallyLeanings({ places: [place('y1', 'X', { shelf: 'oysters' }), place('y2', 'Y', { shelf: 'oysters', status: 'been' })] }) })
+  assert.equal(liked.highlights[0].title, 'Oyster Bar')
 })
 
 test('your list: a night already over today is gone; the surprise changes week to week', async () => {

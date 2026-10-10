@@ -43,7 +43,6 @@ export function dayWord(ymd, today) {
 
 const dateOf = (o) => (o?.when ? String(o.when).slice(0, 10) : null)
 const timeOf = (o) => (o?.when && String(o.when).length > 10 ? String(o.when).slice(11, 16) : null)
-const savedWord = (iso) => { const d = iso ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? `SAVED ${MONTH[d.getMonth()]} ${d.getDate()}` : 'YOU SAVED IT' }
 
 /** A place on their list, or the surprise. */
 export function placeItem(p, { today, calendar = {}, surprise = false } = {}) {
@@ -57,7 +56,8 @@ export function placeItem(p, { today, calendar = {}, surprise = false } = {}) {
   const hit = calendar[p.id]
   const when = hit?.next ? `ON THE CALENDAR ${dayWord(hit.next, today)}`
     : surprise ? 'SURPRISE · NOT ON YOUR LIST'
-    : p.status === 'spot' ? 'ANY NIGHT' : savedWord(p.saved_at)
+    // No date on one not planned (Oct 10: "SAVED OCT 9" read as a night already gone) — when it was saved is up close.
+    : p.status === 'spot' ? 'ANY NIGHT' : ''
   // Town and drive; the stars are in its details.
   const where = [p.address ? townOf(p.address) : null, p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(' · ')
   return {
@@ -118,8 +118,75 @@ const COMMON = /^(park|house|garden|kitchen|tavern|grill|cafe|club|lounge|pub|be
 const sortKey = (it, today) => `${it.date ?? addDays(today, 2)} ${it.time ?? (it.type === 'place' ? '99:98' : '99:99')}`
 
 /** The week's surprise: one of the guide's labeled picks they haven't put on their list, a different one each week. */
-export function surprisePick(places, today) {
-  const pool = (places ?? []).filter((p) => p.status === 'live' && (p.labels ?? []).length && !p.beyond).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 8)
+// ---- What they lean toward (Jake, Oct 10: "i want it to come in via what it thinks we may want to do based on feedback
+// and adaptive predictions"): each answer — Save, Not for us, We went — counts for its kind, and the page ranks by it. ----
+
+/** What an answer teaches about: a watch's own dates, a kind of night from the scout, a shelf of places. */
+export function leanKey(x) {
+  if (!x) return null
+  if (x.shelf !== undefined && x.name !== undefined) return `shelf:${x.shelf}`
+  if (x.watch_id) return `watch:${x.watch_id}`
+  return `night:${x.kind}${x.kind === 'music' && x.venue_kind === 'cover' ? '-cover' : ''}`
+}
+
+/** Their answers, counted by kind: { 'shelf:oysters': { yes: 2, no: 0 }, … }. */
+export function tallyLeanings({ outings = [], places = [] } = {}) {
+  const tally = {}
+  const add = (key, yes) => { if (!key) return; const t = (tally[key] ??= { yes: 0, no: 0 }); if (yes) t.yes += 1; else t.no += 1 }
+  for (const o of outings ?? []) if (['saved', 'been', 'not_for_us'].includes(o.status)) add(leanKey(o), o.status !== 'not_for_us')
+  for (const p of places ?? []) if (['saved', 'spot', 'been', 'not_for_us'].includes(p.status)) add(leanKey(p), p.status !== 'not_for_us')
+  return tally
+}
+
+/** -2.25 (always no) … +3 (always yes), gently — two answers either way before it leans hard; a watch's dates half as much (they asked for it). */
+export function leaning(leanings, key) {
+  const { yes = 0, no = 0 } = leanings?.[key] ?? {}
+  const a = ((yes - 1.5 * no) / (yes + no + 2)) * 3
+  return key?.startsWith('watch:') ? a / 2 : a
+}
+
+const BROWARD = /\b(fort lauderdale|davie|hollywood|pompano|plantation|sunrise|coral springs|weston|miramar|pembroke|dania|lauderhill|tamarac|margate|coconut creek|parkland)\b/i
+const daysTo = (ymd, today) => Math.round((Date.parse(`${ymd}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / DAY)
+
+/**
+ * How much they'd want it, now: why it's on the page (asked > their own > again > a spot > the guide's saved > the
+ * scout's > the surprise), how soon (dated), how new on the list, already planned or just been, and what they lean toward.
+ */
+export function wantScore(it, { today, leanings = {} }) {
+  const FROM = { asked: 3, own: 2.4, again: 2.2, spot: 1.6, saved: 1.5, scout: 1.2, surprise: 1.3 }
+  let s = FROM[it.from] ?? 1
+  if (it.date) {
+    const d = daysTo(it.date, today)
+    s += d <= 1 ? 2.2 : d <= 3 ? 1.8 : d <= 7 ? 1.2 : d <= 14 ? 0.6 : d <= 30 ? 0.2 : -0.4
+  } else if (it.place) {
+    const saved = it.place.saved_at ? daysTo(it.place.saved_at.slice(0, 10), today) : null
+    if (saved !== null && saved >= -14) s += 0.6
+  }
+  // Already planned, or just been: it doesn't need the top.
+  if (it.place && it.onCalendar) s -= 3
+  if (it.place && it.lastCalendar && daysTo(it.lastCalendar, today) >= -21) s -= 1.2
+  if (it.outing && BROWARD.test(String(it.outing.place ?? ''))) s -= 0.8
+  return s + leaning(leanings, it.lean)
+}
+
+/** The best n in turn, each kind less welcome once it's on the page (not four Candlelights). */
+function bestOf(items, n, { today, leanings, again = 1.6 }) {
+  const left = items.map((it) => ({ it, score: wantScore(it, { today, leanings }) }))
+  const chosen = []
+  const kinds = new Map()
+  while (chosen.length < n && left.length) {
+    let best = 0
+    const at = (x) => x.score - again * (kinds.get(x.it.lean) ?? 0)
+    for (let i = 1; i < left.length; i++) if (at(left[i]) > at(left[best])) best = i
+    const [{ it }] = left.splice(best, 1)
+    chosen.push(it)
+    kinds.set(it.lean, (kinds.get(it.lean) ?? 0) + 1)
+  }
+  return { chosen, left: left.sort((a, b) => b.score - a.score).map((x) => x.it) }
+}
+
+export function surprisePick(places, today, leanings = {}) {
+  const pool = (places ?? []).filter((p) => p.status === 'live' && (p.labels ?? []).length && !p.beyond && leaning(leanings, leanKey(p)) > -1).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 8)
   if (!pool.length) return null
   const week = Math.floor(Date.parse(`${today}T12:00:00Z`) / (7 * DAY))
   return pool[week % pool.length]
@@ -129,14 +196,14 @@ export function surprisePick(places, today) {
  * The page: { highlights (4), more (12), later (the rest, by name), counts }. places — guide_places (live, saved,
  * spot); outings — the scout's, each watch's with watch_id; watches — guide_watch rows; calendar — calendarHits().
  */
-export function yourList({ places = [], outings = [], watches = [], today, nowTime = null, calendar = {} }) {
+export function yourList({ places = [], outings = [], watches = [], today, nowTime = null, calendar = {}, leanings = {} }) {
   const watchBy = new Map((watches ?? []).map((w) => [w.id, w]))
   const upcoming = (o) => { const d = dateOf(o); return d && (d > today || (d === today && (!nowTime || !timeOf(o) || timeOf(o) >= nowTime))) }
   // Dated nights they asked for or would do again: the next two of each watch on the page, the rest later.
   const perWatch = new Map()
   const watched = []
   // Nearby first: the same Candlelight shows play in West Palm and Fort Lauderdale (Oct 10) — Broward's wait.
-  const broward = (o) => /\b(fort lauderdale|davie|hollywood|pompano|plantation|sunrise|coral springs|weston|miramar|pembroke|dania|lauderhill|tamarac|margate|coconut creek|parkland)\b/i.test(String(o.place ?? ''))
+  const broward = (o) => BROWARD.test(String(o.place ?? ''))
   for (const o of [...(outings ?? [])].filter((o) => o.watch_id && watchBy.has(o.watch_id) && upcoming(o) && o.status !== 'not_for_us').sort((a, b) => Number(broward(a)) - Number(broward(b)) || String(a.when).localeCompare(String(b.when)))) {
     const n = perWatch.get(o.watch_id) ?? 0
     perWatch.set(o.watch_id, n + 1)
@@ -149,49 +216,24 @@ export function yourList({ places = [], outings = [], watches = [], today, nowTi
   const covers = scoutPool.filter((o) => o.kind === 'music' && o.venue_kind === 'cover' && o.act?.standing === 'liked' && soon(o))
   const trivia = scoutPool.filter((o) => o.kind === 'trivia' && soon(o))
   const byWhen = (a, b) => String(a.when).localeCompare(String(b.when))
-  const kindOf = [...stars.sort(byWhen).slice(0, 1), ...covers.sort(byWhen).slice(0, 1), ...trivia.sort(byWhen).slice(0, 1)].map((o) => outingItem(o, { today }))
-  // Their places: what they asked about first, then the newest saved, then their spots.
+  const kindOf = [...stars.sort(byWhen).slice(0, 1), ...covers.sort(byWhen).slice(0, 1), ...trivia.sort(byWhen).slice(0, 1)].map((o) => ({ ...outingItem(o, { today }), from: 'scout', lean: leanKey(o) }))
   const mine = (places ?? []).filter((p) => p.status === 'saved' || p.status === 'spot')
-  // What they asked about, then what they put there themselves (shared, told Alexa, added), then the guide's picks they
-  // saved, then their spots (Oct 10: twelve picks saved with a tap had pushed Loco and Mary Lou's off the page).
-  const rank = (p) => (p.origin === 'asked' ? 0 : p.status === 'spot' ? 3 : OWN.has(p.origin) ? 1 : 2)
-  mine.sort((a, b) => rank(a) - rank(b) || String(b.saved_at ?? '').localeCompare(String(a.saved_at ?? '')))
-  const placeItems = mine.map((p) => placeItem(p, { today, calendar }))
-  const surprise = surprisePick(places, today)
-  const surpriseItem = surprise ? placeItem(surprise, { today, surprise: true }) : null
+  const fromOf = (p) => (p.origin === 'asked' ? 'asked' : p.status === 'spot' ? 'spot' : OWN.has(p.origin) ? 'own' : 'saved')
+  const placeItems = mine.map((p) => ({ ...placeItem(p, { today, calendar }), from: fromOf(p), lean: leanKey(p) }))
+  const surprise = surprisePick(places, today, leanings)
+  const surpriseItem = surprise ? { ...placeItem(surprise, { today, surprise: true }), from: 'surprise', lean: leanKey(surprise) } : null
+  const watchItems = watched.map((w) => ({ ...w.item, from: watchBy.get(w.item.outing?.watch_id)?.kind === 'asked' ? 'asked' : 'again', lean: leanKey(w.item.outing), extra: w.extra }))
 
-  // The four highlights: the soonest night they asked for or would do again (else one of their kind), the newest place
-  // to try that isn't on the calendar, the next "again", and the surprise.
-  const used = new Set()
-  const take = (it) => { if (it && !used.has(it.key)) { used.add(it.key); return it } return null }
-  const thisWeek = (it) => it.date && it.date <= addDays(today, 6)
-  const nearest = [...watched.map((w) => w.item).filter(thisWeek), ...kindOf.filter(thisWeek)].sort((a, b) => sortKey(a, today).localeCompare(sortKey(b, today)))
-  const highlights = [
-    take(nearest[0]),
-    take(placeItems.filter((p) => p.tags.includes('try') && !p.onCalendar).sort((a, b) => Number(OWN.has(b.place?.origin)) - Number(OWN.has(a.place?.origin)) || String(b.place?.saved_at ?? '').localeCompare(String(a.place?.saved_at ?? '')))[0]),
-    take(watched.map((w) => w.item).find((it) => it.tags.includes('again') && !used.has(it.key))),
-    take(surpriseItem),
-  ].filter(Boolean)
-  // Twelve below, soonest first: up to five dated in the next two weeks, two further out, places for the rest.
-  const dated = [...watched.filter((w) => !w.extra).map((w) => w.item), ...kindOf].filter((it) => !used.has(it.key)).sort((a, b) => sortKey(a, today).localeCompare(sortKey(b, today)))
-  const near = dated.filter((it) => it.date <= addDays(today, 14))
-  const far = dated.filter((it) => it.date > addDays(today, 14))
-  const pool = [...placeItems.filter((it) => !used.has(it.key))]
-  // Fewer than four (no surprise, nothing this week): the next ones up.
-  while (highlights.length < LIST_SIZE.highlights && (pool.length || near.length || far.length)) {
-    const it = take(near.shift() ?? pool.shift() ?? far.shift())
-    if (it) highlights.push(it)
-  }
-  const nearN = Math.min(5, near.length)
-  const farN = Math.min(2, far.length)
-  const placesN = Math.min(pool.length, LIST_SIZE.more - nearN - farN)
-  let picked = [...near.slice(0, nearN), ...pool.slice(0, placesN), ...far.slice(0, farN)]
-  // Short on places: more of the dated ones.
-  const rest = [...near.slice(nearN), ...far.slice(farN), ...pool.slice(placesN)]
-  while (picked.length < LIST_SIZE.more && rest.length) picked.push(rest.shift())
-  picked.forEach((it) => used.add(it.key))
-  const more = picked.sort((a, b) => sortKey(a, today).localeCompare(sortKey(b, today)))
-  const later = [...rest, ...watched.filter((w) => w.extra).map((w) => w.item)].filter((it) => !used.has(it.key))
+  // No slot a kind (Jake, Oct 10: "i dont want each coloum to hold a specific catagory"): everything ranked by how
+  // much they'd want it now — the four best on top, a kind less welcome each time it's already there; a Not for us
+  // takes its card off and the next best slides in.
+  const pool = [...watchItems.filter((it) => !it.extra), ...kindOf, ...placeItems, ...(surpriseItem ? [surpriseItem] : [])]
+  const top = bestOf(pool, LIST_SIZE.highlights, { today, leanings })
+  const highlights = top.chosen
+  // Twelve below, the next best (a kind a little less welcome each time), shown soonest first.
+  const below = bestOf(top.left, LIST_SIZE.more, { today, leanings, again: 0.5 })
+  const more = below.chosen.sort((a, b) => sortKey(a, today).localeCompare(sortKey(b, today)))
+  const later = [...below.left, ...watchItems.filter((it) => it.extra)]
   return {
     highlights: highlights.filter(Boolean), more, later,
     counts: { places: mine.length, onCalendar: mine.filter((p) => calendar[p.id]?.next).length, later: later.length },

@@ -3001,9 +3001,12 @@ test('wall: Out & about from your list — highlights, the columns, a place up c
   await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
   await page.keyboard.press('ArrowRight')
   await expect(paper.getByText('Out & about · 2 of 3')).toBeVisible()
-  // The newest to try (their own words), the next Candlelight, the week's surprise.
+  // No slot a kind (Oct 10): the most wanted now on top — what they asked about, soonest; the rest below.
+  const top = paper.getByRole('region', { name: 'Worth getting out for' })
+  const topNames = () => top.getByRole('button').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+  await expect.poll(topNames).toEqual(['Pumpkin Fest', 'Southport Raw Bar & Restaurant', 'The Nutcracker', 'Candlelight: A Haunted Evening'])
   const lucky = paper.getByRole('button', { name: 'Lucky Lou\'s Raw Bar' })
-  await expect(lucky).toContainText('On your list')
+  await expect(lucky).toContainText(/On your list/i)
   await expect(lucky).toContainText('“an oyster bar with a raw bar and a patio” — in your words.')
   await expect(paper.getByRole('button', { name: 'Candlelight: A Haunted Evening' })).toContainText('You loved 90s Hip-Hop on Strings.')
   await expect(paper.getByRole('button', { name: 'Sports & Rec' })).toContainText('SURPRISE · NOT ON YOUR LIST')
@@ -3011,7 +3014,7 @@ test('wall: Out & about from your list — highlights, the columns, a place up c
   const below = paper.getByRole('region', { name: 'Coming up' })
   await expect(below.getByRole('button', { name: 'Celona Restaurant & Gin Lounge' })).toContainText('ON THE CALENDAR SUN')
   await expect(below.getByRole('button', { name: 'Lost Weekend WPB' })).toContainText('KELLY’S KIND OF NIGHT')
-  await expect(below.getByRole('button', { name: 'The Nutcracker' })).toContainText('WITH THE KIDS')
+  await expect(top.getByRole('button', { name: 'The Nutcracker' })).toContainText('With the kids')
   await page.evaluate(() => document.fonts.ready)
   await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('out-from-your-list.png')
   // Up close.
@@ -3035,4 +3038,11 @@ test('wall: Out & about from your list — highlights, the columns, a place up c
   await paper.getByRole('button', { name: 'Sports & Rec' }).click()
   await page.getByRole('dialog', { name: 'Sports & Rec, up close' }).getByRole('button', { name: 'Save it' }).click()
   expect(await page.evaluate(() => window.__placed)).toEqual(['g7:been', 'g1:saved'])
+  // Not for us on a card (Jake, Oct 10): it goes, the others keep their order and slide left, the next best comes in last.
+  await top.getByRole('button', { name: 'Southport Raw Bar & Restaurant' }).click()
+  await page.getByRole('dialog', { name: 'Southport Raw Bar & Restaurant, up close' }).getByRole('button', { name: 'Not for us' }).click()
+  await expect.poll(topNames).not.toContain('Southport Raw Bar & Restaurant')
+  const after = await topNames()
+  expect(after.slice(0, 3)).toEqual(['Pumpkin Fest', 'The Nutcracker', 'Candlelight: A Haunted Evening'])
+  expect(after).toHaveLength(4)
 })

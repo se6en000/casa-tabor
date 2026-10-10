@@ -195,14 +195,56 @@ const eyebrow = (it: ListItem) => [it.is, it.when].filter(Boolean).join(' · ').
 /** One of the four on top: a card (Jake: "i did like the card format for the 3/4 highlight items"). */
 function Highlight({ it, onOpen }: { it: ListItem; onOpen: (it: ListItem) => void }) {
   return (
-    <button type="button" aria-label={it.title} onClick={() => onOpen(it)} className="flex min-w-0 flex-col gap-[10px] rounded-[22px] border-0 bg-wall-paper px-[26px] pb-[24px] pt-[22px] text-left font-body text-wall-ink">
+    <button type="button" aria-label={it.title} onClick={() => onOpen(it)} className="flex w-full min-w-0 flex-col gap-[10px] rounded-[22px] border-0 bg-wall-paper px-[26px] pb-[24px] pt-[22px] text-left font-body text-wall-ink">
       {it.tags.length > 0 && <span className="flex flex-wrap gap-[6px]">{it.tags.map((t) => <ListPill key={t} tag={t} />)}</span>}
-      <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>
+      {eyebrow(it) && <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>}
       <span className="line-clamp-2 font-display text-wall-date font-semibold">{it.title}</span>
       {it.where && <span className="-mt-[4px] truncate text-wall-detail text-wall-ink-2">{it.where}</span>}
       {it.heard && <span className="line-clamp-3 border-0 border-t border-solid border-wall-rule pt-[10px] text-wall-detail">{it.heard}</span>}
       {it.why && <span className="line-clamp-2 font-display text-wall-detail italic">{it.why}</span>}
     </button>
+  )
+}
+
+/**
+ * The four on top, in the order they came (Jake, Oct 10: "if I dismiss (not for us) a card, can the cards shift left and
+ * the next card … slide in from the right?"): the ones still here keep their order and glide left; a new one comes last,
+ * from the right.
+ */
+function Highlights({ items, onOpen }: { items: ListItem[]; onOpen: (it: ListItem) => void }) {
+  const keys = items.map((it) => it.key)
+  const [seen, setSeen] = useState({ keys: keys.join('|'), order: keys })
+  let order = seen.order
+  if (seen.keys !== keys.join('|')) {
+    const kept = seen.order.filter((k) => keys.includes(k))
+    order = [...kept, ...keys.filter((k) => !kept.includes(k))]
+    setSeen({ keys: keys.join('|'), order })
+  }
+  const byKey = new Map(items.map((it) => [it.key, it]))
+  const nodes = useRef(new Map<string, HTMLElement>())
+  const lefts = useRef(new Map<string, number>())
+  const shownKeys = order.join('|')
+  useLayoutEffect(() => {
+    const before = lefts.current
+    const after = new Map<string, number>()
+    for (const [k, el] of nodes.current) {
+      after.set(k, el.offsetLeft)
+      const was = before.get(k)
+      if (!before.size || was === el.offsetLeft) continue
+      const motion = { duration: 560, easing: 'cubic-bezier(0.22,1,0.36,1)', fill: 'backwards' as const }
+      if (was === undefined) el.animate([{ transform: 'translateX(140px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { ...motion, delay: 140 })
+      else el.animate([{ transform: `translateX(${was - el.offsetLeft}px)` }, { transform: 'none' }], motion)
+    }
+    lefts.current = after
+  }, [shownKeys])
+  return (
+    <section aria-label="Worth getting out for" className="mt-[30px] grid grid-cols-4 gap-[18px]">
+      {order.map((k) => byKey.get(k)).filter((it): it is ListItem => Boolean(it)).map((it) => (
+        <div key={it.key} className="flex min-w-0" ref={(el) => { if (el) nodes.current.set(it.key, el); else nodes.current.delete(it.key) }}>
+          <Highlight it={it} onOpen={onOpen} />
+        </div>
+      ))}
+    </section>
   )
 }
 
@@ -212,7 +254,7 @@ function Story({ it, onOpen }: { it: ListItem; onOpen: (it: ListItem) => void })
     <button type="button" aria-label={it.title} onClick={() => onOpen(it)}
       className="flex min-w-0 flex-col gap-[6px] border-0 bg-transparent p-0 text-left font-body text-wall-ink">
       {it.tags.length > 0 && <span className="flex flex-wrap gap-x-[14px] gap-y-[4px]">{it.tags.map((t) => <ListWord key={t} tag={t} />)}</span>}
-      <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>
+      {eyebrow(it) && <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>}
       <span className="line-clamp-2 font-display text-wall-heading font-semibold">{it.title}</span>
       {it.where && <span className="truncate text-wall-detail text-wall-ink-2">{it.where}</span>}
       {it.heard && <span className="line-clamp-3 text-wall-detail">{it.heard}</span>}
@@ -237,8 +279,8 @@ function Columns({ items, onOpen }: { items: ListItem[]; onOpen: (it: ListItem) 
  */
 function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: ScoutPaper; active: boolean; now: Date; onOpen: (o: Outing) => void; onOpenPlace: (p: GuidePlace) => void; onAsk?: (say: string) => void }) {
   const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  const page = useMemo(() => yourList({ places: scout.guide ?? [], outings: scout.outings, watches: scout.watches ?? [], today: scout.today, nowTime, calendar: scout.calendar ?? {} }),
-    [scout.guide, scout.outings, scout.watches, scout.today, scout.calendar, nowTime])
+  const page = useMemo(() => yourList({ places: scout.guide ?? [], outings: scout.outings, watches: scout.watches ?? [], today: scout.today, nowTime, calendar: scout.calendar ?? {}, leanings: scout.leanings ?? {} }),
+    [scout.guide, scout.outings, scout.watches, scout.today, scout.calendar, scout.leanings, nowTime])
   const [allLater, setAllLater] = useState(false)
   const open = (it: ListItem) => { if (it.place) onOpenPlace(it.place); else if (it.outing) onOpen(it.outing) }
   const later = laterLine(page.later)
@@ -246,10 +288,8 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: Sc
   return (
     <ScrollPage active={active}>
       <PageHead kicker="Out & about · from your list" title={page.highlights.length ? 'A few worth getting out for.' : 'Your list is empty so far.'}
-        deck={page.highlights.length ? 'What you saved, what you loved and want again — and one surprise. Tap any for more.' : 'Share a place from any app, or tell Alexa “we want to try…” — it starts here.'} />
-      {page.highlights.length > 0 && (
-        <div className="mt-[30px] grid grid-cols-4 gap-[18px]">{page.highlights.map((it) => <Highlight key={it.key} it={it} onOpen={open} />)}</div>
-      )}
+        deck={page.highlights.length ? 'What you’d most want now, from what you saved, asked about and loved — it learns from each Save and Not for us.' : 'Share a place from any app, or tell Alexa “we want to try…” — it starts here.'} />
+      {page.highlights.length > 0 && <Highlights items={page.highlights} onOpen={open} />}
       {page.more.length > 0 && (
         <section aria-label="Coming up" className="mt-[40px] flex flex-col">
           <span className="flex items-baseline gap-[18px]">

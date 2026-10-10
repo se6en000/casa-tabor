@@ -21,7 +21,12 @@ export interface ListItem {
   outing?: Outing & { watch_id?: string | null }
   onCalendar?: boolean
   lastCalendar?: string | null
+  /** Why it's a candidate (for its rank): asked, their own, again, a spot, the guide's saved, the scout's, the surprise. */
+  from?: 'asked' | 'own' | 'again' | 'spot' | 'saved' | 'scout' | 'surprise'
+  /** The kind its answers teach about: "watch:…", "night:trivia", "shelf:oysters". */
+  lean?: string | null
 }
+export type Leanings = Record<string, { yes: number; no: number }>
 export interface YourListPage { highlights: ListItem[]; more: ListItem[]; later: ListItem[]; counts: { places: number; onCalendar: number; later: number } }
 
 export const LIST_SIZE: { highlights: number; more: number }
@@ -31,8 +36,12 @@ export function dayWord(ymd: string, today: string): string
 export function placeItem(p: GuidePlace, opts?: { today: string; calendar?: Record<string, CalendarHit>; surprise?: boolean }): ListItem
 export function outingItem(o: Outing, opts?: { today: string; watch?: GuideWatch | null }): ListItem
 export function calendarHits(places: Array<{ id: string; name: string }>, events: Array<{ title?: string | null; location_name?: string | null; start_time?: string | null }>, today: string): Record<string, CalendarHit>
-export function surprisePick<T extends { status: string; labels?: string[]; beyond?: boolean; score?: number }>(places: T[], today: string): T | null
-export function yourList(input: { places?: GuidePlace[]; outings?: Array<Outing & { watch_id?: string | null }>; watches?: GuideWatch[]; today: string; nowTime?: string | null; calendar?: Record<string, CalendarHit> }): YourListPage
+export function surprisePick<T extends { status: string; labels?: string[]; beyond?: boolean; score?: number }>(places: T[], today: string, leanings?: Leanings): T | null
+export function leanKey(x: Record<string, any> | null | undefined): string | null
+export function tallyLeanings(rows?: { outings?: Array<Record<string, any>>; places?: Array<Record<string, any>> }): Leanings
+export function leaning(leanings: Leanings | null | undefined, key: string | null | undefined): number
+export function wantScore(it: ListItem, opts: { today: string; leanings?: Leanings }): number
+export function yourList(input: { places?: GuidePlace[]; outings?: Array<Outing & { watch_id?: string | null }>; watches?: GuideWatch[]; today: string; nowTime?: string | null; calendar?: Record<string, CalendarHit>; leanings?: Leanings }): YourListPage
 export function laterLine(later: ListItem[], n?: number): string | null
 
 export interface WatchEvent { title: string; date: string; time: string | null; venue: string | null; town: string | null; price_from: number | null; url: string; line: string | null }

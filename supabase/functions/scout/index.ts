@@ -26,7 +26,7 @@ import {
 } from '../_shared/guide.mjs'
 import { GUIDE_SHELVES } from '../_shared/guide.mjs'
 import { sharedShelf } from '../_shared/share-in.mjs'
-import { UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
+import { UNCHECKED, WATCH_DAYS, collapseWatchDates, watchTooFar, calendarHits, tallyLeanings, likePrompt, parseLike, parseWatchEvents, watchOuting, watchPrompt } from '../_shared/your-list.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -199,11 +199,16 @@ Deno.serve(async (req) => {
       .in('status', ['live', 'saved', 'spot']).order('score', { ascending: false }).limit(300)
     // Out & about from your list (canvas 86C): what they watch for, and which of their places are on the calendar.
     const mine = (guide ?? []).filter((g: { status: string }) => g.status === 'saved' || g.status === 'spot')
-    const [{ data: watches }, { data: events }] = await Promise.all([
+    const half = new Date(Date.now() - 180 * 86_400_000).toISOString()
+    const [{ data: watches }, { data: events }, { data: saidOutings }, { data: saidPlaces }] = await Promise.all([
       sb.from('guide_watch').select('id, name, kind, whose, note').eq('status', 'on').limit(50),
       sb.from('events').select('title, location_name, start_time').gte('start_time', addDays(today, -365)).lt('start_time', addDays(today, 61)).limit(5000),
+      // What they lean toward (Oct 10: "based on feedback and adaptive predictions"): the last half year's answers.
+      sb.from('outings').select('kind, venue_kind, watch_id, status').in('status', ['saved', 'been', 'not_for_us']).gte('updated_at', half).limit(2000),
+      sb.from('guide_places').select('name, shelf, status').in('status', ['saved', 'spot', 'been', 'not_for_us']).gte('updated_at', half).limit(2000),
     ])
-    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], watches: watches ?? [], calendar: calendarHits(mine, events ?? [], today), today })
+    const leanings = tallyLeanings({ outings: saidOutings ?? [], places: saidPlaces ?? [] })
+    return json({ outings: live, news: (news ?? []).filter((n: { news_date: string }) => n.news_date === latest), guide: guide ?? [], watches: watches ?? [], calendar: calendarHits(mine, events ?? [], today), leanings, today })
   }
 
   if (body.action === 'feedback') {

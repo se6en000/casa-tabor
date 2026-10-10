@@ -5,7 +5,7 @@ import { LIVE_LIST } from '../lib/eventsCachePersister'
 import { outingLink, outingWhen, type Outing, type TownNews } from '../../supabase/functions/_shared/scout.mjs'
 import type { OutingDetails } from './outingCard'
 import type { GuidePlace } from '../../supabase/functions/_shared/guide.mjs'
-import type { CalendarHit, GuideWatch, LikeFound } from '../../supabase/functions/_shared/your-list.mjs'
+import { leanKey, type CalendarHit, type GuideWatch, type Leanings, type LikeFound } from '../../supabase/functions/_shared/your-list.mjs'
 
 export type OutingAnswer = 'saved' | 'not_for_us' | 'new'
 
@@ -19,6 +19,8 @@ export interface ScoutPaper {
   watches?: GuideWatch[]
   /** Their list places on the calendar: next on, last went. */
   calendar?: Record<string, CalendarHit>
+  /** Their answers by kind (Oct 10: "adaptive predictions"): what the page ranks by — a tap counts at once. */
+  leanings?: Leanings
   today: string
   /** Save, Not for us, or un-save: shown at once, kept by the Scout (it learns from it). */
   answer?: (id: string, status: OutingAnswer) => void
@@ -38,6 +40,18 @@ export interface ScoutPaper {
 
 const KEY = ['scout-list']
 
+/** One answer counted at once, so the page re-ranks before the server's next read: yes, no, or a yes taken back. */
+function counted(leanings: Leanings | undefined, key: string | null, said: 'yes' | 'no' | 'unyes'): Leanings {
+  const next = { ...(leanings ?? {}) }
+  if (!key) return next
+  const t = { ...(next[key] ?? { yes: 0, no: 0 }) }
+  if (said === 'yes') t.yes += 1
+  else if (said === 'no') t.no += 1
+  else t.yes = Math.max(0, t.yes - 1)
+  next[key] = t
+  return next
+}
+
 /** One call for both pages (supabase/functions/scout, { action: 'list' }); the tables are the server's alone. */
 export function useScout(): ScoutPaper | null {
   const qc = useQueryClient()
@@ -47,7 +61,7 @@ export function useScout(): ScoutPaper | null {
       const { data: reply, error } = await supabase.functions.invoke('scout', { body: { action: 'list' } })
       if (error) throw error
       const r = reply as Partial<ScoutPaper> | null
-      return { outings: r?.outings ?? [], news: r?.news ?? [], guide: r?.guide ?? [], watches: r?.watches ?? [], calendar: r?.calendar ?? {}, today: r?.today ?? '' }
+      return { outings: r?.outings ?? [], news: r?.news ?? [], guide: r?.guide ?? [], watches: r?.watches ?? [], calendar: r?.calendar ?? {}, leanings: r?.leanings ?? {}, today: r?.today ?? '' }
     },
     staleTime: 30 * 60_000,
     refetchInterval: 60 * 60_000,
@@ -58,6 +72,7 @@ export function useScout(): ScoutPaper | null {
     qc.setQueryData<ScoutPaper>(KEY, (d) => d && {
       ...d,
       outings: status === 'not_for_us' ? d.outings.filter((o) => o.id !== id) : d.outings.map((o) => (o.id === id ? { ...o, status } : o)),
+      leanings: counted(d.leanings, leanKey(d.outings.find((o) => o.id === id)), status === 'not_for_us' ? 'no' : status === 'saved' ? 'yes' : 'unyes'),
     })
     void supabase.functions.invoke('scout', { body: { action: 'feedback', id, status } })
   }, [qc])
@@ -74,6 +89,7 @@ export function useScout(): ScoutPaper | null {
     qc.setQueryData<ScoutPaper>(KEY, (d) => d && {
       ...d,
       guide: status === 'not_for_us' || status === 'been' ? d.guide.filter((p) => p.id !== id) : d.guide.map((p) => (p.id === id ? { ...p, status, saved_at: p.saved_at ?? new Date().toISOString() } : p)),
+      leanings: counted(d.leanings, leanKey(d.guide.find((p) => p.id === id)), status === 'not_for_us' ? 'no' : status === 'live' ? 'unyes' : 'yes'),
     })
     void supabase.functions.invoke('scout', { body: { action: 'guide_feedback', id, status } })
   }, [qc])
