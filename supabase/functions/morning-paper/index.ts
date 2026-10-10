@@ -42,9 +42,14 @@ Deno.serve(async (req) => {
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
     // A dry run (testing) writes a paper and keeps nothing.
     const dryRun = body?.dryRun === true
+    // The front page's refresh (Jake, Oct 10: "rerun the page with updated info"): today's written again over the kept
+    // one — unless it was written in the last two minutes (a second tap, or two walls at once).
+    const fresh = body?.fresh === true
 
-    const { data: kept } = dryRun ? { data: null } : await sb.from('morning_papers').select('headline, deck, sky, brief').eq('paper_date', facts.date).maybeSingle()
-    if (kept) return json({ words: kept, kept: true }, 200, correlationId)
+    const { data: kept } = dryRun ? { data: null } : await sb.from('morning_papers').select('headline, deck, sky, brief, created_at').eq('paper_date', facts.date).maybeSingle()
+    if (kept && (!fresh || Date.now() - new Date(kept.created_at).getTime() < 2 * 60_000)) {
+      return json({ words: { headline: kept.headline, deck: kept.deck, sky: kept.sky, brief: kept.brief }, kept: true }, 200, correlationId)
+    }
 
     // The sky, from the home's cached geocode (home-weather keeps it): free, no key.
     const [{ data: home }, { data: persona }] = await Promise.all([
@@ -128,7 +133,7 @@ Deno.serve(async (req) => {
     if (dryRun) return json({ words, kept: false, dryRun: true, sky, found, scout, searchError }, 200, correlationId)
     if (chosen) await sb.from('outings').update({ status: chosen.status === 'saved' ? 'saved' : 'offered', offered_on: facts.date, updated_at: new Date().toISOString() }).eq('id', chosen.id)
     // First one wins (two walls at once): keep it, then read back whichever was kept.
-    await sb.from('morning_papers').upsert({ paper_date: facts.date, headline: words.headline, deck: words.deck, sky: words.sky, brief: words.brief ?? null, facts: { ...facts, more }, sky_facts: sky, found, model: writer }, { onConflict: 'paper_date', ignoreDuplicates: true })
+    await sb.from('morning_papers').upsert({ paper_date: facts.date, headline: words.headline, deck: words.deck, sky: words.sky, brief: words.brief ?? null, facts: { ...facts, more }, sky_facts: sky, found, model: writer, created_at: new Date().toISOString() }, { onConflict: 'paper_date', ignoreDuplicates: !fresh })
     const { data: saved } = await sb.from('morning_papers').select('headline, deck, sky, brief').eq('paper_date', facts.date).maybeSingle()
     return json({ words: saved ?? words, kept: false }, 200, correlationId)
   } catch (error) {

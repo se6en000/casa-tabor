@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { DayPlan, WallMember } from './engine/types'
@@ -7,9 +7,10 @@ import { paperDate, paperFacts, type BriefFacts, type PaperWords } from './paper
 /**
  * Today's morning paper (canvas 48a): the words the server wrote, from the morning_papers table. On a morning with
  * none yet, the wall sends its own facts once (supabase/functions/morning-paper writes and keeps them; every wall
- * then shares that one). Null until there are words — the paper shows plain ones meanwhile.
+ * then shares that one). Null until there are words — the paper shows plain ones meanwhile. `refresh` writes today's
+ * again from the wall's facts as they are now, and reads Out & about and Around town again.
  */
-export function useMorningPaper(today: DayPlan | null, members: WallMember[], now: Date, weather?: { temp: number; condition: string } | null, more?: () => BriefFacts | null | undefined): PaperWords | null {
+export function useMorningPaper(today: DayPlan | null, members: WallMember[], now: Date, weather?: { temp: number; condition: string } | null, more?: () => BriefFacts | null | undefined): { words: PaperWords | null; refresh: () => Promise<void> } {
   const qc = useQueryClient()
   const date = paperDate(now)
   // Written once a day, from 5 on — any time after, too, when there's none (Jake, Oct 8: "regenerate the morning paper
@@ -40,5 +41,14 @@ export function useMorningPaper(today: DayPlan | null, members: WallMember[], no
       if (words) qc.setQueryData(['morning-paper', date], words)
     })
   }, [morning, today, isFetched, data, date, now]) // eslint-disable-line react-hooks/exhaustive-deps
-  return data ?? null
+  // The front page's refresh (Jake, Oct 10: "rerun the page with updated info").
+  const refresh = useCallback(async () => {
+    if (!today) return
+    void qc.invalidateQueries({ queryKey: ['scout-list'] })
+    const { data: reply, error } = await supabase.functions.invoke('morning-paper', { body: { facts: paperFacts(today, members, now, weather), more: more?.() ?? null, fresh: true } })
+    if (error) throw error
+    const words = (reply as { words?: PaperWords | null } | null)?.words
+    if (words) qc.setQueryData(['morning-paper', date], words)
+  }, [qc, today, members, now, weather, more, date])
+  return { words: data ?? null, refresh }
 }

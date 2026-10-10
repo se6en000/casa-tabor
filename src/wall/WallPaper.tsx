@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Bookmark, Flame, Gem, Heart, House, Mic, QrCode, Repeat, Ticket, Users } from 'lucide-react'
+import { Bookmark, Flame, Gem, Heart, House, Mic, QrCode, Repeat, RotateCw, Ticket, Users } from 'lucide-react'
 import { frontScrollMax, PAPER_SLIM_AT, type BriefLine, type PaperBrief, type PaperFacts, type PaperWords } from './paper'
 import { RailClock, RailRule, RailShell } from './WallRail'
 import { Qr } from './WallDirections'
@@ -33,6 +33,8 @@ export interface WallPaperProps {
   onAdd?: (args: Record<string, unknown>) => Promise<void>
   onPutAway: () => void
   onAsk?: (say: string) => void
+  /** The front page's refresh (Jake, Oct 10: "subtle, just a refresh icon"): today's paper written again. */
+  onRefresh?: () => Promise<void>
 }
 
 const KICKER_DATE = { weekday: 'long', month: 'long', day: 'numeric' } as const
@@ -205,10 +207,10 @@ function Highlight({ it, onOpen }: { it: ListItem; onOpen: (it: ListItem) => voi
 }
 
 /** One in the columns below: no box (Jake: "can these not be cards … feels more newspaper like?"). */
-function Story({ it, first, onOpen }: { it: ListItem; first: boolean; onOpen: (it: ListItem) => void }) {
+function Story({ it, onOpen }: { it: ListItem; onOpen: (it: ListItem) => void }) {
   return (
     <button type="button" aria-label={it.title} onClick={() => onOpen(it)}
-      className={`flex min-w-0 flex-col gap-[6px] border-0 border-solid border-wall-rule bg-transparent pb-[22px] pr-[22px] pt-[14px] text-left font-body text-wall-ink ${first ? 'pl-0' : 'border-l pl-[22px]'}`}>
+      className="flex min-w-0 flex-col gap-[6px] border-0 bg-transparent p-0 text-left font-body text-wall-ink">
       {it.tags.length > 0 && <span className="flex flex-wrap gap-x-[14px] gap-y-[4px]">{it.tags.map((t) => <ListWord key={t} tag={t} />)}</span>}
       <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">{eyebrow(it)}</span>
       <span className="line-clamp-2 font-display text-wall-heading font-semibold">{it.title}</span>
@@ -219,17 +221,12 @@ function Story({ it, first, onOpen }: { it: ListItem; first: boolean; onOpen: (i
   )
 }
 
-/** Four across, ruled like a page. */
+/** Four across, spaced like the front page's columns — no rules (Jake, Oct 10: "the same format as the front page"). */
 function Columns({ items, onOpen }: { items: ListItem[]; onOpen: (it: ListItem) => void }) {
-  const rows = Array.from({ length: Math.ceil(items.length / 4) }, (_, i) => items.slice(i * 4, i * 4 + 4))
   return (
-    <>
-      {rows.map((row, i) => (
-        <div key={i} className="grid grid-cols-4 border-0 border-t border-solid border-wall-rule">
-          {row.map((it, j) => <Story key={it.key} it={it} first={j === 0} onOpen={onOpen} />)}
-        </div>
-      ))}
-    </>
+    <div className="grid grid-cols-4 gap-x-[36px] gap-y-[30px]">
+      {items.map((it) => <Story key={it.key} it={it} onOpen={onOpen} />)}
+    </div>
   )
 }
 
@@ -260,11 +257,11 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: Sc
             <span className="text-wall-detail text-wall-ink-2">soonest first — your places, what you asked about, and the nights you’d do again</span>
           </span>
           <div className="mt-[14px]"><Columns items={page.more} onOpen={open} /></div>
-          {allLater && page.later.length > 0 && <Columns items={page.later} onOpen={open} />}
+          {allLater && page.later.length > 0 && <div className="mt-[30px]"><Columns items={page.later} onOpen={open} /></div>}
         </section>
       )}
-      <div className="mt-[18px] grid grid-cols-2 border-0 border-t border-solid border-wall-rule">
-        <div className="flex flex-col gap-[6px] pb-[10px] pr-[22px] pt-[14px]">
+      <div className="mt-[40px] grid grid-cols-2 gap-x-[36px]">
+        <div className="flex flex-col gap-[6px]">
           <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">ADD ONE</span>
           <span className="font-display text-wall-heading font-semibold">Somewhere you want to go?</span>
           <span className="text-wall-detail">Share it from any app, or tell Alexa “we want to try…”.</span>
@@ -272,7 +269,7 @@ function OutPage({ scout, active, now, onOpen, onOpenPlace, onAsk }: { scout: Sc
           {onAsk && <button type="button" onClick={() => onAsk('We want to try ')} className="h-[44px] self-start border-0 bg-transparent p-0 font-body text-wall-detail font-bold text-wall-ink">+ Tell Alexa</button>}
         </div>
         {later && (
-          <div className="flex flex-col gap-[6px] border-0 border-l border-solid border-wall-rule pb-[10px] pl-[22px] pt-[14px]">
+          <div className="flex flex-col gap-[6px]">
             <span className="text-wall-label font-bold tracking-[0.14em] text-wall-brass-ink">SAVED FOR LATER · {page.counts.later}</span>
             <span className="font-display text-wall-heading font-semibold">More when the week fits</span>
             <span className="line-clamp-2 text-wall-detail">{later}.</span>
@@ -314,15 +311,15 @@ function TownPage({ news, today, active }: { news: TownNews[]; today: string; ac
           </div>
         </Section>
       )}
-      <div className="mt-[34px] grid grid-cols-3 gap-x-[44px]">
+      <div className="mt-[34px] grid grid-cols-3 gap-x-[36px]">
         {NEWS_COLUMNS.map(({ section, label, none }) => (
           <section key={section} aria-label={label} className="flex min-w-0 flex-col">
-            <span className="border-0 border-b border-solid border-wall-rule pb-[10px] text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
+            <span className="border-0 border-t-2 border-solid border-wall-ink pt-[14px] text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">{label.toUpperCase()}</span>
             {page[section].length === 0 && <span className="mt-[16px] text-wall-detail text-wall-ink-2">{none}</span>}
             {page[section].map((n, i) => (
-              <article key={`${n.headline}-${i}`} aria-label={n.headline} className={`flex flex-col pt-[16px] ${i ? 'mt-[16px] border-0 border-t border-solid border-wall-rule' : ''}`}>
-                <span className="font-display text-wall-date font-medium">{n.headline}</span>
-                {n.line && <span className="mt-[6px] text-wall-detail text-wall-ink-2">{n.line}</span>}
+              <article key={`${n.headline}-${i}`} aria-label={n.headline} className="mt-[16px] flex flex-col">
+                <span className="font-display text-wall-heading font-semibold">{n.headline}</span>
+                {n.line && <span className="mt-[4px] text-wall-detail text-wall-ink-2">{n.line}</span>}
                 <span className="mt-[6px] text-wall-label font-bold tracking-[0.08em] text-wall-brass-ink">
                   {[n.source, n.source_date ? new Date(`${n.source_date}T12:00:00Z`).toLocaleDateString('en-US', SHORT_DATE) : null].filter(Boolean).join(' · ').toUpperCase()}
                 </span>
@@ -644,9 +641,15 @@ function OutingCard({ o, scout, members, events, computer, onAdd, onAsk, onClose
  * and this weekend's best for the two of them), Out & about (the Scout's checked list) and Around town (the news). The
  * front page's words are the server's, written once a day (supabase/functions/morning-paper); until they come, plain ones.
  */
-export default function WallPaper({ now, facts, words, brief, today = null, counts, scout, members = [], events = [], onAdd, onPutAway, onAsk }: WallPaperProps) {
+export default function WallPaper({ now, facts, words, brief, today = null, counts, scout, members = [], events = [], onAdd, onPutAway, onAsk, onRefresh }: WallPaperProps) {
   const pages = scout ? 3 : 1
   const [page, setPage] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = () => {
+    if (!onRefresh || refreshing) return
+    setRefreshing(true)
+    onRefresh().catch(() => { /* the paper stays as it was */ }).finally(() => setRefreshing(false))
+  }
   const pageNow = useRef(0)
   useEffect(() => { pageNow.current = page }, [page])
   const [phone, setPhone] = useState<Outing | null>(null)
@@ -727,6 +730,12 @@ export default function WallPaper({ now, facts, words, brief, today = null, coun
                 <div className="flex items-center gap-[18px]">
                   <span aria-hidden="true" className="h-[2px] w-[40px] bg-wall-brass" />
                   <span className="text-wall-label font-bold tracking-[0.22em] text-wall-brass-ink">THE MORNING · {facts.day.replace(/, \d{4}$/, '').toUpperCase()}</span>
+                  {onRefresh && (
+                    <button type="button" aria-label={refreshing ? 'Writing today’s paper again' : 'Refresh the paper'} aria-busy={refreshing} disabled={refreshing} onClick={refresh}
+                      className="-my-[12px] ml-auto flex h-[44px] w-[44px] items-center justify-center rounded-full border-0 bg-transparent p-0 text-wall-ink-2 opacity-60 disabled:opacity-100">
+                      <RotateCw aria-hidden="true" className={`h-[20px] w-[20px] ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} />
+                    </button>
+                  )}
                 </div>
                 <h1 className="m-0 mt-[16px] font-display text-wall-headline font-medium text-wall-ink">
                   {words.headline}

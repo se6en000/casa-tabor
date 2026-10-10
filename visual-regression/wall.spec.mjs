@@ -2774,6 +2774,10 @@ test('wall: the morning paper’s three pages — swiped, dragged, the button or
   await page.goto('/__wall-fixture?at=2026-09-25T10:30:00&paper=1')
   const paper = page.getByRole('article', { name: 'The morning paper' })
   await expect(paper.getByText('The front page · 1 of 3')).toBeVisible()
+  // The front page's refresh (Jake, Oct 10: "subtle … just a refresh icon"): today's paper written again.
+  await paper.getByRole('button', { name: 'Refresh the paper' }).click()
+  await expect.poll(() => page.evaluate(() => window.__refreshed ?? 0)).toBe(1)
+  await expect(paper.getByRole('button', { name: 'Refresh the paper' })).toBeEnabled()
   // A finger: touch events (the Pi's Chromium sends pointercancel for a drag, so the paper reads touches).
   const swipe = (dx) => page.evaluate((dx) => {
     const el = document.querySelector('[aria-label="The morning paper"] > div.touch-none')
