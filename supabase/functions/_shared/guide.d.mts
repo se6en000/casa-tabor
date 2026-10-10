@@ -84,6 +84,8 @@ export interface GuidePlace {
   note?: string | null
   saved_at?: string | null
   score?: number
+  /** Google's word for it ("Ice skating rink"). */
+  types?: string | null
 }
 export interface GuideShelf { id: string; label: string; match: RegExp | null; queries: string[] }
 export const GUIDE_SHELVES: GuideShelf[]

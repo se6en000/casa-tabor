@@ -51,7 +51,7 @@ test('your list: the calendar finds a list place by its name in a title or a loc
 })
 
 test('your list: four highlights — the soonest asked/again night, the newest to try, the next again, the surprise; twelve below, soonest first', async () => {
-  const { yourList } = await import('../supabase/functions/_shared/your-list.mjs')
+  const { yourList, placeItem } = await import('../supabase/functions/_shared/your-list.mjs')
   const watches = [
     { id: 'w1', name: 'Candlelight', kind: 'again', whose: 'us', note: 'You loved 90s Hip-Hop on Strings.' },
     { id: 'w2', name: 'Ballet', kind: 'asked', whose: 'family', note: 'You asked Alexa about ballet.' },
@@ -75,6 +75,10 @@ test('your list: four highlights — the soonest asked/again night, the newest t
   ]
   const page = yourList({ places, outings, watches, today: TODAY, nowTime: '10:30' })
   assert.deepEqual(page.highlights.map((h) => h.title), ['Big City', 'J&C Oyster', 'Candlelight: A Haunted Evening', 'Bar Capri'])
+  // One they shared themselves comes before the guide's picks they tapped Save on, however new those are.
+  const shared = yourList({ places: [...places, place('p5', 'Mary Lou’s', { origin: 'shared', saved_at: '2026-10-09T20:55:00Z' })], outings, watches, today: TODAY, nowTime: '10:30' })
+  assert.equal(shared.highlights[1].title, 'Mary Lou’s')
+  assert.equal(placeItem(place('p6', 'Palm Beach Ice Works', { origin: 'asked', types: 'Ice skating rink' }), { today: TODAY }).is, 'Ice skating rink')
   // Below, soonest first: the places (any night) before December; the third Candlelight waits (two a watch).
   const below = page.more.map((h) => h.title)
   assert.ok(!below.includes('Some local band') && !below.includes('Past') && !below.includes('Some Pick'))
@@ -147,4 +151,32 @@ test('watching: one line a show — the first date, the other days as also; two 
     ['Candlelight: Tribute to ABBA', '2027-01-15', []],
   ])
   assert.equal(watchOuting(got[0], { id: 'w', whose: 'family' }).why, 'From $25. Also Sat Dec 5, Sun Dec 6.')
+})
+
+test('watching: a ticket site’s date picker counts as showing the date (Fever: the month’s heading, then "24 sat")', async () => {
+  const { pageVerdict } = await import('../supabase/functions/_shared/scout.mjs')
+  const text = 'candlelight concerts in west palm beach pick a date october 2026 filters october 2026 24 sat candlelight: a haunted evening of halloween classics first presbyterian church of wpb 6:30 pm from $54.00 candlelight: tribute to dolly parton 8:30 pm november 2026 06 fri candlelight: coldplay & imagine dragons 6:30 pm also on: fri, 22 jan · sat, 20 feb candlelight: tribute to the beatles '.repeat(2)
+  const v = (title, when) => pageVerdict({ title, kind: 'couple', when }, text, TODAY, { aheadDays: 150 })
+  assert.equal(v('Candlelight: A Haunted Evening of Halloween Classics', '2026-10-24').ok, true)
+  assert.equal(v('Candlelight: Coldplay & Imagine Dragons', '2026-11-06').ok, true)
+  assert.equal(v('Candlelight: Coldplay & Imagine Dragons', '2027-01-22').ok, true)
+  // The 24th isn't under November.
+  assert.equal(v('Candlelight: Tribute to the Beatles', '2026-11-24').ok, false)
+  // A show on the page, but not that day's.
+  assert.equal(v('Candlelight: Tribute to the Beatles', '2026-10-24').ok, false)
+  assert.equal(v('Candlelight: Tribute to Dolly Parton', '2026-10-24').ok, true)
+})
+
+test('your list: a watch shows its nearby dates first — Broward’s wait', async () => {
+  const { yourList } = await import('../supabase/functions/_shared/your-list.mjs')
+  const watches = [{ id: 'w1', name: 'Candlelight', kind: 'again', whose: 'us', note: null }]
+  const outings = [
+    outing('a', 'Candlelight: Classic Rock', '2026-10-16 21:15', { watch_id: 'w1', place: 'The Sanctuary Church FTL, Fort Lauderdale' }),
+    outing('b', 'Candlelight: A Haunted Evening', '2026-10-24 18:30', { watch_id: 'w1', place: 'First Presbyterian Church of WPB, West Palm Beach' }),
+    outing('c', 'Candlelight: Dolly Parton', '2026-10-24 20:30', { watch_id: 'w1', place: 'First Presbyterian Church of WPB, West Palm Beach' }),
+  ]
+  const page = yourList({ outings, watches, today: TODAY })
+  const shown = [...page.highlights, ...page.more].map((h) => h.title)
+  assert.ok(shown.includes('Candlelight: A Haunted Evening') && shown.includes('Candlelight: Dolly Parton'))
+  assert.deepEqual(page.later.map((h) => h.title), ['Candlelight: Classic Rock'])
 })

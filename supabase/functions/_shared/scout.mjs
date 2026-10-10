@@ -94,6 +94,35 @@ export function pageText(html) {
     .toLowerCase()
 }
 
+/**
+ * A ticket site's date picker (Fever, Oct 10: "october 2026 … 24 sat …", "also on: fri, 22 jan"): the day under its
+ * month's heading, or the day and the short month after its weekday.
+ */
+function calendarShows(ymd, text, name = []) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const wd = DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()].slice(0, 3)
+  const mon = MONTHS[m - 1].slice(0, 3)
+  // Its own name in that day's block, not just somewhere on the page (Oct 10: Fleetwood Mac "on Oct 9" — the 9th was
+  // Michael Jackson's night; Fleetwood Mac was further down).
+  // In a day's block every word of its name ("Candlelight" and "Tribute" are in half the shows).
+  const named = (chunk) => !name.length || name.every((w) => chunk.includes(w))
+  for (const form of [`${wd}, ${d} ${mon}`, `${wd}, ${String(d).padStart(2, '0')} ${mon}`]) {
+    // "also on: fri, 22 jan" comes after its own show's name.
+    for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) if (named(text.slice(Math.max(0, at - 400), at))) return true
+  }
+  const head = text.indexOf(`${MONTHS[m - 1]} ${y}`)
+  if (head < 0) return false
+  const next = MONTHS.map((mn, i) => (i === m - 1 ? -1 : text.indexOf(`${mn} ${i < m - 1 ? y + 1 : y}`, head + 1))).filter((i) => i > head)
+  const section = text.slice(head, next.length ? Math.min(...next) : undefined)
+  const marker = new RegExp(`(^|\\s)0?${d} ${wd}\\b`)
+  const hit = marker.exec(section)
+  if (!hit) return false
+  // That day's block: from its marker to the next day's ("25 sun").
+  const rest = section.slice(hit.index + hit[0].length)
+  const end = /(^|\s)\d{1,2} (sun|mon|tue|wed|thu|fri|sat)\b/.exec(rest)
+  return named(rest.slice(0, end ? end.index : undefined))
+}
+
 /** The ways a page may write a date ("October 18", "Oct. 18", "10/18", "2026-10-18", "Saturday, Oct 18"). */
 function dateForms(ymd) {
   const [y, m, d] = ymd.split('-').map(Number)
@@ -142,7 +171,7 @@ export function pageVerdict(candidate, text, today, { minLength = 200, current =
   if (day) {
     if (day < today) return { ok: false, note: 'it’s past' }
     if (day > addDays(today, aheadDays)) return { ok: false, note: 'too far off' }
-    if (!dateForms(day).some((f) => text.includes(f))) return { ok: false, note: 'the page doesn’t show that date' }
+    if (!dateForms(day).some((f) => text.includes(f)) && !calendarShows(day, text, name)) return { ok: false, note: 'the page doesn’t show that date' }
     return { ok: true, note: 'its page shows the date' }
   }
   if (candidate.recurring) {

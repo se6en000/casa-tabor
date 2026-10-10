@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
       .gte('news_date', addDays(today, -2)).order('news_date', { ascending: false }).limit(40)
     const latest = news?.[0]?.news_date
     // The local guide's places worth trying (canvas 85B), best first; Not for us stays out.
-    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status, whose, origin, note, saved_at, score')
+    const { data: guide } = await sb.from('guide_places').select('id, name, address, shelf, shelf_label, drive_min, beyond, rating, rating_count, maps_url, website, buzz, labels, heard, why, touristy, status, whose, origin, note, saved_at, score, types')
       .in('status', ['live', 'saved', 'spot']).order('score', { ascending: false }).limit(300)
     // Out & about from your list (canvas 86C): what they watch for, and which of their places are on the calendar.
     const mine = (guide ?? []).filter((g: { status: string }) => g.status === 'saved' || g.status === 'spot')

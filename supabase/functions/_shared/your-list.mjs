@@ -62,7 +62,8 @@ export function placeItem(p, { today, calendar = {}, surprise = false } = {}) {
   const where = [p.address ? townOf(p.address) : null, p.drive_min ? `${p.drive_min} min` : null].filter(Boolean).join(' · ')
   return {
     key: `place:${p.id}`, type: 'place', id: p.id, tags: [...new Set(tags)],
-    is: p.shelf_label ?? null, when, title: p.name, where,
+    // What it is: the guide's shelf for its picks; Google's word for one they added ("public skating" filed Ice Works under bars).
+    is: (p.origin && p.origin !== 'guide' && p.types) || p.shelf_label || null, when, title: p.name, where,
     heard: own ? `“${own.replace(/\.$/, '')}” — in your words.` : said ? said.charAt(0).toUpperCase() + said.slice(1) : p.heard ?? null,
     why: surprise ? 'Your one surprise this week. Save it or ✕.' : p.note ?? p.why ?? null,
     date: hit?.next ?? null, time: null, place: p, onCalendar: Boolean(hit?.next), lastCalendar: hit?.last ?? null,
@@ -109,6 +110,9 @@ export function calendarHits(places, events, today) {
   return hits
 }
 
+/** Put on the list by them, not tapped from the guide's picks. */
+const OWN = new Set(['shared', 'alexa', 'added', 'like', 'taste'])
+
 const COMMON = /^(park|house|garden|kitchen|tavern|grill|cafe|club|lounge|pub|beach|market|marina|social|local|hotel|inn|bistro|taproom|brewery|oyster|oysters|tacos)$/
 
 const sortKey = (it, today) => `${it.date ?? addDays(today, 2)} ${it.time ?? (it.type === 'place' ? '99:98' : '99:99')}`
@@ -131,7 +135,9 @@ export function yourList({ places = [], outings = [], watches = [], today, nowTi
   // Dated nights they asked for or would do again: the next two of each watch on the page, the rest later.
   const perWatch = new Map()
   const watched = []
-  for (const o of [...(outings ?? [])].filter((o) => o.watch_id && watchBy.has(o.watch_id) && upcoming(o) && o.status !== 'not_for_us').sort((a, b) => String(a.when).localeCompare(String(b.when)))) {
+  // Nearby first: the same Candlelight shows play in West Palm and Fort Lauderdale (Oct 10) — Broward's wait.
+  const broward = (o) => /\b(fort lauderdale|davie|hollywood|pompano|plantation|sunrise|coral springs|weston|miramar|pembroke|dania|lauderhill|tamarac|margate|coconut creek|parkland)\b/i.test(String(o.place ?? ''))
+  for (const o of [...(outings ?? [])].filter((o) => o.watch_id && watchBy.has(o.watch_id) && upcoming(o) && o.status !== 'not_for_us').sort((a, b) => Number(broward(a)) - Number(broward(b)) || String(a.when).localeCompare(String(b.when)))) {
     const n = perWatch.get(o.watch_id) ?? 0
     perWatch.set(o.watch_id, n + 1)
     watched.push({ item: outingItem(o, { today, watch: watchBy.get(o.watch_id) }), extra: n >= 2 })
@@ -146,7 +152,9 @@ export function yourList({ places = [], outings = [], watches = [], today, nowTi
   const kindOf = [...stars.sort(byWhen).slice(0, 1), ...covers.sort(byWhen).slice(0, 1), ...trivia.sort(byWhen).slice(0, 1)].map((o) => outingItem(o, { today }))
   // Their places: what they asked about first, then the newest saved, then their spots.
   const mine = (places ?? []).filter((p) => p.status === 'saved' || p.status === 'spot')
-  const rank = (p) => (p.origin === 'asked' ? 0 : p.status === 'saved' ? 1 : 2)
+  // What they asked about, then what they put there themselves (shared, told Alexa, added), then the guide's picks they
+  // saved, then their spots (Oct 10: twelve picks saved with a tap had pushed Loco and Mary Lou's off the page).
+  const rank = (p) => (p.origin === 'asked' ? 0 : p.status === 'spot' ? 3 : OWN.has(p.origin) ? 1 : 2)
   mine.sort((a, b) => rank(a) - rank(b) || String(b.saved_at ?? '').localeCompare(String(a.saved_at ?? '')))
   const placeItems = mine.map((p) => placeItem(p, { today, calendar }))
   const surprise = surprisePick(places, today)
@@ -160,7 +168,7 @@ export function yourList({ places = [], outings = [], watches = [], today, nowTi
   const nearest = [...watched.map((w) => w.item).filter(thisWeek), ...kindOf.filter(thisWeek)].sort((a, b) => sortKey(a, today).localeCompare(sortKey(b, today)))
   const highlights = [
     take(nearest[0]),
-    take(placeItems.filter((p) => p.tags.includes('try') && !p.onCalendar).sort((a, b) => String(b.place?.saved_at ?? '').localeCompare(String(a.place?.saved_at ?? '')))[0]),
+    take(placeItems.filter((p) => p.tags.includes('try') && !p.onCalendar).sort((a, b) => Number(OWN.has(b.place?.origin)) - Number(OWN.has(a.place?.origin)) || String(b.place?.saved_at ?? '').localeCompare(String(a.place?.saved_at ?? '')))[0]),
     take(watched.map((w) => w.item).find((it) => it.tags.includes('again') && !used.has(it.key))),
     take(surpriseItem),
   ].filter(Boolean)
