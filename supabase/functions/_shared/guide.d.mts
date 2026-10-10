@@ -43,7 +43,15 @@ export interface GuideTaste {
   teams: string[]
   genres: string[]
   reachMin: number
+  interests: GuideInterest[]
 }
+export type InterestWho = 'us' | 'family' | 'jake' | 'kelly'
+export type InterestLevel = 'love' | 'like' | 'no'
+export type InterestGroup = 'eat' | 'do' | 'move' | 'shows' | 'games'
+export interface GuideInterest { name: string; who: InterestWho; level: InterestLevel; group: InterestGroup; why?: string }
+export const INTEREST_WHO: InterestWho[]
+export const INTEREST_LEVELS: InterestLevel[]
+export const INTEREST_GROUPS: InterestGroup[]
 export const TASTE_KEY: string
 export const REACH_CHOICES: Array<[number, string]>
 export const DEFAULT_TASTE: GuideTaste

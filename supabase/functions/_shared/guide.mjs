@@ -124,6 +124,27 @@ export const DEFAULT_TASTE = {
   // Music they'd go see even not knowing the band (Jake, Oct 9).
   genres: ['Pop', 'Rock', 'Classic rock', 'Reggae / island', 'Yacht rock'],
   reachMin: 45,
+  // Interests (Oct 9): who it's for, how much, and why the house thinks so — Jake's own list plus what the calendar and
+  // Alexa showed them doing. Saved here first; the Interests page (canvas 86) and the For-you feed read it later.
+  interests: [],
+}
+export const INTEREST_WHO = ['us', 'family', 'jake', 'kelly']
+export const INTEREST_LEVELS = ['love', 'like', 'no']
+export const INTEREST_GROUPS = ['eat', 'do', 'move', 'shows', 'games']
+
+/** Interests, cleaned: a name, one of the people, a level and a group; once each per person; a why when there is one. */
+function interestsOf(v) {
+  if (!Array.isArray(v)) return DEFAULT_TASTE.interests
+  const seen = new Set()
+  return v.flatMap((i) => {
+    const name = String(i?.name ?? '').trim()
+    const who = INTEREST_WHO.includes(i?.who) ? i.who : 'us'
+    const key = `${who}:${name.toLowerCase()}`
+    if (!name || seen.has(key)) return []
+    seen.add(key)
+    const why = String(i?.why ?? '').trim()
+    return [{ name, who, level: INTEREST_LEVELS.includes(i?.level) ? i.level : 'like', group: INTEREST_GROUPS.includes(i?.group) ? i.group : 'do', ...(why ? { why } : {}) }]
+  })
 }
 
 /** A saved taste, whole: missing parts from the defaults, lists cleaned (trimmed, once each). */
@@ -140,6 +161,7 @@ export function tasteOf(saved) {
     teams: list(s.teams, DEFAULT_TASTE.teams),
     genres: list(s.genres, DEFAULT_TASTE.genres),
     reachMin: REACH_CHOICES.some(([m]) => m === s.reachMin) ? s.reachMin : DEFAULT_TASTE.reachMin,
+    interests: interestsOf(s.interests),
   }
 }
 

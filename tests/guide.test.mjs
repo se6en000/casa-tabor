@@ -96,6 +96,25 @@ test('guide: Your taste — Jake\'s Oct 9 answers to start; a saved one cleaned,
   assert.deepEqual(t.places, [{ name: 'Blue Door', note: 'West Palm' }])
   assert.equal(t.reachMin, 45)
   assert.deepEqual(t.tryFirst, ['Escape rooms'])
+  assert.deepEqual(t.interests, [])
+})
+
+test('guide: interests — kept whole through a save; cleaned, once each per person', async () => {
+  const { tasteOf } = await import('../supabase/functions/_shared/guide.mjs')
+  const t = tasteOf({ interests: [
+    { name: ' Yoga ', who: 'kelly', level: 'love', group: 'move', why: 'Thrive Power Yoga' },
+    { name: 'yoga', who: 'kelly', level: 'like' },
+    { name: 'Yoga', who: 'jake', level: 'meh', group: 'nope' },
+    { name: '' },
+    { name: 'Markets', who: 'kids' },
+  ] })
+  assert.deepEqual(t.interests, [
+    { name: 'Yoga', who: 'kelly', level: 'love', group: 'move', why: 'Thrive Power Yoga' },
+    { name: 'Yoga', who: 'jake', level: 'like', group: 'do' },
+    { name: 'Markets', who: 'us', level: 'like', group: 'do' },
+  ])
+  // The phone's Your taste saves the whole taste back: interests ride along.
+  assert.deepEqual(tasteOf({ ...t, loves: ['Oysters'] }).interests, t.interests)
 })
 
 test('guide buzz: the shelves follow Your taste — a love of their own is searched as written; taking one off drops it', async () => {
