@@ -1170,6 +1170,9 @@ Deno.serve(async (req) => {
     let emailReview = false
     // What the memory tools did this turn (dry runs report it; the trace keeps it).
     const memoryCalls: Array<{ tool: string; args: Record<string, unknown>; result: unknown }> = []
+    // Done at once this turn (a place saved, a watch kept, a tidy-up answered): her "I'll keep an eye out" after it isn't a
+    // promise left undone (Oct 10: watch_for was called, then sent back and called a second time).
+    let actedAtOnce = false
     let nudgedPromise = false
     // Only the request right after the promise is sent back must call a tool.
     let mustActNext: boolean | 'look' = false
@@ -1238,7 +1241,7 @@ Deno.serve(async (req) => {
         // called): once, back to the model — call the tool now, or say plainly that nothing was saved.
         const words = parts.filter((p) => typeof p.text === 'string' && p.thought !== true).map((p) => p.text as string).join('').trim()
         const lookOnly = !promisesAction(words) && promisesLookup(words)
-        if (!nudgedPromise && !memoryCalls.length && (promisesAction(words) || lookOnly) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
+        if (!nudgedPromise && !memoryCalls.length && !(actedAtOnce && !lookOnly) && (promisesAction(words) || lookOnly) && !parts.some((p) => p.functionCall) && round < FULL_AI_ROUNDS - 1) {
           nudgedPromise = true
           mustActNext = lookOnly ? 'look' : true
           contents.push({ role: 'model', parts }, { role: 'user', parts: [{ text: lookOnly ? '(A note from the house, not from them: you said you would look that up, but called no tool, so they have no answer yet. Look it up now, then answer — don’t apologize or mention this note.)' : '(A note from the house, not from them: you said you would do that, but called no tool, so nothing has happened yet. Call the tool for it now. Don’t apologize or mention this note — just do it, then answer them as if this were your first reply.)' }] })
@@ -1375,6 +1378,7 @@ Deno.serve(async (req) => {
           result = await runLookup(call.name, call.args ?? {}, lookupDeps).catch(() => ({ error: 'That lookup failed' }))
         }
         if (['remember', 'forget', 'undo_memory'].includes(call.name)) memoryCalls.push({ tool: call.name, args: call.args ?? {}, result })
+        if (['save_place', 'mark_place', 'watch_for', 'answer_tidy'].includes(call.name)) actedAtOnce = true
         if (result && typeof result === 'object' && 'error' in result) autoBugReport('lookup_failed', `${call.name}: ${String((result as { error: unknown }).error)}`, { tool: call.name, args: call.args })
         return { functionResponse: { name: call.name, response: result ?? { error: 'Unknown lookup' } } }
       }))

@@ -30,8 +30,12 @@ test('words that promise an action, and words that don’t', () => {
 
 test('the loop sends a promise with no tool back once', () => {
   const server = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
-  assert.match(server, /if \(!nudgedPromise && !memoryCalls\.length && \(promisesAction\(words\) \|\| lookOnly\)/)
+  assert.match(server, /if \(!nudgedPromise && !memoryCalls\.length && !\(actedAtOnce && !lookOnly\) && \(promisesAction\(words\) \|\| lookOnly\)/)
   assert.match(server, /nothing has happened yet/)
+  // Oct 10: a place saved or a watch kept this turn — "I'll keep an eye out" after it isn't sent back to be done twice;
+  // and the note is the house's, so she doesn't apologize for it.
+  assert.match(server, /\['save_place', 'mark_place', 'watch_for', 'answer_tidy'\]\.includes\(call\.name\)\) actedAtOnce = true/)
+  assert.match(server, /Don’t apologize or mention this note/)
 })
 
 test('sent back, the model must call a tool that acts — never a lookup, never words alone', async () => {
